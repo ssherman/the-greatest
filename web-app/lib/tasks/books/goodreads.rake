@@ -30,6 +30,12 @@ namespace :books do
       puts "queued Books::Goodreads::RerunUnparseableJob#{" (limit #{limit})" if limit}"
     end
 
+    desc "Is Goodreads fetching, and is it working? Prints the fetch gate, the last day's stored fetches " \
+      "and the goodreads workflow steps. Read-only."
+    task status: :environment do
+      puts Services::Books::GoodreadsEnrichment::StatusReport.call.data[:report]
+    end
+
     desc "Load the legacy app's scraped Goodreads rows (page lookups and search results) into the page " \
       "cache. Idempotent; never overwrites a cached page. Reads the legacy_books database."
     task seed_legacy_pages: :environment do

@@ -42,6 +42,23 @@ module Services
           assert_equal html, Zlib.gunzip(search.html.download).force_encoding(Encoding::UTF_8)
         end
 
+        test "waits for a result card or the no-results notice, not the heading that arrives before them" do
+          client = mock("page_fetcher")
+          client.expects(:fetch).with(anything,
+            wait_for_selector: '[data-testid="book-item-title"], [data-testid="no-book-search-results"]',
+            timeout_ms: 30_000).returns(fetched(search_html("no_results.html.gz")))
+
+          FetchSearch.call(query: "zzqxjv wplkrtq", client: client)
+        end
+
+        test "every search back from the fetcher is logged with its status and outcome" do
+          Rails.logger.stubs(:info)
+          Rails.logger.expects(:info).with("Goodreads fetch: search \"zzqxjv wplkrtq\" status=200 outcome=no_results " \
+            "elapsed_ms=5000 selector_found=true")
+
+          FetchSearch.call(query: "zzqxjv  wplkrtq", client: client_returning(fetched(search_html("no_results.html.gz"))))
+        end
+
         test "a search with no results is stored as no_results" do
           result = FetchSearch.call(query: "zzqxjv wplkrtq", client: client_returning(fetched(search_html("no_results.html.gz"))))
 

@@ -76,4 +76,13 @@ class BooksGoodreadsRakeTest < ActiveSupport::TestCase
   ensure
     Rake::Task["books:goodreads:seed_legacy_pages"].reenable
   end
+
+  test "status prints the status report" do
+    Services::Books::GoodreadsEnrichment::StatusReport.expects(:call)
+      .returns(Services::Books::GoodreadsEnrichment::StatusReport::Result.new(success?: true, data: {report: "gate open"}, errors: []))
+    task = Rake::Task["books:goodreads:status"]
+    task.reenable
+
+    assert_output(/gate open/) { task.invoke }
+  end
 end
