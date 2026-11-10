@@ -26,7 +26,7 @@ who decided or why. ChatGPT is confirmed working against `/api/mcp/admin` (OAuth
 ## Goals
 
 - Four admin MCP tools over the duplicate queue: list, get, merge, dismiss.
-- Every resolution the agent makes records **who** (the token's user), **why** (a required note) and that
+- Every resolution the agent makes records **who** (the token's user), **why** (an optional note) and that
   it came **through the API**.
 - A **Copy prompt** button on the duplicates admin page that copies a ready-made starting prompt.
 
@@ -41,7 +41,9 @@ who decided or why. ChatGPT is confirmed working against `/api/mcp/admin` (OAuth
 ## Anti-goals
 
 - A merge the agent did not see: merging must be tied to the pair and refuse if the pair changed.
-- A silent dismissal: a "not a duplicate" with no reason is useless to review later.
+- Server-side rules about how the agent should behave. Shane: "these are raw endpoints with not many
+  rules." The endpoints only refuse what would be wrong data (a resolved pair, a survivor that is not in
+  the pair, a missing record, no permission); the workflow and judgement live in the prompt.
 - House rules baked into server text Shane cannot trim. Rules belong in the copyable prompt.
 
 ## Design
@@ -56,8 +58,8 @@ the same way as every other admin tool. Scope is the queue's `item_type` for the
 |---|---|---|---|
 | `list_duplicate_candidates` | `GET /api/v1/admin/duplicate_candidates` | `books:admin:read` | Paged list. Filters: `status` (default `pending`), `item_type` (`book`/`author`, default both). Each pair: id, item type, source (why it was raised), created_at, status, resolution (note, resolved_at, resolved_by email) when resolved, and both records' summaries. |
 | `get_duplicate_candidate` | `GET /api/v1/admin/duplicate_candidates/{id}` | `books:admin:read` | One pair with fuller evidence for each side: the summary plus, for books, description (truncated), subtitle, alternate titles and the lists the book is on; for authors, their own equivalents (description, alternate names, books with ranks). Plus the linked match decision's reasoning if there is one. |
-| `merge_duplicate_candidate` | `POST /api/v1/admin/duplicate_candidates/{id}/merge` | `books:admin:merge` | Body: `target_id` (which of the pair survives), `note` (required), `dry_run` (default false, as the other merges). Refuses unless the pair is pending and `target_id` is one of its two ids; the other id is the source. Runs the same `Services::Books::AdminMerge` and delete-permission check as `merge_book`/`merge_author`, then stamps the pair. Returns what `merge_book` returns plus the pair. |
-| `dismiss_duplicate_candidate` | `POST /api/v1/admin/duplicate_candidates/{id}/dismiss` | `books:admin:write` | Body: `note` (required, non-blank). Refuses unless pending. Sets `not_duplicate`, `resolved_at`, `resolved_by`, `resolution_note`. |
+| `merge_duplicate_candidate` | `POST /api/v1/admin/duplicate_candidates/{id}/merge` | `books:admin:merge` | Body: `target_id` (which of the pair survives), `note` (optional), `dry_run` (default false, as the other merges). Refuses unless the pair is pending and `target_id` is one of its two ids; the other id is the source. Runs the same `Services::Books::AdminMerge` and delete-permission check as `merge_book`/`merge_author`, then stamps the pair. Returns what `merge_book` returns plus the pair. |
+| `dismiss_duplicate_candidate` | `POST /api/v1/admin/duplicate_candidates/{id}/dismiss` | `books:admin:write` | Body: `note` (optional). Refuses unless pending. Sets `not_duplicate`, `resolved_at`, `resolved_by`, `resolution_note`. |
 
 Notes:
 
@@ -91,7 +93,7 @@ Notes:
 Server text describes what tools do and their hard limits, nothing more.
 
 - Each new tool's `x-mcp` description says what it does, that `merge` deletes the source permanently,
-  that `note` is required, and that a refusal for a changed pair means re-fetch.
+  that `note` is optional and shown to the admin, and that a refusal for a changed pair means re-fetch.
 - **The queue tools are for agents deciding on their own — Shane's decision.** "The whole point of this
   endpoint is I want the agent to make a decision on the decisions the AI left for me. The endpoints
   should be final real merges." So `merge_duplicate_candidate` and `dismiss_duplicate_candidate` are
@@ -99,7 +101,7 @@ Server text describes what tools do and their hard limits, nothing more.
   ask the user first. `dry_run: true` stays available but is optional.
 - **`config/mcp/books/admin_usage.md` conflicts with this today.** It says to run every merge "only after
   the user agrees … agreement to one merge is not agreement to the next". Add a section for the queue
-  tools saying they are the exception: the agent decides each pair itself and records why in the note.
+  tools saying they are the exception: the agent decides each pair itself. One short paragraph, no more rules.
   The existing ask-first rule stays for `merge_book`, `merge_author`, `merge_categories`,
   `delete_admin_category` and untagging, which are for ad-hoc chat use, and their descriptions do not
   change.
@@ -134,7 +136,7 @@ Server text describes what tools do and their hard limits, nothing more.
 ### Tests
 
 - Request tests for the four endpoints: scopes, refusals (not pending, wrong `target_id`, missing record,
-  blank note, policy refusal), dry run changes nothing, real merge stamps `resolved_by`/note/`resolved_via`.
+  no permission), dry run changes nothing, real merge stamps `resolved_by`/note/`resolved_via`.
 - MCP catalogue/tool-directory pin tests bumped for the four new admin tools; contract coverage.
 - Admin page: controller test for the `resolved_via` filter (behaviour only); a Playwright E2E for
   **Copy prompt** (button present, clipboard gets text containing the MCP URL).
