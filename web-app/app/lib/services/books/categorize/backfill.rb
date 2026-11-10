@@ -4,7 +4,8 @@ module Services
   module Books
     module Categorize
       # The origin and categories backfill. Picks the books still needing a judgment
-      # (scope origin_only, categories_only or all = either) and plans a books.book_categorize run for each, SPACING seconds after
+      # for its scope (origin_only, categories_only, or all: either kind undone) and
+      # plans a books.book_categorize run for each, SPACING seconds after
       # the one before (Wikimedia's pace of one request a second, with room for
       # the several requests a book's evidence takes).
       #
@@ -24,7 +25,7 @@ module Services
         SPACING = 8
         BATCH = 500
         SCOPES = %w[origin_only categories_only all]
-        SCOPE = "origin_only"
+        DEFAULT_SCOPE = "origin_only"
 
         def self.call(scope:, limit:, label:, book_ids: nil)
           new(scope: scope, limit: limit, label: label, book_ids: book_ids).call
@@ -34,7 +35,7 @@ module Services
           "unknown scope #{scope}; use one of #{SCOPES.join(", ")}" unless SCOPES.include?(scope)
         end
 
-        def self.candidates(scope: SCOPE, book_ids: nil)
+        def self.candidates(scope: DEFAULT_SCOPE, book_ids: nil)
           raise ArgumentError, refusal(scope) if refusal(scope)
 
           relation = ::Books::Book.where("NOT EXISTS (#{importing_runs.to_sql})")
@@ -127,6 +128,7 @@ module Services
           relation.pluck(:id).each_slice(BATCH) do |ids|
             books = ::Books::Book.where(id: ids).index_by(&:id)
             running = running_book_ids(ids)
+            run_scopes = run_scopes_for(ids)
             ids.each do |id|
               # Merged or deleted since the pluck: not planned, not counted.
               next unless (book = books[id])
@@ -137,7 +139,7 @@ module Services
               ActiveRecord::Base.transaction do
                 ::Workflows::Books::BookCategorize.start(
                   book, initiated_by: "backfill",
-                  options: {"context" => "backfill", "label" => @label, "scope" => @scope},
+                  options: {"context" => "backfill", "label" => @label, "scope" => run_scopes.fetch(id, @scope)},
                   start_after: first_slot + (fresh * SPACING).seconds
                 )
               end
@@ -162,6 +164,20 @@ module Services
           return now unless latest && latest > now
 
           latest + SPACING.seconds
+        end
+
+        # Under "all", a book already done for one kind must not be judged for it
+        # again (a second AI call): its run is narrowed to the other kind.
+        def run_scopes_for(ids)
+          return {} unless @scope == "all"
+
+          origin, categories = self.class.kinds_for("all").map do |kind, version|
+            ::Books::Book.where(id: ids).where("EXISTS (#{self.class.done_rows(kind, version).to_sql})").pluck(:id).to_set
+          end
+          ids.each_with_object({}) do |id, scopes|
+            scopes[id] = "categories_only" if origin.include?(id)
+            scopes[id] = "origin_only" if categories.include?(id)
+          end
         end
 
         def running_book_ids(ids)

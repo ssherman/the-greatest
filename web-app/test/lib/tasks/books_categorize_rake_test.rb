@@ -38,6 +38,18 @@ class BooksCategorizeRakeTest < ActiveSupport::TestCase
     end
   end
 
+  test "categories_only and all are accepted and enqueue the job with that scope" do
+    ENV["APPLY"] = "1"
+    Sidekiq::Testing.fake! do
+      %w[categories_only all].each do |scope|
+        @task.reenable
+        capture_io { @task.invoke(scope, "10", "v1") }
+      end
+      assert_equal [["categories_only", 10, "v1", nil], ["all", 10, "v1", nil]], Books::CategorizeBackfillJob.jobs.map { it["args"] }
+      Books::CategorizeBackfillJob.clear
+    end
+  end
+
   test "BOOK_IDS is passed through" do
     ENV["APPLY"] = "1"
     ENV["BOOK_IDS"] = "4, 5"

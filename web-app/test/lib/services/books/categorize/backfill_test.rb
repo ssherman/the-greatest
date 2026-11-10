@@ -216,6 +216,18 @@ module Services
           assert_predicate run.step(:categorize), :skipped?
         end
 
+        test "under all, a book done for one kind is planned for the other only" do
+          origin_row(@american)
+          categories_row(@unknown_only)
+          Backfill.call(scope: "all", limit: nil, label: "t", book_ids: [@american.id, @unknown_only.id, @no_country.id])
+          runs = ->(book) { WorkflowRun.where(workflow: "books.book_categorize", enrichable: book).sole }
+          assert_equal "categories_only", runs.call(@american).options["scope"]
+          assert_predicate runs.call(@american).step(:categorize), :skipped?
+          assert_equal "origin_only", runs.call(@unknown_only).options["scope"]
+          assert_predicate runs.call(@unknown_only).step(:categories), :skipped?
+          assert_equal "all", runs.call(@no_country).options["scope"]
+        end
+
         test "refuses an unknown scope" do
           assert_nil Backfill.refusal("categories_only")
           result = Backfill.call(scope: "bogus", limit: 1, label: "t")
