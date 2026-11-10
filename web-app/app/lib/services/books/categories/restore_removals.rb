@@ -31,25 +31,33 @@ module Services
             Array(row.facts.dig("apply", "removed")).map { [row.enrichable_id, it["id"]] }
           end.uniq
           active = ::Books::Category.active.where(id: removals.map(&:last)).pluck(:id).to_set
-          held = ::CategoryItem.where(item_type: "Books::Book", item_id: removals.map(&:first), category_id: removals.map(&:last))
-            .pluck(:item_id, :category_id).to_set
+          existing = ::CategoryItem.where(item_type: "Books::Book", item_id: removals.map(&:first), category_id: removals.map(&:last))
+            .index_by { [it.item_id, it.category_id] }
 
           links = skipped = 0
           touched = []
-          removals.each do |book_id, category_id|
-            if !active.include?(category_id) || held.include?([book_id, category_id])
-              skipped += 1
-              next
+          ActiveRecord::Base.transaction do
+            removals.each do |book_id, category_id|
+              item = existing[[book_id, category_id]]
+              # An inherited row is not the book's own link: it is upgraded to legacy.
+              if !active.include?(category_id) || (item && !item.source_inherited?)
+                skipped += 1
+                next
+              end
+              links += 1
+              touched << book_id
+              next unless @apply
+
+              if item
+                item.update!(source: :legacy)
+              else
+                ::CategoryItem.create!(item_type: "Books::Book", item_id: book_id, category_id: category_id, source: :legacy)
+              end
             end
-            links += 1
-            touched << book_id
-            next unless @apply
 
-            ::CategoryItem.create!(item_type: "Books::Book", item_id: book_id, category_id: category_id, source: :legacy)
+            touched.uniq!
+            ::Categories::AncestorReconciler.call(item_ids: touched) if @apply && touched.any?
           end
-
-          touched.uniq!
-          ::Categories::AncestorReconciler.call(item_ids: touched) if @apply && touched.any?
           Result.new(success?: true, errors: [], data: {books: touched.size, links: links, skipped: skipped})
         end
       end

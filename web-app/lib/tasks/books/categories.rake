@@ -23,7 +23,7 @@ namespace :books do
       puts "Held back by reason: #{pairs.call(data[:held_back])}"
       puts "Book type by reason: #{pairs.call(data[:type])}"
       puts "Average added per book: #{data[:avg_added_per_book]}; removed: #{data[:avg_removed_per_book]}"
-      puts "Type conflicts (#{data[:type_conflicts].size}):"
+      puts "Type conflicts (#{data[:type_conflicts].size} of #{data[:type]["type_conflict"] || 0}):"
       data[:type_conflicts].each { |c| puts "  ##{c[:book_id]} #{c[:title]}: judged #{c[:judged]}, held #{c[:held]}" }
       puts "Unmatched answers (top 20 per type):"
       data[:unmatched].each do |type, names|

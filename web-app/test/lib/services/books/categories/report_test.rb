@@ -33,6 +33,7 @@ module Services
           data = Report.call(label: "c1").data
           assert_equal [1, {"genre" => 1}, {"audience" => 1}, {"subject" => 2}, {"cap" => 2, "low_confidence" => 1}, {"type_conflict" => 1}],
             [data[:books], data[:added], data[:confirmed], data[:removed], data[:held_back], data[:type]]
+          assert_equal({"applied" => 1}, data[:by_outcome])
           assert_equal [1.0, 2.0], [data[:avg_added_per_book], data[:avg_removed_per_book]]
           assert_equal [{book_id: @a.id, title: "Cat Report A", judged: "novel", held: "essay"}], data[:type_conflicts]
         end

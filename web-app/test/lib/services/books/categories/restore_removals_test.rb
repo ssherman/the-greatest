@@ -30,6 +30,14 @@ module Services
           assert_nil CategoryItem.find_by(item: @book, category_id: @gone.id)
         end
 
+        test "an inherited row is upgraded to legacy and counted as restored" do
+          @book.category_items.create!(category: @cat, source: :inherited)
+          row([entry(@cat)])
+          data = RestoreRemovals.call(label: "r1", apply: true).data
+          assert_equal [1, 0], [data[:links], data[:skipped]]
+          assert_equal "legacy", CategoryItem.find_by(item: @book, category_id: @cat.id).source
+        end
+
         test "a dry run writes nothing" do
           row([entry(@cat)])
           data = RestoreRemovals.call(label: "r1", apply: false).data
