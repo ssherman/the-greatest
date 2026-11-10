@@ -53,6 +53,7 @@ module Services
           fetched = client.fetch(format(URL, @goodreads_book_id), wait_for_selector: config.wait_for_selector,
             timeout_ms: config.fetch_timeout_ms)
           parsed = ::Books::Goodreads::BookPage.parse(html: fetched.html, status: fetched.status)
+          ::Books::Goodreads::FetchLog.fetched(target: "book #{@goodreads_book_id}", page: fetched, outcome: parsed.outcome)
           return done(:unavailable) if parsed.outcome == :unavailable
 
           page = store(parsed, fetched)
