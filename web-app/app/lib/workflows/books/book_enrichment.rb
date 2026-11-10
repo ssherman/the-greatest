@@ -9,7 +9,9 @@
 # waits on goodreads too; a run planned under version 2 has no evidence step
 # and still runs. Version 4 added categorize (the origin judge), which waits on
 # book_facts and evidence; a run planned under version 3 has no categorize step
-# and still runs.
+# and still runs. Version 5 added categories (the category judge), which waits
+# on categorize; a run planned under version 4 has no categories step and still
+# runs.
 #
 # book_facts also waits for the AI step of every author the import created, but
 # those are other runs' steps, so those waits are passed at plan time (start)
@@ -21,7 +23,7 @@ module Workflows
   module Books
     class BookEnrichment < Workflows::Definition
       workflow "books.book_enrichment"
-      version 4
+      version 5
       target_class ::Books::Book
 
       # On the goodreads_fetch capsule, one job at a time: FetchGate pacing relies on it.
@@ -45,6 +47,11 @@ module Workflows
       # Decides the origin country from the evidence and book_facts' answer.
       add_step key: :categorize, queue: :low, lease: 10.minutes, waits_on: {book_facts: :finish, evidence: :finish},
         adapter: Steps::Categorize.new
+
+      # Decides genres, subjects, locations and audience; runs after categorize so
+      # the two share one research call per book.
+      add_step key: :categories, queue: :low, lease: 10.minutes, waits_on: {categorize: :finish},
+        adapter: Steps::Categories.new
 
       # Plans a book run and dispatches what is ready once the caller's
       # transaction commits. Returns the run: the new one, or the active one when
