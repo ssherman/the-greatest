@@ -32,7 +32,9 @@ module Services
       def mark_pair_merged
         a, b = [@source_id, @target_id].minmax
         ::DuplicateCandidate.where(item_type: @item_type, item_a_id: a, item_b_id: b)
-          .update_all(status: ::DuplicateCandidate.statuses[:merged], resolved_at: Time.current, updated_at: Time.current)
+          .update_all(status: ::DuplicateCandidate.statuses[:merged], resolved_at: Time.current,
+            resolved_by_id: Current.acting_user&.id, resolved_via: Current.acting_via,
+            updated_at: Time.current)
       end
 
       def rekey_pending_pairs

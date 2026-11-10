@@ -6,10 +6,10 @@ module Api
   class McpAdminControllerTest < ActionDispatch::IntegrationTest
     include McpRpcHelpers
 
-    READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category].freeze
-    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author].freeze
-    MERGE_TOOLS = %w[delete_admin_category merge_categories merge_book merge_author].freeze
-    DESTRUCTIVE_TOOLS = %w[merge_categories merge_book merge_author delete_admin_category untag_book untag_author].freeze
+    READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate].freeze
+    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author dismiss_duplicate_candidate].freeze
+    MERGE_TOOLS = %w[delete_admin_category merge_categories merge_book merge_author merge_duplicate_candidate].freeze
+    DESTRUCTIVE_TOOLS = %w[merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author].freeze
 
     setup do
       host! "dev-new.thegreatestbooks.org"
@@ -55,10 +55,10 @@ module Api
       assert_equal %w[untag_author untag_book], destructive_names(tools).sort
     end
 
-    test "a merge token lists all fourteen tools" do
+    test "a merge token lists all eighteen tools" do
       tools = listed_tools(ApiTokenSecrets::ADMIN)
 
-      assert_equal 14, tools.size
+      assert_equal 18, tools.size
       assert_equal (READ_TOOLS + WRITE_TOOLS + MERGE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
       assert_equal DESTRUCTIVE_TOOLS.sort, destructive_names(tools).sort
     end
