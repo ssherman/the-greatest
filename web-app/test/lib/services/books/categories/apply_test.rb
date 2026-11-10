@@ -20,9 +20,9 @@ module Services
 
         def sources_of(cat) = CategoryItem.find_by(item: @book, category_id: cat.id)&.source
 
-        def dossier(external: true, book_facts: nil, wikidata: nil, worldcat: nil, goodreads: nil)
+        def dossier(external: true, book_facts: nil, wikidata: nil, worldcat: nil, goodreads: nil, record: {})
           wikidata = {"genres" => ["Unrelated"]} if external && wikidata.nil? && worldcat.nil?
-          Categorize::Dossier.new(book: @book, evidence_id: nil, record: {}, book_facts: book_facts,
+          Categorize::Dossier.new(book: @book, evidence_id: nil, record: record, book_facts: book_facts,
             wikidata: wikidata, wikipedia: nil, worldcat: worldcat, goodreads: goodreads)
         end
 
@@ -110,6 +110,69 @@ module Services
           assert_empty result.data[:removed]
           assert_equal "legacy", sources_of(us)
           assert_equal "ai", sources_of(chicago)
+        end
+
+        test "a legacy United States link is kept because its descendant Alabama is resolved" do
+          us = category("location", "United States")
+          alabama = category("location", "Alabama", parent: us)
+          link(us)
+          result = perform(resolved: [entry(alabama)])
+          assert_empty result.data[:removed]
+          assert_equal "legacy", sources_of(us)
+        end
+
+        test "a legacy subject named inside a picked subject is kept, at any confidence" do
+          gender = category("subject", "Gender")
+          death = category("subject", "Mortality", alternative_names: ["Death"])
+          roles = category("subject", "Gender Roles")
+          grief = category("subject", "Death and Grief")
+          [gender, death].each { |c| link(c) }
+          result = perform(resolved: [entry(roles), entry(grief, "low")])
+          assert_empty result.data[:removed]
+          assert_equal %w[legacy legacy], [gender, death].map { |c| sources_of(c) }
+        end
+
+        test "a legacy subject only partly spelled inside a picked subject is not protected" do
+          war = category("subject", "War")
+          warsaw = category("subject", "Warsaw Uprising")
+          link(war)
+          result = perform(resolved: [entry(warsaw)])
+          assert_equal [war.id], result.data[:removed].map { |r| r[:id] }
+        end
+
+        test "a legacy subject mentioned only in the description is still removable" do
+          mentioned = category("subject", "Chess")
+          picked = category("subject", "Whaling")
+          link(mentioned)
+          result = perform(resolved: [entry(picked)], dossier: dossier(record: {"description" => "A novel about chess."}))
+          assert_equal [mentioned.id], result.data[:removed].map { |r| r[:id] }
+        end
+
+        test "a medium pick the book already holds is confirmed without external support" do
+          held = category("subject", "Held Subject")
+          link(held)
+          result = perform(resolved: [entry(held, "medium")], rejudge: false)
+          assert_equal [held.id], result.data[:confirmed].map { |c| c[:id] }
+          assert_equal "ai", sources_of(held)
+        end
+
+        test "a medium pick named in the description is added" do
+          cat = category("subject", "Whaling")
+          result = perform(resolved: [entry(cat, "medium")], dossier: dossier(record: {"description" => "An epic of whaling."}))
+          assert_equal [cat.id], result.data[:added].map { |a| a[:id] }
+          assert_equal [["text"]], result.data[:added].map { |a| a[:support] }
+        end
+
+        test "a medium pick named in a goodreads shelf the matcher misses is added" do
+          cat = category("subject", "Sea Voyages")
+          result = perform(resolved: [entry(cat, "medium")], dossier: dossier(goodreads: {"genres" => ["sea voyages classics"]}))
+          assert_equal [cat.id], result.data[:added].map { |a| a[:id] }
+        end
+
+        test "a medium pick with no support of any kind is still held back" do
+          cat = category("subject", "Whaling")
+          result = perform(resolved: [entry(cat, "medium")], dossier: dossier(record: {"description" => "Nothing relevant."}))
+          assert_equal [[cat.id, "unsupported_medium"]], result.data[:held_back].map { |h| [h[:id], h[:reason]] }
         end
 
         test "a legacy link backed by a goodreads shelf stays" do

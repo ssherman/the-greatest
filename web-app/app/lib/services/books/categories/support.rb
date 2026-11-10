@@ -30,6 +30,23 @@ module Services
           sources_for(category).any?
         end
 
+        # The sources_for names plus the looser evidence that admits a medium pick for ADDING only:
+        # "held" (the book already has the category, any source), "text" (a name appears in the
+        # description, Wikipedia lead or plot, or WorldCat summary) and "shelf" (a name appears in a
+        # Goodreads shelf name the GenreMatcher missed). Never used to protect a legacy link from removal.
+        def addition_sources(category, held:)
+          sources = sources_for(category)
+          names = names_for(category)
+          sources << "held" if held
+          sources << "text" if prose_strings.any? { |text| text_match?(names, text) }
+          sources << "shelf" if shelf_names.any? { |shelf| text_match?(names, shelf) }
+          sources
+        end
+
+        def supports_addition?(category, held:)
+          addition_sources(category, held: held).any?
+        end
+
         private
 
         attr_reader :dossier
@@ -58,6 +75,19 @@ module Services
             text.match?(/(?<![[:alnum:]])#{Regexp.escape(name)}(?![[:alnum:]])/i) ||
               (text_key && text_key == Services::CategoryCleanup::NameNormalizer.twin_key(name))
           end
+        end
+
+        def prose_strings
+          @prose_strings ||= begin
+            record = dossier.record.is_a?(Hash) ? dossier.record : {}
+            wikipedia = dossier.wikipedia.is_a?(Hash) ? dossier.wikipedia : {}
+            worldcat = dossier.worldcat.is_a?(Hash) ? dossier.worldcat : {}
+            [record["description"], wikipedia["lead"], wikipedia["plot"], worldcat["summary"]].map(&:to_s).reject(&:blank?)
+          end
+        end
+
+        def shelf_names
+          @shelf_names ||= dossier.goodreads.is_a?(Hash) ? Array(dossier.goodreads["genres"]).map(&:to_s) : []
         end
 
         def wikidata_strings

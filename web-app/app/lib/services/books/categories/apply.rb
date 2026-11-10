@@ -115,6 +115,21 @@ module Services
           end.to_set
         end
 
+        # A legacy subject whose name (or an alternative name) is a whole word or phrase inside a
+        # picked subject's name is covered by that pick: Gender inside Gender Roles. Any confidence.
+        def named_inside_picked_subject?(category)
+          return false unless category.subject?
+
+          names = ([category.name] + Array(category.alternative_names)).map { |name| name.to_s.strip }.reject(&:empty?)
+          picked_subject_names.any? do |picked|
+            names.any? { |name| picked.match?(/(?<![[:alnum:]])#{Regexp.escape(name)}(?![[:alnum:]])/i) }
+          end
+        end
+
+        def picked_subject_names
+          @picked_subject_names ||= resolved.map { |entry| entry[:category] }.select(&:subject?).map(&:name).uniq
+        end
+
         def remove_unsupported
           @links.select(&:source_legacy?).each do |link|
             category = link.category
@@ -123,6 +138,7 @@ module Services
             next unless resolved_types.include?(category.category_type)
             next if picked_ids.include?(category.id)
             next if named_by_unmatched?(category)
+            next if named_inside_picked_subject?(category)
             next if support.supported?(category)
 
             link.destroy!
@@ -177,10 +193,12 @@ module Services
           type = category.category_type
           return hold(entry, category, "low_confidence") unless CONFIDENCE_ORDER.key?(entry[:confidence])
 
-          sources = support.sources_for(category)
+          existing = book.category_items.find_by(category_id: category.id)
+          # A medium pick needs the looser, addition-only support (held, prose, shelf names);
+          # removals still use the stricter supported?.
+          sources = (entry[:confidence] == "medium") ? support.addition_sources(category, held: existing.present?) : support.sources_for(category)
           return hold(entry, category, "unsupported_medium") if entry[:confidence] == "medium" && sources.empty?
 
-          existing = book.category_items.find_by(category_id: category.id)
           if existing
             return unless existing.source_legacy? || existing.source_inherited?
 

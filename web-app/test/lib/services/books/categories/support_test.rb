@@ -10,8 +10,8 @@ module Services
 
         def category(name, type, **attrs) = ::Books::Category.create!(name: name, category_type: type, **attrs)
 
-        def dossier(wikidata: nil, wikipedia: nil, worldcat: nil, goodreads: nil)
-          Categorize::Dossier.new(book: @book, evidence_id: nil, record: {}, book_facts: nil,
+        def dossier(wikidata: nil, wikipedia: nil, worldcat: nil, goodreads: nil, record: {})
+          Categorize::Dossier.new(book: @book, evidence_id: nil, record: record, book_facts: nil,
             wikidata: wikidata, wikipedia: wikipedia, worldcat: worldcat, goodreads: goodreads)
         end
 
@@ -82,6 +82,42 @@ module Services
           assert_equal %w[wikidata wikipedia], sup.sources_for(genre)
           assert sup.supported?(genre)
           assert_not support.supported?(genre)
+        end
+
+        test "supports_addition? holds wherever supported? holds" do
+          genre = category("Satire", "genre")
+          assert support(wikidata: {"genres" => ["Satire"]}).supports_addition?(genre, held: false)
+        end
+
+        test "supports_addition? admits a category the book already holds" do
+          genre = category("Satire", "genre")
+          assert_not support.supports_addition?(genre, held: false)
+          assert support.supports_addition?(genre, held: true)
+          assert_not support.supported?(genre)
+        end
+
+        test "supports_addition? admits a name found in the description, lead, plot or WorldCat summary" do
+          genre = category("Satire", "genre")
+          {record: {"description" => "A biting satire of war."}, wikipedia: {"lead" => "A satire."},
+           wikipedia_plot: {"plot" => "It is satire throughout."}, worldcat: {"summary" => "Satire of the army."}}.each do |key, value|
+            sections = (key == :wikipedia_plot) ? {wikipedia: value} : {key => value}
+            sup = support(**sections)
+            assert sup.supports_addition?(genre, held: false), key.to_s
+            assert_not sup.supported?(genre), key.to_s
+          end
+        end
+
+        test "supports_addition? text test is whole-word" do
+          war = category("War", "subject")
+          assert_not support(record: {"description" => "The Warsaw Uprising."}).supports_addition?(war, held: false)
+        end
+
+        test "supports_addition? admits a name matching any goodreads shelf the matcher misses" do
+          war = category("War", "subject")
+          sup = support(goodreads: {"genres" => ["Fiction", "War stories"]})
+          assert sup.supports_addition?(war, held: false)
+          assert_not sup.supported?(war)
+          assert_not support(goodreads: {"genres" => ["warfare"]}).supports_addition?(war, held: false)
         end
       end
     end
