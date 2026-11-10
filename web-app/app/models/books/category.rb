@@ -19,14 +19,15 @@
 #
 # Indexes
 #
-#  index_categories_on_category_type   (category_type)
-#  index_categories_on_deleted         (deleted)
-#  index_categories_on_merged_into_id  (merged_into_id)
-#  index_categories_on_name            (name)
-#  index_categories_on_parent_id       (parent_id)
-#  index_categories_on_slug            (slug)
-#  index_categories_on_type            (type)
-#  index_categories_on_type_and_slug   (type,slug)
+#  index_categories_on_category_type    (category_type)
+#  index_categories_on_deleted          (deleted)
+#  index_categories_on_lower_name_trgm  (lower((name)::text) gin_trgm_ops) USING gin
+#  index_categories_on_merged_into_id   (merged_into_id)
+#  index_categories_on_name             (name)
+#  index_categories_on_parent_id        (parent_id)
+#  index_categories_on_slug             (slug)
+#  index_categories_on_type             (type)
+#  index_categories_on_type_and_slug    (type,slug)
 #
 # Foreign Keys
 #
