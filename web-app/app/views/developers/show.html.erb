@@ -22,6 +22,12 @@
       create and revoke them at <%= link_to "/developers/tokens", developers_tokens_path %>.
       Reading this page needs nothing.
     </p>
+    <% if @mcp_tools.any? %>
+      <p id="mcp-pointer">
+        Using Claude, Codex or another AI assistant? It can read the rankings
+        for you: see <a href="#mcp">connecting an AI assistant (MCP)</a>.
+      </p>
+    <% end %>
 
     <h2 id="quick-start">Quick start</h2>
     <p>Put your token in an environment variable and send it as a bearer token:</p>

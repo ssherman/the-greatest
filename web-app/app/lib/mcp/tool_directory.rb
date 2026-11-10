@@ -30,5 +30,10 @@ module Mcp
 
       operations + composites
     end
+
+    # Whether `domain` has a public MCP endpoint to point people at. The links
+    # into the MCP docs (footer, /members, the top of /developers) ask this, so
+    # they appear on a site exactly when /developers has an MCP section to show.
+    def self.public_tools?(domain) = entries(document: :public, domain: domain).any?
   end
 end

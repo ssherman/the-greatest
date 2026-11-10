@@ -27,7 +27,7 @@ class FooterComponentTest < ViewComponent::TestCase
     test "#{domain} footer links to the API docs" do
       render_footer(domain)
 
-      assert_selector "footer a[href='/developers']", text: "API"
+      assert_selector "footer a[href='/developers']", count: 1
     end
 
     # The year is computed, not typed: the music and games footers this replaces

@@ -46,5 +46,11 @@ module Mcp
       assert_equal Mcp::Sites::Books::FindBook.description, find_book.description
       assert_equal false, find_book.destructive
     end
+
+    test "public_tools? is true only for a site with a public MCP endpoint" do
+      assert Mcp::ToolDirectory.public_tools?(:books)
+      assert_not Mcp::ToolDirectory.public_tools?(:music)
+      assert_not Mcp::ToolDirectory.public_tools?(:games)
+    end
   end
 end
