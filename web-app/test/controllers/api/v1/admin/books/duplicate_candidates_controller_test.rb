@@ -130,6 +130,25 @@ module Api
             assert_nil json[:data][:match_decision]
           end
 
+          test "get reads descriptions from the descriptions subsystem, not the legacy column" do
+            book = ::Books::Book.find(@pending.item_a_id)
+            book.update_columns(description: "stale legacy text")
+            book.descriptions.create!(kind: :summary, locale: "en", source: :manual, content: "current summary")
+
+            author_pair_row = author_pair
+            author = ::Books::Author.find(author_pair_row.item_a_id)
+            author.update_columns(description: "stale legacy bio")
+            author.descriptions.create!(kind: :summary, locale: "en", source: :manual, content: "current bio")
+
+            fetch(@pending.id)
+            assert_response :success
+            assert_equal "current summary", json[:data][:records].find { |r| r[:id] == book.id }[:description]
+
+            fetch(author_pair_row.id)
+            assert_response :success
+            assert_equal "current bio", json[:data][:records].find { |r| r[:id] == author.id }[:description]
+          end
+
           test "get answers for a resolved pair" do
             fetch(@dismissed.id)
             assert_api_response_conform(status: 200, api: :admin)

@@ -71,18 +71,25 @@ module Api
             books.left_joins(:primary_ranked_item).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), :id)
           end
 
+          # The current summary lives in the descriptions subsystem (Open Library and
+          # the Apply*Facts services write there), not the legacy description column;
+          # the public resources read it the same way.
+          def summary_for(record)
+            record.primary_description(kind: :summary)&.content&.slice(0, DESCRIPTION_LIMIT)
+          end
+
           def detail_for(record)
             if record.is_a?(::Books::Book)
               {
                 subtitle: record.subtitle,
                 alternate_titles: Array(record.alternate_titles),
-                description: record.description&.slice(0, DESCRIPTION_LIMIT),
+                description: summary_for(record),
                 lists: record.lists.order(:id).limit(DETAIL_LIMIT).map { |list| {id: list.id, name: list.name} }
               }
             else
               {
                 alternate_names: Array(record.alternate_names),
-                description: record.description&.slice(0, DESCRIPTION_LIMIT),
+                description: summary_for(record),
                 books: ranked_first(record.books.includes(:primary_ranked_item)).limit(DETAIL_LIMIT).map do |book|
                   {id: book.id, title: book.title, rank: book.primary_ranked_item&.rank}
                 end
