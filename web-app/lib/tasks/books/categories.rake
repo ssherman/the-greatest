@@ -32,9 +32,9 @@ namespace :books do
       end
       puts "Genre names to alias (add as an alternative name on an existing genre, or ignore):"
       close, open_names = data[:unlisted_genres].partition { |suggestion| suggestion[:genre_name] }
-      close.each { |suggestion| puts "  #{suggestion[:name]} → #{suggestion[:genre_name]} (#{suggestion[:count]})" }
+      close.each { |suggestion| puts "  #{suggestion[:display]} → #{suggestion[:genre_name]} (#{suggestion[:count]})" }
       puts "No close genre:"
-      open_names.each { |suggestion| puts "  #{suggestion[:name]} (#{suggestion[:count]})" }
+      open_names.each { |suggestion| puts "  #{suggestion[:display]} (#{suggestion[:count]})" }
       puts "Research rows: #{data[:research_rows]} (about $#{format("%.2f", data[:research_cost_estimate])})"
       puts "Deferred research: #{data[:deferred_research]}"
     end

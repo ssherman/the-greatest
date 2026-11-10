@@ -139,7 +139,8 @@ module Services
             changed = applied.data.values_at(:added, :confirmed, :removed).any?(&:present?) || applied.data.dig(:type, :applied) == true
             attributes.merge!(outcome: changed ? :applied : :nothing_to_apply, reason: changed ? "applied" : "nothing_applied",
               facts: facts.merge(committed).merge(
-                "choice_chat_id" => mapped.data[:ai_chat]&.id
+                "choice_chat_id" => mapped.data[:ai_chat]&.id,
+                "parent_choice_chat_id" => mapped.data[:parent_ai_chat]&.id
               ))
           end
           [book.enrichments.create!(attributes), mode == :knowledge && unrecognized]
@@ -185,7 +186,7 @@ module Services
         def base_facts(path)
           {"prompt_version" => Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "context" => context,
            "label" => label, "path" => path, "dossier" => dossier&.to_ledger, "answer" => nil, "mapping" => nil,
-           "apply" => nil, "choice_chat_id" => nil, "deferred_research" => false}
+           "apply" => nil, "choice_chat_id" => nil, "parent_choice_chat_id" => nil, "deferred_research" => false}
         end
 
         def confidence_for(value)

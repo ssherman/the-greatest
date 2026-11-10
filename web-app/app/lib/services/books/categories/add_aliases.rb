@@ -50,10 +50,10 @@ module Services
 
             taken << name
             if @apply
-              genre.alternative_names = (Array(genre.alternative_names) + [name]).uniq
+              genre.alternative_names = (Array(genre.alternative_names) + [suggestion[:display].presence || name]).uniq
               genre.save!
             end
-            added << {name: name, genre: genre.name}
+            added << {name: suggestion[:display].presence || name, genre: genre.name}
           end
 
           Result.new(success?: true, errors: [], data: {added: added, skipped: skipped})

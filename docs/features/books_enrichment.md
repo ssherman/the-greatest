@@ -244,7 +244,7 @@ migration behind the candidates. A failed chooser call fails the judge row, so t
 
 **Facts keys.** Every row: `prompt_version`, `context`, `label`, `path`, `dossier`, `answer`, `mapping`
 (resolved entries with `via`, and unmatched with their reason), `apply` (`added`, `confirmed`, `removed`,
-`held_back`, `type`, `rejudged`), `choice_chat_id` and `deferred_research`.
+`held_back`, `type`, `rejudged`), `choice_chat_id`, `parent_choice_chat_id` (the fictional-parent chooser call) and `deferred_research`.
 
 **Research and budgets.** As for origin: a book published at or after `config.x.ai.knowledge_cutoff_year`, or one
 the knowledge call did not recognize and no evidence identifies, is researched when the budget allows, otherwise

@@ -40,9 +40,8 @@ module Services
           parent_chat = settle_fictional_parents(items)
           return parent_chat if parent_chat.is_a?(Result)
 
-          chat ||= parent_chat
           items.each { |item| item.unmatched_via ||= "no_candidate" if item.category_id.nil? }
-          Result.new(success?: true, errors: [], data: build_data(items, chat))
+          Result.new(success?: true, errors: [], data: build_data(items, chat, parent_chat))
         end
 
         private
@@ -128,6 +127,9 @@ module Services
         def fits?(item, id)
           return true unless item.type == "location"
           return false if fictional_ids.include?(id) != fictional_filter(item)
+          # The bare Fictional Location root is never assigned; a fictional place's parent hint is a
+          # real place, which never appears among a fictional row's ancestors.
+          return !fictional_root_id?(id) if fictional_filter(item)
 
           hint_matches?(item, id)
         end
@@ -137,6 +139,8 @@ module Services
         end
 
         def fictional_ids = (@fictional_ids ||= Candidates.fictional_ids)
+
+        def fictional_root_id?(id) = id == Candidates.fictional_root_id
 
         def hint_matches?(item, id)
           proposed_key = ::Services::CategoryCleanup::NameNormalizer.twin_key(item.proposed)
@@ -211,7 +215,7 @@ module Services
           questions = open_items.map do |item|
             question = {proposed: item.proposed, category_type: item.type,
                         candidates: item.candidate_ids.map { |id| {id: id, label: label(item.type, id)} }}
-            question[:hint] = item.hint if item.type == "location" && item.hint.present?
+            question[:hint] = item.hint if item.type == "location" && item.hint.present? && !fictional_filter(item)
             question
           end
           Services::Ai::Tasks::Books::CategoryChoiceTask.new(parent: book, book_line: book_line, questions: questions).call
@@ -274,7 +278,7 @@ module Services
           chat
         end
 
-        def build_data(items, chat)
+        def build_data(items, chat, parent_chat = nil)
           categories = ::Books::Category.where(id: items.filter_map(&:category_id)).index_by(&:id)
           seen = Set.new
           resolved = []
@@ -292,7 +296,7 @@ module Services
               unmatched << entry
             end
           end
-          {resolved: resolved, unmatched: unmatched, ai_chat: chat}
+          {resolved: resolved, unmatched: unmatched, ai_chat: chat, parent_ai_chat: parent_chat}
         end
       end
     end

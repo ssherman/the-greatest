@@ -59,10 +59,10 @@ module Services
           row(@b, answer: {"unlisted_genres" => [{"name" => "Satirical novel", "closest_id" => satire.id},
             {"name" => "Odd one", "closest_id" => subject.id}, {"name" => "Nothing Close", "closest_id" => nil}, "Legacy String"]})
           assert_equal [
-            {name: "satirical novel", genre_id: satire.id, genre_name: "Report Satire", count: 2},
-            {name: "legacy string", genre_id: nil, genre_name: nil, count: 1},
-            {name: "nothing close", genre_id: nil, genre_name: nil, count: 1},
-            {name: "odd one", genre_id: nil, genre_name: nil, count: 2}
+            {name: "satirical novel", display: "Satirical Novel", genre_id: satire.id, genre_name: "Report Satire", count: 2},
+            {name: "legacy string", display: "Legacy String", genre_id: nil, genre_name: nil, count: 1},
+            {name: "nothing close", display: "Nothing Close", genre_id: nil, genre_name: nil, count: 1},
+            {name: "odd one", display: "Odd One", genre_id: nil, genre_name: nil, count: 2}
           ].sort_by { |h| [-h[:count], h[:name]] }, Report.call.data[:unlisted_genres]
         end
 
@@ -73,9 +73,16 @@ module Services
             dossier: {"wikidata" => {"genres" => ["Known Genre", "weird fiction", "Space Opera"]}})
           row(@b, dossier: {"wikidata" => {"genres" => ["Space Opera"]}})
           assert_equal [
-            {name: "space opera", genre_id: nil, genre_name: nil, count: 2},
-            {name: "weird fiction", genre_id: satire.id, genre_name: "Report Satire", count: 1}
+            {name: "space opera", display: "Space Opera", genre_id: nil, genre_name: nil, count: 2},
+            {name: "weird fiction", display: "Weird Fiction", genre_id: satire.id, genre_name: "Report Satire", count: 1}
           ], Report.call.data[:unlisted_genres]
+        end
+
+        test "display is the most common original form, never retitled" do
+          row(@a, answer: {"unlisted_genres" => [{"name" => "war Novel", "closest_id" => nil}]})
+          row(@b, answer: {"unlisted_genres" => [{"name" => "war Novel", "closest_id" => nil}]})
+          row(new_book("Cat Report C"), answer: {"unlisted_genres" => [{"name" => "War novel", "closest_id" => nil}]})
+          assert_equal ["war Novel"], Report.call.data[:unlisted_genres].map { |h| h[:display] }
         end
 
         test "unlisted_limit caps the suggestions and nil lifts the cap" do

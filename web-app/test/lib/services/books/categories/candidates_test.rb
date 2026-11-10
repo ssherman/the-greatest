@@ -52,6 +52,14 @@ module Services
           assert_equal 2, Candidates.new(category_type: "location").call(name: "Limitville", limit: 2).size
         end
 
+        test "fictional true never returns the Fictional Location root, though fictional_ids includes it" do
+          root = ::Books::Category.create!(name: "Fictional Location", category_type: "location")
+          ::Books::Category.create!(name: "Fictional Places", category_type: "location", parent: root)
+          found = Candidates.new(category_type: "location").call(name: "Fictional Location", fictional: true).map(&:id)
+          assert_not_includes found, root.id
+          assert_includes Candidates.fictional_ids, root.id
+        end
+
         test "fictional_ids includes grandchildren and the root" do
           root = location("Fictional Location")
           child = location("Fic Child", parent: root)

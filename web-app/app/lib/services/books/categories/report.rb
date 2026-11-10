@@ -44,6 +44,7 @@ module Services
           type_reasons = Hash.new(0)
           unmatched = Hash.new { |hash, key| hash[key] = Hash.new(0) }
           unlisted = Hash.new(0)
+          forms = Hash.new { |hash, key| hash[key] = Hash.new(0) }
           conflicts = []
           deferred = 0
           matcher = ::Services::Books::GoodreadsEnrichment::GenreMatcher.new
@@ -67,9 +68,10 @@ module Services
             end
             suggestions = {}
             Array(unlisted_names).each do |entry|
-              name, closest = entry.is_a?(Hash) ? [fold(entry["name"]), entry["closest_id"]] : [fold(entry), nil]
+              raw, closest = entry.is_a?(Hash) ? [entry["name"], entry["closest_id"]] : [entry, nil]
+              name = fold(raw)
               next if name.blank?
-              suggestions[[name, listed[closest] ? closest : nil]] = true
+              suggestions[[name, listed[closest] ? closest : nil]] ||= raw.to_s.strip
             end
             closest_by_name = suggestions.keys.to_h
             Array(wikidata_genres).each do |label|
@@ -77,9 +79,12 @@ module Services
               next if folded.blank?
               resolvable[folded] = matcher.match(label).present? unless resolvable.key?(folded)
               next if resolvable[folded]
-              suggestions[[folded, closest_by_name[folded]]] = true
+              suggestions[[folded, closest_by_name[folded]]] ||= label.to_s.strip
             end
-            suggestions.each_key { unlisted[it] += 1 }
+            suggestions.each do |key, raw|
+              unlisted[key] += 1
+              forms[key][raw] += 1
+            end
             deferred += 1 if deferred_flag == "true"
           end
 
@@ -93,7 +98,7 @@ module Services
             added: added, confirmed: confirmed, removed: removed, held_back: held_back, type: type_reasons,
             type_conflicts: type_conflicts,
             unmatched: unmatched.transform_values { |counts| top(counts, UNMATCHED_LIMIT) },
-            unlisted_genres: suggestions_from(unlisted, listed),
+            unlisted_genres: suggestions_from(unlisted, listed, forms),
             research_rows: research_rows,
             research_cost_estimate: research_rows * Origin::Report::RESEARCH_COST_PER_ROW,
             deferred_research: deferred,
@@ -105,10 +110,14 @@ module Services
         private
 
         # [{name:, genre_id:, genre_name:, count:}] by count, then name.
-        def suggestions_from(unlisted, listed)
+        # display is the most common original spelling of the folded name (ties: alphabetical); never retitled.
+        def suggestions_from(unlisted, listed, forms)
           sorted = unlisted.sort_by { |(name, genre_id), count| [-count, name, genre_id.to_i] }
           sorted = sorted.first(@unlisted_limit) if @unlisted_limit
-          sorted.map { |(name, genre_id), count| {name: name, genre_id: genre_id, genre_name: listed[genre_id], count: count} }
+          sorted.map { |(name, genre_id), count|
+            {name: name, display: forms[[name, genre_id]].min_by { |form, n| [-n, form] }.first, genre_id: genre_id,
+             genre_name: listed[genre_id], count: count}
+          }
         end
 
         def tally(counts, entries, key)

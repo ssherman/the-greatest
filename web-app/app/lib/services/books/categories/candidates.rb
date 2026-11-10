@@ -23,9 +23,12 @@ module Services
         def call(name:, fictional: nil, limit: 10)
           fictional_set = (@category_type == "location" && !fictional.nil?) ? self.class.fictional_ids : nil
 
+          root_id = self.class.fictional_root_id
           query = Trigram.profile(name)
           scored = rows.filter_map do |id, profile|
             next if fictional_set && fictional_set.include?(id) != fictional
+            # The bare root is never a candidate for a fictional place.
+            next if fictional && id == root_id
 
             sim = Trigram.similarity_of(profile, query)
             word = Trigram.word_similarity_of(query, profile)
@@ -37,6 +40,10 @@ module Services
           ids = scored.sort_by { |score, id| [-score, id] }.first(limit).map(&:last)
           by_id = ::Books::Category.where(id: ids).index_by(&:id)
           ids.filter_map { |id| by_id[id] }
+        end
+
+        def self.fictional_root_id
+          ::Books::Category.active.location.where(name: FICTIONAL_ROOT).pick(:id)
         end
 
         # The Fictional Location root and its active descendants. Empty when the root is absent.

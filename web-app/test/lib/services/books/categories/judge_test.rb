@@ -246,6 +246,15 @@ module Services
           end
         end
 
+        test "the parent lookup's chat is recorded separately" do
+          stub_task({})
+          parent_chat = AiChat.create!(parent: @book, chat_type: :analysis, model: "gpt-6-sol", provider: :openai)
+          Mapper.stubs(:call).returns(Mapper::Result.new(success?: true, errors: [], data: {resolved: [], unmatched: [], ai_chat: @choice_chat, parent_ai_chat: parent_chat}))
+          Apply.stubs(:call).returns(Apply::Result.new(success?: true, errors: [], data: applied_data(added: [])))
+          facts = judge.data[:enrichments].sole.facts
+          assert_equal [@choice_chat.id, parent_chat.id], facts.values_at("choice_chat_id", "parent_choice_chat_id")
+        end
+
         test "no chooser call leaves choice_chat_id nil" do
           stub_task({})
           Mapper.stubs(:call).returns(Mapper::Result.new(success?: true, errors: [], data: {resolved: [], unmatched: [], ai_chat: nil}))

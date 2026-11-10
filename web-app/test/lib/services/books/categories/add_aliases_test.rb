@@ -56,6 +56,23 @@ module Services
           assert_empty @war.reload.alternative_names
         end
 
+        test "a name suggested for two genres is added once" do
+          judged(entry("war novel", @war), entry("war novel", @satire))
+          data = perform.data
+          assert_equal 1, data[:added].size
+          assert_equal ["already suggested for another genre in this run"], data[:skipped].map { |s| s[:reason] }
+        end
+
+        test "the most common original casing is written, never retitled" do
+          other = ::Books::Book.create!(title: "Alias Other Book", first_published_year: 1900, original_language: languages(:english))
+          third = ::Books::Book.create!(title: "Alias Third Book", first_published_year: 1900, original_language: languages(:english))
+          judged(entry("War novel", @war))
+          judged(entry("war Novel", @war), book: other)
+          judged(entry("war Novel", @war), book: third)
+          perform(apply: true)
+          assert_equal ["war Novel"], @war.reload.alternative_names
+        end
+
         test "a suggestion with no genre is ignored and no category is ever created" do
           judged(entry("odd name", nil))
           assert_no_difference -> { ::Books::Category.count } do

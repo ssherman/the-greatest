@@ -188,6 +188,54 @@ module Services
           assert_empty result.data[:unmatched]
         end
 
+        test "a fictional place under Fictional Location resolves there even when it has a real parent" do
+          root = location("Fictional Location")
+          yok = location("Yoknapatawpha County", parent: root)
+          location("Mississippi")
+          result = map(answer(locations: [loc("Yoknapatawpha County", kind: "fictional", parent: "Mississippi")]))
+          assert_equal [[yok, "exact"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
+        end
+
+        test "the chooser question for a fictional place carries no parent hint" do
+          root = location("Fictional Location")
+          yok = location("Yoknapatawpha Countyx", parent: root)
+          Services::Ai::Tasks::Books::CategoryChoiceTask.expects(:new).with do |args|
+            args[:questions].none? { |q| q.key?(:hint) }
+          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: yok.id}]}, ai_chat: nil)))
+          result = map(answer(locations: [loc("Yoknapatawpha County", kind: "fictional", parent: "Mississippi")]))
+          assert_equal [yok], result.data[:resolved].map { |r| r[:category] }
+        end
+
+        test "the Fictional Location root is never assigned by an exact answer" do
+          location("Fictional Location")
+          result = map(answer(locations: [loc("Fictional Location", kind: "fictional")]))
+          assert_empty result.data[:resolved]
+        end
+
+        test "the Fictional Location root is never offered to the chooser" do
+          root = location("Fictional Location")
+          Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call).never
+          result = map(answer(locations: [loc("Fictional Locations", kind: "fictional")]))
+          assert_empty result.data[:resolved]
+          assert_not_includes result.data[:unmatched].flat_map { |u| u[:candidate_ids] }, root.id
+        end
+
+        test "both chooser chats are returned when the parent lookup asks too" do
+          location("Fictional Location")
+          location("Alabama Territory")
+          us = location("Alabama Region", parent: location("United States"))
+          first = AiChat.new
+          second = AiChat.new
+          s = subject("Quasar Studies")
+          Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call).twice
+            .returns(Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: s.id}]}, ai_chat: first))
+            .then.returns(Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: us.id}]}, ai_chat: second))
+          result = map(answer(subjects: [subj("Quasar")], locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_same first, result.data[:ai_chat]
+          assert_same second, result.data[:parent_ai_chat]
+          assert_includes result.data[:resolved].map { |r| r[:via] }, "fictional_parent"
+        end
+
         test "a fictional parent never resolves inside the fictional subtree" do
           root = location("Fictional Location")
           location("Alabama", parent: root)
