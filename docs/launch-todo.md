@@ -559,29 +559,43 @@ How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
    `/developers/tokens` and confirm each asks to sign in again. Record the result in the PR or on the
    acceptance line of `docs/features/mcp-server.md`.
 
-## 14. Book origins (the backfill once, then weekly)
+## 14. Book origins and categories (the backfill once, then weekly)
 
-Fills in each book's country of origin through the `books.book_categorize` workflow. Only you start the
+Fills in each book's country of origin, genres, audience, subjects and locations through the
+`books.book_categorize` workflow. Only you start the
 backfill, by hand, with `APPLY=1`; nothing schedules it or starts it automatically. Run it after the
 Goodreads re-import (section 12) is done, since that removes crufty books and finds duplicates, and
-the books and authors it creates already go through the full import workflow, origin step included. The
+the books and authors it creates already go through the full import workflow, origin and categories steps included. The
 backfill runs once here; the weekly run is section 4, step 10, and is optional.
 
 1. Run the author Wikidata enrichment first (section 15, step 11): the work match depends on author QIDs.
    The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
    Wikidata copy first (section 15): remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
    2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
-2. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
+2. Before any categories run, write the genre and audience definitions the categories judge reads.
+   `bin/rails books:categories:write_definitions` is a dry run; run it again with `APPLY=1` to write them (blanks
+   only). Fill in the description in the admin for any genre or audience it prints as `missing`.
+3. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
    catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
    `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised; books whose
    judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. Until
    WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
    judge works without it.
-3. `bin/rails "books:origin:report[origin-v1]"`.
-4. Accept or skip the disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
+   Run the categories after the origins with `bin/rails "books:categorize:backfill[categories_only,all,categories-v1]"`
+   (dry run, then `APPLY=1`). Or, preferably, run `[all,all,<label>]` once in place of both: one evidence gather
+   serves both judgments, and each book is planned with only the judgment it still needs. The categories judge
+   spends the same backfill research cap (`categorize_backfill_research_daily_cap`), which counts origin and
+   categories research together.
+4. `bin/rails "books:origin:report[origin-v1]"` and `bin/rails "books:categories:report[categories-v1]"`. The
+   categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
+   used that we do not list; add the last as alternative names on existing genres, never as new genres.
+5. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
    `IDS=` and `APPLY=1`.
-5. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
+6. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
+   support. `bin/rails "books:categories:restore_removals[categories-v1]"` lists what it would put back; with
+   `APPLY=1` it restores them.
+7. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
    origins changes `percentage_western` and so the western-canon penalty.
 
 ## 15. Local Wikidata (the service once; the re-check repeats after each refresh)
@@ -658,7 +672,7 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
    76,006 authors have a Wikidata QID. On a 40-book sample the local copy matched 5 of 10 top-ranked books,
    1 of 10 mid-ranked and 1 of 20 unranked, all through identifiers. When the author was found by name,
    the author-works route matched 8 of the 14 ranked books that were still unmatched.
-12. **Re-run the stage 2 rehearsal** (section 14, step 1).
+12. **Re-run the stage 2 rehearsal** (section 14, step 1); it now covers the categories judgment too (stage 3, Task 11).
 13. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
    (`config/initializers/wikidata.rb`; it is off everywhere until you do) and deploy. The 06:00 UTC cron
    (`wikidata_recheck_after_refresh`) then reads `/version` daily and, when the dump date is new, re-checks

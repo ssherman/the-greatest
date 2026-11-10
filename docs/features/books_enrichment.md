@@ -81,7 +81,7 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 
 ## The ledger
 
-`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence` or `books.origin`), `mode`
+`Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence`, `books.origin` or `books.categories`), `mode`
 (knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (historical
@@ -175,6 +175,76 @@ Two research caps apply. Imports and admin runs spend `config.x.ai.research_dail
 `config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
 rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
 
+### The `books.categories` kind
+
+The `categories` step (`Services::Books::Categories::Judge`) decides a book's genres, audience, subjects,
+locations and book type from the same evidence the origin judge reads, and writes one row per mode run
+(knowledge, then research when it applies). It runs after `categorize`, so the two share at most one
+research call per book per workflow run.
+
+**Dossier.** `Categorize::Dossier` now also carries what the category judge needs: the record's description
+(1,000 characters) and the categories the book holds now (direct links of the four types, each with its
+source and, for a location, its ancestors); Wikidata's `genres`, `main_subjects`, `narrative_locations`,
+`set_in_periods` and `forms`; Wikipedia's plot (2,000) and infobox genre, subject and setting; WorldCat's summary,
+`mapped_genres` and the first 25 subject headings; and the first 15 Goodreads shelves from the book's fetched
+Goodreads page. The ledger stores a trimmed copy (plot 500, WorldCat subjects 15, a record description over
+300 characters dropped).
+
+**Task and vocabulary.** `BookCategoriesTask` (`PROMPT_VERSION` 1) gets the closed genre and audience lists
+as `id: name — definition`, the definition being `categories.description`. Genres and the audience come back
+as ids from that list; subjects and locations come back as names (locations also carry real or fictional and
+a parent hint); `book_type` is fiction, nonfiction, poetry, religious or unknown. It also lists up to five
+`unlisted_genres`, a report only. Fiction and Nonfiction are never offered as genres: they are the book type.
+`bin/rails books:categories:write_definitions` copies the reviewed definitions from `config/books/genre_plan.yml`
+into `categories.description`, blanks only (dry run unless `APPLY=1`; it prints `kept` for a description that
+differs and `missing` for an active genre or audience with none, which you fill in the admin).
+
+**Mapping.** `Categories::Mapper` turns the answer into categories and never creates one. Ids are checked
+against the vocabulary (`via` `id`; otherwise unmatched `invalid_id`). A name is matched exactly on name or
+alternative name, merged rows included and followed to their target (`via` `exact`, or `merged`); a location
+must also fit its real or fictional subtree and its parent hint. A name still open goes to `Candidates`, which
+scores trigram similarity in Ruby over the type's active names (similarity above 0.3, or word similarity above
+0.5; at most 10), and one `CategoryChoiceTask` call (fast model) picks among them (`via` `chosen`, else
+unmatched `declined`). A name with no candidate is unmatched `no_candidate`. A fictional main setting that
+matched nothing maps to the Fictional Location root (`via` `fictional_root`). There is no database extension or
+migration behind the candidates. A failed chooser call fails the judge row, so the step retries.
+
+**Apply.** `Categories::Apply` writes by fixed rules in one transaction under a row lock:
+
+- Caps count the book's direct links of a type from every source: 5 genres (Fiction and Nonfiction excluded), 8
+  subjects, 5 locations, 1 audience. An entry over the cap is held back (`cap`).
+- `high` answers are written; `medium` only with external support (`Categories::Support`: Wikidata, Wikipedia,
+  WorldCat or Goodreads names the category), else held back `unsupported_medium`; `low` is held back.
+- A new link has source `ai`. A held `legacy` or `inherited` link the judge picked is upgraded to `ai`
+  (`confirmed`); an inherited one is cap-checked first.
+- Book type: written as Fiction or Nonfiction only at `high` confidence, when the book holds neither and
+  book_facts does not disagree. A held type that differs is reported `type_conflict` and never changed.
+- A re-judge may remove links. Only when the context is not `import`, the answer is recognized with `high`
+  confidence, and the dossier has external evidence, a `legacy` link is removed when the judge did not pick it
+  (or a location descendant of it), no source supports it, and the judge resolved at least one entry of that
+  type. Links from any other source, audiences, Fiction and Nonfiction are never removed.
+
+**Facts keys.** Every row: `prompt_version`, `context`, `label`, `path`, `dossier`, `answer`, `mapping`
+(resolved entries with `via`, and unmatched with their reason), `apply` (`added`, `confirmed`, `removed`,
+`held_back`, `type`, `rejudged`), `choice_chat_id` and `deferred_research`.
+
+**Research and budgets.** As for origin: a book published at or after `config.x.ai.knowledge_cutoff_year`, or one
+the knowledge call did not recognize and no evidence identifies, is researched when the budget allows, otherwise
+the row carries `deferred_research` and a later run goes straight to research. Imports and admin runs spend
+`research_daily_cap`. The backfill spends `categorize_backfill_research_daily_cap`, now counting backfill
+research rows of both `books.origin` and `books.categories`.
+
+**Rake tasks.**
+
+| Task | Does |
+|---|---|
+| `books:categories:report[label]` | Counts the newest row per book: outcomes, added, confirmed, removed and held back by type, type conflicts, unmatched names, `unlisted_genres` and research cost. Dry, no label means every run. |
+| `books:categories:restore_removals[label]` | Puts back the legacy links a run removed (`APPLY=1` writes; reads every row with the label; skips a category that is gone or a link the book holds again). The undo. |
+| `books:categories:write_definitions` | Described above. |
+
+The unlisted-genres list in the report is for adding alternative names to existing genres, or ignoring; nothing
+creates a genre from it.
+
 ## Tuning
 
 Everything is in `config/initializers/ai.rb`: the role-to-model map, the knowledge cutoff
@@ -187,5 +257,5 @@ Research run on `gpt-6-astra` with web search: about 15 cents (measured 2026-09-
 
 ## Not done here
 
-Categories (genre, subject, location, and applying the recorded `book_type`), authors,
-Goodreads, series, a ledger UI, and any catalog-wide backfill. See the spec's Non-goals.
+Authors, Goodreads, series and a ledger UI. See the spec's Non-goals. The origin and categories backfill is
+`Services::Books::Categorize::Backfill` (`docs/launch-todo.md` section 14).
