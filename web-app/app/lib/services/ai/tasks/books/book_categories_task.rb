@@ -8,6 +8,8 @@ module Services
         # as names for the Mapper to resolve. The dossier is read-only context;
         # the caller decides what to apply.
         class BookCategoriesTask < EnrichmentTask
+          include DossierPromptHelpers
+
           PROMPT_VERSION = 1
           WORLDCAT_SUBJECTS = 25
           GOODREADS_SHELVES = 15
@@ -54,12 +56,6 @@ module Services
             end.join("\n")
           end
 
-          def research_instruction
-            return "" unless research?
-
-            " Use web search to verify every fact before reporting it; prefer publisher, library and encyclopedia sources. Report what the sources say, not what you remember."
-          end
-
           def user_prompt
             lines = record_lines
             lines.concat(book_facts_lines, wikidata_lines, wikipedia_lines, worldcat_lines, goodreads_lines)
@@ -72,9 +68,7 @@ module Services
             record = dossier.record
             lines = ["Book: \"#{record["title"]}\""]
             lines << "Subtitle: #{record["subtitle"]}" if record["subtitle"].present?
-            Array(record["authors"]).each do |author|
-              lines << "#{(author["role"] == "editor") ? "Editor" : "Author"}: #{author["name"]}"
-            end
+            Array(record["authors"]).each { |author| lines << author_line(author) }
             if record["first_published_year"].present?
               lines << "First published (our record): #{::Services::Books::YearLabel.call(record["first_published_year"])}"
             end
@@ -102,7 +96,10 @@ module Services
             if parts.any?
               lines << (dossier.research_backed? ? "Web-verified facts (from a web search for this book): #{parts.join("; ")}" : "Earlier AI facts: #{parts.join("; ")}")
             end
-            lines << "Description: #{facts["description"]}" if dossier.research_backed? && facts["description"].present?
+            if dossier.research_backed?
+              lines.concat(citation_lines(facts))
+              lines << "Description: #{facts["description"]}" if facts["description"].present?
+            end
             lines
           end
 

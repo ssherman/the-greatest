@@ -44,7 +44,7 @@ module Services
               question[:candidates].each { |candidate| lines << "   #{candidate[:id]}: #{candidate[:label]}" }
               lines << ""
             end
-            lines << "Answer with each proposed name and the id of the matching candidate, or null."
+            lines << "Answer every question with its number and the id of the matching candidate, or null."
             lines.join("\n")
           end
 
@@ -52,21 +52,43 @@ module Services
 
           def response_schema = ResponseSchema
 
+          # Choices are matched to questions by their number, never by echoed text.
+          # A reply that leaves a question unanswered fails, so the caller never
+          # mistakes a malformed reply for a decline.
           def process_and_persist(provider_response)
             parsed = JSON.parse(provider_response[:parsed].to_json, symbolize_names: true)
-            choices = Array(parsed && parsed[:choices]).map do |choice|
-              {proposed: choice[:proposed].to_s, category_id: Integer(choice[:category_id], exception: false)}
+            raw = parsed.is_a?(Hash) ? parsed[:choices] : nil
+            return failure("The reply has no choices list") unless raw.is_a?(Array)
+
+            by_question = {}
+            raw.each do |choice|
+              number = Integer(choice[:question], exception: false) if choice.is_a?(Hash)
+              next unless number&.between?(1, questions.size)
+
+              by_question[number] ||= Integer(choice[:category_id], exception: false)
             end
+            missing = (1..questions.size).reject { |number| raw_numbers(raw).include?(number) }
+            return failure("The reply does not answer question(s) #{missing.join(", ")}") if missing.any?
+
+            choices = (1..questions.size).map { |number| {question: number, category_id: by_question[number]} }
             Services::Ai::Result.new(success: true, data: {choices: choices}, ai_chat: chat)
           end
 
+          def raw_numbers(raw)
+            raw.filter_map { |choice| Integer(choice[:question], exception: false) if choice.is_a?(Hash) }
+          end
+
+          def failure(message)
+            Services::Ai::Result.new(success: false, error: message, ai_chat: chat)
+          end
+
           class Choice < OpenAI::BaseModel
-            required :proposed, String, doc: "The proposed name, exactly as given"
+            required :question, Integer, doc: "The question's number, as listed"
             required :category_id, Integer, nil?: true, doc: "The matching candidate's id, or null for none"
           end
 
           class ResponseSchema < OpenAI::BaseModel
-            required :choices, OpenAI::ArrayOf[Choice], doc: "One per proposed name"
+            required :choices, OpenAI::ArrayOf[Choice], doc: "One per numbered question"
           end
         end
       end

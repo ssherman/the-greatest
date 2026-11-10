@@ -101,6 +101,22 @@ module Services
             assert_includes prompt, "Description: A novel."
           end
 
+          test "research-backed facts list their sources" do
+            facts = {"recognized" => true, "mode" => "research", "book_type" => "fiction", "citations" => ["https://a.example", {"url" => "https://b.example"}]}
+            assert_includes task(dossier: build_dossier(book_facts: facts)).send(:user_prompt), "Sources: https://a.example, https://b.example"
+          end
+
+          test "placeholder and place authors are not presented as people" do
+            dossier = build_dossier
+            record = dossier.record.merge("authors" => [
+              {"name" => "Unknown", "role" => "author", "kind" => "placeholder"},
+              {"name" => "China", "role" => "author", "kind" => "place", "place_country" => "Chinese"}
+            ])
+            prompt = task(dossier: dossier.with(record: record)).send(:user_prompt)
+            assert_includes prompt, "Author: none known (catalogued as \"Unknown\", a placeholder, not a person)"
+            assert_includes prompt, "Author: catalogued under the place name \"China\" (origin signal: Chinese)"
+          end
+
           test "research mode adds the web search instruction and the research role" do
             refute_includes task.send(:system_message), "Use web search"
             research = task(mode: :research)

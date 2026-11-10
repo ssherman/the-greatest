@@ -98,7 +98,7 @@ module Services
             return
           end
 
-          candidates = candidate_ids(item, exact.map(&:first))
+          candidates = find_candidate_ids(item, exact.map(&:first))
           item.candidate_ids = candidates if candidates.any?
         end
 
@@ -118,17 +118,13 @@ module Services
         # Real or fictional subtree, and for a location the parent hint.
         def fits?(item, id)
           return true unless item.type == "location"
-          fictional = fictional_filter(item)
-          return false if !fictional.nil? && fictional_ids.include?(id) != fictional
+          return false if fictional_ids.include?(id) != fictional_filter(item)
 
           hint_matches?(item, id)
         end
 
         def fictional_filter(item)
-          case item.kind.to_s
-          when "fictional" then true
-          when "real" then false
-          end
+          item.kind.to_s.strip.downcase == "fictional"
         end
 
         def fictional_ids = (@fictional_ids ||= Candidates.fictional_ids)
@@ -139,7 +135,10 @@ module Services
           keys = ([hint] + hint.split(",")).filter_map { |part| ::Services::CategoryCleanup::NameNormalizer.twin_key(part) }.uniq - [proposed_key]
           return true if keys.empty?
 
-          known = ([id] + ancestor_ids(id)).filter_map { |row_id| ::Services::CategoryCleanup::NameNormalizer.twin_key(rows("location")[row_id]&.name) }
+          known = ([id] + ancestor_ids(id)).flat_map do |row_id|
+            row = rows("location")[row_id]
+            ([row&.name] + Array(row&.alternative_names)).filter_map { |name| ::Services::CategoryCleanup::NameNormalizer.twin_key(name) }
+          end
           (keys & known).any?
         end
 
@@ -193,7 +192,7 @@ module Services
 
         # ---- candidates and the chooser ------------------------------------
 
-        def candidate_ids(item, exact_ids)
+        def find_candidate_ids(item, exact_ids)
           @candidates[item.type] ||= Candidates.new(category_type: item.type)
           found = @candidates[item.type].call(name: item.proposed, fictional: fictional_filter(item), limit: CANDIDATE_LIMIT).map(&:id)
           (exact_ids + found).uniq.first(CANDIDATE_LIMIT)
@@ -210,11 +209,9 @@ module Services
         end
 
         def apply_choices(open_items, data)
-          choices = Array((data || {}).deep_stringify_keys["choices"]).dup
-          open_items.each do |item|
-            position = choices.index { |choice| choice["proposed"] == item.proposed }
-            choice = position && choices.delete_at(position)
-            id = choice && Integer(choice["category_id"], exception: false)
+          by_question = Array((data || {}).deep_stringify_keys["choices"]).to_h { |choice| [choice["question"], Integer(choice["category_id"], exception: false)] }
+          open_items.each_with_index do |item, index|
+            id = by_question[index + 1]
             if id && item.candidate_ids.include?(id)
               item.category_id = id
               item.via = "chosen"
@@ -244,7 +241,7 @@ module Services
         # A fictional main setting (first listed) that matched nothing stands for the root.
         def settle_fictional_root(items)
           items.each do |item|
-            next unless item.type == "location" && item.category_id.nil? && item.kind.to_s == "fictional" && item.index == 0
+            next unless item.type == "location" && item.category_id.nil? && fictional_filter(item) && item.index == 0
 
             root = rows("location").values.find { |row| !row.deleted && row.name == Candidates::FICTIONAL_ROOT }
             next unless root

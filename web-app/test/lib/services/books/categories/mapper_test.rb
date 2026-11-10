@@ -89,7 +89,7 @@ module Services
           Services::Ai::Tasks::Books::CategoryChoiceTask.expects(:new).with do |args|
             labels = args[:questions].first[:candidates].map { |c| c[:label] }
             labels.include?("Georgia › Caucasus") && args[:questions].first[:candidates].map { |c| c[:id] }.include?(georgia.id)
-          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{proposed: "Georgia", category_id: nil}]}, ai_chat: nil)))
+          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: nil}]}, ai_chat: nil)))
           result = map(answer(locations: [loc("Georgia", parent: "United States")]))
           assert_empty result.data[:resolved]
           assert_equal [{type: "location", proposed: "Georgia", via: "declined"}], result.data[:unmatched]
@@ -106,7 +106,7 @@ module Services
           georgia = location("Georgia", parent: location("Caucasus"))
           Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call).never
           assert_equal [georgia], map(answer(locations: [loc("Georgia", parent: "Georgia, Caucasus")])).data[:resolved].map { |r| r[:category] }
-          chooser_returns({proposed: "Georgia", category_id: nil})
+          chooser_returns({question: 1, category_id: nil})
           assert_empty map(answer(locations: [loc("Georgia", parent: "Georgia, United States")])).data[:resolved]
         end
 
@@ -121,7 +121,7 @@ module Services
           ga_cau = location("Georgia", parent: location("Caucasus"))
           Services::Ai::Tasks::Books::CategoryChoiceTask.expects(:new).with do |args|
             args[:questions].first[:candidates].map { |c| c[:id] }.first(2).sort == [ga_us.id, ga_cau.id].sort
-          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{proposed: "Georgia", category_id: ga_us.id}]}, ai_chat: nil)))
+          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: ga_us.id}]}, ai_chat: nil)))
           result = map(answer(locations: [loc("Georgia")]))
           assert_equal [[ga_us, "chosen"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
         end
@@ -130,8 +130,8 @@ module Services
           a = subject("Alpha Quasar Studies")
           b = subject("Beta Quasar Studies")
           c = subject("Gamma Quasar Studies")
-          chooser_returns({proposed: "Alpha Quasar", category_id: a.id}, {proposed: "Beta Quasar", category_id: b.id},
-            {proposed: "Gamma Quasar", category_id: c.id})
+          chooser_returns({question: 1, category_id: a.id}, {question: 2, category_id: b.id},
+            {question: 3, category_id: c.id})
           result = map(answer(subjects: [subj("Alpha Quasar"), subj("Beta Quasar"), subj("Gamma Quasar")]))
           assert_equal [a, b, c], result.data[:resolved].map { |r| r[:category] }
           assert_equal %w[chosen] * 3, result.data[:resolved].map { |r| r[:via] }
@@ -141,7 +141,7 @@ module Services
           s = subject("Quasar Studies")
           chat = AiChat.new
           Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call)
-            .returns(Services::Ai::Result.new(success: true, data: {choices: [{proposed: "Quasar", category_id: s.id}]}, ai_chat: chat))
+            .returns(Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: s.id}]}, ai_chat: chat))
           assert_same chat, map(answer(subjects: [subj("Quasar")])).data[:ai_chat]
         end
 
@@ -157,7 +157,7 @@ module Services
         test "a chooser id outside the candidates is declined" do
           subject("Quasar Studies")
           outsider = subject("Entirely Different")
-          chooser_returns({proposed: "Quasar", category_id: outsider.id})
+          chooser_returns({question: 1, category_id: outsider.id})
           result = map(answer(subjects: [subj("Quasar")]))
           assert_empty result.data[:resolved]
           assert_equal [{type: "subject", proposed: "Quasar", via: "declined"}], result.data[:unmatched]
@@ -200,6 +200,20 @@ module Services
           result = map(answer(subjects: [subj("Chess"), subj("Game of Kings")]))
           assert_equal [[chess, "Chess"]], result.data[:resolved].map { |r| [r[:category], r[:proposed]] }
           assert_empty result.data[:unmatched]
+        end
+
+        test "a location hint matches an ancestor's alternative name" do
+          boston = location("Boston", parent: location("United States", alternative_names: ["USA"]))
+          Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call).never
+          assert_equal [boston], map(answer(locations: [loc("Boston", parent: "USA")])).data[:resolved].map { |r| r[:category] }
+        end
+
+        test "kind is case-insensitive and an unknown kind is real" do
+          root = location("Fictional Location")
+          shire = location("The Shire", parent: root)
+          assert_equal [shire], map(answer(locations: [loc("The Shire", kind: " Fictional ")])).data[:resolved].map { |r| r[:category] }
+          assert_empty map(answer(locations: [loc("The Shire", kind: "imaginary")])).data[:resolved]
+          assert_empty map(answer(locations: [loc("The Shire", kind: nil)])).data[:resolved]
         end
 
         test "a blank name is unmatched" do

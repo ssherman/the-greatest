@@ -29,16 +29,28 @@ module Services
             assert_includes prompt, "21: Chess"
           end
 
-          test "turns the parsed choices into plain hashes" do
-            parsed = {choices: [{proposed: "Georgia", category_id: 12}, {proposed: "Chess", category_id: nil}]}
+          test "turns the parsed choices into numbered hashes" do
+            parsed = {choices: [{question: 2, category_id: nil}, {question: 1, category_id: 12}]}
             result = @task.send(:process_and_persist, {parsed: parsed})
             assert result.success?
-            assert_equal [{proposed: "Georgia", category_id: 12}, {proposed: "Chess", category_id: nil}], result.data[:choices]
+            assert_equal [{question: 1, category_id: 12}, {question: 2, category_id: nil}], result.data[:choices]
           end
 
           test "a non-numeric id becomes nil" do
-            result = @task.send(:process_and_persist, {parsed: {choices: [{proposed: "Chess", category_id: "abc"}]}})
-            assert_equal [{proposed: "Chess", category_id: nil}], result.data[:choices]
+            result = @task.send(:process_and_persist, {parsed: {choices: [{question: 1, category_id: "abc"}, {question: 2, category_id: 21}]}})
+            assert_equal [{question: 1, category_id: nil}, {question: 2, category_id: 21}], result.data[:choices]
+          end
+
+          test "a reply with no choices fails" do
+            assert_not @task.send(:process_and_persist, {parsed: {}}).success?
+            assert_not @task.send(:process_and_persist, {parsed: nil}).success?
+            assert_not @task.send(:process_and_persist, {parsed: {choices: nil}}).success?
+          end
+
+          test "a reply that omits a question fails" do
+            result = @task.send(:process_and_persist, {parsed: {choices: [{question: 1, category_id: 12}]}})
+            assert_not result.success?
+            assert_match(/question\(s\) 2/, result.error)
           end
 
           test "the schema is choices" do
