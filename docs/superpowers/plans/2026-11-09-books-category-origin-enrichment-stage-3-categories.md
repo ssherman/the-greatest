@@ -200,7 +200,8 @@ Stage 2 (origin) shipped in PR #470. Read its plan's rulings (`docs/superpowers/
       - `genres`: `ArrayOf[{id Integer, confidence String, evidence String}]`;
       - `audience`: `{id Integer nil?, confidence String, evidence String}`;
       - `subjects`: `ArrayOf[{name String, confidence String, evidence String}]`;
-      - `locations`: `ArrayOf[{name String, kind String (real|fictional), parent String nil?, confidence String, evidence String}]`.
+      - `locations`: `ArrayOf[{name String, kind String (real|fictional), parent String nil?, confidence String, evidence String}]`;
+      - `unlisted_genres`: `ArrayOf[String]`, at most 5: genre names the evidence uses (Wikidata, Wikipedia, WorldCat, Goodreads) that are not on the list, such as "Bildungsroman". This is a report only; it is never mapped or linked.
     - The task's `data[:facts]` is that hash.
   - **`CategoryChoiceTask.new(parent:, book_line:, questions:)`** (fast role, `task_provider` as `SameWorkTask`).
     - `questions`: `[{proposed: String, category_type: String, candidates: [{id: Integer, label: String}]}]`.
@@ -226,7 +227,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
 - **Genres and audience.** Look up `id` in `vocabulary` by id and type. If it is absent, record it as unmatched with via `invalid_id`. A genre id that is an audience, or the reverse, is also `invalid_id`.
 - **Subjects and locations, in order:**
   1. **Exact.** Compare `twin_key(proposed)` with the twin keys of `name` and `alternative_names`, on active categories of the type. Do it in Ruby over one load per type, memoised per call; the types hold about 11k and 15k rows, so load only `id, name, alternative_names, parent_id, merged_into_id, deleted`. For locations, honour the real/fictional subtree (`Candidates.fictional_ids`). Exact needs exactly one hit. A location hit with a non-blank `parent` hint also needs the hint's twin key to equal the twin key of the hit or of one of its `ancestors`.
-  2. **Merged.** The same keys on deleted rows that have `merged_into_id`, following `canonical`. Accept only an active canonical of the same type.
+  2. **Merged.** The same keys (the merged row's `name` **and its `alternative_names`**) on deleted rows that have `merged_into_id`, following `canonical`. Accept only an active canonical of the same type. The owner asked for merged rows' alternative names to always count.
   3. **Candidates.** `Candidates.call` with the type, the subtree, and at most 10. For an ambiguous exact location, the exact hits come first and the trigram results fill the rest. Location labels are `"Name › Parent › Grandparent"`. All of the book's unresolved names go into **one** `CategoryChoiceTask` call. Skip the call when no name has candidates. A `category_id` not among that question's candidates counts as declined.
   4. **Otherwise** record it as unmatched (`no_candidate` or `declined`).
 - **A fictional location** left unmatched whose position in `answer["locations"]` is 0 (the main setting) resolves to the `Fictional Location` root with via `fictional_root`. A real location is never matched inside the fictional subtree.
@@ -266,7 +267,8 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
 - Consumes: `Dossier` (Task 3) and the Mapper's `resolved` entries (Task 4).
 - Produces:
   - **`Services::Books::Categories::Support.new(dossier)`**, with `#sources_for(category)`, which returns an Array of the source names that back the category, and `#supported?(category)`, which is `sources_for(category).any?`. Source names: `wikidata`, `wikipedia`, `worldcat` and `goodreads`.
-    - A text test is a whole-word, case-insensitive match of the category's name or one of its `alternative_names` against a string, or equality of their twin keys.
+    - A category's **names** are its `name` and `alternative_names`, plus the `name` and `alternative_names` of every row merged into it (`merged_into_id` = its id; one query per Support instance). `Categories::Merger` copies these onto the target, but older merges may not have.
+    - A text test is a whole-word, case-insensitive match of one of the category's names against a string, or equality of their twin keys.
     - `wikidata`: the text test against each entry of the wikidata `genres`, `main_subjects`, `narrative_locations` and `forms`.
     - `wikipedia`: the text test against `infobox_genre`, `infobox_subject` and `infobox_set_in`.
     - `worldcat`:
@@ -307,7 +309,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
 5. **Reconcile.** `::Categories::AncestorReconciler.call(item_ids: [book.id])` runs once if anything was written.
 
 - [ ] **Step 1: Write the failing tests.**
-  - **Support:** each of the four sources positive and negative; the whole-word test ("War" does not match "Warsaw"); alternative names count.
+  - **Support:** each of the four sources positive and negative; the whole-word test ("War" does not match "Warsaw"); alternative names count; a Wikidata genre label equal to an alternative name of a category *merged into* this one counts.
   - **Apply:**
     - high is added with source `ai`; medium with WorldCat support is added; medium without support is held back; low is held back;
     - Review Focus 2: 5 legacy genres, one unpicked and unsupported, on a high recognized external run → that one is removed and one new high genre is then added (4 + 1 = 5), while a second new high genre gets `cap`;
@@ -359,7 +361,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
 4. Run the task.
    - **Unrecognized** means `recognized == false && !dossier.external? && !dossier.research_backed?`. That row is `unrecognized` and applies nothing.
    - **Otherwise:** run the Mapper, then Apply with `rejudge: context != "import"`. The outcome is `applied` when anything was added, confirmed, removed or typed, else `nothing_to_apply`. `reason` is `"applied"` or `"nothing_applied"`.
-   - The row records: `recognized`; `confidence` (the overall value, normalised as in `Origin::Judge#confidence_for`); `citations`; `ai_chat`; the facts `answer`, `mapping` (`{resolved: [{id, name, type, via, confidence}], unmatched: [...]}`) and `apply` (the Apply data with ids and names only); and `"choice_chat_id"`.
+   - The row records (`answer` includes `unlisted_genres` as given): `recognized`; `confidence` (the overall value, normalised as in `Origin::Judge#confidence_for`); `citations`; `ai_chat`; the facts `answer`, `mapping` (`{resolved: [{id, name, type, via, confidence}], unmatched: [...]}`) and `apply` (the Apply data with ids and names only); and `"choice_chat_id"`.
 5. **Research follows** a knowledge row when that row is unrecognized and `research_allowed`; when it is not permitted, the row gets `deferred_research: true`. A past-cutoff book judged from knowledge because research was not permitted is also deferred, as in `Origin::Judge#judge`.
 6. **Failure.** A task failure, or an exception, gives a `failed` row and stops.
 
@@ -478,6 +480,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
     - `type:` `{reason => count}`;
     - `type_conflicts:` `[{book_id, title, judged, held}]`, first 50;
     - `unmatched:` `{type => [[proposed, count]]}`, top 20 per type, case-folded;
+    - `unlisted_genres:` `[[name, count]]`, top 30, case-folded: the task's `unlisted_genres` plus the dossier's Wikidata `genres` labels that `GenreMatcher#match` resolves to nothing. Each is either an alias to add to an existing genre or a candidate new genre;
     - `research_rows:`;
     - `research_cost_estimate:` (`Origin::Report::RESEARCH_COST_PER_ROW`);
     - `deferred_research:`;
@@ -549,4 +552,5 @@ These need the owner's eye.
 9. **The admin action is the existing Enrich button.** `EnrichBookJob` already starts `books.book_categorize` with context `admin`, which now includes the categories step with re-judging on. No new button. Forcing research from the admin page is not wired.
 10. **The Wikidata re-check** (off by default) now re-judges categories as well as origin for the books it re-checks. That is the point of a re-check, but it costs one standard call per book.
 11. **Backfill spacing stays at 8 s.** With local Wikidata the real limit is Wikipedia's one request a second (about 2 per matched book). Lowering it is a one-constant change after the rehearsal measures requests per book.
+13. **Genres we don't hold are handled through aliases, not a new table** (owner's question, 2026-11-09). The judge reports `unlisted_genres`, and the report ranks them with the unmatched Wikidata genre labels. The owner adds each as an `alternative_names` entry on an existing genre, or creates the genre. Every matcher already reads alternative names (Goodreads, the mapper, the support test), so one alias fixes all three. WorldCat keeps its own reviewed genre map.
 12. **`write_definitions` never overwrites** a non-blank description that differs from the plan. It reports it instead.
