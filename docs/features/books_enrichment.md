@@ -195,11 +195,12 @@ source and, for a location, its ancestors); Wikidata's `genres`, `main_subjects`
 Goodreads page. The ledger stores a trimmed copy (plot 500, WorldCat subjects 15, a record description over
 300 characters dropped).
 
-**Task and vocabulary.** `BookCategoriesTask` (`PROMPT_VERSION` 1) gets the closed genre and audience lists
+**Task and vocabulary.** `BookCategoriesTask` (`PROMPT_VERSION` 2, so a backfill re-judges books done under version 1) gets the closed genre and audience lists
 as `id: name — definition`, the definition being `categories.description`. Genres and the audience come back
 as ids from that list; subjects and locations come back as names (locations also carry real or fictional and
-a parent hint); `book_type` is fiction, nonfiction, poetry, religious or unknown. It also lists up to five
-`unlisted_genres`, a report only. Fiction and Nonfiction are never offered as genres: they are the book type.
+a parent hint, which for a fictional place is the real place it sits in, or null for an invented world); `book_type` is fiction, nonfiction, poetry, religious or unknown. It also lists up to five
+`unlisted_genres`, each a `name` and a `closest_id` (the listed genre or audience it means, or null): alias suggestions, read
+only by the report; the Mapper and Apply ignore them. Fiction and Nonfiction are never offered as genres: they are the book type.
 `bin/rails books:categories:write_definitions` copies the reviewed definitions from `config/books/genre_plan.yml`
 into `categories.description`, and overwrites any description that differs, since the plan is authoritative (owner decision,
 2026-11-10). Dry run unless `APPLY=1`; it prints `replaced` for each non-blank description it overwrote and `missing` for an active genre or audience with none, which you fill in the admin).
@@ -210,19 +211,27 @@ alternative name, merged rows included and followed to their target (`via` `exac
 must also fit its real or fictional subtree and its parent hint. A name still open goes to `Candidates`, which
 scores trigram similarity in Ruby over the type's active names (similarity above 0.3, or word similarity above
 0.5; at most 10), and one `CategoryChoiceTask` call (fast model) picks among them (`via` `chosen`, else
-unmatched `declined`). A name with no candidate is unmatched `no_candidate`. A fictional main setting that
-matched nothing maps to the Fictional Location root (`via` `fictional_root`). There is no database extension or
+unmatched `declined`). A name with no candidate is unmatched `no_candidate`. A fictional place is looked up in the Fictional Location
+subtree first; if it matches nothing there and the answer gave a `parent`, the parent is mapped as a real location (the same exact,
+merged and candidates path, no parent hint) and the place takes that category (`via` `fictional_parent`, `proposed` "Alabama (setting of Maycomb)",
+the entry's own confidence). Otherwise it is unmatched. The bare Fictional Location root is never assigned, and a real place never
+maps inside the fictional subtree. There is no database extension or
 migration behind the candidates. A failed chooser call fails the judge row, so the step retries.
 
 **Apply.** `Categories::Apply` writes by fixed rules in one transaction under a row lock:
 
 - Caps count the book's direct links of a type from every source: 5 genres (Fiction and Nonfiction excluded), 8
   subjects, 5 locations, 1 audience. An entry over the cap is held back (`cap`).
-- `high` answers are written; `medium` only with external support (`Categories::Support`: Wikidata, Wikipedia,
-  WorldCat or Goodreads names the category), else held back `unsupported_medium`; `low` is held back.
+- `high` answers are written; `medium` only with support, else held back `unsupported_medium`; `low` is held back. Support for
+  ADDING (`Support#supports_addition?`) is looser than support for keeping: Wikidata, Wikipedia, WorldCat or a matching Goodreads shelf
+  (`supported?`), or the book already holds the category (any source), or the category's name appears as a whole word in the
+  description, Wikipedia lead or plot, or WorldCat summary, or in any Goodreads shelf name. Removals still use the strict `supported?`.
 - Removals (a confident, externally evidenced re-judge only) never touch a legacy link the judge named: a link
   among the candidates offered for an unmatched name, or whose name key equals a proposed name's, stays. A type
   is stripped only when it has at least one `high` or `medium` pick; low picks protect but do not enable removals.
+  A legacy subject is also kept when its name or an alternative name appears as a whole word or phrase inside the name of any
+  subject the judge picked, at any confidence (Gender stays beside Gender Roles; War does not stay beside Warsaw Uprising). A
+  legacy ancestor of a picked location stays (United States beside Alabama).
 - A new link has source `ai`. A held `legacy` or `inherited` link the judge picked is upgraded to `ai`
   (`confirmed`) only after the confidence and support rule above passes (a `medium` pick with no support is
   held back `unsupported_medium` even when the book holds the link); an inherited one is cap-checked first.
@@ -247,12 +256,13 @@ research rows of both `books.origin` and `books.categories`.
 
 | Task | Does |
 |---|---|
-| `books:categories:report[label]` | Counts the newest row per book: outcomes, added, confirmed, removed and held back by type, type conflicts, unmatched names, `unlisted_genres` and research cost. Dry, no label means every run. |
+| `books:categories:report[label]` | Counts the newest row per book: outcomes, added, confirmed, removed and held back by type, type conflicts, unmatched names, `unlisted_genres` and research cost. Dry, no label means every run. `unlisted_genres` are alias suggestions `{name, genre_id, genre_name, count}`, grouped by case-folded name and genre; a closest id that is not an active genre or audience becomes none. Wikidata labels the matcher cannot resolve are counted too. |
+| `books:categories:add_aliases[label]` | Adds each suggestion that names a genre as an alternative name on that genre. Dry run unless `APPLY=1`; `NAMES=a,b` limits it to those names, `MIN=n` sets the minimum count. Skips (and reports) a name that already matches an active genre or audience; never creates a category. |
 | `books:categories:restore_removals[label]` | Puts back the legacy links a run removed (`APPLY=1` writes; reads every row with the label; skips a category that is gone or a link the book holds again). The undo. |
 | `books:categories:write_definitions` | Described above. |
 
-The unlisted-genres list in the report is for adding alternative names to existing genres, or ignoring; nothing
-creates a genre from it.
+The alias suggestions are for adding alternative names to existing genres, or ignoring; nothing
+creates a genre from them.
 
 ## Tuning
 

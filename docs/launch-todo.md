@@ -598,7 +598,12 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
 5. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
    label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The
    categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
-   used that we do not list; add the last as alternative names on existing genres, never as new genres.
+   used that we do not list, each with the genre the judge said it means; add them as alternative names on existing
+   genres, never as new genres.
+   Then the alias step: `bin/rails "books:categories:add_aliases[<label>]"` is a dry run that lists each name and the genre it
+   would join (and skips a name an active genre already matches). Run it again with `APPLY=1`, and `NAMES=a,b` to add
+   only the names you checked. `MIN=n` sets a minimum count. Aliases take effect for books judged after them; the next
+   backfill pass uses them.
 6. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[<label>]"`, with
    `IDS=` and `APPLY=1`.
 7. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
@@ -682,6 +687,8 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
    1 of 10 mid-ranked and 1 of 20 unranked, all through identifiers. When the author was found by name,
    the author-works route matched 8 of the 14 ranked books that were still unmatched.
 12. **Re-run the stage 2 rehearsal** (section 14, step 1); it now covers the categories judgment too (stage 3, Task 11).
+   The dev rehearsal needs `BOOKS_CATEGORIES_JUDGE_ENABLED=1` in the environment of the dev Sidekiq process; without it every
+   book gets a skipped `disabled` row. That is a dev setting only and does not touch production.
 13. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
    (`config/initializers/wikidata.rb`; it is off everywhere until you do) and deploy. The 06:00 UTC cron
    (`wikidata_recheck_after_refresh`) then reads `/version` daily and, when the dump date is new, re-checks
