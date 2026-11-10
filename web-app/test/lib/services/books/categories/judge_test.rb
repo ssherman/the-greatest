@@ -15,6 +15,7 @@ module Services
           @choice_chat = AiChat.create!(parent: @book, chat_type: :analysis, model: "gpt-6-sol", provider: :openai)
           @external = false
           @research_backed = false
+          Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(true)
           stub_dossier
         end
 
@@ -91,6 +92,55 @@ module Services
           stub_task({})
           stub_pipeline(applied_data(added: []).merge(type: {applied: true}))
           assert judge.data[:enrichments].sole.applied?
+        end
+
+        test "disabled writes one skipped row, calls no task and applies nothing" do
+          Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(false)
+          BookCategoriesTask.any_instance.expects(:call).never
+          Mapper.expects(:call).never
+          Apply.expects(:call).never
+          result = judge
+          row = result.data[:enrichments].sole
+          assert result.success?
+          assert_equal ["skipped", "disabled"], [row.outcome, row.reason]
+          assert_not result.data[:applied]
+        end
+
+        test "a disabled-skipped book is still a backfill candidate" do
+          Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(false)
+          judge
+          assert_equal "1", @book.enrichments.where(kind: "books.categories").sole.facts["prompt_version"].to_s
+          assert_includes Categorize::Backfill.candidates(scope: "categories_only", book_ids: [@book.id]).pluck(:id), @book.id
+        end
+
+        test "confidence strings are normalised before mapping and applying" do
+          stub_task({confidence: " High ", book_type: {value: "fiction", confidence: "High"}, genres: [{id: @novels.id, confidence: "HIGH", evidence: "x"}]})
+          Mapper.expects(:call).with { |args| args[:answer][:confidence] == "high" && args[:answer].dig(:genres, 0, :confidence) == "high" }.returns(mapped)
+          Apply.expects(:call).with { |args| args[:answer].dig(:book_type, :confidence) == "high" }
+            .returns(Apply::Result.new(success?: true, errors: [], data: applied_data))
+          assert judge.success?
+        end
+
+        test "mapping facts carry the unmatched candidate ids and Apply receives the unmatched list" do
+          stub_task({})
+          unmatched = [{type: "subject", proposed: "Odd", via: "declined", candidate_ids: [5, 6]}]
+          Mapper.stubs(:call).returns(Mapper::Result.new(success?: true, errors: [], data: {resolved: [], unmatched: unmatched, ai_chat: nil}))
+          Apply.expects(:call).with(has_entry(unmatched: unmatched)).returns(Apply::Result.new(success?: true, errors: [], data: applied_data(added: [])))
+          row = judge.data[:enrichments].sole
+          assert_equal [5, 6], row.facts.dig("mapping", "unmatched", 0, "candidate_ids")
+        end
+
+        test "an exception after Apply committed keeps the apply and mapping facts on the failed row" do
+          stub_task({})
+          stub_pipeline(applied_data.merge(removed: [{id: 7, name: "Gone", type: "subject", source: "legacy"}]))
+          # The first row write (the applied row) fails; the rescue's failed row goes through.
+          Enrichment.any_instance.stubs(:save!).raises("row boom").then.returns(true)
+          result = judge
+          row = result.data[:enrichments].sole
+          assert_not result.success?
+          assert_equal ["failed", "row boom"], [row.outcome, row.error]
+          assert_equal [7], row.facts.dig("apply", "removed").map { |r| r["id"] }
+          assert_equal [@novels.id], row.facts.dig("mapping", "resolved").map { |r| r["id"] }
         end
 
         test "a blank title is skipped" do

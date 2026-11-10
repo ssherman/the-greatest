@@ -22,6 +22,7 @@ module Services
         LEDGER_WORLDCAT_SUBJECTS = 15
         RECORD_DESCRIPTION_LIMIT = 1_000
         LEDGER_DESCRIPTION_LIMIT = 300
+        LEDGER_WORLDCAT_SUMMARY_LIMIT = 300
         GOODREADS_GENRES = 15
         CATEGORY_TYPES = %w[genre audience subject location].freeze
         WIKIDATA_LISTS = %w[countries country_ids country_matches languages publication_years
@@ -164,13 +165,22 @@ module Services
           end.compact.uniq
         end
 
+        def trimmed_worldcat
+          return nil unless worldcat
+
+          trimmed = worldcat.merge("subjects" => Array(worldcat["subjects"]).first(LEDGER_WORLDCAT_SUBJECTS))
+          trimmed["summary"] = worldcat["summary"].slice(0, LEDGER_WORLDCAT_SUMMARY_LIMIT) if worldcat["summary"].is_a?(String)
+          trimmed
+        end
+        private :trimmed_worldcat
+
         def to_ledger
           description = record&.dig("description")
           trimmed_record = (description.to_s.length > LEDGER_DESCRIPTION_LIMIT) ? record.merge("description" => nil) : record
           {
             "evidence_id" => evidence_id, "record" => trimmed_record, "book_facts" => book_facts,
             "wikidata" => wikidata, "goodreads" => goodreads,
-            "worldcat" => worldcat&.merge("subjects" => Array(worldcat["subjects"]).first(LEDGER_WORLDCAT_SUBJECTS)),
+            "worldcat" => trimmed_worldcat,
             "wikipedia" => wikipedia&.merge("lead" => wikipedia["lead"]&.slice(0, LEDGER_LEAD_LIMIT),
               "plot" => wikipedia["plot"]&.slice(0, LEDGER_PLOT_LIMIT))
           }

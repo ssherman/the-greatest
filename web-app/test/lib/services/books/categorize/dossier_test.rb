@@ -246,6 +246,11 @@ module Services
           assert_nil ledger.dig("record", "description")
         end
 
+        test "to_ledger trims the worldcat summary to 300 characters" do
+          evidence("worldcat" => {"subjects" => {"H" => 1}, "summary" => "s" * 900})
+          assert_equal 300, Dossier.build(book: @book).to_ledger.dig("worldcat", "summary").length
+        end
+
         test "to_ledger keeps a short description" do
           @book.descriptions.create!(kind: "summary", locale: "en", source: "ai_generated", content: "short")
           assert_equal "short", Dossier.build(book: @book).to_ledger.dig("record", "description")

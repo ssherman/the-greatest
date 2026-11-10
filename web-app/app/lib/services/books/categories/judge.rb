@@ -35,6 +35,12 @@ module Services
             return result
           end
 
+          unless Rails.application.config.x.ai.categories_judge_enabled
+            rows << book.enrichments.create!(kind: KIND, mode: :knowledge, outcome: :skipped,
+              reason: "disabled", facts: base_facts("judge"))
+            return result
+          end
+
           # Read before any row is written: judge writes one.
           @owes_research = previously_deferred?
           @dossier = Categorize::Dossier.build(book: book)
@@ -100,12 +106,13 @@ module Services
         # Returns [row, needs_research].
         def run(mode)
           chat = nil
+          committed = {}
           task_result = Services::Ai::Tasks::Books::BookCategoriesTask.new(parent: book, dossier: dossier,
             vocabulary: vocabulary, mode: mode).call
           chat = task_result.ai_chat
           return [failed_row(mode, task_result, task_result.error), false] unless task_result.success?
 
-          answer = (task_result.data[:facts] || {}).to_h.deep_symbolize_keys
+          answer = normalize_confidences((task_result.data[:facts] || {}).to_h.deep_symbolize_keys)
           return [failed_row(mode, task_result, "empty response"), false] if answer.empty?
 
           recognized = answer[:recognized]
@@ -123,17 +130,36 @@ module Services
                 error: Array(mapped.errors).join("; "), facts: facts)), false]
             end
 
+            # Built before Apply and kept for the rescue below: once Apply has committed removals the
+            # failed row must still carry them, or restore_removals cannot find them.
+            committed["mapping"] = mapping_facts(mapped.data)
             applied = Apply.call(book: book, dossier: dossier, answer: answer, resolved: mapped.data[:resolved],
-              rejudge: context != "import")
+              rejudge: context != "import", unmatched: mapped.data[:unmatched])
+            committed["apply"] = applied.data.deep_stringify_keys
             changed = applied.data.values_at(:added, :confirmed, :removed).any?(&:present?) || applied.data.dig(:type, :applied) == true
             attributes.merge!(outcome: changed ? :applied : :nothing_to_apply, reason: changed ? "applied" : "nothing_applied",
-              facts: facts.merge("mapping" => mapping_facts(mapped.data), "apply" => applied.data.deep_stringify_keys,
-                "choice_chat_id" => mapped.data[:ai_chat]&.id))
+              facts: facts.merge(committed).merge(
+                "choice_chat_id" => mapped.data[:ai_chat]&.id
+              ))
           end
           [book.enrichments.create!(attributes), mode == :knowledge && unrecognized]
         rescue => e
           [book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message,
-            facts: base_facts("judge"))), false]
+            facts: base_facts("judge").merge(committed))), false]
+        end
+
+        # Confidence values are compared as lowercase strings downstream.
+        def normalize_confidences(answer)
+          clean = ->(value) { value.is_a?(String) ? value.strip.downcase : value }
+          answer = answer.merge(confidence: clean.call(answer[:confidence]))
+          answer[:book_type] = answer[:book_type].merge(confidence: clean.call(answer[:book_type][:confidence])) if answer[:book_type].is_a?(Hash)
+          answer[:audience] = answer[:audience].merge(confidence: clean.call(answer[:audience][:confidence])) if answer[:audience].is_a?(Hash)
+          %i[genres subjects locations].each do |key|
+            next unless answer[key].is_a?(Array)
+
+            answer[key] = answer[key].map { |entry| entry.is_a?(Hash) ? entry.merge(confidence: clean.call(entry[:confidence])) : entry }
+          end
+          answer
         end
 
         def mapping_facts(data)
