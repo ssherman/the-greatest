@@ -189,7 +189,7 @@ Stage 2 (origin) shipped in PR #470. Read its plan's rulings (`docs/superpowers/
 - Test: `test/lib/services/ai/tasks/books/book_categories_task_test.rb`, `test/lib/services/ai/tasks/books/category_choice_task_test.rb`, `test/lib/services/books/categories/mapper_test.rb`
 
 **Interfaces:**
-- Consumes: `Dossier` (Task 3), `Candidates` (Task 2), and `Services::CategoryCleanup::NameNormalizer.twin_key`.
+- Consumes: `Dossier` (Task 3), `Candidates.new(category_type:)#call(name:, fictional: nil, limit: 10)` and `Candidates.fictional_ids` (Task 2), and `Services::CategoryCleanup::NameNormalizer.twin_key`.
 - Produces:
   - **`BookCategoriesTask.new(parent:, dossier:, vocabulary:, mode: :knowledge)`** (`< EnrichmentTask`, standard role; `:sourced` raises like `BookOriginTask`), with `PROMPT_VERSION = 1`.
     - `vocabulary` is an Array of `::Books::Category`: the active genres minus Fiction and Nonfiction, plus the active audiences.
@@ -228,7 +228,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
 - **Subjects and locations, in order:**
   1. **Exact.** Compare `twin_key(proposed)` with the twin keys of `name` and `alternative_names`, on active categories of the type. Do it in Ruby over one load per type, memoised per call; the types hold about 11k and 15k rows, so load only `id, name, alternative_names, parent_id, merged_into_id, deleted`. For locations, honour the real/fictional subtree (`Candidates.fictional_ids`). Exact needs exactly one hit. A location hit with a non-blank `parent` hint also needs the hint's twin key to equal the twin key of the hit or of one of its `ancestors`.
   2. **Merged.** The same keys (the merged row's `name` **and its `alternative_names`**) on deleted rows that have `merged_into_id`, following `canonical`. Accept only an active canonical of the same type. The owner asked for merged rows' alternative names to always count.
-  3. **Candidates.** `Candidates.call` with the type, the subtree, and at most 10. For an ambiguous exact location, the exact hits come first and the trigram results fill the rest. Location labels are `"Name › Parent › Grandparent"`. All of the book's unresolved names go into **one** `CategoryChoiceTask` call. Skip the call when no name has candidates. A `category_id` not among that question's candidates counts as declined.
+  3. **Candidates.** One `Candidates.new(category_type:)` per type per Mapper call (it loads the type's rows once), then `#call(name:, fictional:, limit: 10)` per name. (Task 2 ruling: no pg_trgm migration; Candidates scores trigrams in Ruby.) For an ambiguous exact location, the exact hits come first and the trigram results fill the rest. Location labels are `"Name › Parent › Grandparent"`. All of the book's unresolved names go into **one** `CategoryChoiceTask` call. Skip the call when no name has candidates. A `category_id` not among that question's candidates counts as declined.
   4. **Otherwise** record it as unmatched (`no_candidate` or `declined`).
 - **A fictional location** left unmatched whose position in `answer["locations"]` is 0 (the main setting) resolves to the `Fictional Location` root with via `fictional_root`. A real location is never matched inside the fictional subtree.
 - **Duplicates.** Two answers that resolve to one category keep the first.
