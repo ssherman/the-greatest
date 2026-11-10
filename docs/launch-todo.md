@@ -216,8 +216,8 @@ the sync never undoes them.
 
 ### Decide at launch
 
-- **Author enrichment:** `bin/rails "books:authors:enrich[all]"`, or `[13654]` for the ranked
-  authors only. About 58k authors have no ranked book. After the switch-over.
+- **Author enrichment:** `bin/rails "books:authors:enrich[all]"`, or `[13333]` for the ranked
+  authors only (the 2026-11-09 count; section 15 step 11 runs it). About 58k authors have no ranked book. After the switch-over.
 - **Book AI enrichment:** `bin/rails "books:enrich_missing[<limit>]"`. Nothing queues it
   automatically.
 - **Amazon enrichment of ranked books:** `bin/rails books:amazon_enrich_ranked`. It has never been
@@ -648,8 +648,11 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
     merge. It deploys the client. Merging it before step 9 passes leaves production imports with no
     Wikidata at all.
 11. **Enrich the authors from the local Wikidata, ranked authors first. Shane runs with `!`.**
-   `bin/rails "books:authors:enrich[13654]"` (13,654 is the ranked authors; it queues the Wikidata step, then
-   VIAF on a miss, then AI with research off, one author every 8 seconds). Check it with
+   `bin/rails "books:authors:enrich[13333]"`. The limit is how many authors to queue, ranked authors first:
+   13,333 authors had a ranked book on dev on 2026-11-09, and a few hundred more only reaches unranked
+   authors with the most books. Authors already processed are skipped, and its first line prints how many
+   it planned. It queues the Wikidata step, then VIAF on a miss, then AI with research off, one author every
+   2 seconds (`Backfill::SPACING`), so about 7.5 hours for the ranked authors. Check it with
    `bin/rails "books:authors:enrich_report[<ISO time it printed>]"`. Do this BEFORE the section 14 origin
    backfill, because the work match rate depends on author QIDs. Measured on dev 2026-11-09: only 714 of
    76,006 authors have a Wikidata QID. On a 40-book sample the local copy matched 5 of 10 top-ranked books,

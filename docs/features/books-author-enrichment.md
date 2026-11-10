@@ -729,8 +729,10 @@ count against that check once its `author_facts` step has run: the AI step does 
 `bin/rails "books:authors:enrich[100]"` (or `[all]`) plans author runs for authors the Wikidata step
 has not processed (`LedgerRun.processed`; placeholders never are, so they are left out): ranked
 authors first by rank under the primary authors configuration, then the rest by how many books they
-wrote. Each run's Wikidata step starts `Backfill::SPACING` (6) seconds after the one before
-(`start_after`), with research off for the whole run. A limit is required; `all` is the decision to
+wrote. Each run's Wikidata step starts `Backfill::SPACING` (2) seconds after the one before
+(`start_after`), with research off for the whole run. It was 6 while Wikidata was the live service;
+Wikidata is now the local copy (`docs/features/wikidata-data-service.md`), so the pace left is
+Wikipedia's shared one request a second, about two requests per matched author. A limit is required; `all` is the decision to
 run wide.
 
 It also plans a run that starts at the VIAF step (`start_at: "viaf"`) for any author whose Wikidata
