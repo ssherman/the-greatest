@@ -66,6 +66,11 @@ module Api
             hash
           end
 
+          # Ranked books first, best rank first, then the unranked by id.
+          def ranked_first(books)
+            books.left_joins(:primary_ranked_item).order(Arel.sql("ranked_items.rank ASC NULLS LAST"), :id)
+          end
+
           def detail_for(record)
             if record.is_a?(::Books::Book)
               {
@@ -78,7 +83,7 @@ module Api
               {
                 alternate_names: Array(record.alternate_names),
                 description: record.description&.slice(0, DESCRIPTION_LIMIT),
-                books: record.books.includes(:primary_ranked_item).order(:id).limit(DETAIL_LIMIT).map do |book|
+                books: ranked_first(record.books.includes(:primary_ranked_item)).limit(DETAIL_LIMIT).map do |book|
                   {id: book.id, title: book.title, rank: book.primary_ranked_item&.rank}
                 end
               }

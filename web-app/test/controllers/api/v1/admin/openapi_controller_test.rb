@@ -12,7 +12,7 @@ module Api
 
           body = response.parsed_body
           assert_equal [{"url" => "https://dev-new.thegreatestbooks.org"}], body["servers"]
-          assert_equal %w[/api/v1/admin/openapi.json /api/v1/admin/books /api/v1/admin/authors /api/v1/admin/duplicate_candidates /api/v1/admin/duplicate_candidates/{id} /api/v1/admin/categories /api/v1/admin/categories/{id} /api/v1/admin/categories/{id}/merge /api/v1/admin/books/{id}/merge /api/v1/admin/authors/{id}/merge /api/v1/admin/books/{id}/categories /api/v1/admin/books/{id}/categories/{category_id} /api/v1/admin/authors/{id}/categories /api/v1/admin/authors/{id}/categories/{category_id}], body["paths"].keys
+          assert_equal %w[/api/v1/admin/openapi.json /api/v1/admin/books /api/v1/admin/authors /api/v1/admin/duplicate_candidates /api/v1/admin/duplicate_candidates/{id} /api/v1/admin/duplicate_candidates/{id}/merge /api/v1/admin/duplicate_candidates/{id}/dismiss /api/v1/admin/categories /api/v1/admin/categories/{id} /api/v1/admin/categories/{id}/merge /api/v1/admin/books/{id}/merge /api/v1/admin/authors/{id}/merge /api/v1/admin/books/{id}/categories /api/v1/admin/books/{id}/categories/{category_id} /api/v1/admin/authors/{id}/categories /api/v1/admin/authors/{id}/categories/{category_id}], body["paths"].keys
           assert_match(/no-store/, response.headers["Cache-Control"])
         end
 

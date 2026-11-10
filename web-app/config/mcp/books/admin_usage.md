@@ -18,6 +18,10 @@ These four tools take `dry_run`, and it defaults to false. So for every one of t
 
 In `merge_book` and `merge_author`, `id` is the book or author that survives and `source_id` is the duplicate that is deleted. In `merge_categories`, `id` is the target and `source_ids` lists 1 to 50 categories folded into it. Check you have not swapped them.
 
+## The duplicate queue
+
+`list_duplicate_candidates`, `get_duplicate_candidate`, `merge_duplicate_candidate` and `dismiss_duplicate_candidate` work through pairs our importers flagged as possible duplicates. They are meant for an agent deciding each pair itself: the ask-first rule above does not apply to them. `merge_duplicate_candidate` is still permanent.
+
 ## After a merge
 
 A real `merge_book` or `merge_author` can return `warnings`. They name follow-up work, such as search reindexing and ranking recalculation, that could not be scheduled and will need to be re-run, and for a book merge the source authors or credits that did not transfer. Report them to the user after the real merge; a dry run never has warnings.

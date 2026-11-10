@@ -161,6 +161,8 @@ paths:
           an integer `id`, why it was raised, and both records, ordered by id, with title, creators, year,
           ranked position, list count and identifiers; a record that no longer exists is `missing: true`. Use
           it to work through the queue; get_duplicate_candidate adds more detail for one pair.
+          Resolving pairs shrinks the queue, so after merging or dismissing, list again from page 1 rather than
+          continuing to a later page.
       parameters:
         - name: status
           in: query
@@ -250,6 +252,118 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/duplicate_candidates/{id}/merge:
+    x-domain: books
+    post:
+      operationId: mergeDuplicateCandidate
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Merge a suspected duplicate pair
+      description: |
+        Merges the pair: the record named by `target_id` (one of the pair's two record ids) survives and the pair's other record is PERMANENTLY DELETED, as `merge_book` and `merge_author` do. The pair is marked merged, resolved by the token's owner via the API, with the optional `note`.
+        Refused (422) when the pair is not pending, when `target_id` is not one of the pair's ids, or when one of the pair's records no longer exists. A 404 means no such pair, or one folded into another by a merge.
+        Send `dry_run: true` to validate and see both records without changing anything. Requires `books:admin:merge`, and the token's owner must be allowed to delete both records. There is no undelete.
+      x-mcp:
+        description: >-
+          Merges the pair: `target_id` (one of the pair's two record ids) survives and the other record is
+          PERMANENTLY DELETED, with no undelete. `dry_run: true` validates without changing anything. `note` is
+          optional and shown to admins reviewing the queue. A 422 saying the target is not in this pair, or a
+          404, means another merge changed the queue: list it again. After the real merge, report its
+          `warnings`: they name follow-up work (search reindexing, ranking recalculation) that will need to be
+          re-run, and for a book pair the authors or credits that did not transfer.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DuplicateMergeRequest"
+      responses:
+        "200":
+          description: The merge was done (or, for a dry run, would succeed). `pair` is the pair as it now stands; on a dry run it is unchanged.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDuplicateMerge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/duplicate_candidates/{id}/dismiss:
+    x-domain: books
+    post:
+      operationId: dismissDuplicateCandidate
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Dismiss a suspected duplicate pair
+      description: |
+        Marks the pair as not duplicates, resolved by the token's owner via the API, with the optional `note`. Nothing is deleted. Works even when one of the pair's records no longer exists. Refused (422) when the pair is not pending. Requires `books:admin:write`, and the token's owner must be allowed to change books (or authors, for an author pair).
+      x-mcp:
+        description: >-
+          Marks the pair as not duplicates. `note` is optional and shown to admins. Nothing is deleted, and it
+          works even when one record of the pair no longer exists. A 422 saying the pair is already resolved,
+          or a 404, means the queue changed: list it again.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DuplicateDismissRequest"
+      responses:
+        "200":
+          description: The pair, now marked not_duplicate.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDuplicateDismiss"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories:
@@ -1380,6 +1494,66 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminDuplicateCandidateFull"
+    DuplicateMergeRequest:
+      type: object
+      required: [target_id]
+      properties:
+        target_id:
+          description: The pair's record that survives; the other one is deleted. Must be one of the pair's two record ids. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Why, shown to admins reviewing the queue. Optional.
+        dry_run: {type: boolean, default: false, description: Validate and report without merging.}
+    DuplicateDismissRequest:
+      type: object
+      properties:
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Why, shown to admins reviewing the queue. Optional.
+    AdminDuplicateMerge:
+      type: object
+      required: [data, meta, warnings]
+      properties:
+        data:
+          type: object
+          required: [survivor, deleted, pair]
+          properties:
+            survivor:
+              description: The record that remains, as it is after the merge. A book for a book pair, an author for an author pair.
+              oneOf:
+                - $ref: "#/components/schemas/AdminBook"
+                - $ref: "#/components/schemas/AdminAuthor"
+            deleted:
+              description: The other record as it was before the merge. On a dry run it still exists.
+              oneOf:
+                - $ref: "#/components/schemas/AdminBook"
+                - $ref: "#/components/schemas/AdminAuthor"
+            pair:
+              $ref: "#/components/schemas/AdminDuplicateCandidate"
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MergeWarning"
+    AdminDuplicateDismiss:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [pair]
+          properties:
+            pair:
+              $ref: "#/components/schemas/AdminDuplicateCandidate"
     AdminDuplicateCandidateCollection:
       type: object
       required: [data, meta, links]
