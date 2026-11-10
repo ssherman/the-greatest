@@ -6,12 +6,26 @@ module Services
       # Everything we hold about a book that bears on where it comes from: our
       # record, the latest books.evidence row and the latest books.book_facts
       # row. Read-only. The instance methods work from the stored fields alone.
-      class Dossier < Data.define(:book, :evidence_id, :record, :book_facts, :wikidata, :wikipedia, :worldcat)
+      class Dossier < Data.define(:book, :evidence_id, :record, :book_facts, :wikidata, :wikipedia, :worldcat, :goodreads)
+        # goodreads defaults to nil so callers built before it existed still work.
+        def initialize(goodreads: nil, **rest)
+          super
+        end
+
         LEAD_LIMIT = 1_000
         LEDGER_LEAD_LIMIT = 500
         CITATION_LIMIT = 5
         DESCRIPTION_LIMIT = 600
-        WIKIDATA_LISTS = %w[countries country_ids country_matches languages publication_years].freeze
+        PLOT_LIMIT = 2_000
+        LEDGER_PLOT_LIMIT = 500
+        WORLDCAT_SUBJECTS = 25
+        LEDGER_WORLDCAT_SUBJECTS = 15
+        RECORD_DESCRIPTION_LIMIT = 1_000
+        LEDGER_DESCRIPTION_LIMIT = 300
+        GOODREADS_GENRES = 15
+        CATEGORY_TYPES = %w[genre audience subject location].freeze
+        WIKIDATA_LISTS = %w[countries country_ids country_matches languages publication_years
+          genres main_subjects narrative_locations set_in_periods forms].freeze
         WIKIDATA_KEYS = %w[qid label description].freeze
 
         def self.build(book:)
@@ -19,7 +33,8 @@ module Services
           facts = evidence&.facts || {}
           new(book: book, evidence_id: evidence&.id, record: record_for(book),
             book_facts: book_facts_for(book), wikidata: wikidata_section(facts["wikidata"]),
-            wikipedia: wikipedia_section(facts["wikipedia"]), worldcat: worldcat_section(facts["worldcat"]))
+            wikipedia: wikipedia_section(facts["wikipedia"]), worldcat: worldcat_section(facts["worldcat"]),
+            goodreads: goodreads_for(book))
         end
 
         def self.record_for(book)
@@ -29,9 +44,33 @@ module Services
             "first_published_year" => book.first_published_year,
             "original_language" => book.original_language&.name,
             "countries" => names,
+            "description" => book.primary_description&.content&.slice(0, RECORD_DESCRIPTION_LIMIT),
+            "categories" => category_entries(book),
             "real_countries" => names.reject { |name| CountryLookup::PLACEHOLDERS.include?(name.downcase) },
             "authors" => book.book_authors.includes(author: :countries).order(:position, :id).map { |ba| author_entry(ba) }
           }
+        end
+
+        def self.category_entries(book)
+          type_values = ::Books::Category.category_types.values_at(*CATEGORY_TYPES)
+          items = ::CategoryItem.direct.where(item: book).includes(:category)
+            .select { |item| item.category.present? && !item.category.deleted && type_values.include?(item.category.category_type_before_type_cast) }
+          items.sort_by { |item| [item.category.category_type_before_type_cast, item.category.name] }.map do |item|
+            category = item.category
+            {
+              "id" => category.id, "name" => category.name, "type" => category.category_type,
+              "source" => item.source,
+              "ancestors" => category.location? ? category.ancestors.map(&:name) : []
+            }
+          end
+        end
+
+        def self.goodreads_for(book)
+          ids = book.identifiers.where(identifier_type: :books_work_goodreads_id).pluck(:value)
+          page = ::Books::GoodreadsPage.outcome_found.where(goodreads_book_id: ids).order(:fetched_at).last
+          return nil unless page
+
+          {"genres" => Array(page.genres).map(&:to_s).first(GOODREADS_GENRES)}
         end
 
         def self.author_entry(book_author)
@@ -75,18 +114,25 @@ module Services
           {
             "title" => section["title"], "url" => section["url"],
             "lead" => section["lead"]&.slice(0, LEAD_LIMIT),
-            "infobox_country" => infobox["country"], "infobox_language" => infobox["language"]
+            "plot" => section["plot"]&.slice(0, PLOT_LIMIT),
+            "infobox_country" => infobox["country"], "infobox_language" => infobox["language"],
+            "infobox_genre" => infobox["genre"], "infobox_subject" => infobox["subject"],
+            "infobox_set_in" => infobox["set_in"]
           }
         end
 
         def self.worldcat_section(section)
           return nil unless section.is_a?(Hash)
 
-          section.slice("publication_places", "earliest_year", "cataloging_languages")
+          subjects = section["subjects"]
+          headings = subjects.is_a?(Hash) ? subjects.keys : Array(subjects)
+          section.slice("publication_places", "earliest_year", "cataloging_languages", "summary")
+            .merge("mapped_genres" => section["mapped_genres"].is_a?(Hash) ? section["mapped_genres"] : {},
+              "subjects" => headings.first(WORLDCAT_SUBJECTS))
         end
 
         private_class_method :record_for, :author_entry, :book_facts_for, :wikidata_section,
-          :wikipedia_section, :worldcat_section
+          :wikipedia_section, :worldcat_section, :category_entries, :goodreads_for
 
         def external?
           [wikidata, wikipedia, worldcat].any?(&:present?)
@@ -119,10 +165,14 @@ module Services
         end
 
         def to_ledger
+          description = record&.dig("description")
+          trimmed_record = (description.to_s.length > LEDGER_DESCRIPTION_LIMIT) ? record.merge("description" => nil) : record
           {
-            "evidence_id" => evidence_id, "record" => record, "book_facts" => book_facts,
-            "wikidata" => wikidata, "worldcat" => worldcat,
-            "wikipedia" => wikipedia&.merge("lead" => wikipedia["lead"]&.slice(0, LEDGER_LEAD_LIMIT))
+            "evidence_id" => evidence_id, "record" => trimmed_record, "book_facts" => book_facts,
+            "wikidata" => wikidata, "goodreads" => goodreads,
+            "worldcat" => worldcat&.merge("subjects" => Array(worldcat["subjects"]).first(LEDGER_WORLDCAT_SUBJECTS)),
+            "wikipedia" => wikipedia&.merge("lead" => wikipedia["lead"]&.slice(0, LEDGER_LEAD_LIMIT),
+              "plot" => wikipedia["plot"]&.slice(0, LEDGER_PLOT_LIMIT))
           }
         end
       end
