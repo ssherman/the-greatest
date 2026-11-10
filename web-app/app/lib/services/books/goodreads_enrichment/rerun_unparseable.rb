@@ -46,7 +46,7 @@ module Services
             book = books[run.enrichable_id]
             next false unless book
 
-            ::Workflows::Books::BookEnrichment.start(book, initiated_by: INITIATED_BY,
+            ::Workflows::Books::BookEnrichment.start(book, initiated_by: initiated_by,
               author_names: Array(run.options["author_names"]), options: run.options.except("author_names"))
             true
           end
@@ -55,12 +55,18 @@ module Services
 
         private
 
+        # The goodreads steps whose book gets a new run (RerunFailed picks
+        # another set), and the initiated_by the new runs carry.
+        def goodreads_steps = WorkflowStep.where(key: "goodreads", outcome: "unparseable")
+
+        def initiated_by = INITIATED_BY
+
         # The latest finished book run of each existing book, where its
-        # goodreads step ended unparseable.
+        # goodreads step is one of goodreads_steps.
         def eligible
           WorkflowRun.where(workflow: WORKFLOW, enrichable_type: "Books::Book").where.not(status: :running)
             .where(LATEST_RUN_SQL)
-            .where(id: WorkflowStep.where(key: "goodreads", outcome: "unparseable").select(:workflow_run_id))
+            .where(id: goodreads_steps.select(:workflow_run_id))
             .where(enrichable_id: ::Books::Book.select(:id))
         end
       end
