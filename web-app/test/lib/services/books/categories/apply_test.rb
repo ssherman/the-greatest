@@ -122,11 +122,67 @@ module Services
 
         test "legacy audience, Fiction and Nonfiction links are never removed" do
           kids = category("audience", "Kidz")
-          link(kids)
-          link(@fiction)
-          result = perform
+          [kids, @fiction, @nonfiction].each { |c| link(c) }
+          result = perform(resolved: [entry(category("genre"))])
           assert_empty result.data[:removed]
-          assert_equal %w[legacy legacy], [sources_of(kids), sources_of(@fiction)]
+          assert_equal %w[legacy] * 3, [kids, @fiction, @nonfiction].map { |c| sources_of(c) }
+        end
+
+        test "a type with nothing resolved gets no removals" do
+          legacy = [category("genre"), category("subject"), category("location")].each { |c| link(c) }
+          result = perform(resolved: [])
+          assert_empty result.data[:removed]
+          assert result.data[:rejudged]
+          assert_equal %w[legacy] * 3, legacy.map { |c| sources_of(c) }
+        end
+
+        test "with only a genre resolved, legacy subjects stay and an unpicked unsupported legacy genre goes" do
+          genre = category("genre")
+          subject = category("subject")
+          stale = category("genre")
+          [genre, subject, stale].each { |c| link(c) }
+          result = perform(resolved: [entry(genre)])
+          assert_equal [stale.id], result.data[:removed].map { |r| r[:id] }
+          assert_equal "legacy", sources_of(subject)
+        end
+
+        test "removing a link lowers item_count by one" do
+          genres = five_legacy_genres
+          stale = genres.last
+          assert_difference -> { stale.reload.item_count }, -1 do
+            perform(resolved: [entry(genres.first)], dossier: dossier(wikidata: {"genres" => genres.first(4).map(&:name)}))
+          end
+        end
+
+        test "a legacy genre backed by worldcat mapped_genres survives a removal run" do
+          genre = category("genre", "Wcgenre")
+          other = category("genre")
+          link(genre)
+          result = perform(resolved: [entry(other)], dossier: dossier(worldcat: {"mapped_genres" => {"genre:Wcgenre" => 2}, "subjects" => []}))
+          assert_empty result.data[:removed]
+          assert_equal "legacy", sources_of(genre)
+        end
+
+        test "a legacy subject picked at low confidence is not removed and not re-sourced" do
+          subject = category("subject")
+          link(subject)
+          result = perform(resolved: [entry(subject, "low")])
+          assert_empty result.data[:removed]
+          assert_equal "low_confidence", result.data[:held_back].first[:reason]
+          assert_equal "legacy", sources_of(subject)
+        end
+
+        test "confirming an inherited link is held back by the cap and the row stays inherited" do
+          us = category("location", "Landia2")
+          child = category("location", "Child2", parent: us)
+          link(child)
+          ::Categories::AncestorReconciler.call(item_ids: [@book.id])
+          4.times { link(category("location"), :admin) }
+          assert_equal "inherited", sources_of(us)
+          result = perform(resolved: [entry(us)], rejudge: false)
+          assert_equal [[us.id, "cap"]], result.data[:held_back].map { |h| [h[:id], h[:reason]] }
+          assert_empty result.data[:confirmed]
+          assert_equal "inherited", sources_of(us)
         end
 
         test "links of other sources are never removed" do
@@ -235,7 +291,6 @@ module Services
         end
 
         test "high entries are added before medium ones when the cap bites" do
-          3.times { link(category("audience"), :admin) } # fills nothing relevant to subjects
           7.times { link(category("subject"), :admin) }
           medium = category("subject", "Medsubj")
           high = category("subject", "Highsubj")

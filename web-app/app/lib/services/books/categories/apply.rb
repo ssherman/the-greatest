@@ -71,10 +71,14 @@ module Services
           @rejudge && answer["recognized"] == true && answer["confidence"] == "high" && dossier.external?
         end
 
+        def resolved_types
+          @resolved_types ||= resolved.map { |entry| entry[:category].category_type }.to_set
+        end
+
         def picked_ids
           @picked_ids ||= resolved.flat_map do |entry|
             ids = [entry[:category].id]
-            ids += entry[:category].ancestors.map(&:id) if entry[:type] == "location"
+            ids += entry[:category].ancestors.map(&:id) if entry[:category].location?
             ids
           end.to_set
         end
@@ -83,6 +87,8 @@ module Services
           @links.select(&:source_legacy?).each do |link|
             category = link.category
             next if category.audience?
+            # A type the mapping produced nothing for is never stripped: silence is not evidence.
+            next unless resolved_types.include?(category.category_type)
             next if picked_ids.include?(category.id)
             next if support.supported?(category)
 
@@ -146,6 +152,8 @@ module Services
             return unless existing.source_legacy? || existing.source_inherited?
 
             from = existing.source
+            return hold(entry, category, "cap") if from == "inherited" && @counts[type] >= CAPS.fetch(type)
+
             existing.update!(source: :ai)
             @counts[type] += 1 if from == "inherited"
             @wrote = true
