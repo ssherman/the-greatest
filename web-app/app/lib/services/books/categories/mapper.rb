@@ -34,26 +34,35 @@ module Services
 
         def call
           items = genre_items + audience_items + named_items("subject", "subjects") + named_items("location", "locations")
-          items.each { |item| resolve_by_name(item) if named?(item) && item.category_id.nil? && item.unmatched_via.nil? }
+          chat = resolve_open(items)
+          return chat if chat.is_a?(Result)
 
-          chat = nil
-          open_items = items.select { |item| named?(item) && item.category_id.nil? && item.candidate_ids.present? }
-          if open_items.any?
-            result = ask_chooser(open_items)
-            return Result.new(success?: false, data: nil, errors: [result.error]) unless result.success?
+          parent_chat = settle_fictional_parents(items)
+          return parent_chat if parent_chat.is_a?(Result)
 
-            chat = result.ai_chat
-            apply_choices(open_items, result.data)
-          end
-
+          chat ||= parent_chat
           items.each { |item| item.unmatched_via ||= "no_candidate" if item.category_id.nil? }
-          settle_fictional_root(items)
           Result.new(success?: true, errors: [], data: build_data(items, chat))
         end
 
         private
 
         attr_reader :book, :answer, :vocabulary
+
+        # Exact names, then one chooser call for the names still open. Returns the AI chat
+        # (or nil), or a failed Result when the chooser failed.
+        def resolve_open(items)
+          items.each { |item| resolve_by_name(item) if named?(item) && item.category_id.nil? && item.unmatched_via.nil? }
+
+          open_items = items.select { |item| named?(item) && item.category_id.nil? && item.candidate_ids.present? }
+          return nil if open_items.empty?
+
+          result = ask_chooser(open_items)
+          return Result.new(success?: false, data: nil, errors: [result.error]) unless result.success?
+
+          apply_choices(open_items, result.data)
+          result.ai_chat
+        end
 
         def named?(item) = %w[subject location].include?(item.type)
 
@@ -236,20 +245,33 @@ module Services
           [book.title, authors.presence && "by #{authors}", book.first_published_year && "(#{book.first_published_year})"].compact.join(" ")
         end
 
-        # ---- fictional root and output -------------------------------------
+        # ---- fictional parents and output ----------------------------------
 
-        # A fictional main setting (first listed) that matched nothing stands for the root.
-        def settle_fictional_root(items)
-          items.each do |item|
-            next unless item.type == "location" && item.category_id.nil? && fictional_filter(item) && item.index == 0
+        # A fictional place that is not in the Fictional Location subtree maps to the real place
+        # it sits in (Maycomb to Alabama), looked up as a real location with no parent hint. The
+        # bare Fictional Location root is never assigned. Returns the chooser's AI chat (or nil),
+        # or a failed Result.
+        def settle_fictional_parents(items)
+          pairs = items.filter_map do |item|
+            next unless item.type == "location" && item.category_id.nil? && fictional_filter(item) && item.hint.present?
+            next if ::Services::CategoryCleanup::NameNormalizer.twin_key(item.hint) == ::Services::CategoryCleanup::NameNormalizer.twin_key(item.proposed)
 
-            root = rows("location").values.find { |row| !row.deleted && row.name == Candidates::FICTIONAL_ROOT }
-            next unless root
+            [item, Item.new(type: "location", proposed: item.hint.to_s, kind: "real", hint: nil, confidence: item.confidence, evidence: item.evidence, index: item.index)]
+          end
+          return nil if pairs.empty?
 
-            item.category_id = root.id
-            item.via = "fictional_root"
+          chat = resolve_open(pairs.map(&:last))
+          return chat if chat.is_a?(Result)
+
+          pairs.each do |item, parent|
+            next unless parent.category_id
+
+            item.category_id = parent.category_id
+            item.via = "fictional_parent"
+            item.proposed = "#{parent.proposed} (setting of #{item.proposed})"
             item.unmatched_via = nil
           end
+          chat
         end
 
         def build_data(items, chat)

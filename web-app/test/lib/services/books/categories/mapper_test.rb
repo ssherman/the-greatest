@@ -171,13 +171,28 @@ module Services
           assert_equal ["boom"], result.errors
         end
 
-        test "an unmatched fictional main setting resolves to the Fictional Location root; a second one does not" do
+        test "a fictional place with no parent and no match is unmatched and the root is never used" do
+          location("Fictional Location")
+          result = map(answer(locations: [loc("Zzzyzx Land", kind: "fictional")]))
+          assert_empty result.data[:resolved]
+          assert_equal [{type: "location", proposed: "Zzzyzx Land", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
+        end
+
+        test "a fictional place maps to its real parent, keeping the entry's confidence" do
+          location("Fictional Location")
+          us = location("United States")
+          alabama = location("Alabama", parent: us)
+          result = map(answer(locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_equal [[alabama, "fictional_parent", "Alabama (setting of Maycomb)", "high"]],
+            result.data[:resolved].map { |r| [r[:category], r[:via], r[:proposed], r[:confidence]] }
+          assert_empty result.data[:unmatched]
+        end
+
+        test "a fictional parent never resolves inside the fictional subtree" do
           root = location("Fictional Location")
-          result = map(answer(locations: [loc("Zzzyzx Land", kind: "fictional"), loc("Qwxyz Land", kind: "fictional")]))
-          assert_equal [[root, "fictional_root", "Zzzyzx Land"]], result.data[:resolved].map { |r| [r[:category], r[:via], r[:proposed]] }
-          assert_equal [{type: "location", proposed: "Qwxyz Land", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
-          second_only = map(answer(locations: [loc("Zzzyzx Land"), loc("Qwxyz Land", kind: "fictional")]))
-          assert_empty second_only.data[:resolved].select { |r| r[:via] == "fictional_root" }
+          location("Alabama", parent: root)
+          result = map(answer(locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_empty result.data[:resolved]
         end
 
         test "a fictional location that matches the fictional subtree resolves there" do
