@@ -200,8 +200,8 @@ into `categories.description`, blanks only (dry run unless `APPLY=1`; it prints 
 differs and `missing` for an active genre or audience with none, which you fill in the admin).
 
 **Mapping.** `Categories::Mapper` turns the answer into categories and never creates one. Ids are checked
-against the vocabulary (`via` `id`; otherwise unmatched `invalid_id`). A name is matched exactly on name or
-alternative name, merged rows included and followed to their target (`via` `exact`, or `merged`); a location
+against the vocabulary (`via` `id`; otherwise unmatched `invalid_id`). A name is matched on a normalised key (`NameNormalizer.twin_key`) against name or
+alternative name, merged rows included and followed to their target (`via` `exact` for the normalised match, or `merged`); a location
 must also fit its real or fictional subtree and its parent hint. A name still open goes to `Candidates`, which
 scores trigram similarity in Ruby over the type's active names (similarity above 0.3, or word similarity above
 0.5; at most 10), and one `CategoryChoiceTask` call (fast model) picks among them (`via` `chosen`, else
@@ -216,7 +216,8 @@ migration behind the candidates. A failed chooser call fails the judge row, so t
 - `high` answers are written; `medium` only with external support (`Categories::Support`: Wikidata, Wikipedia,
   WorldCat or Goodreads names the category), else held back `unsupported_medium`; `low` is held back.
 - A new link has source `ai`. A held `legacy` or `inherited` link the judge picked is upgraded to `ai`
-  (`confirmed`); an inherited one is cap-checked first.
+  (`confirmed`) only after the confidence and support rule above passes (a `medium` pick with no support is
+  held back `unsupported_medium` even when the book holds the link); an inherited one is cap-checked first.
 - Book type: written as Fiction or Nonfiction only at `high` confidence, when the book holds neither and
   book_facts does not disagree. A held type that differs is reported `type_conflict` and never changed.
 - A re-judge may remove links. Only when the context is not `import`, the answer is recognized with `high`
@@ -257,5 +258,5 @@ Research run on `gpt-6-astra` with web search: about 15 cents (measured 2026-09-
 
 ## Not done here
 
-Authors, Goodreads, series and a ledger UI. See the spec's Non-goals. The origin and categories backfill is
+Authors, series and a ledger UI. See the spec's Non-goals. The origin and categories backfill is
 `Services::Books::Categorize::Backfill` (`docs/launch-todo.md` section 14).

@@ -106,8 +106,11 @@ second export on the same day reuses the day's file name and the trainer reports
    queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
    author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
-10. **Optional, manual: `bin/rails "books:categorize:backfill[origin_only,all,weekly]" APPLY=1`**. It applies
-   only after you have run section 14 step 2 once, and it needs `APPLY=1` like that step. Re-running it
+10. **Optional, manual: `bin/rails "books:categorize:backfill[all,all,weekly]" APPLY=1`**. It covers origin and
+   categories; under `all` each book is planned with only the judgment it still lacks. Run it only after
+   section 14 step 2 (the definitions) and step 3 (the origin backfill and the categories backfill, or one `[all,...]`
+   run) have been done once: `all` weekly before the categories backfill would plan the whole catalog for
+   categories. It needs `APPLY=1` like that step. Re-running it
    after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
    research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
    section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
@@ -587,14 +590,15 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    serves both judgments, and each book is planned with only the judgment it still needs. The categories judge
    spends the same backfill research cap (`categorize_backfill_research_daily_cap`), which counts origin and
    categories research together.
-4. `bin/rails "books:origin:report[origin-v1]"` and `bin/rails "books:categories:report[categories-v1]"`. The
+4. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
+   label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The
    categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
    used that we do not list; add the last as alternative names on existing genres, never as new genres.
 5. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[origin-v1]"`, with
    `IDS=` and `APPLY=1`.
 6. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
-   support. `bin/rails "books:categories:restore_removals[categories-v1]"` lists what it would put back; with
-   `APPLY=1` it restores them.
+   support. `bin/rails "books:categories:restore_removals[<label>]"` prints how many links on how many books it would
+   put back (it does not list them); with `APPLY=1` it restores them.
 7. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
    origins changes `percentage_western` and so the western-canon penalty.
 
