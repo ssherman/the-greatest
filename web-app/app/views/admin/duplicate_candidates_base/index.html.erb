@@ -17,6 +17,15 @@
     <% end %>
   </div>
 
+  <% if @status != "pending" %>
+    <div class="join" data-testid="via-filter">
+      <% [["All", nil], ["Admin page", "admin_ui"], ["API", "api"]].each do |label, via| %>
+        <%= link_to label, duplicates_index_path(status: @status, via: via),
+              class: "btn btn-xs join-item #{"btn-active" if @via == via}", data: {testid: "via-#{via || "all"}"} %>
+      <% end %>
+    </div>
+  <% end %>
+
   <% if @pairs.any? %>
     <div class="space-y-4">
       <%= render partial: "admin/duplicate_candidates_base/pair", collection: @pairs, as: :pair %>

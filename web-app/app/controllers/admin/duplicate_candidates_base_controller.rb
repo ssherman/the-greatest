@@ -18,6 +18,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
   before_action :require_domain_write!, only: [:dismiss, :merge]
 
   STATUSES = ::DuplicateCandidate.statuses.keys.freeze
+  VIAS = ::DuplicateCandidate.resolved_via.keys.freeze
   PER_PAGE = 100
 
   helper_method :duplicates_index_path, :dismiss_duplicate_path, :merge_duplicate_path, :decision_path_for,
@@ -26,12 +27,16 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
   def index
     @status = STATUSES.include?(params[:status]) ? params[:status] : "pending"
     @counts = domain_scope.group(:status).count
-    @pagy, @pairs = pagy(domain_scope.where(status: @status).includes(:match_decision, :resolved_by).newest_first, limit: PER_PAGE)
+    # The via filter narrows resolved tabs only; pending pairs have no resolver.
+    @via = params[:via] if VIAS.include?(params[:via]) && @status != "pending"
+    pairs = domain_scope.where(status: @status).includes(:match_decision, :resolved_by).newest_first
+    pairs = pairs.where(resolved_via: @via) if @via
+    @pagy, @pairs = pagy(pairs, limit: PER_PAGE)
 
     # Resolving the last pairs on the last page leaves that page's URL past
     # the end.
     if @pairs.empty? && @pagy.page > 1
-      redirect_to duplicates_index_path(status: @status, page: @pagy.last)
+      redirect_to duplicates_index_path(status: @status, via: @via, page: @pagy.last)
       return
     end
 

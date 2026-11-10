@@ -47,7 +47,7 @@
       </div>
     <% elsif pair.resolved_at %>
       <p class="text-sm text-base-content/70">
-        <%= pair.status.humanize %> <%= pair.resolved_at.to_date.iso8601 %><%= " by #{pair.resolved_by.email}" if pair.resolved_by %><%= " — #{pair.resolution_note}" if pair.resolution_note.present? %>
+        <%= pair.status.humanize %> <%= pair.resolved_at.to_date.iso8601 %><%= " by #{pair.resolved_by.email}" if pair.resolved_by %><%= pair.resolved_via_api? ? " via API" : (pair.resolved_via_admin_ui? ? " via admin page" : "") %><%= " — #{pair.resolution_note}" if pair.resolution_note.present? %>
       </p>
     <% end %>
   </div>
