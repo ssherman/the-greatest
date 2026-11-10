@@ -146,6 +146,112 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/duplicate_candidates:
+    x-domain: books
+    get:
+      operationId: listDuplicateCandidates
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: List suspected duplicate pairs
+      description: |
+        The duplicate review queue for books and authors, newest first. Pending pairs by default; `status` selects merged or not_duplicate (dismissed) pairs and `item_type` narrows to books or authors. Each pair carries both records (`records`, lower id first) with the evidence the admin queue page shows. A record a merge or delete has since removed is `{id, missing: true}`. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists suspected duplicate pairs of books and authors, newest first; pending pairs by default, and
+          `status` also accepts merged or not_duplicate. `item_type` narrows to book or author. Each pair has
+          an integer `id`, why it was raised, and both records, ordered by id, with title, creators, year,
+          ranked position, list count and identifiers; a record that no longer exists is `missing: true`. Use
+          it to work through the queue; get_duplicate_candidate adds more detail for one pair.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "`pending` (default) is the open queue; `merged` and `not_duplicate` are resolved pairs."
+          schema:
+            type: string
+            enum: [pending, merged, not_duplicate]
+            default: pending
+        - name: item_type
+          in: query
+          required: false
+          description: Only pairs of this record type.
+          schema:
+            type: string
+            enum: [book, author]
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of duplicate pairs.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDuplicateCandidateCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/duplicate_candidates/{id}:
+    x-domain: books
+    get:
+      operationId: getDuplicateCandidate
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One suspected duplicate pair
+      description: |
+        One pair in any status, with more detail on each record (description, alternate titles or names, the lists a book is on or an author's books) and the match decision that raised it, if any. A pair that does not exist, or was folded into another pair by a merge, is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one duplicate pair by integer id, in any status, with both records ordered by id and more
+          detail on each: description, alternate titles (books) or names (authors), up to 25 lists a book is
+          on or up to 25 of an author's books, and the match decision that raised the pair. A 404 means the
+          pair is gone, possibly folded into another pair by a merge; call list_duplicate_candidates again.
+          Ids come from list_duplicate_candidates.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The pair.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDuplicateCandidateDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories:
     x-domain: books
     get:
@@ -1158,6 +1264,130 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminCategory"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    DuplicateCandidateRecord:
+      type: object
+      description: One side of a pair. A record that has been merged away or deleted is only `id` and `missing`. A present record carries the finder summary plus type-specific fields (book_kind and alternate_titles for books; alternate_names, birth_year, death_year, kind and book_titles for authors) and, on the single-pair endpoint, the detail fields.
+      required: [id, missing]
+      properties:
+        id: {type: integer}
+        missing: {type: boolean}
+        title: {type: string, description: The book title or the author name.}
+        creators:
+          type: array
+          items: {type: string}
+        year: {type: [integer, "null"]}
+        ranked_position: {type: [integer, "null"]}
+        list_count: {type: integer, minimum: 0}
+        identifiers:
+          type: array
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type: {type: string}
+              value: {type: string}
+        subtitle: {type: [string, "null"]}
+        alternate_titles:
+          type: array
+          items: {type: string}
+        alternate_names:
+          type: array
+          items: {type: string}
+        description: {type: [string, "null"], description: "The first 500 characters (detail only)."}
+        lists:
+          type: array
+          description: Up to 25 lists the book is on (books, detail only).
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+        books:
+          type: array
+          description: Up to 25 of the author's books (authors, detail only).
+          items:
+            type: object
+            required: [id, title, rank]
+            properties:
+              id: {type: integer}
+              title: {type: string}
+              rank: {type: [integer, "null"]}
+    AdminDuplicateCandidate:
+      type: object
+      required: [id, item_type, raised_by, status, occurrences, evidence, created_at, resolution, records]
+      properties:
+        id: {type: integer}
+        item_type:
+          type: string
+          enum: [book, author]
+        raised_by:
+          type: string
+          enum: [identifier_collision, external_key_collision, ai, human, bulk_verify, ol_backfill]
+        status:
+          type: string
+          enum: [pending, merged, not_duplicate]
+        occurrences: {type: integer, minimum: 1}
+        evidence:
+          type: object
+          description: Why the pair was raised; free-form.
+        created_at: {type: string, format: date-time}
+        resolution:
+          description: Null while the pair is pending.
+          oneOf:
+            - {type: "null"}
+            - type: object
+              required: [resolved_at, resolved_by, resolved_via, note]
+              properties:
+                resolved_at: {type: [string, "null"], format: date-time}
+                resolved_by: {type: [string, "null"], description: The resolving user's email.}
+                resolved_via:
+                  type: [string, "null"]
+                  enum: [admin_ui, api, null]
+                note: {type: [string, "null"]}
+        records:
+          type: array
+          description: Both records, lower id first.
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/DuplicateCandidateRecord"
+    AdminDuplicateCandidateFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminDuplicateCandidate"
+        - type: object
+          required: [match_decision]
+          properties:
+            match_decision:
+              description: The finder decision that raised the pair, if any.
+              oneOf:
+                - {type: "null"}
+                - type: object
+                  required: [id, finder, outcome, confidence, reason]
+                  properties:
+                    id: {type: integer}
+                    finder: {type: string}
+                    outcome: {type: string, enum: [matched, unmatched]}
+                    confidence: {type: string, enum: [certain, high, medium, low]}
+                    reason: {type: [string, "null"]}
+    AdminDuplicateCandidateDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminDuplicateCandidateFull"
+    AdminDuplicateCandidateCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminDuplicateCandidate"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

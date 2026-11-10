@@ -139,26 +139,13 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     DataImporters::FinderRegistry.entry_for_model(pair.item_type)
   end
 
-  # One query per item type for the records, and for their summaries
-  # (FinderBase#summarize_all: title, creators, year, ranked position, list
-  # count, identifiers) one query per type for the ranked positions and one
-  # for the list counts. A record a merge or delete has since removed is
-  # simply absent; its side says so and the row offers dismissal only.
+  # See Services::DuplicateCandidates::PairRecords; a record a merge or delete
+  # has since removed is absent, its side says so and the row offers dismissal
+  # only.
   def load_pair_records(pairs)
-    @records = {}
-    @summaries = {}
-    pairs.group_by(&:item_type).each do |type, rows|
-      entry = DataImporters::FinderRegistry.entry_for_model(type)
-      next unless entry
-
-      ids = rows.flat_map { |row| [row.item_a_id, row.item_b_id] }.uniq
-      records = entry.model_class.where(id: ids).includes(:identifiers, *entry.preloads).to_a
-      summaries = entry.finder_class.new.summarize_all(records)
-      records.each do |record|
-        @records[[type, record.id]] = record
-        @summaries[[type, record.id]] = summaries[record.id]
-      end
-    end
+    loaded = ::Services::DuplicateCandidates::PairRecords.call(pairs)
+    @records = loaded.records
+    @summaries = loaded.summaries
   end
 
   def record_for(pair, id)
