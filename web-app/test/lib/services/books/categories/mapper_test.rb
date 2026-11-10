@@ -80,7 +80,7 @@ module Services
           dead = subject("Dead End", deleted: true)
           subject("Old Name", deleted: true, merged_into_id: dead.id)
           result = map(answer(subjects: [subj("Old Name")]))
-          assert_equal [{type: "subject", proposed: "Old Name", via: "no_candidate"}], result.data[:unmatched]
+          assert_equal [{type: "subject", proposed: "Old Name", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
         end
 
         test "Georgia with a United States hint when only the Caucasus Georgia exists goes to the chooser and can be declined" do
@@ -92,7 +92,7 @@ module Services
           end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: nil}]}, ai_chat: nil)))
           result = map(answer(locations: [loc("Georgia", parent: "United States")]))
           assert_empty result.data[:resolved]
-          assert_equal [{type: "location", proposed: "Georgia", via: "declined"}], result.data[:unmatched]
+          assert_equal [{type: "location", proposed: "Georgia", via: "declined", candidate_ids: [georgia.id]}], result.data[:unmatched]
         end
 
         test "the same Georgia with the Caucasus hint is exact" do
@@ -150,17 +150,17 @@ module Services
           Services::Ai::Tasks::Books::CategoryChoiceTask.any_instance.expects(:call).never
           result = map(answer(subjects: [subj("Chess"), subj("Zzzyzx Nonexistent")]))
           assert_equal ["Chess"], result.data[:resolved].map { |r| r[:proposed] }
-          assert_equal [{type: "subject", proposed: "Zzzyzx Nonexistent", via: "no_candidate"}], result.data[:unmatched]
+          assert_equal [{type: "subject", proposed: "Zzzyzx Nonexistent", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
           assert_nil result.data[:ai_chat]
         end
 
         test "a chooser id outside the candidates is declined" do
-          subject("Quasar Studies")
+          @quasar_studies = subject("Quasar Studies")
           outsider = subject("Entirely Different")
           chooser_returns({question: 1, category_id: outsider.id})
           result = map(answer(subjects: [subj("Quasar")]))
           assert_empty result.data[:resolved]
-          assert_equal [{type: "subject", proposed: "Quasar", via: "declined"}], result.data[:unmatched]
+          assert_equal [{type: "subject", proposed: "Quasar", via: "declined", candidate_ids: [@quasar_studies.id]}], result.data[:unmatched]
         end
 
         test "a failed chooser call fails the mapping" do
@@ -175,7 +175,7 @@ module Services
           root = location("Fictional Location")
           result = map(answer(locations: [loc("Zzzyzx Land", kind: "fictional"), loc("Qwxyz Land", kind: "fictional")]))
           assert_equal [[root, "fictional_root", "Zzzyzx Land"]], result.data[:resolved].map { |r| [r[:category], r[:via], r[:proposed]] }
-          assert_equal [{type: "location", proposed: "Qwxyz Land", via: "no_candidate"}], result.data[:unmatched]
+          assert_equal [{type: "location", proposed: "Qwxyz Land", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
           second_only = map(answer(locations: [loc("Zzzyzx Land"), loc("Qwxyz Land", kind: "fictional")]))
           assert_empty second_only.data[:resolved].select { |r| r[:via] == "fictional_root" }
         end
@@ -192,7 +192,7 @@ module Services
           location("Paris", parent: root)
           result = map(answer(locations: [loc("Paris")]))
           assert_empty result.data[:resolved]
-          assert_equal [{type: "location", proposed: "Paris", via: "no_candidate"}], result.data[:unmatched]
+          assert_equal [{type: "location", proposed: "Paris", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
         end
 
         test "two answers that resolve to one category keep the first" do
@@ -218,7 +218,7 @@ module Services
 
         test "a blank name is unmatched" do
           result = map(answer(subjects: [subj("")]))
-          assert_equal [{type: "subject", proposed: "", via: "no_candidate"}], result.data[:unmatched]
+          assert_equal [{type: "subject", proposed: "", via: "no_candidate", candidate_ids: []}], result.data[:unmatched]
         end
       end
     end

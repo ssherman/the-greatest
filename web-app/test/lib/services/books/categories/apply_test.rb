@@ -34,8 +34,8 @@ module Services
           {"recognized" => recognized, "confidence" => confidence, "book_type" => book_type}
         end
 
-        def perform(resolved: [], dossier: self.dossier, answer: self.answer, rejudge: true)
-          Apply.call(book: @book, dossier: dossier, answer: answer, resolved: resolved, rejudge: rejudge)
+        def perform(resolved: [], dossier: self.dossier, answer: self.answer, rejudge: true, unmatched: [])
+          Apply.call(book: @book, dossier: dossier, answer: answer, resolved: resolved, rejudge: rejudge, unmatched: unmatched)
         end
 
         test "a high entry is added with source ai and support recorded" do
@@ -161,6 +161,60 @@ module Services
           result = perform(resolved: [entry(other)], dossier: dossier(worldcat: {"mapped_genres" => {"genre:Wcgenre" => 2}, "subjects" => []}))
           assert_empty result.data[:removed]
           assert_equal "legacy", sources_of(genre)
+        end
+
+        test "an unmatched proposed subject whose candidates included the legacy subject keeps it" do
+          kept = category("subject", "Quasar Studies")
+          gone = category("subject", "Unrelated Subject")
+          [kept, gone].each { |c| link(c) }
+          unmatched = [{type: "subject", proposed: "Quasar", via: "declined", candidate_ids: [kept.id]}]
+          result = perform(resolved: [entry(category("subject", "Chess"))], unmatched: unmatched)
+          assert_equal [gone.id], result.data[:removed].map { |r| r[:id] }
+          assert_equal "legacy", sources_of(kept)
+        end
+
+        test "a candidate of another type does not protect a link" do
+          genre_like = category("subject", "Same Id Space")
+          link(genre_like)
+          unmatched = [{type: "location", proposed: "Paris", via: "declined", candidate_ids: [genre_like.id]}]
+          result = perform(resolved: [entry(category("subject", "Chess"))], unmatched: unmatched)
+          assert_equal [genre_like.id], result.data[:removed].map { |r| r[:id] }
+        end
+
+        test "an unmatched location whose name key equals the legacy location's keeps it" do
+          paris = category("location", "Paris", alternative_names: ["Paname"])
+          other = category("location", "Lyon")
+          [paris, other].each { |c| link(c) }
+          unmatched = [{type: "location", proposed: "paris!", via: "no_candidate", candidate_ids: []}]
+          result = perform(resolved: [entry(category("location", "Berlin"))], unmatched: unmatched)
+          assert_equal [other.id], result.data[:removed].map { |r| r[:id] }
+          assert_equal "legacy", sources_of(paris)
+        end
+
+        test "a legacy link matching an alternative name of a proposed name's key is kept" do
+          paris = category("location", "Paris", alternative_names: ["Paname"])
+          link(paris)
+          unmatched = [{type: "location", proposed: "Paname", via: "declined", candidate_ids: []}]
+          result = perform(resolved: [entry(category("location", "Berlin"))], unmatched: unmatched)
+          assert_empty result.data[:removed]
+        end
+
+        test "a low-confidence pick alone does not enable removals for its type" do
+          legacy = category("subject")
+          link(legacy)
+          result = perform(resolved: [entry(category("subject"), "low")])
+          assert_empty result.data[:removed]
+          assert_equal "legacy", sources_of(legacy)
+        end
+
+        test "resolving one audience never removes a legacy audience" do
+          legacy = category("audience", "Adults")
+          link(legacy)
+          picked = category("audience", "Children")
+          result = perform(resolved: [entry(picked)])
+          assert_empty result.data[:removed]
+          assert result.data[:rejudged]
+          assert_equal "legacy", sources_of(legacy)
         end
 
         test "a legacy subject picked at low confidence is not removed and not re-sourced" do

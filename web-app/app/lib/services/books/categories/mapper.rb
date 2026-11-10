@@ -264,7 +264,10 @@ module Services
 
               resolved << {type: item.type, category: category, proposed: item.proposed, confidence: item.confidence, evidence: item.evidence, via: item.via}
             else
-              unmatched << {type: item.type, proposed: item.proposed, via: item.unmatched_via || "no_candidate"}
+              entry = {type: item.type, proposed: item.proposed, via: item.unmatched_via || "no_candidate"}
+              # What the chooser was offered: a legacy link among these is one the judge was naming.
+              entry[:candidate_ids] = Array(item.candidate_ids) if named?(item)
+              unmatched << entry
             end
           end
           {resolved: resolved, unmatched: unmatched, ai_chat: chat}

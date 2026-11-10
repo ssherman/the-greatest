@@ -8,6 +8,8 @@ module Services
       # (2) on a confident, externally evidenced re-judge remove legacy links
       # that nothing picked and no source supports, (3) the Fiction/Nonfiction
       # type, (4) additions under the per-type caps, (5) reconcile ancestors.
+      # A legacy link the judge named is protected even when the mapper lost the
+      # name (declined, or outside the candidates): see `named_by_unmatched?`.
       # Only `legacy` links are ever removed; Fiction, Nonfiction and audiences
       # never are. Never creates a Category.
       class Apply
@@ -18,16 +20,17 @@ module Services
         CONFIDENCE_ORDER = {"high" => 0, "medium" => 1}.freeze
         TYPE_NAMES = ::Books::Book::BOOK_TYPE_CATEGORY_NAMES
 
-        def self.call(book:, dossier:, answer:, resolved:, rejudge:)
-          new(book: book, dossier: dossier, answer: answer, resolved: resolved, rejudge: rejudge).call
+        def self.call(book:, dossier:, answer:, resolved:, rejudge:, unmatched: [])
+          new(book: book, dossier: dossier, answer: answer, resolved: resolved, rejudge: rejudge, unmatched: unmatched).call
         end
 
-        def initialize(book:, dossier:, answer:, resolved:, rejudge:)
+        def initialize(book:, dossier:, answer:, resolved:, rejudge:, unmatched: [])
           @book = book
           @dossier = dossier
           @answer = (answer || {}).deep_stringify_keys
           @resolved = resolved || []
           @rejudge = rejudge
+          @unmatched = unmatched || []
           @added = []
           @confirmed = []
           @removed = []
@@ -72,7 +75,36 @@ module Services
         end
 
         def resolved_types
-          @resolved_types ||= resolved.map { |entry| entry[:category].category_type }.to_set
+          # Only a confident pick shows the judge covered the type; a low pick still protects (picked_ids).
+          @resolved_types ||= resolved.select { |entry| CONFIDENCE_ORDER.key?(entry[:confidence]) }
+            .map { |entry| entry[:category].category_type }.to_set
+        end
+
+        # The category ids the chooser was offered for an unmatched name, per type.
+        def unmatched_candidate_ids
+          @unmatched_candidate_ids ||= @unmatched.each_with_object(Hash.new { |hash, key| hash[key] = Set.new }) do |entry, ids|
+            ids[entry[:type].to_s].merge(Array(entry[:candidate_ids]))
+          end
+        end
+
+        # Twin keys of every name the judge proposed, matched or not, per type.
+        def proposed_keys
+          @proposed_keys ||= (resolved + @unmatched).each_with_object(Hash.new { |hash, key| hash[key] = Set.new }) do |entry, keys|
+            # Genres and audiences arrive as ids, not names.
+            next unless %w[subject location].include?(entry[:type].to_s)
+
+            key = ::Services::CategoryCleanup::NameNormalizer.twin_key(entry[:proposed])
+            keys[entry[:type].to_s] << key if key
+          end
+        end
+
+        # The judge named this legacy link but the mapper lost the name.
+        def named_by_unmatched?(category)
+          type = category.category_type
+          return true if unmatched_candidate_ids[type].include?(category.id)
+
+          names = ([category.name] + Array(category.alternative_names)).filter_map { |name| ::Services::CategoryCleanup::NameNormalizer.twin_key(name) }
+          (names.to_set & proposed_keys[type]).any?
         end
 
         def picked_ids
@@ -90,6 +122,7 @@ module Services
             # A type the mapping produced nothing for is never stripped: silence is not evidence.
             next unless resolved_types.include?(category.category_type)
             next if picked_ids.include?(category.id)
+            next if named_by_unmatched?(category)
             next if support.supported?(category)
 
             link.destroy!
