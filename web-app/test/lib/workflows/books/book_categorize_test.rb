@@ -19,7 +19,7 @@ module Workflows
         assert_equal [:evidence, :low, :low], BookCategorize.steps.map(&:queue)
       end
 
-      test "plans evidence then categorize, and a second start reuses the active run" do
+      test "plans evidence, categorize then categories, and a second start reuses the active run" do
         run = BookCategorize.start(@book, initiated_by: "backfill", options: {"context" => "backfill"})
 
         assert_equal %w[categories categorize evidence], run.steps.map(&:key).sort

@@ -50,7 +50,7 @@ module Workflows
 
       # Decides genres, subjects, locations and audience; runs after categorize so
       # the two share one research call per book.
-      add_step key: :categories, queue: :low, lease: 10.minutes, waits_on: {categorize: :finish},
+      add_step key: :categories, queue: :low, lease: 10.minutes, waits_on: {categorize: :finish, book_facts: :finish, evidence: :finish},
         adapter: Steps::Categories.new
 
       # Plans a book run and dispatches what is ready once the caller's

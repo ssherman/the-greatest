@@ -67,6 +67,14 @@ module Workflows
           call(run)
         end
 
+        test "a skipped research-mode row from book_facts does not count" do
+          run = import_run
+          @book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :skipped, workflow_step_id: run.step(:book_facts).id)
+          ::Services::Books::Categories::Judge.expects(:call).with(has_entries(research_allowed: true)).returns(ok_result)
+
+          call(run)
+        end
+
         test "research stays allowed when only another run's step researched" do
           run = import_run
           @book.enrichments.create!(kind: "books.origin", mode: :research, outcome: :applied)

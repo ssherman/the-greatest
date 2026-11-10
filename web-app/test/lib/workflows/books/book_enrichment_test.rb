@@ -57,7 +57,7 @@ module Workflows
         assert_equal %i[goodreads evidence book_facts amazon categorize categories], BookEnrichment.steps.map(&:key)
         assert_equal [:goodreads_fetch, :evidence, :low, :serial, :low, :low], BookEnrichment.steps.map(&:queue)
         assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes, 10.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
-        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}, {categorize: :finish}],
+        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}, {categorize: :finish, book_facts: :finish, evidence: :finish}],
           BookEnrichment.steps.map(&:waits_on)
       end
 
@@ -77,7 +77,7 @@ module Workflows
         run = start
 
         assert_equal "blocked", run.step(:categories).state
-        assert_equal %w[categorize], WorkflowDependency.where(step: run.step(:categories)).map { it.prerequisite_step.key }
+        assert_equal %w[book_facts categorize evidence], WorkflowDependency.where(step: run.step(:categories)).map { it.prerequisite_step.key }.sort
       end
 
       test "a run planned under version 3 (no categorize step) still completes" do

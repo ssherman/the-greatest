@@ -25,12 +25,13 @@ module Workflows
         end
 
         # True when a research-mode Enrichment exists for any of the run's steps
-        # named in keys.
+        # named in keys. Skipped rows (a budget refusal) made no web call, so they
+        # do not count.
         def researched_in_run?(run, keys)
           step_ids = run.steps.where(key: keys).pluck(:id)
           return false if step_ids.empty?
 
-          Enrichment.where(workflow_step_id: step_ids, mode: :research).exists?
+          Enrichment.where(workflow_step_id: step_ids, mode: :research).where.not(outcome: :skipped).exists?
         end
       end
     end

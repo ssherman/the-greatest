@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 # books.book_categorize: gather evidence, then judge the origin, then the
-# categories. The backfill
-# and the admin Enrich button's job (Books::EnrichBookJob) start it for books
-# that did not come through an import. The evidence step reuses a current,
-# complete evidence row instead of gathering again.
+# categories. The backfill and the admin Enrich button's job
+# (Books::EnrichBookJob) start it for books that did not come through an
+# import. The evidence step reuses a current, complete evidence row instead of
+# gathering again.
 #
 # Run options read by the steps: "context", "label", "force_judge",
 # "force_research" and "regather" (true: the evidence step gathers even when a
@@ -12,7 +12,8 @@
 # run. "origin_only" plans categories as skipped, "categories_only" plans
 # categorize as skipped, "all" or absent plans both. Anything else raises.
 # Version 2 added categories; a run planned under version 1 has no categories
-# step and still runs.
+# step and still runs. When the book already has an active run, start returns
+# that run and the scope has no effect.
 module Workflows
   module Books
     class BookCategorize < Workflows::Definition
