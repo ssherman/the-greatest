@@ -24,24 +24,39 @@ module Services
           end
         end
 
-        # |A ∩ B| / |A ∪ B| of the two trigram sets.
-        def similarity(a, b)
-          jaccard(trigrams(a), trigrams(b))
+        # A text's trigram set and per-word sets, computed once so a caller scoring
+        # many rows against one query does not rebuild them on every comparison.
+        Profile = Struct.new(:trigrams, :word_sets)
+
+        def profile(text)
+          word_sets = words(text).map { |word| trigrams_of_words([word]) }
+          Profile.new(word_sets.reduce(Set.new, :|), word_sets)
         end
 
-        # Best share of the query's trigrams found in any contiguous run of the
-        # text's words that is as long as the query. A whole word inside a longer
-        # name ("Paris" in "Parisian Suburbs") scores high though the names differ.
-        # Containment, not Jaccard: pg_trgm trims the run to the matching extent,
-        # which Jaccard over the whole run would not (Paris/Parisian is exactly 0.5).
-        def word_similarity(query, text)
-          query_words = words(query)
-          text_words = words(text)
-          return 0.0 if query_words.empty? || text_words.empty?
+        # |A ∩ B| / |A ∪ B| of the two trigram sets.
+        def similarity(a, b)
+          similarity_of(profile(a), profile(b))
+        end
 
-          query_set = trigrams_of_words(query_words)
-          size = [query_words.size, text_words.size].min
-          text_words.each_cons(size).map { |run| containment(query_set, trigrams_of_words(run)) }.max
+        def similarity_of(a, b)
+          jaccard(a.trigrams, b.trigrams)
+        end
+
+        def word_similarity(query, text)
+          word_similarity_of(profile(query), profile(text))
+        end
+
+        # Containment: the best share of the query's trigrams found in any
+        # contiguous run of the text's words that is as many words as the query.
+        # A whole word inside a longer name ("Paris" in "Parisian Suburbs") scores
+        # high. This is NOT pg_trgm's word_similarity, which scores the best
+        # contiguous trigram extent; containment is more generous (Jaccard over a
+        # whole word would put Paris/Parisian at exactly 0.5).
+        def word_similarity_of(query, text)
+          return 0.0 if query.word_sets.empty? || text.word_sets.empty?
+
+          size = [query.word_sets.size, text.word_sets.size].min
+          text.word_sets.each_cons(size).map { |run| containment(query.trigrams, run.reduce(Set.new, :|)) }.max
         end
 
         def containment(query_set, run_set)

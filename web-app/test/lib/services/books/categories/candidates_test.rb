@@ -40,10 +40,11 @@ module Services
         end
 
         test "equal scores break ties by id" do
-          first = location("Tieville")
-          second = location("Tieville")
+          # Higher id inserted first, so row order alone cannot satisfy the assertion.
+          ::Books::Category.create!(id: 9_000_002, name: "Tieville", category_type: "location")
+          ::Books::Category.create!(id: 9_000_001, name: "Tieville", category_type: "location")
           result = Candidates.new(category_type: "location").call(name: "Tieville")
-          assert_equal [first.id, second.id], result.map(&:id)
+          assert_equal [9_000_001, 9_000_002], result.map(&:id)
         end
 
         test "respects limit" do

@@ -4,7 +4,7 @@ module Services
   module Books
     module Categories
       # Retrieves the categories a free-text name could mean, scored in Ruby with
-      # Trigram (see there). Loads the type's active names once per instance; the
+      # Trigram (see there). Loads the type's active names and their trigram profiles once per instance; the
       # category table is small, and no database extension or index is involved.
       # Retrieval only: the AI task rules on the candidates.
       class Candidates
@@ -23,11 +23,12 @@ module Services
         def call(name:, fictional: nil, limit: 10)
           fictional_set = (@category_type == "location" && !fictional.nil?) ? self.class.fictional_ids : nil
 
-          scored = rows.filter_map do |id, row_name, _parent_id|
+          query = Trigram.profile(name)
+          scored = rows.filter_map do |id, profile|
             next if fictional_set && fictional_set.include?(id) != fictional
 
-            sim = Trigram.similarity(row_name, name)
-            word = Trigram.word_similarity(name, row_name)
+            sim = Trigram.similarity_of(profile, query)
+            word = Trigram.word_similarity_of(query, profile)
             next unless sim > MIN_SIMILARITY || word > MIN_WORD_SIMILARITY
 
             [[sim, word].max, id]
@@ -60,7 +61,8 @@ module Services
         private
 
         def rows
-          @rows ||= ::Books::Category.active.where(category_type: @category_type).pluck(:id, :name, :parent_id)
+          @rows ||= ::Books::Category.active.where(category_type: @category_type).pluck(:id, :name)
+            .map { |id, row_name| [id, Trigram.profile(row_name)] }
         end
       end
     end
