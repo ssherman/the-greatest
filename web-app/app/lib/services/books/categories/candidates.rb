@@ -3,30 +3,39 @@
 module Services
   module Books
     module Categories
-      # Retrieves the categories a free-text name could mean, by trigram
-      # similarity over lower(name) (served by index_categories_on_lower_name_trgm).
-      # Retrieval only: the AI task rules on the candidates, this never picks one.
+      # Retrieves the categories a free-text name could mean, scored in Ruby with
+      # Trigram (see there). Loads the type's active names once per instance; the
+      # category table is small, and no database extension or index is involved.
+      # Retrieval only: the AI task rules on the candidates.
       class Candidates
         MIN_SIMILARITY = 0.3
-        # Recall over precision: the chooser rules on the candidates, so a query that is a
-        # whole word inside a longer name (Paris in Parisian Suburbs) must still surface.
+        # Recall over precision: a query that is a whole word inside a longer name
+        # (Paris in Parisian Suburbs) must still surface.
         MIN_WORD_SIMILARITY = 0.5
         FICTIONAL_ROOT = "Fictional Location"
 
-        # fictional: true keeps only the Fictional Location subtree, false drops it;
-        # nil leaves locations unfiltered. Only meaningful for category_type "location".
-        def self.call(name:, category_type:, fictional: nil, limit: 10)
-          scope = ::Books::Category.active.where(category_type: category_type)
-            .where("similarity(lower(categories.name), lower(?)) > ? OR word_similarity(lower(?), lower(categories.name)) > ?",
-              name, MIN_SIMILARITY, name, MIN_WORD_SIMILARITY)
+        def initialize(category_type:)
+          @category_type = category_type.to_s
+        end
 
-          if category_type.to_s == "location" && !fictional.nil?
-            ids = fictional_ids.to_a
-            scope = fictional ? scope.where(id: ids) : scope.where.not(id: ids)
+        # fictional: true keeps only the Fictional Location subtree, false drops it;
+        # nil leaves locations unfiltered. Only meaningful for the "location" type.
+        def call(name:, fictional: nil, limit: 10)
+          fictional_set = (@category_type == "location" && !fictional.nil?) ? self.class.fictional_ids : nil
+
+          scored = rows.filter_map do |id, row_name, _parent_id|
+            next if fictional_set && fictional_set.include?(id) != fictional
+
+            sim = Trigram.similarity(row_name, name)
+            word = Trigram.word_similarity(name, row_name)
+            next unless sim > MIN_SIMILARITY || word > MIN_WORD_SIMILARITY
+
+            [[sim, word].max, id]
           end
 
-          order = ::Books::Category.sanitize_sql_array(["GREATEST(similarity(lower(categories.name), lower(?)), word_similarity(lower(?), lower(categories.name))) DESC, categories.id", name, name])
-          scope.order(Arel.sql(order)).limit(limit).to_a
+          ids = scored.sort_by { |score, id| [-score, id] }.first(limit).map(&:last)
+          by_id = ::Books::Category.where(id: ids).index_by(&:id)
+          ids.filter_map { |id| by_id[id] }
         end
 
         # The Fictional Location root and its active descendants. Empty when the root is absent.
@@ -34,17 +43,24 @@ module Services
           root = ::Books::Category.active.location.find_by(name: FICTIONAL_ROOT)
           return Set.new unless root
 
+          location_type = ::Books::Category.category_types.fetch("location").to_i
           sql = <<~SQL.squish
             WITH RECURSIVE tree(id) AS (
               SELECT id FROM categories WHERE id = #{root.id.to_i}
               UNION
               SELECT c.id FROM categories c
               JOIN tree ON c.parent_id = tree.id
-              WHERE c.type = 'Books::Category' AND c.deleted = FALSE
+              WHERE c.type = 'Books::Category' AND c.category_type = #{location_type} AND c.deleted = FALSE
             )
             SELECT id FROM tree
           SQL
           ::Books::Category.connection.select_values(sql).to_set
+        end
+
+        private
+
+        def rows
+          @rows ||= ::Books::Category.active.where(category_type: @category_type).pluck(:id, :name, :parent_id)
         end
       end
     end
