@@ -8,20 +8,24 @@ module Services
       # Retrieval only: the AI task rules on the candidates, this never picks one.
       class Candidates
         MIN_SIMILARITY = 0.3
+        # Recall over precision: the chooser rules on the candidates, so a query that is a
+        # whole word inside a longer name (Paris in Parisian Suburbs) must still surface.
+        MIN_WORD_SIMILARITY = 0.5
         FICTIONAL_ROOT = "Fictional Location"
 
         # fictional: true keeps only the Fictional Location subtree, false drops it;
         # nil leaves locations unfiltered. Only meaningful for category_type "location".
         def self.call(name:, category_type:, fictional: nil, limit: 10)
           scope = ::Books::Category.active.where(category_type: category_type)
-            .where("similarity(lower(categories.name), lower(?)) > ?", name, MIN_SIMILARITY)
+            .where("similarity(lower(categories.name), lower(?)) > ? OR word_similarity(lower(?), lower(categories.name)) > ?",
+              name, MIN_SIMILARITY, name, MIN_WORD_SIMILARITY)
 
           if category_type.to_s == "location" && !fictional.nil?
             ids = fictional_ids.to_a
             scope = fictional ? scope.where(id: ids) : scope.where.not(id: ids)
           end
 
-          order = ::Books::Category.sanitize_sql_array(["similarity(lower(categories.name), lower(?)) DESC, categories.id", name])
+          order = ::Books::Category.sanitize_sql_array(["GREATEST(similarity(lower(categories.name), lower(?)), word_similarity(lower(?), lower(categories.name))) DESC, categories.id", name, name])
           scope.order(Arel.sql(order)).limit(limit).to_a
         end
 

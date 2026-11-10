@@ -9,7 +9,7 @@ module Services
         end
 
         test "ranks the exact name ahead of a longer similar one" do
-          suburbs = location("Parisian")
+          suburbs = location("Parisian Suburbs")
           paris = location("Paris")
           result = Candidates.call(name: "Paris", category_type: "location")
           assert_equal [paris.id, suburbs.id], result.map(&:id).first(2)
