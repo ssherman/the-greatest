@@ -480,7 +480,7 @@ The vocabulary goes in as `id: Name — description` lines (genres, then audienc
     - `type:` `{reason => count}`;
     - `type_conflicts:` `[{book_id, title, judged, held}]`, first 50;
     - `unmatched:` `{type => [[proposed, count]]}`, top 20 per type, case-folded;
-    - `unlisted_genres:` `[[name, count]]`, top 30, case-folded: the task's `unlisted_genres` plus the dossier's Wikidata `genres` labels that `GenreMatcher#match` resolves to nothing. Each is either an alias to add to an existing genre or a candidate new genre;
+    - `unlisted_genres:` `[[name, count]]`, top 30, case-folded: the task's `unlisted_genres` plus the dossier's Wikidata `genres` labels that `GenreMatcher#match` resolves to nothing. Each is a candidate alias for an existing genre; the report prints them under the heading "Genre names to alias (add as an alternative name on an existing genre, or ignore)". Nothing is created from this list;
     - `research_rows:`;
     - `research_cost_estimate:` (`Origin::Report::RESEARCH_COST_PER_ROW`);
     - `deferred_research:`;
@@ -553,4 +553,4 @@ These need the owner's eye.
 10. **The Wikidata re-check** (off by default) now re-judges categories as well as origin for the books it re-checks. That is the point of a re-check, but it costs one standard call per book.
 11. **Backfill spacing stays at 8 s.** With local Wikidata the real limit is Wikipedia's one request a second (about 2 per matched book). Lowering it is a one-constant change after the rehearsal measures requests per book.
 12. **`write_definitions` never overwrites** a non-blank description that differs from the plan. It reports it instead.
-13. **Genres we don't hold are handled through aliases, not a new table** (owner's question, 2026-11-09). The judge reports `unlisted_genres`, and the report ranks them with the unmatched Wikidata genre labels. The owner adds each as an `alternative_names` entry on an existing genre, or creates the genre. Every matcher already reads alternative names (Goodreads, the mapper, the support test), so one alias fixes all three. WorldCat keeps its own reviewed genre map.
+13. **Genres we don't hold are handled through aliases, not a new table** (owner's question, 2026-11-09). The judge reports `unlisted_genres`, and the report ranks them with the unmatched Wikidata genre labels. The owner adds the useful ones as `alternative_names` on an existing genre and ignores the rest. Creating a genre stays a deliberate admin decision outside this pipeline; the genre list was cut down on purpose, and the old site's junk genres came from auto-creation. Note: the judge reads the vocabulary live, so a genre added in admin is offered to the AI at once (and needs a description). Every matcher already reads alternative names (Goodreads, the mapper, the support test), so one alias fixes all three. WorldCat keeps its own reviewed genre map.
