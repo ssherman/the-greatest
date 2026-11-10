@@ -49,7 +49,7 @@ class BooksCategorizeRakeTest < ActiveSupport::TestCase
   end
 
   test "a missing label, a bad limit or another scope aborts" do
-    [["origin_only", "all", ""], ["origin_only", "0", "v1"], ["origin_only", "lots", "v1"], ["categories_only", "all", "v1"]].each do |args|
+    [["origin_only", "all", ""], ["origin_only", "0", "v1"], ["origin_only", "lots", "v1"], ["bogus", "all", "v1"]].each do |args|
       @task.reenable
       assert_raises(SystemExit) { capture_io { @task.invoke(*args) } }
     end
