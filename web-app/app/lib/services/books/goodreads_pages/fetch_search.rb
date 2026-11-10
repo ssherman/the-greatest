@@ -28,9 +28,10 @@ module Services
         end
 
         def call
-          fetched = client.fetch(format(URL, CGI.escape(normalized_query)), wait_for_selector: config.wait_for_selector,
+          fetched = client.fetch(format(URL, CGI.escape(normalized_query)), wait_for_selector: config.search_wait_for_selector,
             timeout_ms: config.fetch_timeout_ms)
           parsed = ::Books::Goodreads::SearchPage.parse(html: fetched.html, status: fetched.status)
+          ::Books::Goodreads::FetchLog.fetched(target: "search #{normalized_query.inspect}", page: fetched, outcome: parsed.outcome)
           return done(:unavailable) if parsed.outcome == :unavailable
 
           done(parsed.outcome, store(parsed, fetched))

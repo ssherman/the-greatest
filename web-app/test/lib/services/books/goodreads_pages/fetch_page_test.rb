@@ -52,6 +52,14 @@ module Services
           assert_equal [:not_found, true, nil, []], [result.data[:outcome], page.outcome_not_found?, page.title, page.authors]
         end
 
+        test "every page back from the fetcher is logged with its status and outcome" do
+          client = client_returning(fetched(page_html("unexpected_error_503.html"), status: 503))
+          Rails.logger.expects(:info).with("Goodreads fetch: book 327847 status=503 outcome=unavailable " \
+            "elapsed_ms=5000 selector_found=true")
+
+          FetchPage.call(goodreads_book_id: 327847, client: client)
+        end
+
         test "Goodreads' error page stores nothing and is worth another try" do
           client = client_returning(fetched(page_html("unexpected_error_503.html"), status: 503))
 
