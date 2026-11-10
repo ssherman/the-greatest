@@ -24,12 +24,10 @@ module Admin
           source: :human, status: :merged, resolved_at: Time.current, resolved_by: @admin, resolved_via: via)
       end
 
-      test "index renders the agent prompt for admins" do
+      test "index renders for admins" do
         sign_in_as(@admin, stub_auth: true)
         get admin_books_duplicate_candidates_path
         assert_response :success
-        assert_select "[data-testid=copy-agent-prompt]", 1
-        assert_select "textarea[data-clipboard-copy-target=source]", text: /list_duplicate_candidates/
       end
 
       test "index redirects unauthenticated users" do

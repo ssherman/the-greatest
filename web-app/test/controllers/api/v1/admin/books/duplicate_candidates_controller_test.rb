@@ -153,7 +153,9 @@ module Api
             post "/api/v1/admin/duplicate_candidates/#{id}/merge", params: body, as: :json, headers: bearer(token)
           end
 
+          # record_ids default to the pair's own, as get_duplicate_candidate returns them.
           def dismiss_pair(pair, body = {}, token: ApiTokenSecrets::ADMIN, id: pair&.id)
+            body = {record_ids: [pair.item_a_id, pair.item_b_id]}.merge(body) if pair
             post "/api/v1/admin/duplicate_candidates/#{id}/dismiss", params: body, as: :json, headers: bearer(token)
           end
 
@@ -171,7 +173,7 @@ module Api
 
           test "merge deletes the other record and resolves the pair with who, how and the note" do
             pair = book_pair
-            merge_pair(pair, {target_id: @war.id, note: "Same novel."})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id, note: "Same novel."})
             assert_api_response_conform(status: 200, api: :admin)
 
             assert_not ::Books::Book.exists?(@crime.id)
@@ -190,7 +192,7 @@ module Api
 
           test "the target is the survivor whichever side it is" do
             pair = book_pair
-            merge_pair(pair, {target_id: @crime.id})
+            merge_pair(pair, {target_id: @crime.id, source_id: @war.id})
             assert_response :success
 
             assert_not ::Books::Book.exists?(@war.id)
@@ -199,7 +201,7 @@ module Api
 
           test "merge without a note leaves the note nil" do
             pair = book_pair
-            merge_pair(pair, {target_id: @war.id})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id})
             assert_api_response_conform(status: 200, api: :admin)
 
             assert_nil pair.reload.resolution_note
@@ -208,7 +210,7 @@ module Api
 
           test "a string target_id of plain digits is accepted" do
             pair = book_pair
-            merge_pair(pair, {target_id: @war.id.to_s})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id.to_s})
             assert_response :success
             assert_not ::Books::Book.exists?(@crime.id)
           end
@@ -217,7 +219,7 @@ module Api
             pair = book_pair
             ::Books::Book::Merger.expects(:new).never
 
-            merge_pair(pair, {target_id: @war.id, note: "ignored", dry_run: true})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id, note: "ignored", dry_run: true})
             assert_api_response_conform(status: 200, api: :admin)
 
             assert ::Books::Book.exists?(@crime.id)
@@ -234,13 +236,14 @@ module Api
             keep = books_authors(:king)
             gone = books_authors(:bachman)
 
-            merge_pair(pair, {target_id: keep.id})
+            merge_pair(pair, {target_id: keep.id, source_id: gone.id})
             assert_api_response_conform(status: 200, api: :admin)
 
             assert_not ::Books::Author.exists?(gone.id)
             assert_equal [keep.id, gone.id], [json[:data][:survivor][:id], json[:data][:deleted][:id]]
             assert json[:data][:survivor].key?(:name)
             assert pair.reload.merged?
+            assert pair.resolved_via_api?
           end
 
           test "merge warnings are returned" do
@@ -249,7 +252,7 @@ module Api
               stats: {post_commit_error: "Redis down"})
             ::Books::Book::Merger.expects(:new).returns(merger)
 
-            merge_pair(pair, {target_id: @war.id})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id})
             assert_equal ["post_commit_error"], json[:warnings].map { |w| w[:code] }
           end
 
@@ -257,7 +260,7 @@ module Api
             pair = book_pair
             pair.update!(status: :not_duplicate)
 
-            merge_pair(pair, {target_id: @war.id})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id})
             assert_api_response_conform(status: 422, api: :admin)
 
             assert ::Books::Book.exists?(@crime.id)
@@ -268,10 +271,10 @@ module Api
             pair = book_pair
             outsider = books_books(:cannery_row)
 
-            merge_pair(pair, {target_id: outsider.id})
+            merge_pair(pair, {target_id: outsider.id, source_id: @war.id})
             assert_api_response_conform(status: 422, api: :admin)
 
-            assert_includes json[:detail], "not in this pair"
+            assert_includes json[:detail], "not this pair's"
             [@war, @crime, outsider].each { |book| assert ::Books::Book.exists?(book.id) }
             assert pair.reload.pending?
           end
@@ -279,7 +282,7 @@ module Api
           test "a pair with a side already gone is a 422 and nothing is deleted" do
             pair = pair_with_missing_side
 
-            merge_pair(pair, {target_id: books_books(:war_and_peace).id})
+            merge_pair(pair, {target_id: books_books(:war_and_peace).id, source_id: @gone_id})
             assert_api_response_conform(status: 422, api: :admin)
 
             assert ::Books::Book.exists?(books_books(:war_and_peace).id)
@@ -289,7 +292,7 @@ module Api
           test "merge naming the missing side as the survivor is a 422" do
             pair = pair_with_missing_side
 
-            merge_pair(pair, {target_id: @gone_id})
+            merge_pair(pair, {target_id: @gone_id, source_id: books_books(:war_and_peace).id})
             assert_api_response_conform(status: 422, api: :admin)
             assert ::Books::Book.exists?(books_books(:war_and_peace).id)
           end
@@ -301,7 +304,7 @@ module Api
             assert_response :bad_request
 
             ["abc", "0x1A", 5.5, 0, -1, true].each do |bad|
-              merge_pair(pair, {target_id: bad})
+              merge_pair(pair, {target_id: bad, source_id: @crime.id})
               assert_response :bad_request, bad.inspect
               assert_equal "invalid_parameter", json[:code]
             end
@@ -312,27 +315,27 @@ module Api
           test "a note that is not a string or is too long is a 400" do
             pair = book_pair
 
-            merge_pair(pair, {target_id: @war.id, note: ["a"]})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id, note: ["a"]})
             assert_response :bad_request
-            merge_pair(pair, {target_id: @war.id, note: "a" * 1001})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id, note: "a" * 1001})
             assert_response :bad_request
             assert ::Books::Book.exists?(@crime.id)
           end
 
           test "merging an unknown pair is a 404 that says to list again" do
-            merge_pair(nil, {target_id: books_books(:war_and_peace).id}, id: 999_999_999)
+            merge_pair(nil, {target_id: books_books(:war_and_peace).id, source_id: 1}, id: 999_999_999)
             assert_api_response_conform(status: 404, api: :admin)
             assert_includes json[:detail], "List the queue again"
           end
 
           test "merging another domain's pair is a 404" do
-            merge_pair(nil, {target_id: 1}, id: duplicate_candidates(:resident_evil_4_pair).id)
+            merge_pair(nil, {target_id: 1, source_id: 2}, id: duplicate_candidates(:resident_evil_4_pair).id)
             assert_response :not_found
           end
 
           test "merge needs the merge scope" do
             pair = book_pair
-            merge_pair(pair, {target_id: @war.id}, token: ApiTokenSecrets::ADMIN_READ)
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id}, token: ApiTokenSecrets::ADMIN_READ)
             assert_api_response_conform(status: 403, api: :admin)
 
             assert_equal "insufficient_scope", json[:code]
@@ -350,7 +353,7 @@ module Api
             ::Books::BookPolicy.stubs(:new).with { |_user, record| record == refused }
               .returns(stub_everything(destroy?: false))
 
-            merge_pair(pair, {target_id: @war.id})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id})
             assert_api_response_conform(status: 403, api: :admin)
 
             assert_equal "forbidden", json[:code]
@@ -363,11 +366,86 @@ module Api
             merger = stub(call: ::Books::Book::Merger::Result.new(success?: false, data: nil, errors: ["boom"]), stats: {})
             ::Books::Book::Merger.expects(:new).returns(merger)
 
-            merge_pair(pair, {target_id: @war.id})
+            merge_pair(pair, {target_id: @war.id, source_id: @crime.id})
             assert_api_response_conform(status: 422, api: :admin)
 
             assert_includes json[:detail], "boom"
             assert pair.reload.pending?
+          end
+
+          test "merging with the old ids after a merge re-keyed the pair is a 422 and deletes nothing" do
+            a = books_books(:war_and_peace)
+            b = books_books(:crime_and_punishment)
+            c = books_books(:cannery_row)
+            p1 = pair_of("Books::Book", a, b)
+            p2 = pair_of("Books::Book", b, c)
+            ids = [a, b, c].map(&:id)
+            # The agent listed p1 and p2 with (a, b) and (b, c). Merging p2 keeping c re-keys p1 to (a, c).
+            merge_pair(p2, {target_id: c.id, source_id: b.id})
+            assert_response :success
+            assert_equal [a.id, c.id].minmax, [p1.reload.item_a_id, p1.item_b_id]
+
+            merge_pair(p1, {target_id: a.id, source_id: b.id})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_includes json[:detail], "not this pair's"
+            assert ::Books::Book.exists?(a.id)
+            assert ::Books::Book.exists?(c.id)
+            assert_not ::Books::Book.exists?(b.id)
+            assert p1.reload.pending?
+            assert_equal 2, ids.count { |id| ::Books::Book.exists?(id) }
+          end
+
+          test "merge with source_id equal to target_id is a 422" do
+            pair = book_pair
+            merge_pair(pair, {target_id: @war.id, source_id: @war.id})
+            assert_response :unprocessable_entity
+            assert ::Books::Book.exists?(@crime.id)
+            assert pair.reload.pending?
+          end
+
+          test "a missing or malformed source_id is a 400" do
+            pair = book_pair
+            post "/api/v1/admin/duplicate_candidates/#{pair.id}/merge", params: {target_id: @war.id}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
+            assert_response :bad_request
+
+            ["abc", 0, -1, 5.5, true].each do |bad|
+              merge_pair(pair, {target_id: @war.id, source_id: bad})
+              assert_response :bad_request, bad.inspect
+            end
+            assert ::Books::Book.exists?(@crime.id)
+            assert pair.reload.pending?
+          end
+
+          test "dismissing with the old record_ids after a merge re-keyed the pair is a 422 and leaves it pending" do
+            a = books_books(:war_and_peace)
+            b = books_books(:crime_and_punishment)
+            c = books_books(:cannery_row)
+            p1 = pair_of("Books::Book", a, b)
+            p2 = pair_of("Books::Book", b, c)
+            merge_pair(p2, {target_id: c.id, source_id: b.id})
+            assert_response :success
+
+            post "/api/v1/admin/duplicate_candidates/#{p1.id}/dismiss", params: {record_ids: [a.id, b.id]}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
+            assert_api_response_conform(status: 422, api: :admin)
+            assert p1.reload.pending?
+          end
+
+          test "dismiss with missing or malformed record_ids is a 400" do
+            post "/api/v1/admin/duplicate_candidates/#{@pending.id}/dismiss", params: {note: "x"}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
+            assert_response :bad_request
+
+            [[1], [1, 2, 3], ["a", "b"], [0, 1], "1,2", [1, nil], [1.5, 2]].each do |bad|
+              post "/api/v1/admin/duplicate_candidates/#{@pending.id}/dismiss", params: {record_ids: bad}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
+              assert_response :bad_request, bad.inspect
+            end
+            assert @pending.reload.pending?
+          end
+
+          test "dismiss accepts the record ids in either order" do
+            dismiss_pair(@pending, {record_ids: [@pending.item_b_id, @pending.item_a_id]})
+            assert_response :success
+            assert @pending.reload.not_duplicate?
           end
 
           test "dismiss marks the pair not a duplicate with who, how and the note" do
@@ -428,7 +506,7 @@ module Api
           end
 
           test "dismiss on an unknown pair is a 404" do
-            dismiss_pair(nil, {}, id: 999_999_999)
+            dismiss_pair(nil, {record_ids: [1, 2]}, id: 999_999_999)
             assert_api_response_conform(status: 404, api: :admin)
           end
 

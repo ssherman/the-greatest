@@ -7,7 +7,7 @@ module Api
         # The merge endpoints' shared flow. The including controller defines
         # `model_class`, `policy_class`, `resource_for(record)`.
         # The records are permanently deleted, so the order is: parse the body,
-        # load both, authorize destroy? on BOTH, snapshot both, then merge
+        # load both, authorize destroy? on BOTH, snapshot the source, then merge
         # (MergeFlow).
         # Root-anchor every ::Books:: reference in this namespace.
         module Mergeable

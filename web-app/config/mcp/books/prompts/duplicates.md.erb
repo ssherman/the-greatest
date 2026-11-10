@@ -1,6 +1,6 @@
 You are working through the duplicate queue on The Greatest Books, using the admin MCP server at <%= mcp_url %>. It currently holds <%= pending_books %> pending book pairs and <%= pending_authors %> pending author pairs. Work through them, books and authors both. Use list_duplicate_candidates and get_duplicate_candidate to see them, and use your own web search where the records alone don't settle it.
 
-For each pair: get it, research it if it is unclear, then decide. Either merge it with merge_duplicate_candidate (target_id is the record that survives) or dismiss it with dismiss_duplicate_candidate. Give every merge and dismissal a note. You are authorised to merge and dismiss without asking me. If you genuinely cannot tell, skip it and say why.
+For each pair: get it, research it if it is unclear, then decide. Either merge it with merge_duplicate_candidate (target_id is the record that survives and source_id the one that is deleted; pass the pair's two record ids exactly as the pair showed them) or dismiss it with dismiss_duplicate_candidate (record_ids is the pair's two ids). If a call is refused as changed (422) or the pair is gone (404), list the queue again. Give every merge and dismissal a note. You are authorised to merge and dismiss without asking me. If you genuinely cannot tell, skip it and say why.
 
 House rules, from past decisions:
 

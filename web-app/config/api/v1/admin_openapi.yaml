@@ -261,15 +261,16 @@ paths:
       security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Merge a suspected duplicate pair
       description: |
-        Merges the pair: the record named by `target_id` (one of the pair's two record ids) survives and the pair's other record is PERMANENTLY DELETED, as `merge_book` and `merge_author` do. The pair is marked merged, resolved by the token's owner via the API, with the optional `note`.
-        Refused (422) when the pair is not pending, when `target_id` is not one of the pair's ids, or when one of the pair's records no longer exists. A 404 means no such pair, or one folded into another by a merge.
+        Merges the pair: the record named by `target_id` survives and the one named by `source_id` is PERMANENTLY DELETED, as `merge_book` and `merge_author` do. The two ids must be exactly the pair's two record ids, as the get and list responses return them. The pair is marked merged, resolved by the token's owner via the API, with the optional `note`.
+        Refused (422) when the pair is not pending, when `source_id` and `target_id` are not exactly the pair's two ids (a merge elsewhere can re-key a pair in place; get it again), or when one of the pair's records no longer exists. A 404 means no such pair, or one folded into another by a merge.
         Send `dry_run: true` to validate and see both records without changing anything. Requires `books:admin:merge`, and the token's owner must be allowed to delete both records. There is no undelete.
       x-mcp:
         description: >-
-          Merges the pair: `target_id` (one of the pair's two record ids) survives and the other record is
-          PERMANENTLY DELETED, with no undelete. `dry_run: true` validates without changing anything. `note` is
-          optional and shown to admins reviewing the queue. A 422 saying the target is not in this pair, or a
-          404, means another merge changed the queue: list it again. After the real merge, report its
+          Merges the pair: `target_id` survives and `source_id` is PERMANENTLY DELETED, with no undelete. Pass
+          the pair's two record ids exactly as `get_duplicate_candidate` or `list_duplicate_candidates`
+          returned them. `dry_run: true` validates without changing anything. `note` is
+          optional and shown to admins reviewing the queue. A 422 saying the records are
+          not this pair's, or a 404, means another merge changed the queue: list it again. After the real merge, report its
           `warnings`: they name follow-up work (search reindexing, ranking recalculation) that will need to be
           re-run, and for a book pair the authors or credits that did not transfer.
         destructive: true
@@ -320,16 +321,17 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Dismiss a suspected duplicate pair
       description: |
-        Marks the pair as not duplicates, resolved by the token's owner via the API, with the optional `note`. Nothing is deleted. Works even when one of the pair's records no longer exists. Refused (422) when the pair is not pending. Requires `books:admin:write`, and the token's owner must be allowed to change books (or authors, for an author pair).
+        Marks the pair as not duplicates, resolved by the token's owner via the API, with the optional `note`. Nothing is deleted. Works even when one of the pair's records no longer exists. Send `record_ids`, the pair's two record ids as the get and list responses return them. Refused (422) when the pair is not pending or when `record_ids` are not exactly the pair's ids (a merge elsewhere can re-key a pair in place). Requires `books:admin:write`, and the token's owner must be allowed to change books (or authors, for an author pair).
       x-mcp:
         description: >-
           Marks the pair as not duplicates. `note` is optional and shown to admins. Nothing is deleted, and it
-          works even when one record of the pair no longer exists. A 422 saying the pair is already resolved,
-          or a 404, means the queue changed: list it again.
+          works even when one record of the pair no longer exists. Pass `record_ids`, the pair's two record ids
+          exactly as `get_duplicate_candidate` or `list_duplicate_candidates` returned them. A 422 saying the
+          pair is already resolved or the records changed, or a 404, means the queue changed: list it again.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
@@ -1496,10 +1498,15 @@ components:
           $ref: "#/components/schemas/AdminDuplicateCandidateFull"
     DuplicateMergeRequest:
       type: object
-      required: [target_id]
+      required: [target_id, source_id]
       properties:
         target_id:
-          description: The pair's record that survives; the other one is deleted. Must be one of the pair's two record ids. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
+          description: The pair's record that survives. With `source_id` it must be exactly the pair's two record ids. A JSON integer, or a string of plain decimal digits (no sign, prefix or separators).
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        source_id:
+          description: The pair's record that is PERMANENTLY DELETED. Must differ from `target_id`; same formats.
           oneOf:
             - {type: integer, minimum: 1}
             - {type: string, pattern: "^0*[1-9][0-9]*$"}
@@ -1510,7 +1517,14 @@ components:
         dry_run: {type: boolean, default: false, description: Validate and report without merging.}
     DuplicateDismissRequest:
       type: object
+      required: [record_ids]
       properties:
+        record_ids:
+          type: array
+          minItems: 2
+          maxItems: 2
+          description: The pair's two record ids, as the get and list responses return them (either order). A pair re-keyed by another merge is refused (422).
+          items: {type: integer, minimum: 1}
         note:
           type: [string, "null"]
           maxLength: 1000

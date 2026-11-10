@@ -21,6 +21,7 @@ module Api
           ITEM_TYPES = {"book" => "Books::Book", "author" => "Books::Author"}.freeze
           STATUSES = ::DuplicateCandidate.statuses.keys.freeze
           NOTE_LIMIT = 1000
+          CHANGED_PAIR = "These records are not this pair's (it changed after another merge); nothing was changed. Get the pair again."
           # Per item type: the model, its policy and the merge response's record shape.
           KINDS = {
             "Books::Book" => {model: ::Books::Book, policy: ::Books::BookPolicy, resource: :book_merge_resource},
@@ -56,19 +57,23 @@ module Api
             target_id = parse_id(params.require(:target_id))
             return render_problem(::Api::Problem.new(:invalid_parameter, detail: "target_id must be a positive integer")) if target_id.nil?
 
+            source_id = parse_id(params.require(:source_id))
+            return render_problem(::Api::Problem.new(:invalid_parameter, detail: "source_id must be a positive integer")) if source_id.nil?
+
             note = text_param!(:note, required: false, max_length: NOTE_LIMIT)
             dry_run = ActiveModel::Type::Boolean.new.cast(params[:dry_run]) || false
             pair = find_pair
             return if performed?
             return unless pending_pair?(pair)
 
-            unless [pair.item_a_id, pair.item_b_id].include?(target_id)
-              return render_problem(::Api::Problem.new(:unprocessable,
-                detail: "target_id #{target_id} is not in this pair (#{pair.item_a_id}, #{pair.item_b_id}). The queue may have changed; list it again."))
+            # A merge elsewhere re-keys pending pairs in place (same pair id), so
+            # the ids the agent judged must still be exactly this pair's ids, or
+            # the other side would be a record it never saw.
+            unless source_id != target_id && [source_id, target_id].minmax == [pair.item_a_id, pair.item_b_id]
+              return render_problem(::Api::Problem.new(:unprocessable, detail: CHANGED_PAIR))
             end
 
             kind = KINDS.fetch(pair.item_type)
-            source_id = (pair.item_a_id == target_id) ? pair.item_b_id : pair.item_a_id
             target = kind[:model].find_by(id: target_id)
             source = kind[:model].find_by(id: source_id)
             if target.nil? || source.nil?
@@ -97,10 +102,17 @@ module Api
           end
 
           def dismiss
+            ids = params.require(:record_ids)
+            record_ids = (ids.is_a?(Array) && ids.size == 2) ? ids.map { |id| parse_id(id) } : nil
+            if record_ids.nil? || record_ids.any?(&:nil?)
+              return render_problem(::Api::Problem.new(:invalid_parameter, detail: "record_ids must be an array of exactly two positive integers"))
+            end
+
             note = text_param!(:note, required: false, max_length: NOTE_LIMIT)
             pair = find_pair
             return if performed?
             return unless pending_pair?(pair)
+            return render_problem(::Api::Problem.new(:unprocessable, detail: CHANGED_PAIR)) unless record_ids.minmax == [pair.item_a_id, pair.item_b_id]
 
             kind = KINDS.fetch(pair.item_type)
             # Dismissing needs write access to the pair's record type; the pair

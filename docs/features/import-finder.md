@@ -243,7 +243,7 @@ or pairs the sweep or a real reviewer produced.
 
 `duplicate_candidates.resolved_via` (`admin_ui` or `api`) records the surface that resolved a pair, next to `resolved_by`, `resolved_at` and `resolution_note`. `Admin::BaseController` and `Api::V1::Admin::Books::BaseController` set `Current.acting_user` and `Current.acting_via`; `Services::DuplicateCandidates::RecordMerge` reads them when the merger marks the pair, so a merge stamps the pair the same way whichever surface ran it. Dismissals from the page set `resolved_via: admin_ui`.
 
-The API path is `/api/v1/admin/duplicate_candidates` (list, show, `merge`, `dismiss`), exposed as MCP tools; see "The duplicate queue" in `docs/features/mcp-server.md`. The page and the API share `Services::DuplicateCandidates::PairRecords` to load each pair's records and summaries. On the resolved tabs the page takes a `via` filter (`admin_ui` or `api`, links All / Admin page / API); it has no effect on Pending.
+The API path is `/api/v1/admin/duplicate_candidates` (list, show, `merge`, `dismiss`), exposed as MCP tools. `merge` takes `target_id` and `source_id` and `dismiss` takes `record_ids`; both must be exactly the pair's two ids or they answer 422 (a merge elsewhere re-keys pending pairs in place, the same reason the page's merge form posts both ids). See "The duplicate queue" in `docs/features/mcp-server.md`. The page and the API share `Services::DuplicateCandidates::PairRecords` to load each pair's records and summaries. On the resolved tabs the page takes a `via` filter (`admin_ui` or `api`, links All / Admin page / API); it has no effect on Pending.
 
 ## The duplicate sweep
 
