@@ -7,7 +7,7 @@ module Services
       # the Wikidata step has not processed (LedgerRun.processed; a placeholder
       # never is, so placeholders are left out): ranked authors first by
       # rank, then the rest by how many books they wrote. Each run's Wikidata
-      # step starts SPACING seconds after the one before, the Wikidata pace, with
+      # step starts SPACING seconds after the one before, the Wikipedia pace, with
       # research off for the whole run.
       #
       # An author whose Wikidata step missed and whose VIAF step never
@@ -25,7 +25,10 @@ module Services
       class Backfill
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        SPACING = 6
+        # Wikidata is a local service now (no pace of its own); what remains is the
+        # shared one-request-a-second Wikimedia pace for the matched author's
+        # Wikipedia article, about two requests an author. Was 6 while Wikidata was live.
+        SPACING = 2
 
         def self.call(limit:, queued: nil)
           new(limit: limit, queued: queued).call
