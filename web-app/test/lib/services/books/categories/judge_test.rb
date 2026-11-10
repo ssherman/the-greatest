@@ -68,7 +68,7 @@ module Services
           assert result.data[:applied]
           assert_equal ["books.categories", "applied", "knowledge", "applied", "high", true, "gpt-6-sol"],
             [row.kind, row.outcome, row.mode, row.reason, row.confidence, row.recognized, row.model]
-          assert_equal [1, "import"], [row.facts["prompt_version"], row.facts["context"]]
+          assert_equal [Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "import"], [row.facts["prompt_version"], row.facts["context"]]
           assert_equal({"sections" => ["record"]}, row.facts["dossier"])
           assert_equal ["Bildungsroman"], row.facts["answer"]["unlisted_genres"]
           assert_equal [@novels.id, "Novels", "genre", "id", "high"],
@@ -109,7 +109,7 @@ module Services
         test "a disabled-skipped book is still a backfill candidate" do
           Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(false)
           judge
-          assert_equal "1", @book.enrichments.where(kind: "books.categories").sole.facts["prompt_version"].to_s
+          assert_equal Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION.to_s, @book.enrichments.where(kind: "books.categories").sole.facts["prompt_version"].to_s
           assert_includes Categorize::Backfill.candidates(scope: "categories_only", book_ids: [@book.id]).pluck(:id), @book.id
         end
 

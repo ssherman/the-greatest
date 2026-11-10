@@ -5,7 +5,9 @@ module Services
     module Categories
       # Summarises the books.categories ledger rows of a run for the owner: what
       # was added, confirmed, removed and held back, the type conflicts, the
-      # names the vocabulary could not match, and genre names worth aliasing.
+      # names the vocabulary could not match, and alias suggestions: genre names
+      # the evidence used that are not on the list, each with the listed genre
+      # the judge said it means (when it named one).
       # Counts the newest row per book only.
       class Report
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
@@ -14,12 +16,13 @@ module Services
         UNLISTED_LIMIT = 30
         CONFLICT_LIMIT = 50
 
-        def self.call(label: nil)
-          new(label: label).call
+        def self.call(label: nil, unlisted_limit: UNLISTED_LIMIT)
+          new(label: label, unlisted_limit: unlisted_limit).call
         end
 
-        def initialize(label: nil)
+        def initialize(label: nil, unlisted_limit: UNLISTED_LIMIT)
           @label = label
+          @unlisted_limit = unlisted_limit
         end
 
         def call
@@ -44,6 +47,7 @@ module Services
           conflicts = []
           deferred = 0
           matcher = ::Services::Books::GoodreadsEnrichment::GenreMatcher.new
+          listed = ::Books::Category.active.where(category_type: %w[genre audience]).pluck(:id, :name).to_h
           resolvable = {}
 
           rows.each do |book_id, apply, unmatched_rows, unlisted_names, wikidata_genres, deferred_flag|
@@ -61,14 +65,21 @@ module Services
               proposed = entry["proposed"].to_s.strip.downcase
               unmatched[entry["type"]][proposed] += 1 if proposed.present?
             end
-            names = Array(unlisted_names).map { fold(it) }
+            suggestions = {}
+            Array(unlisted_names).each do |entry|
+              name, closest = entry.is_a?(Hash) ? [fold(entry["name"]), entry["closest_id"]] : [fold(entry), nil]
+              next if name.blank?
+              suggestions[[name, listed[closest] ? closest : nil]] = true
+            end
+            closest_by_name = suggestions.keys.to_h
             Array(wikidata_genres).each do |label|
               folded = fold(label)
               next if folded.blank?
               resolvable[folded] = matcher.match(label).present? unless resolvable.key?(folded)
-              names << folded unless resolvable[folded]
+              next if resolvable[folded]
+              suggestions[[folded, closest_by_name[folded]]] = true
             end
-            names.reject(&:blank?).uniq.each { unlisted[it] += 1 }
+            suggestions.each_key { unlisted[it] += 1 }
             deferred += 1 if deferred_flag == "true"
           end
 
@@ -82,7 +93,7 @@ module Services
             added: added, confirmed: confirmed, removed: removed, held_back: held_back, type: type_reasons,
             type_conflicts: type_conflicts,
             unmatched: unmatched.transform_values { |counts| top(counts, UNMATCHED_LIMIT) },
-            unlisted_genres: top(unlisted, UNLISTED_LIMIT),
+            unlisted_genres: suggestions_from(unlisted, listed),
             research_rows: research_rows,
             research_cost_estimate: research_rows * Origin::Report::RESEARCH_COST_PER_ROW,
             deferred_research: deferred,
@@ -92,6 +103,13 @@ module Services
         end
 
         private
+
+        # [{name:, genre_id:, genre_name:, count:}] by count, then name.
+        def suggestions_from(unlisted, listed)
+          sorted = unlisted.sort_by { |(name, genre_id), count| [-count, name, genre_id.to_i] }
+          sorted = sorted.first(@unlisted_limit) if @unlisted_limit
+          sorted.map { |(name, genre_id), count| {name: name, genre_id: genre_id, genre_name: listed[genre_id], count: count} }
+        end
 
         def tally(counts, entries, key)
           Array(entries).each { |entry| counts[entry[key]] += 1 if entry[key] }

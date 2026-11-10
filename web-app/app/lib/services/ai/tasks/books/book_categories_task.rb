@@ -10,7 +10,7 @@ module Services
         class BookCategoriesTask < EnrichmentTask
           include DossierPromptHelpers
 
-          PROMPT_VERSION = 1
+          PROMPT_VERSION = 2
           WORLDCAT_SUBJECTS = 25
           GOODREADS_SHELVES = 15
 
@@ -36,8 +36,8 @@ module Services
               - "genres": ids from the numbered genre list below, at most 5, most important first. Use only ids on the list. Never invent an id.
               - "audience": the id of one audience from the audience list, or null. Most books have none: there is no adult audience. Choose one only when the book is written for that readership.
               - "subjects": free-text names, at most 8, most important first. A subject is a browse page a reader would want this book on ("World War II", "Chess", "Slavery"). It is not a theme so broad that it describes most literary fiction, such as identity, love, family or human nature, unless the book is centrally about that.
-              - "locations": free-text places, at most 5. Each is the most specific place the book is substantially set in; for nonfiction, the place the book is about. Never list every place the book mentions. Mark each "real" or "fictional" (an invented place such as Middle-earth or Yoknapatawpha County is fictional). Give "parent", the containing place ("France" for Paris, "United States" for Georgia the state), or null when there is none.
-              - "unlisted_genres": at most 5 genre names the evidence uses (Wikidata, Wikipedia, WorldCat, Goodreads) that are not on the genre list, such as "Bildungsroman". This is a report only.
+              - "locations": free-text places, at most 5. Each is the most specific place the book is substantially set in; for nonfiction, the place the book is about. Never list every place the book mentions. Mark each "real" or "fictional" (an invented place such as Middle-earth or Yoknapatawpha County is fictional). Give "parent", the containing place ("France" for Paris, "United States" for Georgia the state), or null when there is none. For a fictional place, "parent" is the real place it sits in (Maycomb is in "Alabama", East Egg in "Long Island", Longbourn in "Hertfordshire"), or null for an invented world with no real setting (Middle-earth).
+              - "unlisted_genres": at most 5 genre names the evidence uses (Wikidata, Wikipedia, WorldCat, Goodreads) that are not on the lists, such as "Bildungsroman". For each, give "closest_id", the id of the listed genre or audience it means, or null when nothing on the list covers it. This is a report only.
 
               Every genre, the audience, every subject and every location carries a "confidence" (high, medium or low) and an "evidence" note, a short phrase naming the dossier section that supports it (record, Wikidata, Wikipedia, WorldCat, Goodreads, current categories or your own knowledge). Give low confidence to a guess. Set "recognized" to false if you do not know this specific book, and give an overall "confidence" for the whole answer. Output only the JSON object described by the schema.
 
@@ -185,6 +185,11 @@ module Services
             required :evidence, String, doc: "Short note naming the dossier section"
           end
 
+          class UnlistedGenre < OpenAI::BaseModel
+            required :name, String, doc: "A genre name the evidence uses that is not on the list"
+            required :closest_id, Integer, nil?: true, doc: "The id of the listed genre or audience it means, or null when nothing on the list covers it"
+          end
+
           class ResponseSchema < OpenAI::BaseModel
             required :recognized, OpenAI::Boolean, doc: "false if you do not know this specific book"
             required :confidence, String, doc: "high, medium or low, overall"
@@ -193,7 +198,7 @@ module Services
             required :audience, AudienceFact
             required :subjects, OpenAI::ArrayOf[SubjectFact], doc: "At most 8, most important first"
             required :locations, OpenAI::ArrayOf[LocationFact], doc: "At most 5"
-            required :unlisted_genres, OpenAI::ArrayOf[String], doc: "At most 5 genre names from the evidence that are not on the list"
+            required :unlisted_genres, OpenAI::ArrayOf[UnlistedGenre], doc: "At most 5 genre names from the evidence that are not on the lists"
           end
         end
       end

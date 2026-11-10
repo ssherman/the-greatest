@@ -50,11 +50,38 @@ module Services
           assert_equal({"subject" => [["whaling", 2]], "genre" => [["zed", 1]]}, Report.call.data[:unmatched])
         end
 
-        test "unlisted genres combine the task's names with unresolvable Wikidata labels" do
+        test "unlisted genres are alias suggestions grouped by case-folded name and genre" do
+          satire = ::Books::Category.create!(name: "Report Satire", category_type: "genre")
+          deleted = ::Books::Category.create!(name: "Report Gone", category_type: "genre", deleted: true)
+          subject = ::Books::Category.create!(name: "Report Subject", category_type: "subject")
+          row(@a, answer: {"unlisted_genres" => [{"name" => "Satirical Novel", "closest_id" => satire.id},
+            {"name" => "satirical novel", "closest_id" => satire.id}, {"name" => "Odd One", "closest_id" => deleted.id}]})
+          row(@b, answer: {"unlisted_genres" => [{"name" => "Satirical novel", "closest_id" => satire.id},
+            {"name" => "Odd one", "closest_id" => subject.id}, {"name" => "Nothing Close", "closest_id" => nil}, "Legacy String"]})
+          assert_equal [
+            {name: "satirical novel", genre_id: satire.id, genre_name: "Report Satire", count: 2},
+            {name: "legacy string", genre_id: nil, genre_name: nil, count: 1},
+            {name: "nothing close", genre_id: nil, genre_name: nil, count: 1},
+            {name: "odd one", genre_id: nil, genre_name: nil, count: 2}
+          ].sort_by { |h| [-h[:count], h[:name]] }, Report.call.data[:unlisted_genres]
+        end
+
+        test "an unresolvable Wikidata label is counted, taking the task's closest id for the same name on that book" do
           ::Books::Category.create!(name: "Known Genre", category_type: "genre")
-          row(@a, answer: {"unlisted_genres" => ["Space Opera", "space opera"]}, dossier: {"wikidata" => {"genres" => ["Known Genre", "Weird Fiction"]}})
-          row(@b, answer: {"unlisted_genres" => ["Space opera", "Weird fiction"]})
-          assert_equal [["space opera", 2], ["weird fiction", 2]], Report.call.data[:unlisted_genres].sort
+          satire = ::Books::Category.create!(name: "Report Satire", category_type: "genre")
+          row(@a, answer: {"unlisted_genres" => [{"name" => "Weird Fiction", "closest_id" => satire.id}]},
+            dossier: {"wikidata" => {"genres" => ["Known Genre", "weird fiction", "Space Opera"]}})
+          row(@b, dossier: {"wikidata" => {"genres" => ["Space Opera"]}})
+          assert_equal [
+            {name: "space opera", genre_id: nil, genre_name: nil, count: 2},
+            {name: "weird fiction", genre_id: satire.id, genre_name: "Report Satire", count: 1}
+          ], Report.call.data[:unlisted_genres]
+        end
+
+        test "unlisted_limit caps the suggestions and nil lifts the cap" do
+          row(@a, answer: {"unlisted_genres" => [{"name" => "aa", "closest_id" => nil}, {"name" => "bb", "closest_id" => nil}]})
+          assert_equal 1, Report.call(unlisted_limit: 1).data[:unlisted_genres].size
+          assert_equal 2, Report.call(unlisted_limit: nil).data[:unlisted_genres].size
         end
 
         test "research rows, cost and deferred research" do

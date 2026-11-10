@@ -148,7 +148,7 @@ module Services
 
         def categories_row(book, outcome: :applied, **facts)
           book.enrichments.create!(kind: "books.categories", outcome: outcome,
-            facts: {"prompt_version" => 1, "context" => "backfill"}.merge(facts.stringify_keys))
+            facts: {"prompt_version" => Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "context" => "backfill"}.merge(facts.stringify_keys))
         end
 
         def genre(name)

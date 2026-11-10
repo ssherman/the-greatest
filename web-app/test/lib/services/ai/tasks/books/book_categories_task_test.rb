@@ -135,8 +135,20 @@ module Services
             assert_equal BookCategoriesTask::ResponseSchema, task.send(:response_schema)
           end
 
-          test "PROMPT_VERSION is 1" do
-            assert_equal 1, BookCategoriesTask::PROMPT_VERSION
+          test "PROMPT_VERSION is 2" do
+            assert_equal 2, BookCategoriesTask::PROMPT_VERSION
+          end
+
+          test "unlisted genres carry a name and a nullable closest id" do
+            item = BookCategoriesTask::ResponseSchema.to_json_schema[:properties][:unlisted_genres][:items]
+            assert_equal %w[closest_id name], item[:properties].keys.map(&:to_s).sort
+            assert_includes Array(item[:properties][:closest_id][:type]), "null"
+          end
+
+          test "the prompt asks for a real parent for a fictional place and a closest id for unlisted genres" do
+            prompt = task.send(:system_message)
+            assert_includes prompt, "the real place it sits in"
+            assert_includes prompt, "closest_id"
           end
         end
       end

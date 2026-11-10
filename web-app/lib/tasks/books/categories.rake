@@ -31,9 +31,25 @@ namespace :books do
         names.each { |proposed, count| puts "    #{proposed}: #{count}" }
       end
       puts "Genre names to alias (add as an alternative name on an existing genre, or ignore):"
-      data[:unlisted_genres].each { |name, count| puts "  #{name}: #{count}" }
+      close, open_names = data[:unlisted_genres].partition { |suggestion| suggestion[:genre_name] }
+      close.each { |suggestion| puts "  #{suggestion[:name]} → #{suggestion[:genre_name]} (#{suggestion[:count]})" }
+      puts "No close genre:"
+      open_names.each { |suggestion| puts "  #{suggestion[:name]} (#{suggestion[:count]})" }
       puts "Research rows: #{data[:research_rows]} (about $#{format("%.2f", data[:research_cost_estimate])})"
       puts "Deferred research: #{data[:deferred_research]}"
+    end
+
+    desc "Add the report's alias suggestions as alternative names on the genres they mean. Dry run unless APPLY=1; " \
+      "NAMES=a,b limits it to those names; MIN=n sets the minimum count: bin/rails \"books:categories:add_aliases[categories-v1]\""
+    task :add_aliases, [:label] => :environment do |_task, args|
+      label = args[:label].presence
+      abort "A run label is required: bin/rails \"books:categories:add_aliases[LABEL]\"" unless label
+      apply = ENV["APPLY"] == "1"
+      names = ENV["NAMES"].presence&.split(",")
+      data = ::Services::Books::Categories::AddAliases.call(label: label, names: names, min_count: ENV.fetch("MIN", "1"), apply: apply).data
+      data[:added].each { |row| puts "#{apply ? "added" : "would add"}: #{row[:name]} → #{row[:genre]}" }
+      data[:skipped].each { |row| puts "skipped: #{row[:name]} (#{row[:reason]})" }
+      puts "Re-run with APPLY=1 to add them." unless apply
     end
 
     desc "Put back the legacy links a run removed; APPLY=1 writes: bin/rails \"books:categories:restore_removals[categories-v1]\""
