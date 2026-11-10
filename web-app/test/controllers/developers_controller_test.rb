@@ -165,6 +165,7 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_select "#mcp", 0
+      assert_select "#mcp-pointer", 0
       refute_includes response.body, "/api/mcp"
     end
   end

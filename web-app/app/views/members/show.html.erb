@@ -39,6 +39,9 @@
       </p>
       <div class="card-actions mt-2">
         <%= link_to "Manage tokens", developers_tokens_path, class: "btn btn-primary" %>
+        <% if Mcp::ToolDirectory.public_tools?(Current.domain) %>
+          <%= link_to "Connect an AI assistant", developers_path(anchor: "mcp"), class: "btn btn-outline" %>
+        <% end %>
         <%= link_to "Read the docs", developers_path, class: "btn btn-ghost" %>
       </div>
     </div>
