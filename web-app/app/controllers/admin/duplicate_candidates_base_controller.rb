@@ -41,6 +41,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     end
 
     load_pair_records(@pairs)
+    @agent_prompt = agent_prompt
   end
 
   def dismiss
@@ -115,6 +116,20 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
 
   def domain_scope
     ::DuplicateCandidate.where(item_type: entries.map(&:model))
+  end
+
+  # The starting prompt the page's Copy prompt button copies. A domain with no
+  # config/mcp/<domain>/prompts/duplicates.md.erb gets no button.
+  def agent_prompt
+    file = Rails.root.join("config", "mcp", domain.to_s, "prompts", "duplicates.md.erb")
+    return unless file.exist?
+
+    pending = domain_scope.pending.group(:item_type).count
+    ERB.new(file.read).result_with_hash(
+      mcp_url: "#{Api::Host.base_url}/api/mcp/admin",
+      pending_books: pending["Books::Book"].to_i,
+      pending_authors: pending["Books::Author"].to_i
+    )
   end
 
   def set_pair

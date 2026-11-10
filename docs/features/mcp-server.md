@@ -167,6 +167,20 @@ The admin tools change live data, and the agent is the thing deciding which to c
 - **`config/mcp/books/`** holds `admin_instructions.md` (one paragraph, sent to every client) and `admin_usage.md` (the prompt). `test/lib/mcp/sites/books_test.rb` and `test/controllers/api/mcp_admin_controller_test.rb` assert the key rules are in them.
 - **Audit lines.** The dispatched controllers write the same audit lines as REST (`event=api_admin_merge`, `event=api_admin_category_create|update|merge|delete|link`), which carry the token and user ids. See "Admin permissions" in `docs/features/public-api.md`. The MCP log line below says which endpoint served the request.
 
+## The duplicate queue
+
+Four admin tools work the books duplicate queue (`duplicate_candidates`; see `docs/features/import-finder.md`): `list_duplicate_candidates` and `get_duplicate_candidate` (scope `books:admin:read`), `merge_duplicate_candidate` (`books:admin:merge`; body `target_id`, optional `note` up to 1000 characters, optional `dry_run`) and `dismiss_duplicate_candidate` (`books:admin:write`; optional `note`). They are the one exception to the "dry run, then ask" protocol above: `config/mcp/books/admin_usage.md` has a "The duplicate queue" section telling the agent it decides each pair itself. `merge_duplicate_candidate` is still permanent, and dry run is optional.
+
+The admin endpoint is `/api/mcp/admin`. Every resolution made through these tools is stamped with the token's user, the note, and `resolved_via: api`.
+
+### Copy prompt
+
+The books duplicates admin page has a **Copy prompt** button. It copies a starting prompt, rendered at page load from `config/mcp/books/prompts/duplicates.md.erb` with the admin MCP URL (`Api::Host.base_url` plus `/api/mcp/admin`) and the pending book and author counts, into a hidden textarea that `clipboard_copy_controller` reads. A domain with no prompt file gets no button. The house rules live in that file, not in server text, so Shane can trim them per run.
+
+The workflow: click Copy prompt, paste it into the agent, adjust, send. The agent lists pending pairs, researches each, and merges or dismisses with a note. Afterwards the resolved tabs on the same page show the pairs and notes, and the `via` filter narrows them to API resolutions.
+
+E2E: `e2e/tests/books/admin/duplicates-copy-prompt.spec.ts` clicks the button and checks the clipboard.
+
 ## Logging
 
 One line per MCP POST, written before the transport runs:

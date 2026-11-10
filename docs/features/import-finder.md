@@ -239,6 +239,12 @@ tasks share one marker, `IMPORT_FINDER_MARKER = "E2E import finder audit seed"` 
 `duplicate_candidates.evidence->>'reason'` equals that marker, so a run never touches decisions
 or pairs the sweep or a real reviewer produced.
 
+### Who resolved a pair, and through what
+
+`duplicate_candidates.resolved_via` (`admin_ui` or `api`) records the surface that resolved a pair, next to `resolved_by`, `resolved_at` and `resolution_note`. `Admin::BaseController` and `Api::V1::Admin::Books::BaseController` set `Current.acting_user` and `Current.acting_via`; `Services::DuplicateCandidates::RecordMerge` reads them when the merger marks the pair, so a merge stamps the pair the same way whichever surface ran it. Dismissals from the page set `resolved_via: admin_ui`.
+
+The API path is `/api/v1/admin/duplicate_candidates` (list, show, `merge`, `dismiss`), exposed as MCP tools; see "The duplicate queue" in `docs/features/mcp-server.md`. The page and the API share `Services::DuplicateCandidates::PairRecords` to load each pair's records and summaries. On the resolved tabs the page takes a `via` filter (`admin_ui` or `api`, links All / Admin page / API); it has no effect on Pending.
+
 ## The duplicate sweep
 
 `Services::Books::FindDuplicates.call(book:)` resolves one book against the rest of the
