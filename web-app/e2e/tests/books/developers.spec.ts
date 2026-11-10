@@ -8,7 +8,7 @@ test.describe('Books API developer pages, signed out', () => {
   test('the documentation page renders and lists the books endpoints', async ({ page }) => {
     await page.goto('/developers');
 
-    await expect(page.getByRole('heading', { level: 1, name: /API/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'The Greatest Books API', exact: true })).toBeVisible();
     await expect(page.locator('#endpoint-listBooks')).toBeVisible();
     await expect(page.locator('#endpoint-listAuthors')).toBeVisible();
     await expect(page.locator('#errors-rate_limited')).toBeVisible();

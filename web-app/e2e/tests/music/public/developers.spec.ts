@@ -12,6 +12,7 @@ test.describe('Music API docs, no MCP', () => {
 
     await expect(page).toHaveURL(/\/developers$/);
     await expect(page.locator('#mcp-pointer')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'The Greatest Music API', exact: true })).toBeVisible();
     await expect(page.locator('#mcp')).toHaveCount(0);
   });
 });
