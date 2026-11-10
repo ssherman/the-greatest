@@ -28,12 +28,17 @@ module Services
           assert_equal "B.", @ya.reload.description
         end
 
-        test "leaves a different non-blank description and reports it" do
+        test "replaces a different non-blank description and reports it in replaced" do
           @adventure.update_columns(description: "Mine.")
           result = run_it(apply: true)
 
-          assert_equal "Mine.", @adventure.reload.description
-          assert_equal [{name: "Adventure", held: "Mine.", plan: "A."}], result.data[:kept]
+          assert_equal "A.", @adventure.reload.description
+          assert_includes result.data[:written], "Adventure"
+          assert_equal [{name: "Adventure", held: "Mine.", plan: "A."}], result.data[:replaced]
+        end
+
+        test "a blank fill is written but not reported as replaced" do
+          assert_empty run_it(apply: true).data[:replaced]
         end
 
         test "reports an active genre with no plan entry and a blank description" do

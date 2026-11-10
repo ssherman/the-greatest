@@ -576,8 +576,8 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    Wikidata copy first (section 15): remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
    2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
 2. Before any categories run, write the genre and audience definitions the categories judge reads.
-   `bin/rails books:categories:write_definitions` is a dry run; run it again with `APPLY=1` to write them (blanks
-   only). Fill in the description in the admin for any genre or audience it prints as `missing`.
+   `bin/rails books:categories:write_definitions` is a dry run; run it again with `APPLY=1` to write them (the plan
+   overwrites any description that differs; those print as `replaced`). Fill in the description in the admin for any genre or audience it prints as `missing`.
 3. **Turn the categories judge on (after the rehearsal sign-off and the definitions in step 2).** The judge is off
    everywhere until `BOOKS_CATEGORIES_JUDGE_ENABLED=1` is set (`config.x.ai.categories_judge_enabled`, default off).
    Until then every import and every Goodreads-rebuild book gets a skipped `disabled` row in place of a judgment,

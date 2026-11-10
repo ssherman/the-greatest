@@ -201,8 +201,8 @@ as ids from that list; subjects and locations come back as names (locations also
 a parent hint); `book_type` is fiction, nonfiction, poetry, religious or unknown. It also lists up to five
 `unlisted_genres`, a report only. Fiction and Nonfiction are never offered as genres: they are the book type.
 `bin/rails books:categories:write_definitions` copies the reviewed definitions from `config/books/genre_plan.yml`
-into `categories.description`, blanks only (dry run unless `APPLY=1`; it prints `kept` for a description that
-differs and `missing` for an active genre or audience with none, which you fill in the admin).
+into `categories.description`, and overwrites any description that differs, since the plan is authoritative (owner decision,
+2026-11-10). Dry run unless `APPLY=1`; it prints `replaced` for each non-blank description it overwrote and `missing` for an active genre or audience with none, which you fill in the admin).
 
 **Mapping.** `Categories::Mapper` turns the answer into categories and never creates one. Ids are checked
 against the vocabulary (`via` `id`; otherwise unmatched `invalid_id`). A name is matched on a normalised key (`NameNormalizer.twin_key`) against name or

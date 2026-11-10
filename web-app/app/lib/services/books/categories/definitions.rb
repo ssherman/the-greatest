@@ -4,8 +4,10 @@ module Services
   module Books
     module Categories
       # Copies the reviewed genre/audience definitions from config/books/genre_plan.yml
-      # into categories.description, where the categories task reads them. Fills
-      # blanks only: a description someone already wrote is kept and reported.
+      # into categories.description, where the categories task reads them. The plan is
+      # authoritative (owner decision, 2026-11-10: the old descriptions are unused old-site
+      # blurbs): any held description that differs is overwritten, and a non-blank one that
+      # was replaced is reported in replaced.
       class Definitions
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -23,7 +25,7 @@ module Services
         def call
           plan = YAML.safe_load_file(@plan_path.to_s) || {}
           written = []
-          kept = []
+          replaced = []
           missing = []
 
           PLAN_KEYS.each do |key, type|
@@ -32,16 +34,15 @@ module Services
               wanted = entries[category.name.downcase]
               if wanted.blank?
                 missing << category.name if category.description.blank?
-              elsif category.description.blank?
+              elsif category.description != wanted
+                replaced << {name: category.name, held: category.description, plan: wanted} if category.description.present?
                 category.update_columns(description: wanted) if @apply
                 written << category.name
-              elsif category.description != wanted
-                kept << {name: category.name, held: category.description, plan: wanted}
               end
             end
           end
 
-          Result.new(success?: true, data: {written: written, kept: kept, missing: missing}, errors: [])
+          Result.new(success?: true, data: {written: written, replaced: replaced, missing: missing}, errors: [])
         end
       end
     end
