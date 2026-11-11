@@ -1642,16 +1642,16 @@ components:
           properties:
             id: {type: integer}
             type: {type: string, description: "The record's class, e.g. Books::Book."}
-            label: {type: [string, "null"], description: The book title or the author name.}
+            label: {type: [string, "null"], description: The book or edition title or the author name; null for a record with neither (a list item).}
     AdminMatchDecision:
       type: object
       required: [id, entity, finder, outcome, confidence, decided_by, reason, created_at, subject, record, review]
       properties:
         id: {type: integer}
         entity:
-          type: [string, "null"]
+          type: string
           description: The finder's kind.
-          enum: [book, author, wikidata-link, viaf-link, null]
+          enum: [book, author, wikidata-link, viaf-link]
         finder: {type: string}
         outcome: {type: string, enum: [matched, unmatched]}
         confidence: {type: string, enum: [certain, high, medium, low]}

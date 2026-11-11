@@ -60,7 +60,7 @@ module Api
           def reference(record)
             return nil unless record
 
-            {id: record.id, type: record.class.name, label: record.respond_to?(:title) ? record.title : record.name}
+            {id: record.id, type: record.class.name, label: record.try(:title) || record.try(:name)}
           end
 
           def review

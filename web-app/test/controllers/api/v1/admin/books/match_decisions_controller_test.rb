@@ -131,6 +131,21 @@ module Api
             assert_equal books_books(:war_and_peace).title, candidate[:current][:title]
           end
 
+          test "a list item subject has a null label and does not break list or get" do
+            item = list_items(:basic_item)
+            @low.update_columns(subject_type: "ListItem", subject_id: item.id)
+
+            list
+            assert_api_response_conform(status: 200, api: :admin)
+            subject = json[:data].find { |row| row[:id] == @low.id }[:subject]
+            assert_equal [item.id, "ListItem"], [subject[:id], subject[:type]]
+            assert_nil subject[:label]
+
+            fetch(@low.id)
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_nil json[:data][:subject][:label]
+          end
+
           test "a candidate whose record is gone has a null current" do
             @low.update!(candidates: @low.candidates.map { |c| c.merge("record_id" => 999_999_999) })
             fetch(@low.id)

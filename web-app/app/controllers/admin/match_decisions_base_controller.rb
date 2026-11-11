@@ -29,8 +29,8 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
     :review_decision_path, :recheck_decision_path, :reject_decision_path, :ai_chat_path_for
 
   def index
-    @reviewed = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
-    @verify = VERIFY.include?(params[:verify]) ? params[:verify] : "hide"
+    @reviewed = Services::MatchDecisions::Filter.reviewed_value(params)
+    @verify = Services::MatchDecisions::Filter.verify_value(params)
     # The via filter narrows reviewed rows only; pending rows have no reviewer.
     @via = params[:via] if VIAS.include?(params[:via]) && @reviewed != "pending"
     @pagy, @decisions = pagy(filtered_scope.includes(:record, :reviewed_by).newest_first, limit: PER_PAGE)

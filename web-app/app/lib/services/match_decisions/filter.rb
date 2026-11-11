@@ -18,6 +18,10 @@ module Services
 
       def self.call(scope, params) = new(scope, params).call
 
+      def self.reviewed_value(params) = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
+
+      def self.verify_value(params) = VERIFY.include?(params[:verify]) ? params[:verify] : "hide"
+
       def initialize(scope, params)
         @scope = scope
         @params = params
@@ -46,9 +50,9 @@ module Services
 
       private
 
-      def reviewed = REVIEWED.include?(@params[:reviewed]) ? @params[:reviewed] : "pending"
+      def reviewed = self.class.reviewed_value(@params)
 
-      def verify = VERIFY.include?(@params[:verify]) ? @params[:verify] : "hide"
+      def verify = self.class.verify_value(@params)
     end
   end
 end

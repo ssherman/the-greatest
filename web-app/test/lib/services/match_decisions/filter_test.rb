@@ -4,7 +4,7 @@ module Services
   module MatchDecisions
     class FilterTest < ActiveSupport::TestCase
       setup do
-        @scope = MatchDecision.where(finder: DataImporters::FinderRegistry.finders_for(:books))
+        @scope = MatchDecision.where(finder: DataImporters::FinderRegistry.for_domain(:books).map(&:finder))
       end
 
       def ids(params) = Filter.call(@scope, params).pluck(:id)
