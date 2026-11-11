@@ -6,7 +6,9 @@
 class Books::ArchiveMonthlyRankingJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :low
+  # Two retries, not Sidekiq's 25: the daily cron already heals a missed run, and each failing day would
+  # otherwise start another weeks-long retry chain.
+  sidekiq_options queue: :low, retry: 2
 
   def perform
     config = Books::RankingConfiguration.default_primary

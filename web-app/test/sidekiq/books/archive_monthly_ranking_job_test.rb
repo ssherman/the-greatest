@@ -10,6 +10,10 @@ module Books
       RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: @primary, rank: 2, score: 90)
     end
 
+    test "retries only twice, since the daily cron heals a missed run" do
+      assert_equal 2, Books::ArchiveMonthlyRankingJob.sidekiq_options["retry"]
+    end
+
     test "creates the month's archive from the primary, named for the month" do
       travel_to Time.utc(2027, 2, 1, 5, 15) do
         assert_difference -> { Books::RankingArchive.count }, 1 do
