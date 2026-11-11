@@ -60,7 +60,18 @@ module Services
           return nil if ids.empty?
 
           ids.each { |id| fetch(add(id, "held_id")) }
-          held = persons.find { |candidate| candidate.sources.include?("held_id") && corroborated?(candidate) }
+          held_persons = persons.select { |candidate| candidate.sources.include?("held_id") }
+          # An id an admin set is authoritative: no name or years check, and it
+          # wins over any other held id (a cluster that is gone, rejected or
+          # not a person still drops out).
+          admin_ids = admin_identifier_values(VIAF)
+          admin = held_persons.find { |candidate| admin_ids.include?(candidate.viaf_id) }
+          if admin
+            return Verdict.new(outcome: :matched, candidate: admin, decided_by: :identifier, confidence: :certain,
+              reason: "The VIAF id an admin set, #{admin.viaf_id}.")
+          end
+
+          held = held_persons.find { |candidate| corroborated?(candidate) }
           return nil unless held
 
           Verdict.new(outcome: :matched, candidate: held, decided_by: :identifier, confidence: :certain,
@@ -261,6 +272,10 @@ module Services
 
         def identifier_values(type)
           author.identifiers.select { |identifier| identifier.identifier_type == type }.map(&:value)
+        end
+
+        def admin_identifier_values(type)
+          author.identifiers.select { |identifier| identifier.identifier_type == type && identifier.source_admin? }.map(&:value)
         end
 
         # The main title, case and diacritics folded: VIAF titles carry

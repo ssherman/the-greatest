@@ -14,20 +14,6 @@ module Services
         COUNTRY = "enrichments.facts->'origin'->>'country'"
         RAW = "enrichments.facts->'origin'->>'raw'"
 
-        # The newest books.origin row per book (highest id), optionally within
-        # one run label. Shared with AcceptDisagreements.
-        def self.latest_rows(label: nil)
-          scope = ::Enrichment.where(kind: Judge::KIND)
-          newer = "SELECT 1 FROM enrichments newer WHERE newer.enrichable_type = enrichments.enrichable_type " \
-            "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind " \
-            "AND newer.id > enrichments.id"
-          if label
-            scope = scope.where("enrichments.facts->>'label' = ?", label)
-            newer += " AND newer.facts->>'label' = #{::Enrichment.connection.quote(label)}"
-          end
-          scope.where("NOT EXISTS (#{newer})")
-        end
-
         def self.call(label: nil)
           new(label: label).call
         end
@@ -37,7 +23,7 @@ module Services
         end
 
         def call
-          latest = self.class.latest_rows(label: @label)
+          latest = Categorize::LatestRows.call(kind: Judge::KIND, label: @label)
           research = ::Enrichment.research.where(kind: Judge::KIND)
           research = research.where("facts->>'label' = ?", @label) if @label
           research_rows = research.count

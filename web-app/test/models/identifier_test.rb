@@ -283,9 +283,16 @@ class IdentifierTest < ActiveSupport::TestCase
     assert_nil identifier.source
   end
 
+  test "admin is a valid source" do
+    identifier = Identifier.new(identifiable: books_books(:war_and_peace), identifier_type: :books_work_isbn10, value: "0140447938", source: :admin)
+
+    assert identifier.valid?
+    assert identifier.source_admin?
+  end
+
   test "source takes the provenance values" do
     assert_equal(
-      {"legacy" => 0, "open_library" => 1, "worldcat" => 2, "goodreads_import" => 3, "amazon" => 4, "wikidata" => 5, "viaf" => 6, "goodreads" => 7},
+      {"legacy" => 0, "open_library" => 1, "worldcat" => 2, "goodreads_import" => 3, "amazon" => 4, "wikidata" => 5, "viaf" => 6, "goodreads" => 7, "admin" => 8},
       Identifier.sources
     )
     identifier = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_isbn10,

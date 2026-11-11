@@ -49,6 +49,81 @@ module Api
         ["POST", "/api/v1/admin/duplicate_candidates/{id}/dismiss", "404"] => -> { post "/api/v1/admin/duplicate_candidates/999999999/dismiss", params: {record_ids: [1, 2]}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/duplicate_candidates/{id}/dismiss", "422"] => -> { post "/api/v1/admin/duplicate_candidates/#{duplicate_candidates(:books_dismissed_pair).id}/dismiss", params: {record_ids: [duplicate_candidates(:books_dismissed_pair).item_a_id, duplicate_candidates(:books_dismissed_pair).item_b_id]}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/duplicate_candidates/{id}/dismiss", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/duplicate_candidates/#{duplicate_candidates(:books_pending_pair).id}/dismiss", params: {record_ids: [duplicate_candidates(:books_pending_pair).item_a_id, duplicate_candidates(:books_pending_pair).item_b_id]}, as: :json, headers: bearer(MERGE) } },
+        ["GET", "/api/v1/admin/match_decisions", "200"] => -> { get "/api/v1/admin/match_decisions", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/match_decisions", "400"] => -> { get "/api/v1/admin/match_decisions?outcome=bogus", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/match_decisions", "401"] => -> { get "/api/v1/admin/match_decisions" },
+        ["GET", "/api/v1/admin/match_decisions", "403"] => -> { get "/api/v1/admin/match_decisions", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/match_decisions", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/match_decisions", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/match_decisions/{id}", "200"] => -> { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/match_decisions/{id}", "401"] => -> { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}" },
+        ["GET", "/api/v1/admin/match_decisions/{id}", "403"] => -> { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/match_decisions/{id}", "404"] => -> { get "/api/v1/admin/match_decisions/999999999", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/match_decisions/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "200"] => -> { get "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "400"] => -> { get "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers?scope=bogus", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "401"] => -> { get "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers" },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "403"] => -> { get "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "404"] => -> { get "/api/v1/admin/books/999999999/identifiers", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/books/{id}/identifiers", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "200"] => -> { get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "400"] => -> { get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers?page=0", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "401"] => -> { get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers" },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "403"] => -> { get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "404"] => -> { get "/api/v1/admin/authors/999999999/identifiers", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/authors/{id}/identifiers", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/identifiers", "200"] => -> { get "/api/v1/admin/identifiers?type=books_author_viaf&value=123", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/identifiers", "400"] => -> { get "/api/v1/admin/identifiers?type=bogus&value=1", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/identifiers", "401"] => -> { get "/api/v1/admin/identifiers?type=books_author_viaf&value=123" },
+        ["GET", "/api/v1/admin/identifiers", "403"] => -> { get "/api/v1/admin/identifiers?type=books_author_viaf&value=123", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/identifiers", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/identifiers?type=books_author_viaf&value=123", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "200"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_isbn13", value: identifiers(:war_and_peace_isbn13).value}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "201"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_isbn10", value: "0306406152"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "400"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_isbn10", value: "0306406153"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "401"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_asin", value: "B0"}, as: :json },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "403"] => -> { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_asin", value: "B0"}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "404"] => -> { post "/api/v1/admin/books/999999999/identifiers", params: {identifier_type: "books_work_asin", value: "B0"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/books/{id}/identifiers", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers", params: {identifier_type: "books_work_asin", value: "B0"}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "200"] => -> { 2.times { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_isni", value: "0000000081226987"}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "201"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_isni", value: "0000000120960218"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "400"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_viaf", value: "abc"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "401"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_viaf", value: "1"}, as: :json },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "403"] => -> { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_viaf", value: "1"}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "404"] => -> { post "/api/v1/admin/authors/999999999/identifiers", params: {identifier_type: "books_author_viaf", value: "1"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "422"] => -> {
+          Identifier.find_or_create_by!(identifiable: books_authors(:tolstoy), identifier_type: :books_author_viaf, value: "111")
+          post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_viaf", value: "222"}, as: :json, headers: bearer(MERGE)
+        },
+        ["POST", "/api/v1/admin/authors/{id}/identifiers", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers", params: {identifier_type: "books_author_viaf", value: "1"}, as: :json, headers: bearer(MERGE) } },
+        ["DELETE", "/api/v1/admin/books/{id}/identifiers/{identifier_id}", "200"] => -> {
+          row = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_goodreads_id, value: "coverage-delete")
+          delete "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers/#{row.id}", headers: bearer(MERGE)
+        },
+        ["DELETE", "/api/v1/admin/books/{id}/identifiers/{identifier_id}", "401"] => -> { delete "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers/#{identifiers(:war_and_peace_asin).id}" },
+        ["DELETE", "/api/v1/admin/books/{id}/identifiers/{identifier_id}", "403"] => -> { delete "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers/#{identifiers(:war_and_peace_asin).id}", headers: bearer(READ) },
+        ["DELETE", "/api/v1/admin/books/{id}/identifiers/{identifier_id}", "404"] => -> { delete "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers/999999999", headers: bearer(MERGE) },
+        ["DELETE", "/api/v1/admin/books/{id}/identifiers/{identifier_id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/books/#{books_books(:war_and_peace).id}/identifiers/#{identifiers(:war_and_peace_asin).id}", headers: bearer(MERGE) } },
+        ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "200"] => -> {
+          row = Identifier.create!(identifiable: books_authors(:tolstoy), identifier_type: :books_author_goodreads_id, value: "coverage-delete")
+          delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/#{row.id}", headers: bearer(MERGE)
+        },
+        ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "401"] => -> { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/1" },
+        ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "403"] => -> { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/1", headers: bearer(READ) },
+        ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "404"] => -> { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/999999999", headers: bearer(MERGE) },
+        ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/1", headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "200"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {verdict: "confirmed", note: "Same book."}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "400"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "401"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "403"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "404"] => -> { post "/api/v1/admin/match_decisions/999999999/review", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "422"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:reviewed_book_match).id}/review", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "200"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", params: {note: "Wrong person."}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "400"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "401"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "403"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "404"] => -> { post "/api/v1/admin/match_decisions/999999999/reject_link", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "422"] => -> { post "/api/v1/admin/match_decisions/#{link_decision(outcome: :unmatched).id}/reject_link", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json, headers: bearer(MERGE) } },
         ["GET", "/api/v1/admin/categories", "200"] => -> { get "/api/v1/admin/categories?q=nov", headers: bearer(READ) },
         ["GET", "/api/v1/admin/categories", "400"] => -> { get "/api/v1/admin/categories?status=bogus", headers: bearer(READ) },
         ["GET", "/api/v1/admin/categories", "401"] => -> { get "/api/v1/admin/categories" },
@@ -140,8 +215,18 @@ module Api
 
       def politics_id = categories(:books_politics_subject).id
 
+      def link_decision(outcome: :matched)
+        MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: books_authors(:tolstoy), outcome: outcome,
+          confidence: :medium, decided_by: :ai, needs_review: true, query: {"name" => "Leo Tolstoy"},
+          candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}],
+          selected_index: (outcome == :matched) ? 1 : nil
+        )
+      end
+
       setup do
         host! "dev-new.thegreatestbooks.org"
+        stub_workflow_dispatch
         ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
         ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
       end

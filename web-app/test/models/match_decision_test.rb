@@ -16,6 +16,7 @@ require "test_helper"
 #  record_type    :string
 #  review_note    :text
 #  reviewed_at    :datetime
+#  reviewed_via   :integer
 #  selected_index :integer
 #  sources_failed :string           default([]), not null, is an Array
 #  subject_type   :string
@@ -101,6 +102,22 @@ class MatchDecisionTest < ActiveSupport::TestCase
     assert_equal users(:admin_user), decision.reviewed_by
     assert_not_nil decision.reviewed_at
     assert_equal "checked", decision.review_note
+  end
+
+  test "review! records the surface it came through when Current names one" do
+    decision = MatchDecision.create!(finder: "F", outcome: :unmatched, confidence: :low, decided_by: :fallback, needs_review: true)
+
+    Current.set(acting_user: users(:admin_user), acting_via: "api") { decision.review!(by: users(:admin_user)) }
+
+    assert decision.reload.reviewed_via_api?
+  end
+
+  test "review! leaves reviewed_via nil outside a request" do
+    decision = MatchDecision.create!(finder: "F", outcome: :unmatched, confidence: :low, decided_by: :fallback, needs_review: true)
+
+    decision.review!(by: users(:admin_user))
+
+    assert_nil decision.reload.reviewed_via
   end
 
   test "destroying the record nullifies the decision's record link" do

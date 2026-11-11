@@ -237,6 +237,12 @@ module Services
           assert_equal ["research"], judge(context: "admin", force_research: true).data[:enrichments].map(&:mode)
         end
 
+        test "force_research does not research when research_allowed is false" do
+          stub_answer(nationality: "French", confidence: "high")
+          rows = judge(context: "admin", force_research: true, research_allowed: false).data[:enrichments]
+          assert_equal ["knowledge"], rows.map(&:mode)
+        end
+
         test "a failed task writes a failed row and fails the result" do
           BookOriginTask.any_instance.stubs(:call).returns(Services::Ai::Result.new(success: false, error: "boom"))
           result = judge(context: "import")

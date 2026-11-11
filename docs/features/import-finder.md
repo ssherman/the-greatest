@@ -245,6 +245,12 @@ or pairs the sweep or a real reviewer produced.
 
 The API path is `/api/v1/admin/duplicate_candidates` (list, show, `merge`, `dismiss`), exposed as MCP tools. `merge` takes `target_id` and `source_id` and `dismiss` takes `record_ids`; both must be exactly the pair's two ids or they answer 422 (a merge elsewhere re-keys pending pairs in place, the same reason the page's merge form posts both ids). See "The duplicate queue" in `docs/features/mcp-server.md`. The page and the API share `Services::DuplicateCandidates::PairRecords` to load each pair's records and summaries. On the resolved tabs the page takes a `via` filter (`admin_ui` or `api`, links All / Admin page / API); it has no effect on Pending.
 
+### Who reviewed a decision, and through what
+
+`match_decisions.reviewed_via` (`admin_ui` or `api`) records the surface that reviewed a decision, next to `reviewed_by_id`. `MatchDecision#review!` reads `Current.acting_via`, so the decisions a reject cascades to are stamped the same way. The page's "Reviewed via" filter (All / Admin page / API) applies to reviewed decisions only.
+
+The API path is `/api/v1/admin/match_decisions` (list, show, `review`, `reject_link`), exposed as MCP tools; the page and the API share `Services::MatchDecisions::Filter`. The page also has a Copy prompt button. See "The match decisions queue and identifiers" in `docs/features/mcp-server.md`.
+
 ## The duplicate sweep
 
 `Services::Books::FindDuplicates.call(book:)` resolves one book against the rest of the

@@ -1,0 +1,27 @@
+<% content_for :page_title, "Page not found | #{domain_name}" %>
+
+<%# One template for every site, inside that site's layout. Root and /search are
+    the same path on books, music and games; the movies host is a placeholder
+    with no search, so it gets the home link only. %>
+<section class="max-w-xl mx-auto py-12 sm:py-20 text-center" aria-labelledby="not-found-heading">
+  <p class="text-sm font-semibold uppercase tracking-wider text-base-content/60">404</p>
+  <h1 id="not-found-heading" class="mt-2 text-3xl sm:text-4xl font-bold">We couldn't find that page</h1>
+  <p class="mt-4 text-base-content/70">
+    The link may be out of date, or the page may have moved. Try searching
+    <%= domain_name %>, or start again from the home page.
+  </p>
+
+  <% unless current_domain == :movies %>
+    <%= form_with url: "/search", method: :get, class: "mt-8", data: {turbo: false} do |f| %>
+      <div class="join w-full">
+        <%= f.search_field :q, placeholder: "Search #{domain_name}", class: "input join-item flex-1",
+            autocomplete: "off", aria: {label: "Search #{domain_name}"} %>
+        <button type="submit" class="btn btn-primary join-item">Search</button>
+      </div>
+    <% end %>
+  <% end %>
+
+  <div class="mt-6">
+    <%= link_to "Go to the home page", "/", class: "btn btn-outline" %>
+  </div>
+</section>

@@ -120,7 +120,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
 
   # The Copy prompt button's text; nil (no button) for a domain without a prompt file.
   def agent_prompt
-    Services::DuplicateCandidates::AgentPrompt.call(domain: domain)
+    Services::AgentPrompts.call(domain: domain, queue: :duplicates)
   end
 
   def set_pair

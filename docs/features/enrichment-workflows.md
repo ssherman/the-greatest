@@ -192,7 +192,7 @@ step directly, and nothing in the import path writes that deferral any more.
 
 ## The book workflow
 
-`books.book_enrichment` (definition version 4) has five steps, each wrapping an existing service:
+`books.book_enrichment` (definition version 5) has six steps, each wrapping an existing service:
 
 | Step | Queue | Waits on | Runs when |
 |---|---|---|---|
@@ -201,6 +201,7 @@ step directly, and nothing in the import path writes that deferral any more.
 | `book_facts` | `low` | `goodreads` reaching a terminal state (**finish**), and the `author_facts` step of the runs of authors **linked to the book** that the import created (**release**) | Always |
 | `amazon` | `serial` | `goodreads` reaching a terminal state (**finish**) | The book has at least one `book_authors` row; otherwise it is skipped `no_authors` at plan time |
 | `categorize` | `low` | `book_facts` and `evidence` reaching a terminal state (**finish**) | Always |
+| `categories` | `low` | `categorize`, `book_facts` and `evidence` reaching a terminal state (**finish**) | Always |
 
 The author waits cross runs, so they are passed at plan time rather than declared in the definition; the
 `goodreads` waits are in the definition (`waits_on: {goodreads: :finish}`). `start` is
@@ -277,15 +278,41 @@ belongs to `book_facts`). Research is not allowed when this run's `book_facts` s
 book (an `Enrichment` with that step's `workflow_step_id` and mode `research`), so one import never spends
 two web searches on a book. A `books.book_categorize` run has no `book_facts` step, so research is allowed.
 
+### The categories step
+
+`categories` runs `Services::Books::Categories::Judge` (the `books.categories` kind, described in
+`docs/features/books_enrichment.md`) and writes one ledger row per mode run. It succeeds with the last row's
+`reason` (its `outcome` when blank) and the result `{"enrichment_ids", "applied"}`; a failed row makes the step
+raise, so the coordinator retries it. Options read: `"context"`, `"label"`, `"book_facts_researched"` and
+`"force_research"` (read only in `books.book_categorize`). Research is not allowed when `book_facts` or
+`categorize` already researched the book in this run, so a book gets at most one research call per run across the
+three steps. In `books.book_enrichment` the step waits on `categorize`, `book_facts` and `evidence`; in
+`books.book_categorize` on `categorize` and `evidence`. The extra `evidence` edge matters under the
+`categories_only` scope, where `categorize` is born skipped and would otherwise release `categories` before the
+evidence ran.
+
 ### The book_categorize workflow
 
-`books.book_categorize` (version 1, target `Books::Book`) has two steps: `evidence` (queue `evidence`, built
-with `Steps::Evidence.new(reuse_fresh: true)`) and `categorize` (queue `low`, waits on `evidence`
-**finish**). `Workflows::Books::BookCategorize.start(book, initiated_by:, options: {}, start_after: nil)`
+`books.book_categorize` (version 2, target `Books::Book`) has three steps: `evidence` (queue `evidence`, built
+with `Steps::Evidence.new(reuse_fresh: true)`), `categorize` (queue `low`, waits on `evidence` **finish**) and
+`categories` (queue `low`, waits on `categorize` and `evidence` **finish**).
+`Workflows::Books::BookCategorize.start(book, initiated_by:, options: {}, start_after: nil)`
 is shaped like the author workflow's `start`: it returns the active run when the book has one. It is for
-books that did not come through an import: the origin backfill, and `Books::EnrichBookJob` (the admin
+books that did not come through an import: the origin and categories backfill, and `Books::EnrichBookJob` (the admin
 **Enrich With AI** button, `books:enrich_missing` and the deferred hand-off), which starts it with
 `"context" => "admin"` after a successful `EnrichBook`.
+
+The `scope` option chooses which judges run, by planning the other step as skipped at plan time:
+
+| `scope` | `categorize` | `categories` |
+|---|---|---|
+| `origin_only` | runs | skipped `scope_origin_only` |
+| `categories_only` | skipped `scope_categories_only` | runs |
+| `all` or absent | runs | runs |
+
+Any other value raises `ArgumentError`. When the book already has an active run, `start` returns it and the scope
+has no effect. Under backfill scope `all`, each book is planned with the narrowest scope it still needs: one
+whose origin judgment is done runs `categories_only`, one whose categories judgment is done runs `origin_only`.
 
 With `reuse_fresh: true` the evidence step does not call `Gather` when the book's latest `books.evidence`
 row has `facts["schema_version"] == Gather::SCHEMA_VERSION` and an empty `sources_failed`; it succeeds with
@@ -294,9 +321,9 @@ outcome `reused` and the same `{"enrichment_id", "qid"}` result. The default (`f
 
 ### Version tolerance
 
-A run planned under version 3 has no `categorize` step (added in version 4) and keeps running. A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
+A run planned under version 4 of `books.book_enrichment` (or version 1 of `books.book_categorize`) has no `categories` step (added in version 5 and version 2) and keeps running. A run planned under version 3 has no `categorize` step (added in version 4) and keeps running. A run planned under version 2 has no `evidence` step (added in version 3) and keeps running. A run planned under version 1 has no `goodreads` step (added in version 2) and only `book_facts` and `amazon`, and keeps running after the deploy:
 `book_facts` finds no `goodreads` step and runs as it always did (knowledge, then research), and
-`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3, `categorize` from version 4.
+`amazon` has no `goodreads` edge. Only runs planned after a deploy get that version's step: `goodreads` from version 2, `evidence` from version 3, `categorize` from version 4, `categories` from version 5.
 
 Callers: `DataImporters::Books::Book::Providers::Enrichment` (importer with `enrich: true`, and the
 list wizard's text rows) and `Services::Books::GoodreadsImports::PromoteRecords` (admin approval of a

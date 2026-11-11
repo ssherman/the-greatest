@@ -1071,6 +1071,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_053410) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "verdict"
+    t.integer "reviewed_via"
     t.index ["ai_chat_id"], name: "index_match_decisions_on_ai_chat_id"
     t.index ["created_at"], name: "index_match_decisions_on_created_at"
     t.index ["finder"], name: "index_match_decisions_on_finder"

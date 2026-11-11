@@ -175,11 +175,32 @@ The admin endpoint is `/api/mcp/admin`. Every resolution made through these tool
 
 ### Copy prompt
 
-The books duplicates admin page has a **Copy prompt** button. It copies a starting prompt, rendered at page load from `config/mcp/books/prompts/duplicates.md.erb` with the admin MCP URL (`Api::Host.base_url` plus `/api/mcp/admin`) and the pending book and author counts, into a hidden textarea that `clipboard_copy_controller` reads. A domain with no prompt file gets no button. The house rules live in that file, not in server text, so Shane trims the pasted prompt as needed; the file is the starting point.
+The books duplicates and match decisions admin pages each have a **Copy prompt** button. It copies a starting prompt, rendered at page load by `Services::AgentPrompts.call(domain:, queue:)` (queue `:duplicates` or `:match_decisions`) from `config/mcp/books/prompts/<queue>.md.erb` with the admin MCP URL (`Api::Host.base_url` plus `/api/mcp/admin`) and the pending book and author counts, into a hidden textarea that `clipboard_copy_controller` reads. A domain with no prompt file gets no button. The house rules live in that file, not in server text, so Shane trims the pasted prompt as needed; the file is the starting point.
 
 The workflow: click Copy prompt, paste it into the agent, adjust, send. The agent lists pending pairs, researches each, and merges or dismisses with a note. Afterwards the resolved tabs on the same page show the pairs and notes, and the `via` filter narrows them to API resolutions.
 
 E2E: `e2e/tests/books/admin/duplicates-copy-prompt.spec.ts` clicks the button and checks the clipboard.
+
+## The match decisions queue and identifiers
+
+The books match decisions page (`/admin/match_decisions`) lists decisions the importers and the Wikidata/VIAF resolvers flagged for a person. Admin tools work it, and the same tools read and change identifiers.
+
+Match decision tools:
+
+- `list_match_decisions` and `get_match_decision` (`books:admin:read`). Filters: `entity` (`book`, `author`, `wikidata-link`, `viaf-link`), `outcome`, `confidence`, `decided_by`, `reviewed` (pending by default), `verify` (hidden by default). `Services::MatchDecisions::Filter` is shared with the page, so both see the same queue.
+- `review_match_decision` (`books:admin:write`): `verdict` (`confirmed` or `rejected`) and `note`. Already reviewed is 422. `rejected` on a matched Wikidata/VIAF decision is refused 422, because it would ban the record while the link stayed; use `reject_match_decision_link`.
+- `reject_match_decision_link` (`books:admin:merge`): runs `Services::Books::Authors::RejectExternalLink`, the same service as the page's reject. It is permanent: it removes the link, reverts the facts it produced and re-runs enrichment. An optional `note` is appended to "Link rejected.".
+
+Identifier tools:
+
+- `get_book_identifiers` and `get_author_identifiers` (`books:admin:read`), paged; a book lists its own rows then its editions' (`scope=work` for its own only).
+- `find_by_identifier` (`books:admin:read`): `type` and `value`; capped at 100 results with a `truncated` flag.
+- `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
+- `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
+
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 29 tools.
+
+The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
 
 ## Logging
 

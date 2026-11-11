@@ -35,6 +35,17 @@ module Services
           assert_equal %w[wikidata_qid openlibrary_ids], result.data[:reverted]
         end
 
+        test "an identifier an admin set is never removed" do
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q1", source: :admin)
+          @author.identifiers.create!(identifier_type: :books_author_openlibrary_id, value: "OL2A", source: :admin)
+
+          result = revert("wikidata_qid" => filled("Q1"), "openlibrary_ids" => filled(["OL2A"], added: ["OL2A"]))
+
+          assert_equal [["books_author_openlibrary_id", "OL2A"], ["books_author_wikidata_qid", "Q1"]],
+            @author.identifiers.reload.pluck(:identifier_type, :value).sort
+          assert_empty result.data[:reverted]
+        end
+
         test "another author holding the same value keeps it" do
           other = ::Books::Author.create!(name: "Other Author")
           hold(:books_author_viaf, "5391", author: other)

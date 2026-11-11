@@ -702,6 +702,17 @@ Rails.application.routes.draw do
             get "duplicate_candidates/:id", to: "duplicate_candidates#show", constraints: {id: /\d+/}
             post "duplicate_candidates/:id/merge", to: "duplicate_candidates#merge", constraints: {id: /\d+/}
             post "duplicate_candidates/:id/dismiss", to: "duplicate_candidates#dismiss", constraints: {id: /\d+/}
+            get "match_decisions", to: "match_decisions#index"
+            get "match_decisions/:id", to: "match_decisions#show", constraints: {id: /\d+/}
+            post "match_decisions/:id/review", to: "match_decisions#review", constraints: {id: /\d+/}
+            post "match_decisions/:id/reject_link", to: "match_decisions#reject_link", constraints: {id: /\d+/}
+            get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
+            get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
+            get "identifiers", to: "identifiers#lookup"
+            post "books/:id/identifiers", to: "identifiers#book_create", constraints: {id: /\d+/}
+            post "authors/:id/identifiers", to: "identifiers#author_create", constraints: {id: /\d+/}
+            delete "books/:id/identifiers/:identifier_id", to: "identifiers#book_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
+            delete "authors/:id/identifiers/:identifier_id", to: "identifiers#author_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"
@@ -1070,6 +1081,17 @@ Rails.application.routes.draw do
       constraints: {format: /html/}
 
     get "lists", to: "books/lists#index", as: :books_lists
+    # A stable link to the generated "Our Users' Favorite Books" list, whose id
+    # is assigned in each database (11485 in production) rather than known when
+    # the nav is written. The nav linked the legacy site's id, 463, which is
+    # never migrated, so the menu item 404'd.
+    get "lists/users-favorites", to: "books/lists#users_favorites", as: :books_users_favorites_list
+    # The legacy site's three hand-maintained favorites lists. The generated
+    # list supersedes all three (Services::BooksMigration::ListMigrator), so
+    # their old URLs move permanently to it. Declared before lists/:id. Legacy
+    # ids: 268 (Favorite), 463 (Top 100), 464 (Honorable Mention). None exists
+    # in the new catalog -- ids are preserved and these were never imported.
+    get "lists/:id", to: "books/lists#legacy_users_favorites", constraints: {id: /268|463|464/}
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
     get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}
     get "lists/:id/page/:page", to: "books/lists#show", as: :books_list_page,

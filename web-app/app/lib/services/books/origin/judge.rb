@@ -96,6 +96,7 @@ module Services
         end
 
         def first_mode
+          return :knowledge unless research_allowed
           return :research if force_research
           return :research if past_cutoff? && research_permitted?
           # Its knowledge call already ran and deferred this book's research.
@@ -121,12 +122,7 @@ module Services
           return false unless research_allowed
           return true if force_research
 
-          if context == "backfill"
-            used = Enrichment.research.today.where(kind: KIND).where("facts->>'context' = 'backfill'").count
-            used < Rails.application.config.x.ai.categorize_backfill_research_daily_cap
-          else
-            Enrichment.against_research_cap.count < Rails.application.config.x.ai.research_daily_cap
-          end
+          Categorize::ResearchBudget.permitted?(context: context)
         end
 
         # Returns [row, needs_research].

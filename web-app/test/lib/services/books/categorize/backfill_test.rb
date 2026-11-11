@@ -111,7 +111,7 @@ module Services
           assert_in_delta Time.current + (2 * Backfill::SPACING), result.data[:done_at], 5
 
           runs = WorkflowRun.where(workflow: "books.book_categorize").order(:id)
-          assert_equal [{"context" => "backfill", "label" => "t"}], runs.map { it.options.slice("context", "label") }.uniq
+          assert_equal [{"context" => "backfill", "label" => "t", "scope" => "origin_only"}], runs.map { it.options.slice("context", "label", "scope") }.uniq
           assert_operator runs.last.step(:evidence).run_after, :>, runs.first.step(:evidence).run_after
 
           again = Backfill.call(scope: "origin_only", limit: 2, label: "t", book_ids: [@american.id, @unknown_only.id])
@@ -146,10 +146,93 @@ module Services
           assert_equal 1, result.data[:planned]
         end
 
-        test "refuses any other scope" do
-          result = Backfill.call(scope: "all", limit: 1, label: "t")
+        def categories_row(book, outcome: :applied, **facts)
+          book.enrichments.create!(kind: "books.categories", outcome: outcome,
+            facts: {"prompt_version" => Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "context" => "backfill"}.merge(facts.stringify_keys))
+        end
+
+        def genre(name)
+          ::Books::Category.find_or_create_by!(name: name, category_type: :genre)
+        end
+
+        test "categories_only leaves out books with a current categories row and keeps books done only for origin" do
+          categories_row(@american)
+          origin_row(@unknown_only)
+          ids = Backfill.candidates(scope: "categories_only").pluck(:id)
+          refute_includes ids, @american.id
+          assert_includes ids, @unknown_only.id
+        end
+
+        test "origin_only ignores categories rows" do
+          categories_row(@american)
+          assert_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
+        test "all keeps a book done for origin but not categories, and drops one done for both" do
+          origin_row(@american)
+          origin_row(@unknown_only)
+          categories_row(@unknown_only)
+          ids = Backfill.candidates(scope: "all").pluck(:id)
+          assert_includes ids, @american.id
+          refute_includes ids, @unknown_only.id
+        end
+
+        test "the deferred rule applies per kind" do
+          deferred = book("Deferred")
+          categories_row(deferred, deferred_research: true)
+          refute_includes Backfill.candidates(scope: "categories_only").pluck(:id), deferred.id
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
+          assert_includes Backfill.candidates(scope: "categories_only").pluck(:id), deferred.id
+        end
+
+        test "categories_only puts a book with no genre before one with genres among the unranked" do
+          with_genre = book("With genre")
+          ::CategoryItem.create!(item: with_genre, category: genre("Mystery"), source: :ai)
+          fiction_only = book("Fiction only")
+          ::CategoryItem.create!(item: fiction_only, category: genre(::Books::Book::BOOK_TYPE_CATEGORY_NAMES.first), source: :legacy)
+          inherited_only = book("Inherited only")
+          ::CategoryItem.create!(item: inherited_only, category: genre("Thriller"), source: :inherited)
+          ids = [with_genre, fiction_only, inherited_only].map(&:id)
+          order = Backfill.candidates(scope: "categories_only").where(id: ids).pluck(:id)
+          assert_equal with_genre.id, order.last
+          assert_equal [fiction_only.id, inherited_only.id].sort, order.first(2).sort
+        end
+
+        test "all treats a book with a country but no genre as needing work first" do
+          has_both = book("Has both")
+          has_both.countries << country("France")
+          ::CategoryItem.create!(item: has_both, category: genre("Mystery"), source: :ai)
+          no_genre = book("Country no genre")
+          no_genre.countries << country("France")
+          ids = [has_both, no_genre].map(&:id)
+          assert_equal [no_genre.id, has_both.id], Backfill.candidates(scope: "all").where(id: ids).pluck(:id)
+        end
+
+        test "the planned run carries the scope and categories_only skips categorize" do
+          result = Backfill.call(scope: "categories_only", limit: 1, label: "t", book_ids: [@american.id])
+          assert result.success?
+          run = WorkflowRun.where(workflow: "books.book_categorize", enrichable: @american).sole
+          assert_equal "categories_only", run.options["scope"]
+          assert_predicate run.step(:categorize), :skipped?
+        end
+
+        test "under all, a book done for one kind is planned for the other only" do
+          origin_row(@american)
+          categories_row(@unknown_only)
+          Backfill.call(scope: "all", limit: nil, label: "t", book_ids: [@american.id, @unknown_only.id, @no_country.id])
+          runs = ->(book) { WorkflowRun.where(workflow: "books.book_categorize", enrichable: book).sole }
+          assert_equal "categories_only", runs.call(@american).options["scope"]
+          assert_predicate runs.call(@american).step(:categorize), :skipped?
+          assert_equal "origin_only", runs.call(@unknown_only).options["scope"]
+          assert_predicate runs.call(@unknown_only).step(:categories), :skipped?
+          assert_equal "all", runs.call(@no_country).options["scope"]
+        end
+
+        test "refuses an unknown scope" do
+          assert_nil Backfill.refusal("categories_only")
+          result = Backfill.call(scope: "bogus", limit: 1, label: "t")
           refute result.success?
-          assert_equal ["scope all arrives with stage 3 (categories); use origin_only"], result.errors
+          assert_equal ["unknown scope bogus; use one of origin_only, categories_only, all"], result.errors
         end
       end
     end

@@ -38,6 +38,18 @@ class BooksCategorizeRakeTest < ActiveSupport::TestCase
     end
   end
 
+  test "categories_only and all are accepted and enqueue the job with that scope" do
+    ENV["APPLY"] = "1"
+    Sidekiq::Testing.fake! do
+      %w[categories_only all].each do |scope|
+        @task.reenable
+        capture_io { @task.invoke(scope, "10", "v1") }
+      end
+      assert_equal [["categories_only", 10, "v1", nil], ["all", 10, "v1", nil]], Books::CategorizeBackfillJob.jobs.map { it["args"] }
+      Books::CategorizeBackfillJob.clear
+    end
+  end
+
   test "BOOK_IDS is passed through" do
     ENV["APPLY"] = "1"
     ENV["BOOK_IDS"] = "4, 5"
@@ -49,7 +61,7 @@ class BooksCategorizeRakeTest < ActiveSupport::TestCase
   end
 
   test "a missing label, a bad limit or another scope aborts" do
-    [["origin_only", "all", ""], ["origin_only", "0", "v1"], ["origin_only", "lots", "v1"], ["categories_only", "all", "v1"]].each do |args|
+    [["origin_only", "all", ""], ["origin_only", "0", "v1"], ["origin_only", "lots", "v1"], ["bogus", "all", "v1"]].each do |args|
       @task.reenable
       assert_raises(SystemExit) { capture_io { @task.invoke(*args) } }
     end

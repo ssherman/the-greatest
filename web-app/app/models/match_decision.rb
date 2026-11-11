@@ -14,6 +14,7 @@
 #  record_type    :string
 #  review_note    :text
 #  reviewed_at    :datetime
+#  reviewed_via   :integer
 #  selected_index :integer
 #  sources_failed :string           default([]), not null, is an Array
 #  subject_type   :string
@@ -59,6 +60,10 @@ class MatchDecision < ApplicationRecord
   # (Services::Books::Authors::RejectExternalLink, spec §12).
   enum :verdict, {confirmed: 0, rejected: 1}, prefix: true
 
+  # Which surface a person reviewed through: the admin page or the admin API
+  # (MCP). Nil for rows reviewed before this was recorded.
+  enum :reviewed_via, {admin_ui: 0, api: 1}, prefix: :reviewed_via
+
   # Validations
   validates :finder, presence: true
 
@@ -68,7 +73,7 @@ class MatchDecision < ApplicationRecord
   scope :for_finder, ->(finder_class) { where(finder: finder_class.to_s) }
 
   def review!(by:, note: nil)
-    update!(reviewed_at: Time.current, reviewed_by: by, review_note: note)
+    update!(reviewed_at: Time.current, reviewed_by: by, review_note: note, reviewed_via: Current.acting_via)
   end
 
   # The candidate snapshot this decision chose (selected_index counts from

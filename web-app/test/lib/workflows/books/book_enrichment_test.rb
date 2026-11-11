@@ -50,20 +50,20 @@ module Workflows
         Workflows::Coordinator.finish(claimed, token: "gr", outcome: Workflows::Outcome.succeeded("no_match", {"matched" => false}))
       end
 
-      test "is registered as books.book_enrichment version 4 on books, with goodreads, evidence, book_facts, amazon and categorize" do
-        assert_equal [BookEnrichment, "books.book_enrichment", 4, ::Books::Book], [
+      test "is registered as books.book_enrichment version 5 on books, with goodreads, evidence, book_facts, amazon, categorize and categories" do
+        assert_equal [BookEnrichment, "books.book_enrichment", 5, ::Books::Book], [
           Workflows::Registry.fetch("books.book_enrichment"), BookEnrichment.workflow, BookEnrichment.version, BookEnrichment.target_class
         ]
-        assert_equal %i[goodreads evidence book_facts amazon categorize], BookEnrichment.steps.map(&:key)
-        assert_equal [:goodreads_fetch, :evidence, :low, :serial, :low], BookEnrichment.steps.map(&:queue)
-        assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
-        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}],
+        assert_equal %i[goodreads evidence book_facts amazon categorize categories], BookEnrichment.steps.map(&:key)
+        assert_equal [:goodreads_fetch, :evidence, :low, :serial, :low, :low], BookEnrichment.steps.map(&:queue)
+        assert_equal [10.minutes, 10.minutes, 15.minutes, 10.minutes, 10.minutes, 10.minutes], BookEnrichment.steps.map(&:lease)
+        assert_equal [{}, {goodreads: :finish}, {goodreads: :finish}, {goodreads: :finish}, {book_facts: :finish, evidence: :finish}, {categorize: :finish, book_facts: :finish, evidence: :finish}],
           BookEnrichment.steps.map(&:waits_on)
       end
 
       test "amazon gets seven attempts (about 11 hours of backoff) where the others get three" do
-        assert_equal [3, 3, 3, 7, 3], BookEnrichment.steps.map(&:max_attempts)
-        assert_equal [3, 3, 3, 7, 3], start.steps.order(:id).pluck(:max_attempts)
+        assert_equal [3, 3, 3, 7, 3, 3], BookEnrichment.steps.map(&:max_attempts)
+        assert_equal [3, 3, 3, 7, 3, 3], start.steps.order(:id).pluck(:max_attempts)
       end
 
       test "version 4 plans categorize after book_facts and evidence" do
@@ -71,6 +71,13 @@ module Workflows
 
         assert_equal "blocked", run.step(:categorize).state
         assert_equal %w[book_facts evidence], WorkflowDependency.where(step: run.step(:categorize)).map { it.prerequisite_step.key }.sort
+      end
+
+      test "version 5 plans categories after categorize" do
+        run = start
+
+        assert_equal "blocked", run.step(:categories).state
+        assert_equal %w[book_facts categorize evidence], WorkflowDependency.where(step: run.step(:categories)).map { it.prerequisite_step.key }.sort
       end
 
       test "a run planned under version 3 (no categorize step) still completes" do
