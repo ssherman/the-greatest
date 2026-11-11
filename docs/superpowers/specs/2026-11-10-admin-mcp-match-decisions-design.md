@@ -73,8 +73,8 @@ Notes:
 | `get_book_identifiers` | `GET /api/v1/admin/books/{id}/identifiers` | `books:admin:read` | Paged with the standard envelope (some books hold thousands of edition identifiers): a flat list of the book's own identifiers first, then its editions', each `{id, identifier_type, value, source, created_at, edition}` where `edition` is null for the book's own rows or `{id, title, format, year}`. Optional `scope=work` returns only the book's own rows (my call). |
 | `get_author_identifiers` | `GET /api/v1/admin/authors/{id}/identifiers` | `books:admin:read` | The author's identifiers, same shape. |
 | `find_by_identifier` | `GET /api/v1/admin/identifiers?type=…&value=…` | `books:admin:read` | Every book, edition (with its book) or author holding that identifier type and value. Answers "which record has this ISBN / Q-number / VIAF id", including several. `type` must be one of the `books_*` identifier types (work, edition, author, series — read-only for edition/series); 400 otherwise. |
-| `add_identifier` | `POST /api/v1/admin/{books|authors}/{id}/identifiers` | `books:admin:write` | Body: `identifier_type`, `value`. Only types valid for that record kind (`books_work_*` on a book, `books_author_*` on an author); 400 otherwise. Stores `source: admin` (new enum value). Already present on this record → 200 with the existing row, no change. For `books_author_wikidata_qid` and `books_author_viaf`: 422 if the author already holds a different value of that type (remove it first), and 422 if `RejectedRecords` lists that value as rejected for this author (my calls). The response also lists any **other** record holding the same type and value, so the agent sees a likely duplicate. |
-| `remove_identifier` | `DELETE /api/v1/admin/{books|authors}/{id}/identifiers/{identifier_id}` | `books:admin:merge` | Deletes that identifier row, whatever its source; 404 if it is not this record's. `destructive: true`. The description warns that `open_library`/`worldcat` rows are verified evidence the Goodreads matcher reads. |
+| `add_book_identifier` / `add_author_identifier` | `POST /api/v1/admin/{books|authors}/{id}/identifiers` | `books:admin:write` | Body: `identifier_type`, `value`. Only types valid for that record kind (`books_work_*` on a book, `books_author_*` on an author); 400 otherwise. Stores `source: admin` (new enum value). Already present on this record → 200 with the existing row, no change. For `books_author_wikidata_qid` and `books_author_viaf`: 422 if the author already holds a different value of that type (remove it first), and 422 if `RejectedRecords` lists that value as rejected for this author (my calls). The response also lists any **other** record holding the same type and value, so the agent sees a likely duplicate. |
+| `remove_book_identifier` / `remove_author_identifier` | `DELETE /api/v1/admin/{books|authors}/{id}/identifiers/{identifier_id}` | `books:admin:merge` | Deletes that identifier row, whatever its source; 404 if it is not this record's. `destructive: true`. The description warns that `open_library`/`worldcat` rows are verified evidence the Goodreads matcher reads. |
 
 Notes:
 
@@ -96,7 +96,7 @@ Notes:
 
 ### Server-side MCP text
 
-Tool descriptions say what each does, what is permanent (`remove_identifier`, `reject_match_decision_link`) and
+Tool descriptions say what each does, what is permanent (`remove_*_identifier`, `reject_match_decision_link`) and
 what a refusal means. `config/mcp/books/admin_usage.md` gets one short section: the match-decision and
 identifier tools are, like the duplicate queue tools, for an agent deciding itself; the ask-first rule does not
 apply to them.
@@ -111,7 +111,7 @@ Same mechanism as duplicates (`Services::DuplicateCandidates::AgentPrompt` patte
 - Per kind:
   - **Wikidata/VIAF matched:** check the linked entity is this author (dates, works, nationality). Right →
     review `confirmed`. Wrong → `reject_match_decision_link`, then if the right entity is findable, add it with
-    `add_identifier`.
+    `add_author_identifier`.
   - **Wikidata/VIAF unmatched:** find the right entity if one exists; add it, then review `confirmed` with a
     note naming it. None exists → review with a note.
   - **Author matched:** check the incoming author really is this author. Wrong → review `rejected` with a note
@@ -130,7 +130,7 @@ Same mechanism as duplicates (`Services::DuplicateCandidates::AgentPrompt` patte
   reviewed → 422, reject refusals passed through, add with a wrong type for the record kind → 400, bad formats →
   400, add is idempotent, add reports other holders, remove of another record's identifier → 404, who/how
   stamped.
-- MCP catalogue pins (18 → 27 admin tools), contract coverage for every status, admin page `via` filter
+- MCP catalogue pins (18 → 29 admin tools), contract coverage for every status, admin page `via` filter
   (behaviour only), the prompt service unit test, a Playwright test for the Copy prompt button.
 
 ### Docs
