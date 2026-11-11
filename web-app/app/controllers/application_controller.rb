@@ -43,9 +43,14 @@ class ApplicationController < ActionController::Base
 
   private
 
+  # The same page ErrorsController serves for an unmatched URL, in the site's
+  # own layout rather than the controller's (an admin page's missing record
+  # still gets the public 404). formats: [:html] because a .json URL here would
+  # otherwise look for not_found.json and turn the 404 into a 500.
   def render_not_found
     prevent_caching
-    render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
+    @indexable = false
+    render "errors/not_found", status: :not_found, formats: [:html], layout: DomainLayout.for(Current.domain)
   end
 
   def user_not_authorized
