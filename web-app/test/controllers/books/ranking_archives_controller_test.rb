@@ -32,6 +32,8 @@ module Books
     end
 
     test "index is publicly cacheable and noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
       get "/rankings/archive"
 
       assert_includes response.headers["Cache-Control"], "public"
@@ -47,6 +49,8 @@ module Books
     end
 
     test "show is publicly cacheable, noindex, and has no canonical" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
       get "/rankings/archive/january-2027"
 
       assert_includes response.headers["Cache-Control"], "public"
@@ -82,6 +86,7 @@ module Books
       assert_response :success
       assert_equal 2, @controller.view_assigns["pagy"].page
       assert_equal [101], @controller.view_assigns["entries"].map(&:rank)
+      assert_select "a[href='/rankings/archive/big']"
     end
 
     test "a page past the last is a 404" do
