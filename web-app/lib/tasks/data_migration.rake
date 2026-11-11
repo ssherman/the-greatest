@@ -149,6 +149,13 @@ namespace :data_migration do
     pp Services::BooksMigration::RankingConfigurationMigrator.call
   end
 
+  desc "Migrate archived legacy ranking_configurations into Books::RankingArchive (re-runnable; safe after sync_init)"
+  task ranking_archives: :environment do
+    result = Services::BooksMigration::RankingArchiveMigrator.call
+    pp result
+    abort "ranking_archives migration failed: #{result[:error]}" unless result[:success]
+  end
+
   desc "Migrate legacy ranked_lists (active RCs only) into ranked_lists (bulk upsert; natural key)"
   task ranked_lists: :environment do
     pp Services::BooksMigration::RankedListMigrator.call
