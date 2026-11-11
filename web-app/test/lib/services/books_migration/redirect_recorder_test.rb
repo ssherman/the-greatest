@@ -7,6 +7,10 @@ class Services::BooksMigration::RedirectRecorderTest < ActiveSupport::TestCase
     RecordRedirect.find_by(item_type: item_type, from_id: from_id)
   end
 
+  def books_ceiling
+    Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
+  end
+
   test "records a legacy-origin merge" do
     Recorder.merged(item_type: "Books::Book", from_id: 1_001, to_id: 2_002)
 
@@ -21,11 +25,34 @@ class Services::BooksMigration::RedirectRecorderTest < ActiveSupport::TestCase
     assert_nil row.to_id
   end
 
-  test "records nothing for an id at or above the ceiling" do
-    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
+  test "records a book merge at and above the books ceiling" do
+    ceiling = books_ceiling
 
     Recorder.merged(item_type: "Books::Book", from_id: ceiling, to_id: 7)
+    Recorder.merged(item_type: "Books::Book", from_id: ceiling + 1, to_id: 8)
+
+    assert_equal 7, fate("Books::Book", ceiling).to_id
+    assert_equal 8, fate("Books::Book", ceiling + 1).to_id
+  end
+
+  test "records a book delete at and above the books ceiling with no survivor" do
+    ceiling = books_ceiling
+
+    Recorder.deleted(item_type: "Books::Book", from_id: ceiling)
     Recorder.deleted(item_type: "Books::Book", from_id: ceiling + 1)
+
+    [ceiling, ceiling + 1].each do |id|
+      row = fate("Books::Book", id)
+      assert row
+      assert_nil row.to_id
+    end
+  end
+
+  test "records nothing for an author at or above the authors ceiling" do
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_authors")
+
+    Recorder.merged(item_type: "Books::Author", from_id: ceiling, to_id: 7)
+    Recorder.deleted(item_type: "Books::Author", from_id: ceiling + 1)
 
     assert_equal 0, RecordRedirect.count
   end
@@ -61,7 +88,16 @@ class Services::BooksMigration::RedirectRecorderTest < ActiveSupport::TestCase
     Recorder.merged(item_type: "Books::Book", from_id: new_app_id, to_id: 3_003)
 
     assert_equal 3_003, fate("Books::Book", 1_001).to_id
-    assert_nil fate("Books::Book", new_app_id)
+    assert_equal 3_003, fate("Books::Book", new_app_id).to_id
+  end
+
+  test "a legacy id still resolves in one hop after its new-app survivor is merged on" do
+    legacy, new_app, final = 1_002, books_ceiling + 5, books_ceiling + 6
+    Recorder.merged(item_type: "Books::Book", from_id: legacy, to_id: new_app)
+    Recorder.merged(item_type: "Books::Book", from_id: new_app, to_id: final)
+    redirects = Services::BooksMigration::Redirects.load
+    assert_equal final, redirects.resolve("Books::Book", legacy)
+    assert_equal final, redirects.resolve("Books::Book", new_app)
   end
 
   test "repoints rows that named a deleted record to deleted" do

@@ -1,6 +1,8 @@
-# What became of a legacy-origin Books::Book or Books::Author that no longer
-# exists here: merged into to_id, or deleted (to_id nil). The books legacy sync
-# reads it so it never brings either back (spec 2026-10-08-books-legacy-sync §4).
+# What became of a Books::Book or Books::Author that no longer exists here:
+# merged into to_id, or deleted (to_id nil). Every book is recorded, because
+# ranking archives resolve their stored book ids through it; an author only when
+# legacy-origin. The books legacy sync reads it so it never brings either back
+# (spec 2026-10-08-books-legacy-sync §4).
 # == Schema Information
 #
 # Table name: record_redirects

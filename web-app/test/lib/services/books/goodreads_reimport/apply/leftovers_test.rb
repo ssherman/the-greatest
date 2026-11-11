@@ -196,7 +196,7 @@ module Services
             keep.update!(applied_at: Time.current)
             copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
             ::Books::Book::Merger.call(source: new_book, target: @from)
-            assert_not RecordRedirect.exists?(from_id: new_book.id), "a post-migration id records no redirect"
+            assert RecordRedirect.exists?(from_id: new_book.id, to_id: @from.id), "a post-migration book records its merge"
 
             apply(copy)
 
