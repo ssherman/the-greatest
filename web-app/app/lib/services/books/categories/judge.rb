@@ -75,6 +75,7 @@ module Services
         end
 
         def first_mode
+          return :knowledge unless research_allowed
           return :research if force_research
           return :research if past_cutoff? && research_permitted?
           # Its knowledge call already ran and deferred this book's research.

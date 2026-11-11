@@ -191,6 +191,14 @@ module Services
           assert_equal ["research"], judge(force_research: true).data[:enrichments].map(&:mode)
         end
 
+        test "force_research does not research when research_allowed is false" do
+          stub_task({})
+          stub_pipeline
+          rows = judge(force_research: true, research_allowed: false).data[:enrichments]
+          assert_equal ["knowledge"], rows.map(&:mode)
+          assert_equal false, rows.first.facts["deferred_research"] || false
+        end
+
         test "a past-cutoff book is researched when permitted, deferred when not" do
           @book.stubs(:first_published_year).returns(Rails.application.config.x.ai.knowledge_cutoff_year)
           stub_pipeline
