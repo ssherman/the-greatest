@@ -250,6 +250,30 @@ module Services
           assert_equal [[shire, "exact"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
         end
 
+        test "a fictional town filed under a real place resolves there by exact name" do
+          location("Fictional Location")
+          alabama = location("Alabama", parent: location("United States"))
+          maycomb = location("Maycomb", parent: alabama)
+          result = map(answer(locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_equal [[maycomb, "exact"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
+          assert_empty result.data[:unmatched]
+        end
+
+        test "a fictional name found in the subtree and under a real place resolves in the subtree" do
+          root = location("Fictional Location")
+          inside = location("Jefferson", parent: root)
+          location("Jefferson", parent: location("Mississippi"))
+          result = map(answer(locations: [loc("Jefferson", kind: "fictional", parent: "Mississippi")]))
+          assert_equal [[inside, "exact"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
+        end
+
+        test "a mapped fictional parent records the original fictional name" do
+          location("Fictional Location")
+          alabama = location("Alabama", parent: location("United States"))
+          result = map(answer(locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_equal [[alabama, "Maycomb"]], result.data[:resolved].map { |r| [r[:category], r[:original]] }
+        end
+
         test "a real Paris never resolves to a fictional Paris" do
           root = location("Fictional Location")
           location("Paris", parent: root)

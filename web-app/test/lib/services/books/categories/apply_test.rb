@@ -244,6 +244,16 @@ module Services
           assert_equal [genre_like.id], result.data[:removed].map { |r| r[:id] }
         end
 
+        test "a legacy location named by a fictional_parent entry's original name is kept" do
+          jefferson = category("location", "Jefferson")
+          other = category("location", "Lyon")
+          [jefferson, other].each { |c| link(c) }
+          parent = entry(category("location", "Mississippi")).merge(via: "fictional_parent", proposed: "Mississippi (setting of Jefferson)", original: "Jefferson")
+          result = perform(resolved: [parent])
+          assert_equal [other.id], result.data[:removed].map { |r| r[:id] }
+          assert_equal "legacy", sources_of(jefferson)
+        end
+
         test "an unmatched location whose name key equals the legacy location's keeps it" do
           paris = category("location", "Paris", alternative_names: ["Paname"])
           other = category("location", "Lyon")

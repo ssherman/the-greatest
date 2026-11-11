@@ -17,7 +17,7 @@ module Services
         MAX_DEPTH = 12
         ROW_COLUMNS = %i[id name alternative_names parent_id merged_into_id deleted].freeze
         Row = Struct.new(*ROW_COLUMNS, keyword_init: true)
-        Item = Struct.new(:type, :proposed, :confidence, :evidence, :kind, :hint, :index, :category_id, :via, :unmatched_via, :candidate_ids, keyword_init: true)
+        Item = Struct.new(:type, :proposed, :confidence, :evidence, :kind, :hint, :index, :category_id, :via, :unmatched_via, :candidate_ids, :original, keyword_init: true)
 
         def self.call(book:, answer:, vocabulary:)
           new(book: book, answer: answer, vocabulary: vocabulary).call
@@ -116,20 +116,30 @@ module Services
           key = ::Services::CategoryCleanup::NameNormalizer.twin_key(item.proposed)
           return [] unless key
 
-          active = keyed(item.type, :active)[key].to_a.uniq.select { |id| fits?(item, id) }
+          active = prefer_fictional_subtree(item, keyed(item.type, :active)[key].to_a.uniq.select { |id| fits?(item, id) })
           return active.map { |id| [id, "exact"] } if active.any?
 
-          merged = keyed(item.type, :merged)[key].to_a.uniq.select { |id| fits?(item, id) }
+          merged = prefer_fictional_subtree(item, keyed(item.type, :merged)[key].to_a.uniq.select { |id| fits?(item, id) })
           merged.map { |id| [id, "merged"] }
+        end
+
+        # Legacy files some fictional towns as ordinary places under real ones (Maycomb under
+        # Alabama), so a fictional name matches anywhere in the tree; a hit inside the Fictional
+        # Location subtree wins over the others.
+        def prefer_fictional_subtree(item, ids)
+          return ids unless item.type == "location" && fictional_filter(item)
+
+          inside = ids.select { |id| fictional_ids.include?(id) }
+          inside.any? ? inside : ids
         end
 
         # Real or fictional subtree, and for a location the parent hint.
         def fits?(item, id)
           return true unless item.type == "location"
-          return false if fictional_ids.include?(id) != fictional_filter(item)
-          # The bare Fictional Location root is never assigned; a fictional place's parent hint is a
-          # real place, which never appears among a fictional row's ancestors.
+          # The bare Fictional Location root is never assigned. A fictional name may match anywhere
+          # and ignores the parent hint; a real name never matches inside the fictional subtree.
           return !fictional_root_id?(id) if fictional_filter(item)
+          return false if fictional_ids.include?(id)
 
           hint_matches?(item, id)
         end
@@ -272,6 +282,7 @@ module Services
 
             item.category_id = parent.category_id
             item.via = "fictional_parent"
+            item.original = item.proposed
             item.proposed = "#{parent.proposed} (setting of #{item.proposed})"
             item.unmatched_via = nil
           end
@@ -289,6 +300,7 @@ module Services
               next unless seen.add?(category.id)
 
               resolved << {type: item.type, category: category, proposed: item.proposed, confidence: item.confidence, evidence: item.evidence, via: item.via}
+              resolved.last[:original] = item.original if item.original
             else
               entry = {type: item.type, proposed: item.proposed, via: item.unmatched_via || "no_candidate"}
               # What the chooser was offered: a legacy link among these is one the judge was naming.
