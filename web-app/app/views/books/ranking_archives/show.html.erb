@@ -18,6 +18,12 @@
     Filters are not available on archived rankings.
   </p>
 
+  <div class="flex justify-center">
+    <%= render CsvExports::DownloadButtonComponent.new(
+      export_path: books_ranking_archive_export_path(slug: @archive.slug, format: :csv), noun: "books"
+    ) %>
+  </div>
+
   <% if @archive.description.present? %>
     <p class="max-w-3xl mx-auto text-base-content/80"><%= @archive.description %></p>
   <% end %>

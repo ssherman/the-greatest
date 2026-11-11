@@ -142,6 +142,51 @@ module Books
       assert_equal [survivor], @controller.view_assigns["entries"].map(&:item)
     end
 
+    test "export requires sign in" do
+      get "/rankings/archive/january-2027/export.csv"
+
+      assert_redirected_to "/"
+    end
+
+    test "a non-member gets the capped export" do
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+      CsvExports::ArchivedRanking.expects(:call).with(has_entries(limit: 500)).returns(0)
+
+      get "/rankings/archive/january-2027/export.csv"
+
+      assert_response :success
+    end
+
+    test "a member gets every row" do
+      sign_in_as users(:regular_user), stub_auth: true
+      CsvExports::ArchivedRanking.expects(:call).with(has_entries(limit: nil)).returns(0)
+
+      get "/rankings/archive/january-2027/export.csv"
+
+      assert_response :success
+    end
+
+    test "export sends a csv attachment that is never cached" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/rankings/archive/january-2027/export.csv"
+
+      assert_equal "text/csv", response.media_type
+      assert response.body.start_with?(CsvExports::Writer::BOM)
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal "noindex", response.headers["X-Robots-Tag"]
+      assert_includes response.headers["Content-Disposition"], 'filename="the-greatest-books-january-2027.csv"'
+      assert_equal 3, CSV.parse(response.body.delete_prefix(CsvExports::Writer::BOM)).size
+    end
+
+    test "exporting a hidden archive is a 404" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/rankings/archive/list-dates-v7/export.csv"
+
+      assert_response :not_found
+    end
+
     test "the session is skipped" do
       get "/rankings/archive/january-2027"
 

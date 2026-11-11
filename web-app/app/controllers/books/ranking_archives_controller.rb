@@ -5,6 +5,7 @@ class Books::RankingArchivesController < ApplicationController
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
+  include CsvExportable
 
   layout "books/application"
 
@@ -27,5 +28,16 @@ class Books::RankingArchivesController < ApplicationController
     @entries = ::Services::RankingArchives::Entries.call(
       archive: @archive, offset: @pagy.offset, limit: @pagy.limit, preload: ENTRY_PRELOAD
     )
+  end
+
+  # GET /rankings/archive/:slug/export.csv
+  # Same columns, sign-in, rate limit and cap as the live ranking's export.
+  def export
+    archive = ::Books::RankingArchive.visible.find_by!(slug: params[:slug])
+    io = StringIO.new
+    ::CsvExports::ArchivedRanking.call(
+      archive: archive, row_class: ::CsvExports::Books::RankedBookRow, limit: export_limit, io: io
+    )
+    send_csv io.string, filename: "the-greatest-books-#{archive.slug}.csv"
   end
 end

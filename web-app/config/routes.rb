@@ -1047,6 +1047,8 @@ Rails.application.routes.draw do
     # routes below: the router rejects .json before a controller is involved.
     get "rankings/archive", to: "books/ranking_archives#index", as: :books_ranking_archives,
       constraints: {format: /html/}
+    get "rankings/archive/:slug/export", to: "books/ranking_archives#export", as: :books_ranking_archive_export,
+      format: true, constraints: {format: /csv/}
     get "rankings/archive/:slug", to: "books/ranking_archives#show", as: :books_ranking_archive,
       constraints: {format: /html/}
     get "rankings/archive/:slug/page/:page", to: "books/ranking_archives#show", as: :books_ranking_archive_page,
