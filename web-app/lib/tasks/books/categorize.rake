@@ -1,8 +1,8 @@
 namespace :books do
   namespace :categorize do
-    desc "Plan the origin backfill, paced one book every 8 seconds, ranked books first. Dry run by default; " \
+    desc "Plan the origin/categories backfill (scope origin_only, categories_only or all), paced one book every 8 seconds, ranked books first. Dry run by default; " \
       "APPLY=1 queues Books::CategorizeBackfillJob. BOOK_IDS=1,2,3 restricts it (for the rehearsal): " \
-      "bin/rails \"books:categorize:backfill[origin_only,all,origin-v1]\""
+      "bin/rails \"books:categorize:backfill[categories_only,all,categories-v1]\""
     task :backfill, [:scope, :limit, :label] => :environment do |_task, args|
       scope = args[:scope].to_s.strip
       refusal = ::Services::Books::Categorize::Backfill.refusal(scope)
@@ -11,7 +11,7 @@ namespace :books do
       raw = args[:limit].to_s.strip
       limit = (raw == "all") ? nil : Integer(raw, exception: false)
       unless raw == "all" || limit&.positive?
-        abort "Usage: bin/rails \"books:categorize:backfill[origin_only,limit,label]\" -- limit is a number or all"
+        abort "Usage: bin/rails \"books:categorize:backfill[origin_only|categories_only|all,limit,label]\" -- limit is a number or all"
       end
       label = args[:label].to_s.strip
       abort "books:categorize:backfill: a label is required (it names this run in the report)" if label.empty?

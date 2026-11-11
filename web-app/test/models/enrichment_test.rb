@@ -138,8 +138,12 @@ class EnrichmentTest < ActiveSupport::TestCase
     import = make.call("books.origin", {"context" => "import"})
     no_context = make.call("books.origin", {})
     facts_row = make.call("books.book_facts", {})
+    categories_backfill = make.call("books.categories", {"context" => "backfill"})
+    categories_import = make.call("books.categories", {"context" => "import"})
     scoped = Enrichment.against_research_cap
     refute_includes scoped, backfill
+    refute_includes scoped, categories_backfill
+    assert_includes scoped, categories_import
     assert_includes scoped, import
     assert_includes scoped, no_context
     assert_includes scoped, facts_row

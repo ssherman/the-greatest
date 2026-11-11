@@ -22,7 +22,7 @@ module Services
         end
 
         def call
-          rows = Report.latest_rows(label: @label)
+          rows = Categorize::LatestRows.call(kind: Judge::KIND, label: @label)
             .where("enrichments.facts->'origin'->>'reason' = 'disagreement'")
             .where("enrichments.facts->>'accepted_at' IS NULL").order(:id)
           rows = rows.where(id: @enrichment_ids) if @enrichment_ids
