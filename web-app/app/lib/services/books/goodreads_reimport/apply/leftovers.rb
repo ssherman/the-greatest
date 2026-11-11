@@ -134,10 +134,12 @@ module Services
           end
 
           # Does a current, non-rejected row of the reader name a book that no longer exists and that nothing follows to
-          # a live book? A merge of a book created after the migration, with no duplicate pair, leaves no verdict, no
-          # pair and no redirect, so a row naming it could head here and nothing would say so. When in doubt, keep:
-          # the sweep waits. One query returns only the gone ids the reader's rows name (a reader can have tens of
-          # thousands of rows, so they are never loaded); `resolve` runs only for those.
+          # a live book? That is a named book that is gone and that neither MergedBook nor a record_redirects row leads
+          # to a live book: one removed without callbacks, or deleted outright, whose redirect has no target. A book
+          # created after the migration and merged later is traceable: every book merge records a redirect, so
+          # `resolve` follows it to the surviving book and the row counts toward it, as legacy-origin ids always have.
+          # When in doubt, keep: the sweep waits. One query returns only the gone ids the reader's rows name (a reader
+          # can have tens of thousands of rows, so they are never loaded); `resolve` runs only for those.
           def untraceable?(user, memo)
             gone = ::Books::RepairVerdict.reimport_row.current.where.not(status: :rejected)
               .where("kind = 8 AND payload->>'user_id' = ?", user.id.to_s)

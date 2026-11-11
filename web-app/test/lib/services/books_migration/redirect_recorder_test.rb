@@ -57,7 +57,7 @@ class Services::BooksMigration::RedirectRecorderTest < ActiveSupport::TestCase
     assert_equal 0, RecordRedirect.count
   end
 
-  test "uses each item type's own ceiling" do
+  test "a book at the authors ceiling is recorded, an author is not" do
     author_ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch("books_authors")
 
     Recorder.deleted(item_type: "Books::Book", from_id: author_ceiling)

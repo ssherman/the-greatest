@@ -189,7 +189,7 @@ module Services
             assert_nil GoodreadsReplay::Apply::MergedBook.call(gone_id)
           end
 
-          test "R6 through the real merger: a new book merged into this one with no pair or verdict keeps the keep row's item" do
+          test "R6 through the real merger: the redirect the merge records resolves a keep row naming the merged-in new book, so its item is kept" do
             new_book = ::Books::Book.create!(title: "Re-import Created", book_kind: :standalone)
             read = UserListItem.create!(user_list: list(:read), listable: new_book)
             keep = row_verdict(csv_row(exclusive_shelf: "read"), action: "keep", from: new_book, to: new_book)
@@ -217,6 +217,24 @@ module Services
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @other.id)
             Leftovers.sweep(copy.reload, @from, @user)
             assert_not UserListItem.exists?(reading.id)
+          end
+
+          test "a row naming a new book merged elsewhere through the real merger is traceable, and one naming a book that never existed still holds the sweep" do
+            merged_away = ::Books::Book.create!(title: "Re-import Merged Away", book_kind: :standalone)
+            ::Books::Book::Merger.call(source: merged_away, target: @other)
+            assert RecordRedirect.exists?(from_id: merged_away.id, to_id: @other.id), "a post-migration book records its merge"
+            never_existed, = gone_ids(1)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @from)
+            stray = row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @other, to: @other)
+            stray.update!(applied_at: Time.current, payload: stray.payload.merge("from_book_id" => never_existed, "to_book_id" => never_existed))
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+
+            apply(copy)
+            assert UserListItem.exists?(reading.id), "a row naming a book with no book and no redirect holds the sweep"
+
+            stray.update!(payload: stray.payload.merge("from_book_id" => merged_away.id, "to_book_id" => merged_away.id))
+            Leftovers.sweep(copy.reload, @from, @user)
+            assert_not UserListItem.exists?(reading.id), "a row naming the merged-away book follows its redirect and no longer holds the sweep"
           end
 
           test "a rejected row naming a gone book does not hold the sweep" do
