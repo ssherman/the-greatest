@@ -45,6 +45,31 @@ class RankingArchiveTest < ActiveSupport::TestCase
     assert_equal before, archive.reload.item_ids
   end
 
+  test "item_ids cannot change on their own" do
+    archive = ranking_archives(:books_january_2027)
+    before = archive.item_ids.dup
+    assert_not archive.update(item_ids: before.reverse.map { |id| id + 1 })
+    assert_equal before, archive.reload.item_ids
+  end
+
+  test "positions cannot change on their own" do
+    archive = ranking_archives(:books_january_2027)
+    assert_not archive.update(positions: [2, 1])
+    assert_equal [1, 2], archive.reload.positions
+  end
+
+  test "scores cannot change on their own" do
+    archive = ranking_archives(:books_january_2027)
+    assert_not archive.update(scores: [50, 40])
+    assert_equal [100, 90], archive.reload.scores
+  end
+
+  test "items_count cannot change on its own" do
+    archive = ranking_archives(:books_january_2027)
+    assert_not archive.update(items_count: 5)
+    assert_equal 2, archive.reload.items_count
+  end
+
   test "an in-place array mutation is refused too" do
     archive = ranking_archives(:books_january_2027)
     archive.item_ids << 5
@@ -115,7 +140,7 @@ class RankingArchiveTest < ActiveSupport::TestCase
   test "summaries leaves the arrays unloaded" do
     row = RankingArchive.summaries.first
     assert_raises(ActiveModel::MissingAttributeError) { row.item_ids }
-    assert_equal 2, ranking_archives(:books_january_2027).items_count
+    assert_equal 2, RankingArchive.summaries.find(ranking_archives(:books_january_2027).id).items_count
   end
 
   test "visible excludes hidden archives" do
@@ -124,7 +149,16 @@ class RankingArchiveTest < ActiveSupport::TestCase
   end
 
   test "newest_first orders by captured_at then id" do
-    assert_equal [ranking_archives(:books_january_2027), ranking_archives(:books_hidden_legacy)], RankingArchive.newest_first.to_a
+    ordered = RankingArchive.newest_first.to_a
+    assert_operator ordered.index(ranking_archives(:books_january_2027)), :<, ordered.index(ranking_archives(:books_hidden_legacy))
+  end
+
+  test "newest_first breaks a captured_at tie by higher id first" do
+    at = Time.zone.parse("2028-01-01 00:00:00")
+    older = build_archive(name: "Tie A", captured_at: at).tap(&:save!)
+    newer = build_archive(name: "Tie B", captured_at: at).tap(&:save!)
+    ordered = RankingArchive.newest_first.where(id: [older.id, newer.id]).to_a
+    assert_equal [newer, older], ordered
   end
 
   test "origin" do
