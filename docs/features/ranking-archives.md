@@ -53,8 +53,7 @@ Rules the model enforces:
 `RankingArchive.summaries` selects every column except the three arrays. Listings use it so they
 never load thousands of ids.
 
-I did not put this data model under `docs/object_models/`: that directory holds only music diagrams
-and no rule for other domains, so the model is described here.
+The data model is described here because `docs/object_models/` covers only music.
 
 ## Capture
 
@@ -83,7 +82,13 @@ delete, whatever the id. Authors are still recorded only when legacy-origin, sin
 author rows. The recorder is described under "Redirects" in `docs/features/books-legacy-sync.md`.
 
 A book removed without callbacks (`delete_all`, raw SQL) leaves no redirect, so it reads as unknown
-and is skipped.
+and is skipped. A book that had been merged into a "mixed" book which the Goodreads re-import later
+deleted also shows as a gap, because deleting the mixed book repoints rows that pointed at it to nothing
+before its own guessed redirect is written.
+
+Because every book merge is now recorded, the Goodreads re-import's leftovers sweep treats a row naming a
+merged new-app book as traceable (it follows the redirect), the same as it always did for legacy-origin
+books.
 
 ## The monthly job
 
@@ -102,9 +107,12 @@ deploy archives the month it is deployed in.
 To keep the current month's archive off the site, hide it. Deleting it is pointless: the next run
 creates it again. The admin delete confirmation says so.
 
+Month uniqueness is per ranking configuration. If the books primary is switched to a different
+configuration mid-month, the job creates a second archive for that month (slug suffixed `-2`).
+
 ## Public pages
 
-All routes are books-only and html-only, defined in `config/routes.rb` next to `/rankings`.
+All routes are books-only and defined in `config/routes.rb` next to `/rankings`. The page routes are html-only and the export is csv-only.
 
 | Route | Page |
 |---|---|
@@ -119,8 +127,10 @@ All routes are books-only and html-only, defined in `config/routes.rb` next to `
 - There are no filters on an archive; the page says so.
 - Pages are cached publicly: the index for 6 hours, a show page for 24 hours, plus one hour of
   stale-while-revalidate. Hiding, deleting or re-slugging an archive therefore does not take it off
-  the edge at once: pages already cached can stay reachable for up to 24 hours. The admin screens say
-  this beside hide, delete and the slug field.
+  the edge at once. Archive pages are cached for 24 hours and the Past rankings list for 6, each served
+  stale for up to an hour longer (`web-app/app/controllers/concerns/cacheable.rb`), so a hidden or deleted
+  archive can stay reachable for up to 25 hours. The admin screens use shorter wording beside hide, delete
+  and the slug field.
 - Links in: the books rankings explainer has a books-only "browse past rankings" paragraph, and the
   live ranking page has a "Past rankings" link, hidden on `/rc/` pages.
 
