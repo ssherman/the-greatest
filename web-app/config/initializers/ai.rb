@@ -30,4 +30,11 @@ Rails.application.configure do
   # research_daily_cap so a backfill never starves imports of web searches.
   # 0 until the rehearsal has shown what a run costs; then it is raised.
   config.x.ai.categorize_backfill_research_daily_cap = 0
+
+  # The categories judge (Services::Books::Categories::Judge) runs only when
+  # this is on. Off, it writes one skipped "disabled" row and nothing else, so
+  # the backfill still plans the book once it is on. Turned on in production
+  # after the dev rehearsal is signed off and the definitions are written
+  # (docs/launch-todo.md section 14). ENV: BOOKS_CATEGORIES_JUDGE_ENABLED.
+  config.x.ai.categories_judge_enabled = %w[1 true].include?(ENV["BOOKS_CATEGORIES_JUDGE_ENABLED"].to_s.strip.downcase)
 end

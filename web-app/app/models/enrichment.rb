@@ -60,9 +60,10 @@ class Enrichment < ApplicationRecord
 
   scope :for_kind, ->(kind) { where(kind: kind) }
   scope :today, -> { where(created_at: Time.current.beginning_of_day..) }
-  # Research runs that count against research_daily_cap. The origin backfill
-  # has its own cap, so its rows must not eat the budget imports share.
+  # Research runs that count against research_daily_cap. The origin and
+  # categories backfills share their own cap, so their rows must not eat the
+  # budget imports share.
   # COALESCE keeps rows with no context (NULL would drop them from NOT).
-  scope :against_research_cap, -> { research.today.where.not("kind = 'books.origin' AND COALESCE(facts->>'context', '') = 'backfill'") }
+  scope :against_research_cap, -> { research.today.where.not("kind IN ('books.origin', 'books.categories') AND COALESCE(facts->>'context', '') = 'backfill'") }
   scope :low_confidence_on, ->(fact) { where("facts -> ? ->> 'confidence' = 'low'", fact.to_s) }
 end
