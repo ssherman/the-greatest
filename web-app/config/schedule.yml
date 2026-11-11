@@ -9,6 +9,11 @@ books_author_rankings:
   cron: "0 4 * * *"
   description: "Recalculate The Greatest Authors from ranked books"
 
+books_monthly_ranking_archive:
+  class: Books::ArchiveMonthlyRankingJob
+  cron: "15 5 * * *"
+  description: "Make sure the books primary ranking has an archive for the current month"
+
 billing_reconcile_all:
   class: Billing::ReconcileAllCustomersJob
   cron: "0 5 * * *"
