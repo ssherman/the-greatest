@@ -96,6 +96,26 @@ module Services
         assert_equal [survivor], entries(archive, offset: 0, limit: 1).map(&:item)
       end
 
+      # A redirect whose source is a live book is stale: a full migration can bring a merged book back
+      # and leave its row behind until sync_init removes it. `resolve` shows that book as itself, so
+      # the row must not also count as an alias of its target and take the target's slot away.
+      test "a stale redirect whose source is still live does not hide its target" do
+        archive = archive_of([@first.id, @second.id])
+        redirect!(@first.id, @second.id)
+
+        result = entries(archive)
+
+        assert_equal [@first, @second], result.map(&:item)
+        assert_equal [1, 2], result.map(&:rank)
+      end
+
+      test "a stale redirect from a live book outside the page does not hide its target" do
+        archive = archive_of([@first.id, @third.id, @second.id])
+        redirect!(@first.id, @second.id)
+
+        assert_equal [@second], entries(archive, offset: 2, limit: 1).map(&:item)
+      end
+
       test "an id redirected to nothing is skipped" do
         gone_id = missing_id
         redirect!(gone_id, nil)

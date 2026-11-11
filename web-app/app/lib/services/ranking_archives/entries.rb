@@ -55,9 +55,19 @@ module Services
         [id, *aliases.fetch(id, [])].filter_map { |candidate| first_index[candidate] }.min
       end
 
+      # The ids redirected to each shown record. A redirect whose source is itself
+      # a live record is stale -- a full migration can bring a merged book back and
+      # leave its row behind until sync_init removes it. `resolve` shows that record
+      # as itself, so it is not an alias: counting it would give the target's best
+      # slot to a book that is displayed there in its own right, and the target
+      # would vanish from the archive.
       def aliases_for(resolved)
-        @aliases ||= ::RecordRedirect.where(item_type: @item_type, to_id: resolved.compact.uniq)
-          .pluck(:to_id, :from_id).group_by(&:first).transform_values { |rows| rows.map(&:last) }
+        @aliases ||= begin
+          rows = ::RecordRedirect.where(item_type: @item_type, to_id: resolved.compact.uniq).pluck(:to_id, :from_id)
+          live_sources = rows.empty? ? Set.new : @item_class.where(id: rows.map(&:last)).pluck(:id).to_set
+          rows.reject { |_, from_id| live_sources.include?(from_id) }
+            .group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+        end
       end
 
       def first_index

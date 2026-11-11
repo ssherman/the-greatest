@@ -70,7 +70,9 @@ Two callers use it: the monthly job and the admin "Archive now" action.
 The arrays are never rewritten, so a book merged or deleted after capture has a stale id in them.
 `Services::RankingArchives::Entries` resolves ids when a page is read:
 
-- A live id is shown.
+- A live id is shown, and a live book always wins over a redirect row that names it as a source.
+  Such a row is stale (a full migration brought the book back before `sync_init` cleared the row),
+  so it is ignored both when showing the book and when deciding another book's best slot.
 - A merged id is shown as its surviving book, at the archived position.
 - A book that would appear twice (a survivor and one it absorbed) is shown once, at its best slot.
 - A deleted or unknown id is skipped, so a page can come back short or empty.
