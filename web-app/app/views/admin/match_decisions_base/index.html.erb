@@ -29,6 +29,12 @@
       <%= form.label :verify, "Verify runs", class: "label text-xs" %>
       <%= form.select :verify, options_for_select([["Hide", "hide"], ["Include", "include"]], @verify), {}, class: "select select-sm" %>
     </div>
+    <% if @reviewed != "pending" %>
+      <div>
+        <%= form.label :via, "Reviewed via", class: "label text-xs" %>
+        <%= form.select :via, options_for_select([["All", ""], ["Admin page", "admin_ui"], ["API", "api"]], @via), {}, class: "select select-sm" %>
+      </div>
+    <% end %>
     <%= form.submit "Filter", class: "btn btn-sm" %>
     <%= link_to "Reset", decisions_index_path, class: "btn btn-sm btn-ghost" %>
   <% end %>
@@ -67,7 +73,7 @@
               <td><%= decision.decided_by %></td>
               <td class="whitespace-nowrap">
                 <% if decision.reviewed_at %>
-                  reviewed <%= decision.reviewed_at.to_date.iso8601 %>
+                  reviewed <%= decision.reviewed_at.to_date.iso8601 %><%= decision.reviewed_via_api? ? " via API" : (decision.reviewed_via_admin_ui? ? " via admin page" : "") %>
                 <% elsif decision.needs_review? %>
                   <span class="badge badge-warning badge-sm">needs review</span>
                 <% else %>

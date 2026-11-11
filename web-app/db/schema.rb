@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_045117) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_040520) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1071,6 +1071,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_045117) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "verdict"
+    t.integer "reviewed_via"
     t.index ["ai_chat_id"], name: "index_match_decisions_on_ai_chat_id"
     t.index ["created_at"], name: "index_match_decisions_on_created_at"
     t.index ["finder"], name: "index_match_decisions_on_finder"

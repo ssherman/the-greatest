@@ -19,9 +19,10 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   OUTCOMES = ::MatchDecision.outcomes.keys.freeze
   CONFIDENCES = ::MatchDecision.confidences.keys.freeze
   DECIDED_BY = ::MatchDecision.defined_enums.fetch("decided_by").keys.freeze
+  VIAS = ::MatchDecision.reviewed_via.keys.freeze
   REVIEWED = %w[pending reviewed all].freeze
   VERIFY = %w[hide include].freeze
-  FILTER_KEYS = %w[entity outcome confidence decided_by reviewed verify].freeze
+  FILTER_KEYS = %w[entity outcome confidence decided_by reviewed verify via].freeze
   PER_PAGE = 50
 
   helper_method :filter_params, :decisions_index_path, :decision_path, :entries, :entry_for,
@@ -30,6 +31,8 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   def index
     @reviewed = REVIEWED.include?(params[:reviewed]) ? params[:reviewed] : "pending"
     @verify = VERIFY.include?(params[:verify]) ? params[:verify] : "hide"
+    # The via filter narrows reviewed rows only; pending rows have no reviewer.
+    @via = params[:via] if VIAS.include?(params[:via]) && @reviewed != "pending"
     @pagy, @decisions = pagy(filtered_scope.includes(:record, :reviewed_by).newest_first, limit: PER_PAGE)
   end
 
@@ -132,6 +135,7 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
     else scope
     end
     scope = scope.where(verify: false) if @verify == "hide"
+    scope = scope.where(reviewed_via: @via) if @via
     scope
   end
 
