@@ -59,18 +59,20 @@ module Api
             unless ::Books::BookPolicy.new(user, ::Books::Book.new).update?
               return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not change books"))
             end
-            if decision.reviewed_at.present?
-              return render_problem(::Api::Problem.new(:unprocessable, detail: "Match decision #{decision.id} is already reviewed."))
+            # Checked under the row lock the reject service also takes, so a reject
+            # committing meanwhile cannot be overwritten by this verdict.
+            refusal = ::ActiveRecord::Base.transaction do
+              decision.lock!
+              if (found = review_refusal(decision, verdict))
+                found
+              else
+                decision.update!(verdict: verdict) if verdict
+                decision.review!(by: user, note: note)
+                nil
+              end
             end
-            if verdict == "rejected" && decision.matched? && link_finder?(decision)
-              return render_problem(::Api::Problem.new(:unprocessable,
-                detail: "A matched Wikidata or VIAF link cannot be rejected by review: it leaves the identifier and what it wrote in place. Use reject_match_decision_link, which removes them."))
-            end
+            return render_problem(::Api::Problem.new(:unprocessable, detail: refusal)) if refusal
 
-            ::ActiveRecord::Base.transaction do
-              decision.update!(verdict: verdict) if verdict
-              decision.review!(by: user, note: note)
-            end
             render_detail(decision)
           end
 
@@ -85,13 +87,18 @@ module Api
               return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete authors, so it may not reject their links."))
             end
 
-            result = ::Services::Books::Authors::RejectExternalLink.call(decision: decision, user: user)
+            entry = ::DataImporters::FinderRegistry.entry(decision.finder)
+            unless entry&.rejectable?
+              return render_problem(::Api::Problem.new(:unprocessable, detail: "Only a Wikidata or VIAF link decision can be rejected."))
+            end
+
+            result = entry.reject_service_class.call(decision: decision, user: user)
             unless result.success?
               return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.to_sentence))
             end
 
             # The service has stamped who and how; the agent's note rides after its own.
-            decision.reload.update_columns(review_note: "#{decision.review_note} \u2014 #{note}") if note
+            decision.reload.update!(review_note: "#{decision.review_note} \u2014 #{note}") if note
             rejected = result.data[:decisions]
             Rails.logger.info("event=api_admin_reject_link decision_id=#{decision.id} rejected=#{rejected.map(&:id).join(",")} " \
               "user_id=#{user.id} token_id=#{current_principal.token.id}")
@@ -105,7 +112,15 @@ module Api
 
           private
 
-          def link_finder?(decision) = ::Services::Books::Authors::RejectedRecords::FINDERS.key?(decision.finder)
+          def link_finder?(decision) = ::DataImporters::FinderRegistry.entry(decision.finder)&.rejectable?
+
+          def review_refusal(decision, verdict)
+            if decision.reviewed_at.present?
+              "Match decision #{decision.id} is already reviewed."
+            elsif verdict == "rejected" && decision.matched? && link_finder?(decision)
+              "A matched Wikidata or VIAF link cannot be rejected by review: it leaves the identifier and what it wrote in place. Use reject_match_decision_link, which removes them."
+            end
+          end
 
           def render_detail(decision)
             decision = find_decision_record(decision.id)

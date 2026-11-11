@@ -345,6 +345,26 @@ module Api
             assert_nil decision.reload.verdict
           end
 
+          test "reject_link on a decision whose author is gone is a 422 with the service's message" do
+            stub_workflow_dispatch
+            decision = link_decision
+            decision.update_columns(subject_id: 999_999_999)
+            reject_link(decision.id)
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_includes json[:detail], "The author is gone."
+            assert_nil decision.reload.verdict
+          end
+
+          test "rejecting a matched VIAF decision by review is a 422 pointing at reject_match_decision_link" do
+            decision = link_decision(finder: "Services::Books::Authors::ResolveViaf", key: "96987389")
+            review(decision.id, {verdict: "rejected"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_includes json[:detail], "reject_match_decision_link"
+            assert_nil decision.reload.reviewed_at
+          end
+
           test "reject_link of an unknown id is 404" do
             reject_link(999_999_999)
             assert_api_response_conform(status: 404, api: :admin)
