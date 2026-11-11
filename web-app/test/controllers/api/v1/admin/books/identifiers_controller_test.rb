@@ -134,6 +134,15 @@ module Api
             assert_equal [isni.identifiable_id], rows.map { |row| row[:id] }
           end
 
+          test "find still matches a stored value that is not in normal form" do
+            # 15 legacy ISBN-10 rows are stored with a lowercase check digit.
+            edition_row = add(@edition, :books_edition_isbn10, "071483355x")
+
+            get_json "/api/v1/admin/identifiers", {type: "books_edition_isbn10", value: "071483355x"}
+
+            assert_equal [edition_row.identifiable_id], rows.map { |row| row[:id] }
+          end
+
           test "find with no match is an empty list" do
             get_json "/api/v1/admin/identifiers", {type: "books_author_viaf", value: "nope"}
             assert_response :success

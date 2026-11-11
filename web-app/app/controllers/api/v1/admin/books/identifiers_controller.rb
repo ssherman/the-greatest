@@ -60,8 +60,10 @@ module Api
             raise ::Api::Page::InvalidParameter, "type is required" if type.nil?
 
             value = text_param!(:value, required: true, max_length: VALUE_LIMIT)
-            value = WRITE.normalize_value(type, value) || value
-            rows, truncated = holders(::Identifier.where(identifier_type: type, value: value))
+            # The normal form finds what an add would store; the raw value still finds
+            # older rows stored some other way (legacy ISBN-10s with a lowercase x).
+            values = [WRITE.normalize_value(type, value), value].compact.uniq
+            rows, truncated = holders(::Identifier.where(identifier_type: type, value: values))
             render json: {data: rows, truncated: truncated}
           end
 
