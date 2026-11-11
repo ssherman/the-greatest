@@ -55,7 +55,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   def execute_action
     validate_action_name!
     action_class = "Actions::Admin::#{params[:action_name]}".constantize
-    result = action_class.call(user: current_user, models: [@ranking_configuration])
+    result = action_class.call(user: current_user, models: [@ranking_configuration], fields: params.except(:controller, :action, :id, :action_name))
 
     respond_to do |format|
       format.turbo_stream do
@@ -188,7 +188,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   # validate_action_name! is inherited from Admin::BaseController; this class only
   # declares which names it accepts.
   def allowed_action_names
-    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration RegenerateCsvExport]
+    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration RegenerateCsvExport ArchiveRanking]
   end
 
   def table_partial_path

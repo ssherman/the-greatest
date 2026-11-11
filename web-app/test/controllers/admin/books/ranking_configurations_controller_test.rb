@@ -148,6 +148,56 @@ module Admin
 
         assert_redirected_to books_root_path
       end
+
+      test "ArchiveRanking archives the ranking under the typed name for an admin" do
+        RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        assert_difference -> { ::Books::RankingArchive.count }, 1 do
+          post execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRanking"),
+            params: {name: "Manual"}
+        end
+
+        assert_redirected_to admin_books_ranking_configuration_path(@rc)
+        assert_equal "Manual", ::Books::RankingArchive.order(:id).last.name
+      end
+
+      test "ArchiveRanking creates nothing for a regular user" do
+        RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+        sign_in_as(@regular_user, stub_auth: true)
+
+        assert_no_difference -> { ::Books::RankingArchive.count } do
+          post execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRanking"),
+            params: {name: "Manual"}
+        end
+      end
+
+      test "an unlisted action name is still rejected" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        assert_no_difference -> { ::Books::RankingArchive.count } do
+          post execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRankingX"),
+            params: {name: "Manual"}
+        end
+        assert_response :bad_request
+      end
+
+      test "show offers the archive form to an admin on a global books configuration" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_ranking_configuration_path(@rc)
+
+        assert_select "form[action=?]", execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRanking") do
+          assert_select "input[name=name][required]"
+        end
+      end
+
+      test "show omits the archive form for a viewer" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_ranking_configuration_path(@rc)
+
+        assert_select "form[action=?]", execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRanking"), count: 0
+      end
     end
   end
 end
