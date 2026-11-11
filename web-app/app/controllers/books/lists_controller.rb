@@ -21,4 +21,20 @@ class Books::ListsController < PublicListsController
       limit: 100
     )
   end
+
+  # 302, not 301: the id is per-database, and a browser holds a 301 forever.
+  def users_favorites
+    redirect_to books_list_path(users_favorites_list_id)
+  end
+
+  def legacy_users_favorites
+    redirect_to books_list_path(users_favorites_list_id), status: :moved_permanently
+  end
+
+  private
+
+  def users_favorites_list_id
+    Books::List.generated_user_favorites.where(status: :active).pick(:id) ||
+      raise(ActiveRecord::RecordNotFound)
+  end
 end

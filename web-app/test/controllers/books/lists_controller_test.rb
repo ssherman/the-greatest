@@ -315,5 +315,43 @@ module Books
         end
       )
     end
+
+    test "users-favorites redirects to the generated favorites list" do
+      favorites = Books::List.create!(name: "Our Users' Favorite Books of All Time", status: :active,
+        auto_generated_kind: :user_favorites)
+
+      get "/lists/users-favorites"
+
+      assert_redirected_to "/lists/#{favorites.id}"
+      assert_response :found
+    end
+
+    test "users-favorites is a 404 when the generated list does not exist yet" do
+      get "/lists/users-favorites"
+
+      assert_response :not_found
+    end
+
+    # The legacy site's three hand-maintained favorites lists (268, 463, 464)
+    # are never migrated -- the generated list supersedes them -- so their
+    # old URLs would otherwise 404 for anyone holding a bookmark or a search
+    # result.
+    test "the superseded legacy favorites list ids redirect permanently to the generated list" do
+      favorites = Books::List.create!(name: "Our Users' Favorite Books of All Time", status: :active,
+        auto_generated_kind: :user_favorites)
+
+      %w[268 463 464].each do |legacy_id|
+        get "/lists/#{legacy_id}"
+
+        assert_redirected_to "/lists/#{favorites.id}"
+        assert_response :moved_permanently
+      end
+    end
+
+    test "other list ids still reach the list page" do
+      get "/lists/#{@list.id}"
+
+      assert_response :success
+    end
   end
 end
