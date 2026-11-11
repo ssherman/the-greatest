@@ -84,7 +84,7 @@
   ```markdown
   ## Match decisions and identifiers
 
-  `list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link` and the identifier tools are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. `reject_match_decision_link` and `remove_identifier` are permanent.
+  `list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link` and the identifier tools are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. `reject_match_decision_link` and `remove_book_identifier` and `remove_author_identifier` are permanent.
   ```
 - [ ] **Step 5:** Run Task 2/3 tests + `test/lib/mcp test/controllers/api test/lib/services/books/authors` — PASS. Commit.
 

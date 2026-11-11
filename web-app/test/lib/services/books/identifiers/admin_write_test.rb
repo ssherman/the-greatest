@@ -186,6 +186,18 @@ module Services
           assert_includes AdminWrite::AUTHOR_TYPES, "books_author_viaf"
           assert(AdminWrite::AUTHOR_TYPES.all? { |type| type.start_with?("books_author_") })
         end
+
+        test "normalize_value applies add's rules and is nil for a bad value" do
+          assert_equal "Q42", AdminWrite.normalize_value("books_author_wikidata_qid", " q42 ")
+          assert_equal "9780306406157", AdminWrite.normalize_value("books_work_isbn13", "978-0-306-40615-7")
+          assert_equal "0000000121032278", AdminWrite.normalize_value("books_author_isni", "0000 0001 2103 2278")
+          assert_nil AdminWrite.normalize_value("books_author_viaf", "nope")
+        end
+
+        test "add locks the record inside the transaction" do
+          @author.expects(:lock!).returns(@author)
+          assert_added add(@author, "books_author_viaf", "123"), "123"
+        end
       end
     end
   end

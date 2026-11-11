@@ -685,7 +685,9 @@ paths:
           hyphens and spaces dropped. A 400 names
           the expected form. Adding a value the book already holds returns that row with status 200 and changes nothing.
           `also_held_by` lists any other book, edition, author or series holding the same type and value, which usually
-          means a duplicate worth a look (find_by_identifier, merge_book). remove_book_identifier undoes an add.
+          means a duplicate worth a look (find_by_identifier, merge_book). remove_book_identifier undoes an add. On a book,
+          `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore
+          it. Only an author's Wikidata and VIAF ids are authoritative.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:

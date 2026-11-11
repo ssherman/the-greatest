@@ -60,6 +60,7 @@ module Api
             raise ::Api::Page::InvalidParameter, "type is required" if type.nil?
 
             value = text_param!(:value, required: true, max_length: VALUE_LIMIT)
+            value = WRITE.normalize_value(type, value) || value
             rows, truncated = holders(::Identifier.where(identifier_type: type, value: value))
             render json: {data: rows, truncated: truncated}
           end

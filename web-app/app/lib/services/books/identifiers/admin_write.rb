@@ -42,6 +42,11 @@ module Services
           new(record).remove(identifier)
         end
 
+        # The value as add would store it, or nil when it does not normalise.
+        def self.normalize_value(type, value)
+          new(nil).send(:normalize, type.to_s, value.to_s).first
+        end
+
         def self.types_for(record)
           record.is_a?(::Books::Author) ? AUTHOR_TYPES : BOOK_TYPES
         end
@@ -59,18 +64,26 @@ module Services
           value, error = normalize(type, raw.to_s)
           return failure(:invalid, error) if error
 
-          existing = @record.identifiers.find_by(identifier_type: type, value: value)
-          return keep_or_promote(existing) if existing
+          result = nil
+          ::ActiveRecord::Base.transaction do
+            @record.lock!
+            existing = @record.identifiers.find_by(identifier_type: type, value: value)
+            if existing
+              result = keep_or_promote(existing)
+              next
+            end
 
-          refusal = author_refusal(type, value)
-          return failure(:conflict, refusal) if refusal
+            refusal = author_refusal(type, value)
+            if refusal
+              result = failure(:conflict, refusal)
+              next
+            end
 
-          identifier = ::ActiveRecord::Base.transaction do
             row = @record.identifiers.create!(identifier_type: type, value: value, source: :admin)
             rerun_enrichment(type)
-            row
+            result = added(row, created: true)
           end
-          added(identifier, created: true)
+          result
         rescue ::ActiveRecord::RecordNotUnique
           keep_or_promote(@record.identifiers.find_by!(identifier_type: type, value: value))
         end

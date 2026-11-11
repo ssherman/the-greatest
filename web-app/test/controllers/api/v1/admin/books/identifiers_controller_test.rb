@@ -115,6 +115,25 @@ module Api
             assert_equal [{record_type: "author", id: @author.id, label: @author.name, book: nil}], rows
           end
 
+          test "find normalises the value the way an add would" do
+            add(@author, :books_author_wikidata_qid, "Q42")
+
+            get_json "/api/v1/admin/identifiers", {type: "books_author_wikidata_qid", value: "q42"}
+
+            assert_equal [@author.id], rows.map { |row| row[:id] }
+          end
+
+          test "find matches a hyphenated ISBN and a spaced ISNI" do
+            edition_row = add(@edition, :books_edition_isbn13, "9780306406157")
+            isni = add(@author, :books_author_isni, "0000000121032278")
+
+            get_json "/api/v1/admin/identifiers", {type: "books_edition_isbn13", value: "978-0-306-40615-7"}
+            assert_equal [edition_row.identifiable_id], rows.map { |row| row[:id] }
+
+            get_json "/api/v1/admin/identifiers", {type: "books_author_isni", value: "0000 0001 2103 2278"}
+            assert_equal [isni.identifiable_id], rows.map { |row| row[:id] }
+          end
+
           test "find with no match is an empty list" do
             get_json "/api/v1/admin/identifiers", {type: "books_author_viaf", value: "nope"}
             assert_response :success
