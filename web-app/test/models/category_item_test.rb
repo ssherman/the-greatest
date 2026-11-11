@@ -42,6 +42,11 @@ class CategoryItemTest < ActiveSupport::TestCase
     assert_equal 4, CategoryItem.sources["worldcat"]
   end
 
+  test "ai is source value 5" do
+    assert_equal 5, CategoryItem.sources["ai"]
+    assert CategoryItem.new(source: :ai).source_ai?
+  end
+
   test "should require category" do
     category_item = CategoryItem.new(item: @dark_side_album)
     assert_not category_item.valid?

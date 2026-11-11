@@ -102,7 +102,7 @@ module Workflows
 
       assert_equal %w[completed completed], runs_of(book.authors).map(&:status)
       assert_equal %w[completed], runs_of(book).map(&:status)
-      assert_equal %w[succeeded succeeded succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
+      assert_equal %w[succeeded succeeded succeeded succeeded succeeded succeeded], runs_of(book).first.steps.order(:id).map(&:state)
       assert_equal [["Two Hands"], 1], [called(:categorize), @calls.count { |kind, _| kind == :categorize }]
       assert_operator @calls.index([:categorize, "Two Hands"]), :>, @calls.index([:book_facts, "Two Hands"])
     end

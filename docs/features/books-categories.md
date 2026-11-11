@@ -49,9 +49,18 @@ location, and not the category itself or one of its descendants.
 ## Link sources
 
 `category_items.source` records why a link exists directly: `legacy` (0, from the old site and the
-weekly sync), `admin` (1, added in the admin), `inherited` (2), `goodreads` (3) and `worldcat` (4). A row is `inherited` only because a
+weekly sync), `admin` (1, added in the admin), `inherited` (2), `goodreads` (3), `worldcat` (4) and `ai` (5, written by the
+categories judge). A row is `inherited` only because a
 descendant location is linked to the same book. A later direct link upgrades the row to its source;
 it never goes the other way.
+
+`ai` links come from `Services::Books::Categories::Apply` (see `docs/features/books_enrichment.md`, "The
+`books.categories` kind"). The judge may upgrade a held `legacy` or `inherited` link to `ai` when it picks
+the same category. A re-judge (backfill or admin run, never an import) may remove `legacy` links only: those the
+judge did not pick, that no evidence supports, of a type it resolved at least one entry for, and only after a
+confident answer backed by external evidence. Links from `admin`, `goodreads`, `worldcat`, `ai` and `inherited`,
+audience links, and Fiction and Nonfiction are never removed. `bin/rails "books:categories:restore_removals[label]"`
+puts a run's removals back as `legacy` links.
 
 `Categories::AncestorReconciler.call(item_ids: nil)` keeps inherited rows right: it adds a missing
 inherited link for every ancestor of a direct location link, deletes inherited links no direct

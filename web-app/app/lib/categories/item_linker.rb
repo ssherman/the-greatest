@@ -61,12 +61,17 @@ module Categories
       end
 
       # {ancestor category id => [direct locations beneath it]} for the item,
-      # computed once so a page of rows does not query per row.
+      # computed once so a page of rows does not query per row. Each list is in
+      # name order (id breaks ties): the category_items query has no ORDER BY,
+      # and these lists are shown to people ("comes from Chicago, Springfield"),
+      # so without the sort they came out in whatever order Postgres scanned.
       def inherited_map(item:)
         return {} unless item.is_a?(::Books::Book)
 
         direct = item.category_items.direct.includes(:category).map(&:category)
-        live = direct.select { |c| c.is_a?(::Books::Category) && c.location? && !c.deleted? }
+        live = direct
+          .select { |c| c.is_a?(::Books::Category) && c.location? && !c.deleted? }
+          .sort_by { |c| [c.name.to_s, c.id] }
         live.each_with_object({}) do |location, map|
           live_ancestors(location).each { |ancestor| (map[ancestor.id] ||= []) << location }
         end

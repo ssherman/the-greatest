@@ -62,7 +62,8 @@ module Services
           assert_equal 1000, dossier.wikipedia["lead"].length
           assert_equal "France", dossier.wikipedia["infobox_country"]
           assert_equal "French", dossier.wikipedia["infobox_language"]
-          assert_equal({"publication_places" => ["Paris"], "earliest_year" => 1850, "cataloging_languages" => ["fre"]}, dossier.worldcat)
+          assert_equal({"publication_places" => ["Paris"], "earliest_year" => 1850, "cataloging_languages" => ["fre"]},
+            dossier.worldcat.slice("publication_places", "earliest_year", "cataloging_languages"))
           assert_nil dossier.wikidata
           assert dossier.external?
         end
@@ -142,6 +143,117 @@ module Services
           ledger = Dossier.build(book: @book).to_ledger
           assert_operator ledger.dig("wikipedia", "lead").length, :<=, 500
           assert_equal @book.title, ledger.dig("record", "title")
+        end
+
+        test "wikidata carries the category lists" do
+          evidence("wikidata" => {"qid" => "Q1", "genres" => ["novel"], "main_subjects" => ["war"],
+                                  "narrative_locations" => ["Paris"], "set_in_periods" => ["1900s"], "forms" => ["prose"]})
+          wikidata = Dossier.build(book: @book).wikidata
+          assert_equal ["novel"], wikidata["genres"]
+          assert_equal ["war"], wikidata["main_subjects"]
+          assert_equal ["Paris"], wikidata["narrative_locations"]
+          assert_equal ["1900s"], wikidata["set_in_periods"]
+          assert_equal ["prose"], wikidata["forms"]
+        end
+
+        test "wikipedia carries the plot cut to 2000 and the infobox genre, subject and set_in" do
+          evidence("wikipedia" => {"title" => "T", "plot" => "p" * 2500,
+                                   "infobox" => {"genre" => "Novel", "subject" => "War", "set_in" => "Paris"}})
+          wikipedia = Dossier.build(book: @book).wikipedia
+          assert_equal 2000, wikipedia["plot"].length
+          assert_equal "Novel", wikipedia["infobox_genre"]
+          assert_equal "War", wikipedia["infobox_subject"]
+          assert_equal "Paris", wikipedia["infobox_set_in"]
+        end
+
+        test "worldcat carries mapped genres, the first 25 subject headings and the summary" do
+          subjects = (1..30).to_h { ["Heading #{it}", it] }
+          evidence("worldcat" => {"publication_places" => ["Paris"], "mapped_genres" => {"Fiction" => 3},
+                                  "subjects" => subjects, "summary" => "A summary"})
+          worldcat = Dossier.build(book: @book).worldcat
+          assert_equal({"Fiction" => 3}, worldcat["mapped_genres"])
+          assert_equal subjects.keys.first(25), worldcat["subjects"]
+          assert_equal "A summary", worldcat["summary"]
+        end
+
+        test "worldcat tolerates stored sections without the new keys" do
+          evidence("worldcat" => {"publication_places" => ["Paris"]})
+          worldcat = Dossier.build(book: @book).worldcat
+          assert_equal [], worldcat["subjects"]
+          assert_equal({}, worldcat["mapped_genres"])
+          assert_nil worldcat["summary"]
+        end
+
+        test "goodreads genres come from the latest found page, capped at 15" do
+          @book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "101")
+          @book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "102")
+          ::Books::GoodreadsPage.create!(goodreads_book_id: 101, outcome: :found, fetched_at: 2.days.ago, genres: %w[Old])
+          ::Books::GoodreadsPage.create!(goodreads_book_id: 102, outcome: :found, fetched_at: 1.day.ago,
+            genres: (1..20).map { "Genre #{it}" })
+          dossier = Dossier.build(book: @book)
+          assert_equal({"genres" => (1..15).map { "Genre #{it}" }}, dossier.goodreads)
+          assert_not dossier.external?
+        end
+
+        test "goodreads is nil without a found page" do
+          assert_nil Dossier.build(book: @book).goodreads
+          @book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "103")
+          ::Books::GoodreadsPage.create!(goodreads_book_id: 103, outcome: :blocked, fetched_at: Time.current, genres: %w[X])
+          assert_nil Dossier.build(book: @book).goodreads
+        end
+
+        test "Dossier.new works without goodreads" do
+          dossier = Dossier.new(book: @book, evidence_id: nil, record: {}, book_facts: nil, wikidata: nil, wikipedia: nil, worldcat: nil)
+          assert_nil dossier.goodreads
+        end
+
+        test "the record carries the description cut to 1000 and the direct active category links" do
+          @book.descriptions.create!(kind: "summary", locale: "en", source: "ai_generated", content: "d" * 1200)
+          country = ::Books::Category.create!(name: "Dossier Country", category_type: :location)
+          city = ::Books::Category.create!(name: "Dossier City", category_type: :location, parent: country)
+          novel = ::Books::Category.create!(name: "Dossier Novel", category_type: :genre)
+          war = ::Books::Category.create!(name: "Dossier War", category_type: :subject)
+          gone = ::Books::Category.create!(name: "Dossier Gone", category_type: :subject, deleted: true)
+          inherited = ::Books::Category.create!(name: "Dossier Inherited", category_type: :genre)
+          [[city, :admin], [novel, :admin], [war, :legacy], [gone, :admin]].each do |category, source|
+            ::CategoryItem.create!(category: category, item: @book, source: source)
+          end
+          ::CategoryItem.create!(category: inherited, item: @book, source: :inherited)
+          record = Dossier.build(book: @book).record
+          assert_equal 1000, record["description"].length
+          assert_equal [
+            {"id" => novel.id, "name" => "Dossier Novel", "type" => "genre", "source" => "admin", "ancestors" => []},
+            {"id" => city.id, "name" => "Dossier City", "type" => "location", "source" => "admin", "ancestors" => ["Dossier Country"]},
+            {"id" => war.id, "name" => "Dossier War", "type" => "subject", "source" => "legacy", "ancestors" => []}
+          ], record["categories"]
+        end
+
+        test "the record has no description when the book has none" do
+          assert_nil Dossier.build(book: @book).record["description"]
+          assert_equal [], Dossier.build(book: @book).record["categories"]
+        end
+
+        test "to_ledger adds goodreads, trims plot, subjects and a long description" do
+          evidence("wikipedia" => {"title" => "T", "plot" => "p" * 1500},
+            "worldcat" => {"subjects" => (1..30).to_h { ["H#{it}", 1] }})
+          @book.descriptions.create!(kind: "summary", locale: "en", source: "ai_generated", content: "d" * 400)
+          @book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "104")
+          ::Books::GoodreadsPage.create!(goodreads_book_id: 104, outcome: :found, fetched_at: Time.current, genres: %w[Novel])
+          ledger = Dossier.build(book: @book).to_ledger
+          assert_equal({"genres" => %w[Novel]}, ledger["goodreads"])
+          assert_equal 500, ledger.dig("wikipedia", "plot").length
+          assert_equal 15, ledger.dig("worldcat", "subjects").length
+          assert_nil ledger.dig("record", "description")
+        end
+
+        test "to_ledger trims the worldcat summary to 300 characters" do
+          evidence("worldcat" => {"subjects" => {"H" => 1}, "summary" => "s" * 900})
+          assert_equal 300, Dossier.build(book: @book).to_ledger.dig("worldcat", "summary").length
+        end
+
+        test "to_ledger keeps a short description" do
+          @book.descriptions.create!(kind: "summary", locale: "en", source: "ai_generated", content: "short")
+          assert_equal "short", Dossier.build(book: @book).to_ledger.dig("record", "description")
         end
       end
     end

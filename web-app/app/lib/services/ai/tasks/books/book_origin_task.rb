@@ -6,6 +6,8 @@ module Services
         # old site's nationality rules. The dossier is read-only context; the
         # caller (the origin service) decides what to do with the answer.
         class BookOriginTask < EnrichmentTask
+          include DossierPromptHelpers
+
           PROMPT_VERSION = 1
           WORLDCAT_PLACES = 5
 
@@ -52,12 +54,6 @@ module Services
             SYSTEM_MESSAGE
           end
 
-          def research_instruction
-            return "" unless research?
-
-            " Use web search to verify every fact before reporting it; prefer publisher, library and encyclopedia sources. Report what the sources say, not what you remember."
-          end
-
           def user_prompt
             record = dossier.record
             lines = ["Book: \"#{record["title"]}\""]
@@ -75,33 +71,6 @@ module Services
             lines.join("\n")
           end
 
-          def author_line(author)
-            name = author["name"]
-            return "Editor: #{name}" if author["role"] == "editor"
-
-            case author["kind"]
-            when "placeholder"
-              "Author: none known (catalogued as \"#{name}\", a placeholder, not a person)"
-            when "place"
-              "Author: catalogued under the place name \"#{name}\" (origin signal: #{author["place_country"]})"
-            else
-              details = [life_years(author), Array(author["countries"]).sort.join(", ").presence].compact
-              details.any? ? "Author: #{name} (#{details.join("; ")})" : "Author: #{name}"
-            end
-          end
-
-          def life_years(author)
-            birth = ::Services::Books::YearLabel.call(author["birth_year"])
-            death = ::Services::Books::YearLabel.call(author["death_year"])
-            if birth && death
-              "#{birth}–#{death}"
-            elsif birth
-              "born #{birth}"
-            elsif death
-              "died #{death}"
-            end
-          end
-
           def book_facts_lines
             facts = dossier.book_facts
             return [] if facts.blank?
@@ -114,8 +83,7 @@ module Services
             return ["Earlier AI facts: #{parts.join("; ")}"] unless dossier.research_backed?
 
             lines = ["Web-verified facts (from a web search for this book): #{parts.join("; ")}"]
-            urls = Array(facts["citations"]).filter_map { |c| c.is_a?(Hash) ? (c["url"] || c[:url]) : c }.reject(&:blank?)
-            lines << "Sources: #{urls.join(", ")}" if urls.any?
+            lines.concat(citation_lines(facts))
             lines << "Description: #{facts["description"]}" if facts["description"].present?
             lines
           end
