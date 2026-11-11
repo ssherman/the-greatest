@@ -709,6 +709,10 @@ Rails.application.routes.draw do
             get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
             get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
             get "identifiers", to: "identifiers#lookup"
+            post "books/:id/identifiers", to: "identifiers#book_create", constraints: {id: /\d+/}
+            post "authors/:id/identifiers", to: "identifiers#author_create", constraints: {id: /\d+/}
+            delete "books/:id/identifiers/:identifier_id", to: "identifiers#book_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
+            delete "authors/:id/identifiers/:identifier_id", to: "identifiers#author_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"

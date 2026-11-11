@@ -10,11 +10,11 @@ module Mcp
       assert_equal 27, entries.size
     end
 
-    test "the admin books directory is the 25 admin tools, eight destructive" do
+    test "the admin books directory is the 29 admin tools, ten destructive" do
       entries = Mcp::ToolDirectory.entries(document: :admin, domain: :books)
 
-      assert_equal 25, entries.size
-      assert_equal %w[delete_admin_category merge_author merge_book merge_categories merge_duplicate_candidate reject_match_decision_link untag_author untag_book],
+      assert_equal 29, entries.size
+      assert_equal %w[delete_admin_category merge_author merge_book merge_categories merge_duplicate_candidate reject_match_decision_link remove_author_identifier remove_book_identifier untag_author untag_book],
         entries.select(&:destructive).map(&:name).sort
     end
 

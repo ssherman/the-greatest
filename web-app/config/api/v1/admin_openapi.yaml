@@ -671,6 +671,123 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: addBookIdentifier
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add an identifier to a book
+      description: |
+        Adds a `books_work_*` identifier to the book, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); an ISBN-13 is 13 digits and an ISBN-10 9 digits and a check digit 0-9 or X, each with a valid checksum, hyphens and spaces ignored; anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the book already holds is 200 with that row, unchanged. `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+      x-mcp:
+        description: >-
+          Adds one identifier to the book `id` (`identifier_type` must be a books_work_* type, e.g. books_work_isbn13,
+          books_work_wikidata_qid, books_work_goodreads_id) and stores it with source `admin`. Values are normalised: a
+          Wikidata QID is Q and digits, ISBNs are checked against their check digit, hyphens and spaces dropped. A 400 names
+          the expected form. Adding a value the book already holds returns that row with status 200 and changes nothing.
+          `also_held_by` lists any other book, edition, author or series holding the same type and value, which usually
+          means a duplicate worth a look (find_by_identifier, merge_book). remove_book_identifier undoes an add.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookIdentifierRequest"
+      responses:
+        "200":
+          description: The book already held this identifier; nothing changed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierWrite"
+        "201":
+          description: The identifier was added.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierWrite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/identifiers/{identifier_id}:
+    x-domain: books
+    delete:
+      operationId: removeBookIdentifier
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Remove an identifier from a book (permanent)
+      description: |
+        Deletes one of the book's own identifier rows, whatever its source. An identifier id that is not this book's is 404 (an edition's identifiers belong to the edition, not the book). Rows from `open_library` and `worldcat` are verified evidence the Goodreads matcher reads. Requires `books:admin:merge`, and the token's owner must be allowed to delete the book.
+      x-mcp:
+        destructive: true
+        description: >-
+          Permanently deletes one identifier the book `id` holds itself (`identifier_id` comes from
+          get_book_identifiers rows whose `edition` is null), whatever its source, and returns the deleted row. Rows with
+          source open_library or worldcat are verified evidence the Goodreads matcher relies on, and adding the value back
+          records it as `admin`, so the original source is lost. A 404 means the identifier is not this book's own.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/identifier_id"
+      responses:
+        "200":
+          description: The identifier was deleted; the body is the row as it was.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierDeleted"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/authors/{id}/identifiers:
     x-domain: books
     get:
@@ -718,6 +835,127 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: addAuthorIdentifier
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add an identifier to an author
+      description: |
+        Adds a `books_author_*` identifier to the author, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); a VIAF id is digits; an ISNI is 16 characters of digits or X, spaces ignored; anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the author already holds is 200 with that row, unchanged. An author holds one Wikidata QID and one VIAF id: adding a different one while one is held is 422 (remove it first), and so is a value rejected as this author's record. An admin-set QID or VIAF id is authoritative: enrichment matches it without checking names or years, and adding one starts a forced enrichment re-run so the author's facts follow it. `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the author.
+      x-mcp:
+        description: >-
+          Adds one identifier to the author `id` (`identifier_type` must be a books_author_* type, e.g.
+          books_author_wikidata_qid, books_author_viaf, books_author_isni) and stores it with source `admin`. A Wikidata QID
+          or VIAF id added here is treated as certain: the author's enrichment re-runs at once and takes its facts from that
+          record without checking names or years. An author holds one QID and one VIAF id, so a different one already held
+          is a 422 that names it (remove_author_identifier first); a record rejected for this author is a 422 too. A 400
+          names the expected form. Adding a value the author already holds returns that row with status 200 and changes
+          nothing. `also_held_by` lists other records holding the same value, usually a duplicate author (merge_author).
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorIdentifierRequest"
+      responses:
+        "200":
+          description: The author already held this identifier; nothing changed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierWrite"
+        "201":
+          description: The identifier was added.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierWrite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/identifiers/{identifier_id}:
+    x-domain: books
+    delete:
+      operationId: removeAuthorIdentifier
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Remove an identifier from an author (permanent)
+      description: |
+        Deletes one of the author's identifier rows, whatever its source. An identifier id that is not this author's is 404. Removing a Wikidata QID or VIAF id starts a forced enrichment re-run. Requires `books:admin:merge`, and the token's owner must be allowed to delete the author.
+      x-mcp:
+        destructive: true
+        description: >-
+          Permanently deletes one identifier the author `id` holds (`identifier_id` from get_author_identifiers),
+          whatever its source, and returns the deleted row. Removing a Wikidata QID or VIAF id starts the author's
+          enrichment again, which may find and stamp a link afresh; to say a linked record is the wrong person, use
+          reject_match_decision_link instead, which also keeps it from coming back. Adding the value back records it as
+          `admin`, so the original source is lost. A 404 means the identifier is not this author's.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/identifier_id"
+      responses:
+        "200":
+          description: The identifier was deleted; the body is the row as it was.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentifierDeleted"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/identifiers:
     x-domain: books
     get:
@@ -725,14 +963,14 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: Find the records holding an identifier
       description: |
-        Every books record holding the identifier of `type` with `value` (the value is trimmed, matched exactly). Each row names the holder (`record_type` book, edition, author or series), its `id` and `label`, and for an edition its book. An identifier nobody holds is an empty list, not a 404. Requires `books:admin:read`.
+        Every books record holding the identifier of `type` with `value` (the value is trimmed, matched exactly). Each row names the holder (`record_type` book, edition, author or series), its `id` and `label`, and for an edition its book. An identifier nobody holds is an empty list, not a 404. At most 100 holders are listed; `truncated` is true when there are more. Requires `books:admin:read`.
       x-mcp:
         description: >-
           Looks up who holds an identifier: pass `type` (a books_* identifier type such as books_edition_isbn13 or
           books_author_wikidata_qid) and the exact `value`. Returns every holder as `record_type` (book, edition, author or
           series), `id`, `label` (title or name) and, for an edition, its `book` (id and title). Use it to find which record
           owns an ISBN or QID before attaching it elsewhere, or to spot two records sharing one. An empty list means
-          nobody holds it.
+          nobody holds it. At most 100 holders are returned; `truncated` is true when there are more.
       parameters:
         - name: type
           in: query
@@ -1482,6 +1720,14 @@ components:
       schema:
         type: integer
         minimum: 1
+    identifier_id:
+      name: identifier_id
+      in: path
+      required: true
+      description: The identifier row's integer id.
+      schema:
+        type: integer
+        minimum: 1
     category_id:
       name: category_id
       in: path
@@ -2092,12 +2338,61 @@ components:
                 title: {type: [string, "null"]}
     AdminIdentifierHolders:
       type: object
-      required: [data]
+      required: [data, truncated]
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: "#/components/schemas/IdentifierHolder"
+        truncated:
+          type: boolean
+          description: True when more than 100 records hold the identifier and only the first 100 (oldest identifier first) are listed.
+    BookIdentifierRequest:
+      type: object
+      required: [identifier_type, value]
+      properties:
+        identifier_type:
+          type: string
+          enum: [books_work_oclc_id, books_work_wikidata_qid, books_work_openlibrary_id, books_work_goodreads_id, books_work_librarything_id, books_work_isbn13, books_work_isbn10, books_work_asin, books_work_ean13, books_work_openlibrary_duplicate_id]
+        value:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: The identifier, normalised before it is stored (see the operation).
+    AuthorIdentifierRequest:
+      type: object
+      required: [identifier_type, value]
+      properties:
+        identifier_type:
+          type: string
+          enum: [books_author_viaf, books_author_isni, books_author_wikidata_qid, books_author_openlibrary_id, books_author_goodreads_id, books_author_librarything_id, books_author_lcnaf]
+        value:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: The identifier, normalised before it is stored (see the operation).
+    AdminIdentifierWrite:
+      type: object
+      required: [data, also_held_by, truncated]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminIdentifier"
+        also_held_by:
+          type: array
+          maxItems: 100
+          description: Other records holding the same identifier type and value, oldest identifier first.
+          items:
+            $ref: "#/components/schemas/IdentifierHolder"
+        truncated:
+          type: boolean
+          description: True when more than 100 other records hold it and only the first 100 are listed.
+    AdminIdentifierDeleted:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminIdentifier"
     DuplicateMergeRequest:
       type: object
       required: [target_id, source_id]

@@ -52,6 +52,31 @@ module Services
           assert client.called?(:suggest)
         end
 
+        test "a held id an admin set matches by identifier even when its years disagree" do
+          @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391", source: :admin)
+          client = FakeViafClient.new(people: {"5391" => willingham(born: "1950")})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = resolve(client)
+
+          assert_equal [:matched, "5391"], [result.data[:outcome], result.data[:person].viaf_id]
+          decision = result.data[:decision]
+          assert_equal ["identifier", "certain"], [decision.decided_by, decision.confidence]
+          assert_equal "The VIAF id an admin set, 5391.", decision.reason
+          assert_not client.called?(:suggest)
+        end
+
+        test "a held id from another source whose years disagree still falls through" do
+          @author.identifiers.create!(identifier_type: :books_author_viaf, value: "5391", source: :viaf)
+          client = FakeViafClient.new(people: {"5391" => willingham(born: "1950")})
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal "ai", result.data[:decision].decided_by
+          assert client.called?(:suggest)
+        end
+
         test "a held id VIAF no longer serves is dropped, and the search decides" do
           @author.identifiers.create!(identifier_type: :books_author_viaf, value: "404")
           client = FakeViafClient.new(
