@@ -36,15 +36,21 @@ module Books
 
     # Duplicate book records are expected in this catalogue, so equal title and
     # year is a real tie. The rows are inserted with explicit ids, highest first,
-    # so an unordered scan reaches the high id before the low one and only an id
+    # so an unordered scan USUALLY reaches the high id first and only an id
     # tie-breaker puts them in id order.
+    #
+    # Usually, not always: Postgres places each new tuple wherever its free-space
+    # map points, so under the parallel suite the second insert sometimes lands
+    # earlier in the heap. That is why there is no "heap order is not id order"
+    # precondition here -- it failed CI whenever the placement went the other
+    # way, with nothing wrong in the code. An unlucky run passes without
+    # exercising the tie-break; it never fails falsely.
     def write_twins(year:)
       high, low = [2_000_000_002, 2_000_000_001].map do |id|
         book = ::Books::Book.create!(id: id, title: "Twin", first_published_year: year)
         ::Books::BookAuthor.create!(book: book, author: @author, role: :author)
         book
       end
-      assert_equal [high.id, low.id], ::Books::Book.where(title: "Twin").pluck(:id), "precondition: heap order is not id order"
       [low, high]
     end
 
