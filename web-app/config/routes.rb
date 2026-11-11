@@ -943,6 +943,10 @@ Rails.application.routes.draw do
         member { post :execute_action }
         collection { post :index_action }
       end
+
+      # No new/create: archives are made by the monthly job and the admin
+      # "archive now" action on the ranking configuration, never by a form.
+      resources :ranking_archives, only: [:index, :show, :edit, :update, :destroy]
     end
 
     scope "(/rc/:ranking_configuration_id)" do
