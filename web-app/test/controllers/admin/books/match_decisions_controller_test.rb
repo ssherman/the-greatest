@@ -175,6 +175,39 @@ module Admin
         assert_not_nil @pending.reviewed_at
       end
 
+      test "review records that it came through the admin page" do
+        sign_in_as(@admin, stub_auth: true)
+
+        post review_admin_books_match_decision_path(@pending), params: {review_note: "ok"}
+
+        assert @pending.reload.reviewed_via_admin_ui?
+      end
+
+      test "via filters the reviewed list to decisions reviewed through that surface" do
+        sign_in_as(@admin, stub_auth: true)
+        @reviewed.update!(reviewed_via: :api)
+
+        get admin_books_match_decisions_path(reviewed: "reviewed", via: "api")
+        assert_equal [@reviewed.id], row_ids
+
+        get admin_books_match_decisions_path(reviewed: "reviewed", via: "admin_ui")
+        assert_empty row_ids
+
+        get admin_books_match_decisions_path(reviewed: "all", via: "api")
+        assert_equal [@reviewed.id], row_ids
+      end
+
+      test "via is ignored on the pending list and when invalid" do
+        sign_in_as(@admin, stub_auth: true)
+        @reviewed.update!(reviewed_via: :api)
+
+        get admin_books_match_decisions_path(via: "api")
+        assert_includes row_ids, @pending.id
+
+        get admin_books_match_decisions_path(reviewed: "reviewed", via: "bogus")
+        assert_equal [@reviewed.id], row_ids
+      end
+
       test "review of an already reviewed decision changes nothing" do
         sign_in_as(@admin, stub_auth: true)
         before = [@reviewed.reviewed_at, @reviewed.reviewed_by_id, @reviewed.review_note]
@@ -419,6 +452,7 @@ module Admin
         assert_redirected_to admin_books_match_decision_path(decision)
         assert decision.reload.verdict_rejected?
         assert_equal @admin, decision.reviewed_by
+        assert decision.reviewed_via_admin_ui?
         assert_equal [true, "reject_external_link"],
           WorkflowRun.running.find_by!(enrichable: books_authors(:tolstoy)).then { |run| [run.options["refresh"], run.initiated_by] }
       end

@@ -148,7 +148,7 @@ module Books
           # Two rows for one value: the survivor takes the more trusted source
           # (identifier provenance spec, section 1).
           if existing
-            if ::Identifier.trust_rank(identifier.source) > ::Identifier.trust_rank(existing.source)
+            if trust_rank(identifier) > trust_rank(existing)
               existing.update!(source: identifier.source)
             end
             identifier.destroy!
@@ -158,6 +158,20 @@ module Books
           end
         end
         @stats[:identifiers] = count
+      end
+
+      # Identifier.trust_rank, except that an admin-source Wikidata or VIAF row
+      # outranks every other source: an admin set it as authoritative and the
+      # resolvers treat it so, so the merge must not drop that. Other types keep
+      # the global ranking (verified open_library/worldcat rows still win).
+      ADMIN_AUTHORITATIVE_TYPES = %w[books_author_wikidata_qid books_author_viaf].freeze
+
+      def trust_rank(identifier)
+        if identifier.source.to_s == "admin" && ADMIN_AUTHORITATIVE_TYPES.include?(identifier.identifier_type.to_s)
+          return 4
+        end
+
+        ::Identifier.trust_rank(identifier.source)
       end
 
       def merge_external_links

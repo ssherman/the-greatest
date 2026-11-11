@@ -9,7 +9,8 @@ module Services
       # Wikipedia descriptions it deprecated or restored, and each year or
       # gender it wrote that still holds the value written. A value changed
       # since is a person's, and stays. Only facts marked applied are
-      # touched, and only this author's rows. Saves the author.
+      # touched, and only this author's rows. An identifier row whose source
+      # is `admin` is never deleted: an admin set it. Saves the author.
       class RevertFacts
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -64,6 +65,8 @@ module Services
 
         def destroy(scope)
           rows = scope.to_a
+          # An identifier an admin set is theirs, whatever a run once recorded.
+          rows = rows.reject { |row| row.is_a?(::Identifier) && row.source_admin? }
           rows.each(&:destroy!)
           rows.any?
         end

@@ -19,6 +19,7 @@
 #  record_type    :string
 #  review_note    :text
 #  reviewed_at    :datetime
+#  reviewed_via   :integer
 #  selected_index :integer
 #  sources_failed :string           default([]), not null, is an Array
 #  subject_type   :string

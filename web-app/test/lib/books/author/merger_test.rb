@@ -111,6 +111,42 @@ module Books
         assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_author_viaf, value: "777").pluck(:source)
       end
 
+      test "an admin Wikidata row on the source beats another source on the target" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_wikidata_qid, value: "Q9", source: :admin)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_wikidata_qid, value: "Q9", source: :wikidata)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["admin"], Identifier.where(identifiable: @target, identifier_type: :books_author_wikidata_qid, value: "Q9").pluck(:source)
+      end
+
+      test "an admin VIAF row on the source beats a verified source on the target" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_viaf, value: "888", source: :admin)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_viaf, value: "888", source: :open_library)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["admin"], Identifier.where(identifiable: @target, identifier_type: :books_author_viaf, value: "888").pluck(:source)
+      end
+
+      test "an admin row on the target is kept against a source row of another source" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_wikidata_qid, value: "Q9", source: :wikidata)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_wikidata_qid, value: "Q9", source: :admin)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["admin"], Identifier.where(identifiable: @target, identifier_type: :books_author_wikidata_qid, value: "Q9").pluck(:source)
+      end
+
+      test "outside the author link types a verified source still beats admin" do
+        Identifier.create!(identifiable: @source, identifier_type: :books_author_isni, value: "0000000121032278", source: :admin)
+        Identifier.create!(identifiable: @target, identifier_type: :books_author_isni, value: "0000000121032278", source: :open_library)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["open_library"], Identifier.where(identifiable: @target, identifier_type: :books_author_isni, value: "0000000121032278").pluck(:source)
+      end
+
       test "moves identifiers the target does not already have" do
         identifier = Identifier.create!(
           identifiable: @source, identifier_type: :books_author_viaf, value: "111"

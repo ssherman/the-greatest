@@ -702,6 +702,17 @@ Rails.application.routes.draw do
             get "duplicate_candidates/:id", to: "duplicate_candidates#show", constraints: {id: /\d+/}
             post "duplicate_candidates/:id/merge", to: "duplicate_candidates#merge", constraints: {id: /\d+/}
             post "duplicate_candidates/:id/dismiss", to: "duplicate_candidates#dismiss", constraints: {id: /\d+/}
+            get "match_decisions", to: "match_decisions#index"
+            get "match_decisions/:id", to: "match_decisions#show", constraints: {id: /\d+/}
+            post "match_decisions/:id/review", to: "match_decisions#review", constraints: {id: /\d+/}
+            post "match_decisions/:id/reject_link", to: "match_decisions#reject_link", constraints: {id: /\d+/}
+            get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
+            get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
+            get "identifiers", to: "identifiers#lookup"
+            post "books/:id/identifiers", to: "identifiers#book_create", constraints: {id: /\d+/}
+            post "authors/:id/identifiers", to: "identifiers#author_create", constraints: {id: /\d+/}
+            delete "books/:id/identifiers/:identifier_id", to: "identifiers#book_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
+            delete "authors/:id/identifiers/:identifier_id", to: "identifiers#author_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"

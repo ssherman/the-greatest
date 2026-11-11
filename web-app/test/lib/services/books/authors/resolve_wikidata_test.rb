@@ -104,6 +104,53 @@ module Services
           assert @ai_options[:candidate_lines].first.include?("year conflict")
         end
 
+        test "a held id an admin set matches by identifier even when its years disagree" do
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :admin)
+          client = FakeWikidataClient.new(entities: {"Q7243" => wikidata_entity("Q7243", label: "Someone Else", born: 1650)})
+          Services::Ai::Tasks::Matching::SelectExternalRecordTask.expects(:new).never
+
+          result = resolve(client)
+
+          assert_equal [:matched, "Q7243"], [result.data[:outcome], result.data[:entity].id]
+          decision = result.data[:decision]
+          assert_equal ["identifier", "certain"], [decision.decided_by, decision.confidence]
+          assert_equal "The Wikidata id an admin set, Q7243.", decision.reason
+          assert_not client.called?(:search)
+        end
+
+        test "an admin-set held id Wikidata has merged matches the surviving item" do
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q999", source: :admin)
+          client = FakeWikidataClient.new(entities: {"Q999" => wikidata_entity("Q7243", label: "Someone Else", born: 1650)})
+
+          result = resolve(client)
+
+          assert_equal [:matched, "Q7243", "identifier"], [result.data[:outcome], result.data[:entity].id, result.data[:decision].decided_by]
+          assert_equal ["Q999"], result.data[:redirected_ids]
+        end
+
+        test "an admin-set held id wins over another held id that is corroborated" do
+          hold(:books_author_wikidata_qid, "Q1")
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :admin)
+          client = FakeWikidataClient.new(entities: {
+            "Q1" => wikidata_entity("Q1", **TOLSTOY),
+            "Q7243" => wikidata_entity("Q7243", label: "Someone Else", born: 1650)
+          })
+
+          result = resolve(client)
+
+          assert_equal "Q7243", result.data[:entity].id
+        end
+
+        test "a held id from another source whose years disagree still falls through" do
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :wikidata)
+          client = FakeWikidataClient.new(entities: {"Q7243" => wikidata_entity("Q7243", label: "Leo Tolstoy", born: 1650)})
+          ai_selects(0)
+
+          result = resolve(client)
+
+          assert_equal "ai", result.data[:decision].decided_by
+        end
+
         test "one person reached through the author's other ids matches by identifier" do
           hold(:books_author_openlibrary_id, "OL26783A")
           client = FakeWikidataClient.new(

@@ -54,7 +54,7 @@ module Api
       end
 
       def sample_url(path)
-        filled = path.gsub(/\{(id|list_id|category_id)\}/, "1").gsub(/\{[^}]+\}/, "x")
+        filled = path.gsub(/\{(id|list_id|category_id|identifier_id)\}/, "1").gsub(/\{[^}]+\}/, "x")
         "#{HOST_URL}#{filled}"
       end
     end

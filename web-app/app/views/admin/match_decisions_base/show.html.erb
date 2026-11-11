@@ -76,7 +76,7 @@
           <dt class="font-semibold">Review</dt>
           <dd>
             <% if @decision.reviewed_at %>
-              reviewed <%= @decision.reviewed_at.strftime("%Y-%m-%d") %><%= " by #{@decision.reviewed_by.email}" if @decision.reviewed_by %>
+              reviewed <%= @decision.reviewed_at.strftime("%Y-%m-%d") %><%= " by #{@decision.reviewed_by.email}" if @decision.reviewed_by %><%= @decision.reviewed_via_api? ? " via API" : (@decision.reviewed_via_admin_ui? ? " via admin page" : "") %>
               <% if @decision.review_note.present? %><p class="[overflow-wrap:anywhere]"><%= @decision.review_note %></p><% end %>
             <% elsif @decision.needs_review? %>
               <span class="badge badge-warning badge-sm">needs review</span>
