@@ -666,3 +666,20 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
    one start every 8 seconds. To see the counts first, `bin/rails wikidata:recheck` is a dry run;
    `APPLY=1` queues the work. It selects no book while their evidence rows list `worldcat` in
    `sources_failed` (until WorldCat is reachable from production), because those books are left to a normal re-gather.
+
+## 16. Ranking archives (the migration once; the monthly job needs nothing)
+
+Frozen copies of the books ranking, shown at `/rankings/archive`. The monthly job is scheduled and
+needs no action; the one manual step is copying the 43 archived legacy rankings in. Details:
+`docs/features/ranking-archives.md`.
+
+Steps marked "Shane runs with `!`" change production, so an agent does not run them.
+
+1. **After deploy, check the first automatic archive.** The next 05:15 UTC run creates an archive named
+   for the month it is deployed in. Check `/admin/ranking_archives`. If it should not be public, hide it;
+   do not delete it, because the next run would create it again.
+2. **Copy the legacy archives. Shane runs with `!`.** In production,
+   `bin/rails data_migration:ranking_archives`. Expect `unknown: 0` and `count: 43`. If it aborts with
+   unknown ids, the books sync is behind legacy: run `data_migration:sync` and retry.
+3. **Re-running it at cutover is harmless.** It reports `count: 0`.
+4. **Spot-check.** Open `/rankings/archive` and one old archive.

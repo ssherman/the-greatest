@@ -4,6 +4,8 @@
 
 The Item Rankings feature calculates aggregate rankings across all media types (albums, books, movies, games, songs) using the `weighted_list_rank` gem. This feature allows users to see master rankings that combine multiple curated lists with weighted scoring.
 
+Frozen monthly copies of the books ranking are described in `docs/features/ranking-archives.md`.
+
 ## Architecture
 
 The system uses a service object pattern with type-specific calculators:

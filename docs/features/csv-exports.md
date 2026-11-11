@@ -14,6 +14,7 @@ saved-search page and on every user-list page. It exports what is on screen, fil
 | Filtered ranking | on demand, full | on demand, top 500 | sign-in modal |
 | Saved search | on demand, up to 10,000 (OpenSearch's window) | on demand, top 500 | sign-in modal |
 | User list | on demand, full | same | unchanged: public lists download for anyone |
+| Archived ranking | on demand, full | on demand, top 500 | sign-in modal |
 
 `MembershipGate::FEATURES[:csv_export_full]` is the paywall entry; the gate is a cap
 (`CsvExports::Limits.limit_for`, 500 rows), never a redirect. A ranking export contains only ranked
@@ -32,7 +33,8 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
   type — seven in the current production restore, unpublished ones included since `/rc/:id` serves
   them — to pick up title, author, category and country edits that no calculation would notice.
   There is no TTL.
-- **Everything else** is generated on demand by the same code and never stored. The full books
+- **Everything else** is generated on demand by the same code and never stored. Past-ranking archive
+  exports (`docs/features/ranking-archives.md`) are generated on demand from `CsvExports::ArchivedRanking`. The full books
   export (21,392 rows, 6.3 MB) builds in 2.5–5 s on the dev DB: rows are batched 1000 at a time with one grouped
   `string_agg` query per many-to-many column, instead of preloading ~150k join rows (which took 10 s).
 - No CSV is ever a format of an edge-cached `index` action. Every export is its own `export` action
