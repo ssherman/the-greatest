@@ -676,12 +676,13 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Add an identifier to a book
       description: |
-        Adds a `books_work_*` identifier to the book, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); an ISBN-13 is 13 digits and an ISBN-10 9 digits and a check digit 0-9 or X, each with a valid checksum, hyphens and spaces ignored; anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the book already holds is 200 with that row, unchanged. `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+        Adds a `books_work_*` identifier to the book, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); an ISBN-13 is 13 digits and an ISBN-10 9 digits and a check digit 0-9 or X, each with a valid checksum, hyphens and spaces ignored; an Open Library work id is `OL`, digits and `W` (upcased); anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the book already holds is 200 with that row, unchanged (`promoted` is always false). `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the book.
       x-mcp:
         description: >-
           Adds one identifier to the book `id` (`identifier_type` must be a books_work_* type, e.g. books_work_isbn13,
           books_work_wikidata_qid, books_work_goodreads_id) and stores it with source `admin`. Values are normalised: a
-          Wikidata QID is Q and digits, ISBNs are checked against their check digit, hyphens and spaces dropped. A 400 names
+          Wikidata QID is Q and digits, an Open Library id OL, digits and W, ISBNs are checked against their check digit,
+          hyphens and spaces dropped. A 400 names
           the expected form. Adding a value the book already holds returns that row with status 200 and changes nothing.
           `also_held_by` lists any other book, edition, author or series holding the same type and value, which usually
           means a duplicate worth a look (find_by_identifier, merge_book). remove_book_identifier undoes an add.
@@ -840,7 +841,7 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Add an identifier to an author
       description: |
-        Adds a `books_author_*` identifier to the author, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); a VIAF id is digits; an ISNI is 16 characters of digits or X, spaces ignored; anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the author already holds is 200 with that row, unchanged. An author holds one Wikidata QID and one VIAF id: adding a different one while one is held is 422 (remove it first), and so is a value rejected as this author's record. An admin-set QID or VIAF id is authoritative: enrichment matches it without checking names or years, and adding one starts a forced enrichment re-run so the author's facts follow it. `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the author.
+        Adds a `books_author_*` identifier to the author, stored with source `admin`. The value is normalised and checked: a Wikidata QID is `Q` and digits (upcased); a VIAF id is digits; an Open Library author id is `OL`, digits and `A` (upcased); an ISNI is 16 characters of digits or X, spaces ignored; anything else is trimmed, non-blank and at most 255 characters. A type for another record kind or a bad value is 400, naming the expected form. A value the author already holds is 200 with that row. When that row is a Wikidata QID or VIAF id from another source, the add makes it admin-set (`promoted: true`) and starts the enrichment re-run; any other row already held is unchanged. An author holds one Wikidata QID and one VIAF id: adding a different one while one is held is 422 (remove it first), and so is a value rejected as this author's record. An admin-set QID or VIAF id is authoritative: enrichment matches it without checking names or years, and adding one starts a forced enrichment re-run so the author's facts follow it. `also_held_by` lists other records holding the same type and value (at most 100; `truncated` says more exist). Requires `books:admin:write`, and the token's owner must be allowed to change the author.
       x-mcp:
         description: >-
           Adds one identifier to the author `id` (`identifier_type` must be a books_author_* type, e.g.
@@ -848,8 +849,9 @@ paths:
           or VIAF id added here is treated as certain: the author's enrichment re-runs at once and takes its facts from that
           record without checking names or years. An author holds one QID and one VIAF id, so a different one already held
           is a 422 that names it (remove_author_identifier first); a record rejected for this author is a 422 too. A 400
-          names the expected form. Adding a value the author already holds returns that row with status 200 and changes
-          nothing. `also_held_by` lists other records holding the same value, usually a duplicate author (merge_author).
+          names the expected form. Adding a value the author already holds returns that row with status 200; for a QID or
+          VIAF id that enrichment found itself, this marks it admin-set (`promoted: true`) and re-runs enrichment, so add a
+          held id to make it certain. Anything else already held is unchanged. `also_held_by` lists other records holding the same value, usually a duplicate author (merge_author).
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:
@@ -2374,10 +2376,13 @@ components:
           description: The identifier, normalised before it is stored (see the operation).
     AdminIdentifierWrite:
       type: object
-      required: [data, also_held_by, truncated]
+      required: [data, promoted, also_held_by, truncated]
       properties:
         data:
           $ref: "#/components/schemas/AdminIdentifier"
+        promoted:
+          type: boolean
+          description: True when the author already held this Wikidata QID or VIAF id from another source and the add made it admin-set (authoritative) and started an enrichment re-run. Always false for a new row and for book identifiers.
         also_held_by:
           type: array
           maxItems: 100

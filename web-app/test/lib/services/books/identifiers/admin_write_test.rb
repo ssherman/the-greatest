@@ -85,6 +85,43 @@ module Services
           assert_nil existing.reload.source
         end
 
+        test "Open Library ids are upcased and must be OL, digits and W for a work or A for an author" do
+          assert_added add(@book, "books_work_openlibrary_id", " ol262758w "), "OL262758W"
+          assert_added add(@author, "books_author_openlibrary_id", "ol26783a"), "OL26783A"
+          assert_refused add(@book, "books_work_openlibrary_id", "OL26783A"), :invalid, /OL, digits and W/
+          assert_refused add(@book, "books_work_openlibrary_id", "/works/OL1W"), :invalid, /OL, digits and W/
+          assert_refused add(@author, "books_author_openlibrary_id", "OL1W"), :invalid, /OL, digits and A/
+        end
+
+        test "adding a QID or VIAF id the author holds from another source promotes it to admin and re-runs" do
+          qid = @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :wikidata)
+          viaf = @author.identifiers.create!(identifier_type: :books_author_viaf, value: "96987389")
+          ::Workflows::Books::AuthorEnrichment.expects(:start)
+            .with(@author, initiated_by: "admin_identifier", options: {refresh: true}, supersede: true).twice
+
+          [[qid, "q7243", "books_author_wikidata_qid"], [viaf, "96987389", "books_author_viaf"]].each do |row, value, type|
+            result = add(@author, type, value)
+
+            assert result.success?
+            assert_equal [row.id, false, true], [result.data[:identifier].id, result.data[:created], result.data[:promoted]]
+            assert row.reload.source_admin?
+          end
+        end
+
+        test "an admin row, another author identifier or a book identifier already held is a pure no-op" do
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :admin)
+          isni = @author.identifiers.create!(identifier_type: :books_author_isni, value: "0000000120960218", source: :viaf)
+          @book.identifiers.create!(identifier_type: :books_work_wikidata_qid, value: "Q161531", source: :wikidata)
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
+
+          results = [add(@author, "books_author_wikidata_qid", "Q7243"), add(@author, "books_author_isni", "0000000120960218"),
+            add(@book, "books_work_wikidata_qid", "Q161531")]
+
+          assert_equal [[false, false]] * 3, results.map { |result| [result.data[:created], result.data[:promoted]] }
+          assert_equal "viaf", isni.reload.source
+          assert_equal "wikidata", @book.identifiers.find_by(value: "Q161531").source
+        end
+
         test "an author already holding a different QID is refused until it is removed" do
           @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q1", source: :wikidata)
 
@@ -114,7 +151,7 @@ module Services
         end
 
         test "other author identifiers, book identifiers and an unchanged add start nothing" do
-          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243")
+          @author.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :admin)
           ::Workflows::Books::AuthorEnrichment.expects(:start).never
 
           add(@author, "books_author_isni", "0000000120960218")

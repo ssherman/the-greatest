@@ -85,10 +85,11 @@ module Api
             return refuse(result) unless result.success?
 
             identifier = result.data[:identifier]
-            log_change("add", identifier) if result.data[:created]
+            log_change("add", identifier, created: result.data[:created], promoted: result.data[:promoted])
             others, truncated = holders(::Identifier.where(identifier_type: identifier.identifier_type, value: identifier.value)
               .where.not(id: identifier.id))
-            render json: {data: IdentifierResource.new(identifier).to_h, also_held_by: others, truncated: truncated},
+            render json: {data: IdentifierResource.new(identifier).to_h, promoted: result.data[:promoted],
+                          also_held_by: others, truncated: truncated},
               status: result.data[:created] ? :created : :ok
           end
 
@@ -130,8 +131,9 @@ module Api
 
           def noun(model) = model.name.demodulize.downcase
 
-          def log_change(action, identifier)
-            Rails.logger.info("event=api_admin_identifier action=#{action} token_id=#{current_principal.token.id} " \
+          def log_change(action, identifier, **flags)
+            outcome = flags.map { |key, flag| " #{key}=#{flag}" }.join
+            Rails.logger.info("event=api_admin_identifier action=#{action}#{outcome} token_id=#{current_principal.token.id} " \
               "token_kind=#{current_principal.token_kind} user_id=#{current_principal.user.id} " \
               "record_type=#{identifier.identifiable_type} record_id=#{identifier.identifiable_id} " \
               "identifier_id=#{identifier.id} identifier_type=#{identifier.identifier_type} value=#{identifier.value.inspect}")

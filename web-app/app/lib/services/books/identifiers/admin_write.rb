@@ -11,7 +11,9 @@ module Services
       # holds one Wikidata id and one VIAF id at a time (remove the old one
       # first), and never one a person rejected for that author. Adding or
       # removing either starts a forced enrichment re-run, so the author's
-      # facts follow the link. Book identifiers trigger nothing.
+      # facts follow the link. Adding a Wikidata/VIAF id the author already
+      # holds from another source promotes that row to `admin` (and re-runs),
+      # so it becomes authoritative. Book identifiers trigger nothing.
       #
       # Failures carry data[:code]: :invalid (bad type or value) or
       # :conflict (the author's state refuses it).
@@ -28,6 +30,8 @@ module Services
         # Held one at a time by an author; adding or removing one re-runs enrichment.
         AUTHOR_LINK_TYPES = %w[books_author_wikidata_qid books_author_viaf].freeze
         WIKIDATA_TYPES = %w[books_work_wikidata_qid books_author_wikidata_qid].freeze
+        # Bare Open Library keys as the importers store them ("OL20600W").
+        OPEN_LIBRARY_SUFFIXES = {"books_work_openlibrary_id" => "W", "books_author_openlibrary_id" => "A"}.freeze
         INITIATED_BY = "admin_identifier"
 
         def self.add(record:, identifier_type:, value:)
@@ -56,7 +60,7 @@ module Services
           return failure(:invalid, error) if error
 
           existing = @record.identifiers.find_by(identifier_type: type, value: value)
-          return success(existing, created: false) if existing
+          return keep_or_promote(existing) if existing
 
           refusal = author_refusal(type, value)
           return failure(:conflict, refusal) if refusal
@@ -66,9 +70,9 @@ module Services
             rerun_enrichment(type)
             row
           end
-          success(identifier, created: true)
+          added(identifier, created: true)
         rescue ::ActiveRecord::RecordNotUnique
-          success(@record.identifiers.find_by!(identifier_type: type, value: value), created: false)
+          keep_or_promote(@record.identifiers.find_by!(identifier_type: type, value: value))
         end
 
         def remove(identifier)
@@ -76,10 +80,25 @@ module Services
             identifier.destroy!
             rerun_enrichment(identifier.identifier_type)
           end
-          success(identifier)
+          Result.new(success?: true, data: {identifier: identifier}, errors: [])
         end
 
         private
+
+        # An author's Wikidata/VIAF row from another source becomes `admin`,
+        # so the resolvers treat it as authoritative, and enrichment re-runs.
+        # Anything else already held is left as it is.
+        def keep_or_promote(existing)
+          return added(existing, created: false) if existing.source_admin? || !author_link?(existing.identifier_type)
+
+          ::ActiveRecord::Base.transaction do
+            existing.update!(source: :admin)
+            rerun_enrichment(existing.identifier_type)
+          end
+          added(existing, created: false, promoted: true)
+        end
+
+        def author_link?(type) = @record.is_a?(::Books::Author) && AUTHOR_LINK_TYPES.include?(type)
 
         # [value, nil] or [nil, error].
         def normalize(type, raw)
@@ -95,6 +114,11 @@ module Services
             isbn(raw, /\A\d{13}\z/, :isbn13, "#{type} must be 13 digits with a valid ISBN-13 check digit (hyphens and spaces are ignored)")
           elsif type.end_with?("_isbn10")
             isbn(raw, /\A\d{9}[\dX]\z/, :isbn10, "#{type} must be 9 digits and a check digit 0-9 or X, a valid ISBN-10 (hyphens and spaces are ignored)")
+          elsif OPEN_LIBRARY_SUFFIXES.key?(type)
+            suffix = OPEN_LIBRARY_SUFFIXES.fetch(type)
+            value = raw.strip.upcase
+            return [nil, "#{type} must be OL, digits and #{suffix}, e.g. OL26783#{suffix}"] unless value.match?(/\AOL\d+#{suffix}\z/)
+            [value, nil]
           elsif type == "books_author_isni"
             value = raw.delete(" \t").upcase
             return [nil, "#{type} must be 16 characters, digits or X (spaces are ignored)"] unless value.match?(/\A[0-9X]{16}\z/)
@@ -115,7 +139,7 @@ module Services
         end
 
         def author_refusal(type, value)
-          return nil unless @record.is_a?(::Books::Author) && AUTHOR_LINK_TYPES.include?(type)
+          return nil unless author_link?(type)
 
           if ::Services::Books::Authors::RejectedRecords.new(@record).identifier?(type, value)
             return "#{value} was rejected as this author's record and cannot be added back"
@@ -126,15 +150,13 @@ module Services
         end
 
         def rerun_enrichment(type)
-          return unless @record.is_a?(::Books::Author) && AUTHOR_LINK_TYPES.include?(type)
+          return unless author_link?(type)
 
           ::Workflows::Books::AuthorEnrichment.start(@record, initiated_by: INITIATED_BY, options: {refresh: true}, supersede: true)
         end
 
-        def success(identifier, created: nil)
-          data = {identifier: identifier}
-          data[:created] = created unless created.nil?
-          Result.new(success?: true, data: data, errors: [])
+        def added(identifier, created:, promoted: false)
+          Result.new(success?: true, data: {identifier: identifier, created: created, promoted: promoted}, errors: [])
         end
 
         def failure(code, message)

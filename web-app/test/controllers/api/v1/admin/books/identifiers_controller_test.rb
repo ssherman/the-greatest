@@ -221,6 +221,50 @@ module Api
             assert_equal "Q7243", json[:data][:value]
           end
 
+          test "adding a QID the author holds from enrichment is 200, promoted to admin, and re-runs enrichment" do
+            row = add(@author, :books_author_wikidata_qid, "Q7243", source: :wikidata)
+            ::Workflows::Books::AuthorEnrichment.expects(:start)
+              .with(@author, initiated_by: "admin_identifier", options: {refresh: true}, supersede: true).once
+
+            post_identifier "/api/v1/admin/authors/#{@author.id}/identifiers", {identifier_type: "books_author_wikidata_qid", value: "Q7243"}
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [row.id, "admin", true], [json[:data][:id], json[:data][:source], json[:promoted]]
+            assert row.reload.source_admin?
+          end
+
+          test "adding a value already held as admin is 200 and not promoted" do
+            add(@author, :books_author_wikidata_qid, "Q7243", source: :admin)
+            ::Workflows::Books::AuthorEnrichment.expects(:start).never
+
+            post_identifier "/api/v1/admin/authors/#{@author.id}/identifiers", {identifier_type: "books_author_wikidata_qid", value: "Q7243"}
+            assert_response :ok
+            assert_equal false, json[:promoted]
+          end
+
+          # AuthorPolicy, because the token's scope eligibility is judged by BookPolicy.
+          test "an owner the policy may not let change the author is refused and nothing is added" do
+            ::Books::AuthorPolicy.any_instance.stubs(:update?).returns(false)
+            ::Workflows::Books::AuthorEnrichment.expects(:start).never
+
+            assert_no_difference -> { Identifier.count } do
+              post_identifier "/api/v1/admin/authors/#{@author.id}/identifiers", {identifier_type: "books_author_viaf", value: "96987389"}
+            end
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+          end
+
+          test "a merge-scoped owner the policy may not let delete the author is refused and the row stays" do
+            row = add(@author, :books_author_viaf, "96987389", source: :viaf)
+            ::Books::AuthorPolicy.any_instance.stubs(:destroy?).returns(false)
+            ::Workflows::Books::AuthorEnrichment.expects(:start).never
+
+            delete_identifier "/api/v1/admin/authors/#{@author.id}/identifiers/#{row.id}"
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+            assert Identifier.exists?(row.id)
+          end
+
           test "a bad type or value is a 400 naming the expected form" do
             post_identifier "/api/v1/admin/books/#{@book.id}/identifiers", {identifier_type: "books_author_viaf", value: "1"}
             assert_api_response_conform(status: 400, api: :admin)
