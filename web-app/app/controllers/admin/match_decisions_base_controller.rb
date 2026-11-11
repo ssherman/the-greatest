@@ -16,12 +16,12 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   # A reject removes what a link wrote, so it takes the merge action's gate.
   before_action :require_domain_delete!, only: [:reject]
 
-  OUTCOMES = ::MatchDecision.outcomes.keys.freeze
-  CONFIDENCES = ::MatchDecision.confidences.keys.freeze
-  DECIDED_BY = ::MatchDecision.defined_enums.fetch("decided_by").keys.freeze
+  OUTCOMES = Services::MatchDecisions::Filter::OUTCOMES
+  CONFIDENCES = Services::MatchDecisions::Filter::CONFIDENCES
+  DECIDED_BY = Services::MatchDecisions::Filter::DECIDED_BY
   VIAS = ::MatchDecision.reviewed_via.keys.freeze
-  REVIEWED = %w[pending reviewed all].freeze
-  VERIFY = %w[hide include].freeze
+  REVIEWED = Services::MatchDecisions::Filter::REVIEWED
+  VERIFY = Services::MatchDecisions::Filter::VERIFY
   FILTER_KEYS = %w[entity outcome confidence decided_by reviewed verify via].freeze
   PER_PAGE = 50
 
@@ -117,26 +117,8 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
   end
 
   def filtered_scope
-    scope = domain_scope
-    # The full registry, not the domain-scoped `entries`: an entity label that
-    # belongs to another domain (params[:entity] == "album" on a books
-    # controller) must still resolve to a real entry so the finder filter
-    # below intersects with domain_scope's own finder list and returns
-    # nothing -- as opposed to an entity that matches no label anywhere
-    # ("cheese"), which is ignored rather than filtered.
-    entity = DataImporters::FinderRegistry::ENTRIES.find { |entry| entry.label.parameterize == params[:entity].to_s }
-    scope = scope.where(finder: entity.finder) if entity
-    scope = scope.where(outcome: params[:outcome]) if OUTCOMES.include?(params[:outcome])
-    scope = scope.where(confidence: params[:confidence]) if CONFIDENCES.include?(params[:confidence])
-    scope = scope.where(decided_by: params[:decided_by]) if DECIDED_BY.include?(params[:decided_by])
-    scope = case @reviewed
-    when "pending" then scope.needing_review
-    when "reviewed" then scope.where.not(reviewed_at: nil)
-    else scope
-    end
-    scope = scope.where(verify: false) if @verify == "hide"
-    scope = scope.where(reviewed_via: @via) if @via
-    scope
+    scope = Services::MatchDecisions::Filter.call(domain_scope, params)
+    @via ? scope.where(reviewed_via: @via) : scope
   end
 
   def set_decision

@@ -11,14 +11,14 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 18, expected.size
+      assert_equal 20, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
     test "the admin tools have the expected names" do
       expected = %w[search_admin_books search_admin_authors search_admin_categories create_admin_category
         get_admin_category update_admin_category delete_admin_category merge_categories merge_book
-        merge_author tag_book untag_book tag_author untag_author list_duplicate_candidates get_duplicate_candidate
+        merge_author tag_book untag_book tag_author untag_author list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision
         merge_duplicate_candidate dismiss_duplicate_candidate]
 
       assert_equal expected.sort, catalog.operations.map(&:tool_name).sort
