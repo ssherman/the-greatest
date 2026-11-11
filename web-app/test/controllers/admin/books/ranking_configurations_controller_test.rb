@@ -162,8 +162,9 @@ module Admin
         assert_equal "Manual", ::Books::RankingArchive.order(:id).last.name
       end
 
-      test "ArchiveRanking creates nothing for a regular user" do
+      test "ArchiveRanking creates nothing for a books viewer" do
         RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
         sign_in_as(@regular_user, stub_auth: true)
 
         assert_no_difference -> { ::Books::RankingArchive.count } do
@@ -196,6 +197,7 @@ module Admin
         sign_in_as(@regular_user, stub_auth: true)
         get admin_books_ranking_configuration_path(@rc)
 
+        assert_response :success
         assert_select "form[action=?]", execute_action_admin_books_ranking_configuration_path(@rc, action_name: "ArchiveRanking"), count: 0
       end
     end

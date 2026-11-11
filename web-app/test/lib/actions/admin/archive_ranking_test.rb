@@ -38,6 +38,14 @@ module Actions
         end
       end
 
+      test "a 300-character name is an error and archives nothing" do
+        assert_no_difference -> { ::Books::RankingArchive.count } do
+          result = ArchiveRanking.call(user: @user, models: [@config], fields: {name: "a" * 300})
+          assert_not result.success?
+          assert_not_empty result.message
+        end
+      end
+
       test "a missing name is an error" do
         assert_no_difference -> { ::Books::RankingArchive.count } do
           assert_not ArchiveRanking.call(user: @user, models: [@config]).success?

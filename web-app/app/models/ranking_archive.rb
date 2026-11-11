@@ -48,7 +48,7 @@ class RankingArchive < ApplicationRecord
   before_validation :set_items_count, on: :create
   before_validation :set_slug, on: :create
 
-  validates :name, presence: true
+  validates :name, presence: true, length: {maximum: 255}
   validates :slug, presence: true, format: {with: SLUG_FORMAT}, uniqueness: {scope: :type}
   validates :captured_at, presence: true
   validates :item_ids, presence: true

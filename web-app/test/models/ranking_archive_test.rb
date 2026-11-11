@@ -38,6 +38,14 @@ class RankingArchiveTest < ActiveSupport::TestCase
     Books::RankingArchive.new({name: "Test Archive", captured_at: Time.current, item_ids: [1, 2], positions: [1, 2], scores: [10, 9]}.merge(attrs))
   end
 
+  test "a name of 256 characters is invalid and 255 is valid" do
+    assert build_archive(name: "a" * 255).valid?
+
+    archive = build_archive(name: "a" * 256)
+    assert_not archive.valid?
+    assert archive.errors.of_kind?(:name, :too_long)
+  end
+
   test "arrays cannot change after creation" do
     archive = ranking_archives(:books_january_2027)
     before = archive.item_ids.dup
