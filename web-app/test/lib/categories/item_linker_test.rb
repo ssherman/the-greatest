@@ -118,9 +118,11 @@ module Categories
       assert CategoryItem.exists?(item: @book, category: @us)
     end
 
+    # Linked out of name order on purpose: the locations are named in name
+    # order, not in whatever order the unordered category_items scan returns.
     test "unlink names both direct locations sharing the ancestor" do
-      ItemLinker.link(item: @book, category: @chicago)
       ItemLinker.link(item: @book, category: @springfield)
+      ItemLinker.link(item: @book, category: @chicago)
 
       result = ItemLinker.unlink(item: @book, category: @il)
 
