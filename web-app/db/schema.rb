@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_045117) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_053410) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1454,6 +1454,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_045117) do
     t.index ["ranking_configuration_id"], name: "index_ranked_lists_on_ranking_configuration_id"
   end
 
+  create_table "ranking_archives", force: :cascade do |t|
+    t.string "type", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.bigint "item_ids", default: [], null: false, array: true
+    t.integer "positions", default: [], null: false, array: true
+    t.decimal "scores", precision: 10, scale: 2, default: [], null: false, array: true
+    t.integer "items_count", default: 0, null: false
+    t.datetime "captured_at", null: false
+    t.date "period"
+    t.bigint "ranking_configuration_id"
+    t.integer "legacy_ranking_configuration_id"
+    t.boolean "hidden", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["legacy_ranking_configuration_id"], name: "index_ranking_archives_on_legacy_config", unique: true, where: "(legacy_ranking_configuration_id IS NOT NULL)"
+    t.index ["ranking_configuration_id", "period"], name: "index_ranking_archives_on_config_and_period", unique: true, where: "(period IS NOT NULL)"
+    t.index ["ranking_configuration_id"], name: "index_ranking_archives_on_ranking_configuration_id"
+    t.index ["type", "hidden", "captured_at"], name: "index_ranking_archives_on_type_and_hidden_and_captured_at"
+    t.index ["type", "slug"], name: "index_ranking_archives_on_type_and_slug", unique: true
+  end
+
   create_table "ranking_configurations", force: :cascade do |t|
     t.string "type", null: false
     t.string "name", null: false
@@ -1852,6 +1875,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_045117) do
   add_foreign_key "penalty_applications", "ranking_configurations"
   add_foreign_key "ranked_items", "ranking_configurations"
   add_foreign_key "ranked_lists", "ranking_configurations"
+  add_foreign_key "ranking_archives", "ranking_configurations", on_delete: :nullify
   add_foreign_key "ranking_configurations", "lists", column: "primary_mapped_list_id"
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"

@@ -59,5 +59,7 @@ module Books
     def supports_year_rollups? = true
 
     def generated_list_class = ::Books::List
+
+    def ranking_archive_class = ::Books::RankingArchive
   end
 end

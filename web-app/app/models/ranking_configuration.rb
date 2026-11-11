@@ -81,6 +81,8 @@ class RankingConfiguration < ApplicationRecord
   # ~21k ranked_items -- one DELETE beats one DELETE per row.
   has_many :ranked_items, dependent: :delete_all
   has_many :ranked_lists, dependent: :delete_all
+  # An archive outlives the configuration it was captured from (FK is ON DELETE SET NULL).
+  has_many :ranking_archives, dependent: :nullify
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
   has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
   has_one :csv_export, dependent: :destroy
@@ -147,6 +149,12 @@ class RankingConfiguration < ApplicationRecord
   # The List subclass this configuration's generated year rollups belong to.
   def generated_list_class
     raise NotImplementedError, "#{self.class.name} must define #generated_list_class"
+  end
+
+  # The RankingArchive subclass that stores frozen copies of this configuration's
+  # ranking, or nil where the domain has no archives.
+  def ranking_archive_class
+    nil
   end
 
   # Display noun for generated list names: "The 100 Greatest Books of 2025".
