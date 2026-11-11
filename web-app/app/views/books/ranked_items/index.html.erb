@@ -46,6 +46,11 @@
     <p class="text-center text-sm text-base-content/70">
       Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
     </p>
+    <% if params[:ranking_configuration_id].blank? %>
+      <p class="text-center text-sm">
+        <%= link_to "Past rankings", books_ranking_archives_path, class: "link" %>
+      </p>
+    <% end %>
   <% else %>
     <div class="text-center py-16">
       <%= image_tag "/icons/books/logo.svg", width: 64, height: 64, alt: "", class: "mx-auto mb-4" %>

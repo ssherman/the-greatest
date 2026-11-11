@@ -35,6 +35,22 @@ module Rankings
       assert_selector "a[href='/global-canon']"
     end
 
+    test "books links to the past rankings" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "a[href='/rankings/archive']"
+    end
+
+    test "music does not link to the past rankings" do
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:music_albums_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_no_selector "a[href='/rankings/archive']"
+    end
+
     test "music does not render the western tilt section" do
       music = Services::RankingConfiguration::ExplainerData.call(
         configurations: [ranking_configurations(:music_albums_global)]

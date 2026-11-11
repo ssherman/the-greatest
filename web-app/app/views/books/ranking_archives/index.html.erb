@@ -1,0 +1,27 @@
+<%
+  content_for :page_title, "Past rankings | The Greatest Books"
+  content_for :meta_description, "The Greatest Books ranking as it stood in earlier months."
+%>
+
+<div class="space-y-8 max-w-3xl mx-auto">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">Past rankings</h1>
+
+  <% if @archives.any? %>
+    <ul class="space-y-3">
+      <% @archives.each do |archive| %>
+        <li class="bg-base-100 border border-base-300 rounded-xl p-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <%= link_to archive.name, books_ranking_archive_path(slug: archive.slug), class: "link text-lg font-semibold" %>
+          <span class="text-sm text-base-content/70">
+            <%= archive.captured_at.strftime("%B %-d, %Y") %> &middot; <%= number_with_delimiter(archive.items_count) %> books
+          </span>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <p class="text-center text-base-content/70 py-16">No past rankings have been saved yet.</p>
+  <% end %>
+
+  <p class="text-center">
+    <%= link_to "See the current ranking", books_root_path, class: "link" %>
+  </p>
+</div>

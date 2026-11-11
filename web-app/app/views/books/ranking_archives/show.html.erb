@@ -1,0 +1,47 @@
+<%
+  captured_on = @archive.captured_at.strftime("%B %-d, %Y")
+  content_for :page_title, "#{@archive.name} | Past rankings | The Greatest Books"
+  content_for :meta_description, "The Greatest Books ranking as it stood on #{captured_on}."
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @archive.name %></h1>
+
+  <div role="status" class="alert alert-info" data-testid="archived-ranking-notice">
+    <span>
+      This is an archived ranking from <%= captured_on %>. It no longer changes.
+      <%= link_to "See the current ranking", books_root_path, class: "link" %>
+    </span>
+  </div>
+
+  <p class="text-center text-sm text-base-content/70" data-testid="archive-no-filters">
+    Filters are not available on archived rankings.
+  </p>
+
+  <% if @archive.description.present? %>
+    <p class="max-w-3xl mx-auto text-base-content/80"><%= @archive.description %></p>
+  <% end %>
+
+  <% if @entries.any? %>
+    <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+      <% @entries.each_with_index do |entry, index| %>
+        <%= render Books::CardComponent.new(book: entry.item, rank: entry.rank, index: index) %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 py-16">
+      None of the books in this part of the ranking are still in the catalogue.
+    </p>
+  <% end %>
+
+  <div class="flex justify-center">
+    <%== @pagy.series_nav(slots: 5) %>
+  </div>
+  <p class="text-center text-sm text-base-content/70">
+    Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+  </p>
+
+  <p class="text-center">
+    <%= link_to "Past rankings", books_ranking_archives_path, class: "link" %>
+  </p>
+</div>

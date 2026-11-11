@@ -1043,6 +1043,15 @@ Rails.application.routes.draw do
 
     get "rankings", to: "books/default#rankings", as: :books_rankings
 
+    # Frozen rankings. Html only, for the same reason as the list submission
+    # routes below: the router rejects .json before a controller is involved.
+    get "rankings/archive", to: "books/ranking_archives#index", as: :books_ranking_archives,
+      constraints: {format: /html/}
+    get "rankings/archive/:slug", to: "books/ranking_archives#show", as: :books_ranking_archive,
+      constraints: {format: /html/}
+    get "rankings/archive/:slug/page/:page", to: "books/ranking_archives#show", as: :books_ranking_archive_page,
+      constraints: {page: /\d+/, format: /html/}
+
     # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope, and
     # constrained to html, for the same reason the corrections routes are:
     # ListSubmissionsController never calls load_ranking_configuration, so an
