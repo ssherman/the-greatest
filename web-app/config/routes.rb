@@ -706,6 +706,9 @@ Rails.application.routes.draw do
             get "match_decisions/:id", to: "match_decisions#show", constraints: {id: /\d+/}
             post "match_decisions/:id/review", to: "match_decisions#review", constraints: {id: /\d+/}
             post "match_decisions/:id/reject_link", to: "match_decisions#reject_link", constraints: {id: /\d+/}
+            get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
+            get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
+            get "identifiers", to: "identifiers#lookup"
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"
