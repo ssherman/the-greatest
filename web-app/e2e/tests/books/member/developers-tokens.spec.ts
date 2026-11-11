@@ -44,6 +44,15 @@ test.describe('Books API tokens, as a member', () => {
     await expect(page.getByRole('heading', { level: 1, name: /API tokens/ })).toBeVisible();
   });
 
+  test('the members area links straight to the AI assistant instructions', async ({ page }) => {
+    await page.goto('/members');
+
+    await page.getByRole('link', { name: 'Connect an AI assistant' }).click();
+
+    await expect(page).toHaveURL(/\/developers#mcp$/);
+    await expect(page.locator('#mcp')).toBeInViewport();
+  });
+
   test('create, see the secret once, use it, revoke it, and it stops working', async ({ page }) => {
     await page.goto('/developers/tokens');
 

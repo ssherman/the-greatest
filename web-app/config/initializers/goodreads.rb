@@ -47,5 +47,12 @@ Rails.application.config.x.goodreads = ActiveSupport::OrderedOptions.new.merge(
   # so no fetch waits out its timeout (the book-title selector cost 43 s on
   # the other two).
   wait_for_selector: "h1",
+  # A search page's h1 arrives with the first streamed chunk, before the
+  # results: waiting on it saved the loading skeleton for about 30% of
+  # searches (measured 2026-11-10), each read as unparseable. Wait for a
+  # result card or the no-results notice instead. A selector that never
+  # appears is not an error: the fetcher returns what loaded when the time
+  # runs out, and the parser decides.
+  search_wait_for_selector: '[data-testid="book-item-title"], [data-testid="no-book-search-results"]',
   fetch_timeout_ms: 30_000
 )

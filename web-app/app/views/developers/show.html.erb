@@ -10,7 +10,7 @@
     and errors-<code> per problem code (Api::Problem#to_h links to those). %>
 <article id="developers" class="max-w-3xl mx-auto px-4 py-10">
   <div class="prose max-w-none">
-    <h1>The <%= domain_name %> API</h1>
+    <h1><%= domain_name %> API</h1>
 
     <p>
       Read the rankings on this site from your own scripts and apps. Every request
@@ -22,6 +22,12 @@
       create and revoke them at <%= link_to "/developers/tokens", developers_tokens_path %>.
       Reading this page needs nothing.
     </p>
+    <% if @mcp_tools.any? %>
+      <p id="mcp-pointer">
+        Using Claude, Codex or another AI assistant? It can read the rankings
+        for you: see <a href="#mcp">connecting an AI assistant (MCP)</a>.
+      </p>
+    <% end %>
 
     <h2 id="quick-start">Quick start</h2>
     <p>Put your token in an environment variable and send it as a bearer token:</p>

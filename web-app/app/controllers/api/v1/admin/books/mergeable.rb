@@ -7,11 +7,13 @@ module Api
         # The merge endpoints' shared flow. The including controller defines
         # `model_class`, `policy_class`, `resource_for(record)`.
         # The records are permanently deleted, so the order is: parse the body,
-        # load both, authorize destroy? on BOTH, snapshot both, then merge.
+        # load both, authorize destroy? on BOTH, snapshot the source, then merge
+        # (MergeFlow).
         # Root-anchor every ::Books:: reference in this namespace.
         module Mergeable
           extend ActiveSupport::Concern
           include ::Api::V1::Admin::StrictIds
+          include MergeFlow
 
           included do
             require_scope "books:admin:merge"
@@ -29,36 +31,8 @@ module Api
             source = model_class.find_by(id: source_id)
             return render_problem(::Api::Problem.new(:not_found, detail: "No source #{noun} #{source_id}")) if source.nil?
 
-            {"source" => source, "target" => target}.each do |role, record|
-              next if policy_class.new(current_principal.user, record).destroy?
-
-              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete the #{role} #{noun}"))
-            end
-
-            # Captured before the merge: the source row does not exist afterwards.
-            deleted = resource_for(source)
-            result = ::Services::Books::AdminMerge.call(source:, target:, dry_run:)
-            unless result.success?
-              log_merge(source:, target:, outcome: "failed", errors: result.errors) unless dry_run
-              return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.join(", ")))
-            end
-
-            log_merge(source:, target:, outcome: "succeeded") unless dry_run
-            render json: {
-              data: {survivor: resource_for(target), deleted: deleted},
-              meta: {dry_run: dry_run},
-              warnings: result.data[:warnings]
-            }
-          end
-
-          private
-
-          def log_merge(source:, target:, outcome:, errors: nil)
-            line = "event=api_admin_merge outcome=#{outcome} token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} " \
-              "user_id=#{current_principal.user.id} record_type=#{model_class.name} " \
-              "source_id=#{source.id} target_id=#{target.id}"
-            line += " errors=#{Array(errors).join("; ").inspect}" if errors
-            Rails.logger.info(line)
+            body = perform_merge(source:, target:, dry_run:, model_class:, policy_class:, resource_for: method(:resource_for))
+            render json: body if body
           end
         end
       end

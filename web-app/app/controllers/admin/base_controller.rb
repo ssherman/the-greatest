@@ -9,8 +9,15 @@ class Admin::BaseController < ApplicationController
   # The admin layout does not hydrate /user_list_state, so an admin who only
   # uses /admin would otherwise never renew.
   before_action :renew_current_session
+  before_action :set_acting_user
 
   private
+
+  # Lets mergers record who resolved a duplicate pair (see Current).
+  def set_acting_user
+    Current.acting_user = current_user
+    Current.acting_via = "admin_ui"
+  end
 
   def authenticate_admin!
     # Global admin or editor has full access

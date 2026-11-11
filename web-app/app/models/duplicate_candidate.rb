@@ -8,6 +8,7 @@
 #  occurrences       :integer          default(1), not null
 #  resolution_note   :text
 #  resolved_at       :datetime
+#  resolved_via      :integer
 #  source            :integer          not null
 #  status            :integer          default("pending"), not null
 #  created_at        :datetime         not null
@@ -38,6 +39,8 @@ class DuplicateCandidate < ApplicationRecord
   # Enums. `pending` is the spec's "open".
   enum :source, {identifier_collision: 0, external_key_collision: 1, ai: 2, human: 3, bulk_verify: 4, ol_backfill: 5}, prefix: :raised_by
   enum :status, {pending: 0, merged: 1, not_duplicate: 2}
+  # Which surface resolved the pair: the admin queue page or the admin API/MCP.
+  enum :resolved_via, {admin_ui: 0, api: 1}, prefix: :resolved_via
 
   # Validations
   validates :item_type, presence: true

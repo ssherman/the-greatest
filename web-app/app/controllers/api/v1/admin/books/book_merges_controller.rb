@@ -14,11 +14,7 @@ module Api
 
           def policy_class = ::Books::BookPolicy
 
-          # Re-read with the associations the resource renders, so the survivor
-          # reflects the merge and the deleted record is captured whole.
-          def resource_for(book)
-            BookResource.new(::Books::Book.includes(:authors, :primary_ranked_item).find(book.id)).to_h
-          end
+          def resource_for(book) = book_merge_resource(book)
         end
       end
     end

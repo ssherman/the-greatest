@@ -18,6 +18,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
   before_action :require_domain_write!, only: [:dismiss, :merge]
 
   STATUSES = ::DuplicateCandidate.statuses.keys.freeze
+  VIAS = ::DuplicateCandidate.resolved_via.keys.freeze
   PER_PAGE = 100
 
   helper_method :duplicates_index_path, :dismiss_duplicate_path, :merge_duplicate_path, :decision_path_for,
@@ -26,16 +27,21 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
   def index
     @status = STATUSES.include?(params[:status]) ? params[:status] : "pending"
     @counts = domain_scope.group(:status).count
-    @pagy, @pairs = pagy(domain_scope.where(status: @status).includes(:match_decision, :resolved_by).newest_first, limit: PER_PAGE)
+    # The via filter narrows resolved tabs only; pending pairs have no resolver.
+    @via = params[:via] if VIAS.include?(params[:via]) && @status != "pending"
+    pairs = domain_scope.where(status: @status).includes(:match_decision, :resolved_by).newest_first
+    pairs = pairs.where(resolved_via: @via) if @via
+    @pagy, @pairs = pagy(pairs, limit: PER_PAGE)
 
     # Resolving the last pairs on the last page leaves that page's URL past
     # the end.
     if @pairs.empty? && @pagy.page > 1
-      redirect_to duplicates_index_path(status: @status, page: @pagy.last)
+      redirect_to duplicates_index_path(status: @status, via: @via, page: @pagy.last)
       return
     end
 
     load_pair_records(@pairs)
+    @agent_prompt = agent_prompt
   end
 
   def dismiss
@@ -45,6 +51,7 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     end
 
     @pair.update!(status: :not_duplicate, resolved_at: Time.current, resolved_by: current_user,
+      resolved_via: :admin_ui,
       resolution_note: params[:resolution_note].presence)
     back_to_index(notice: "Marked as not a duplicate.")
   end
@@ -111,6 +118,11 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     ::DuplicateCandidate.where(item_type: entries.map(&:model))
   end
 
+  # The Copy prompt button's text; nil (no button) for a domain without a prompt file.
+  def agent_prompt
+    Services::DuplicateCandidates::AgentPrompt.call(domain: domain)
+  end
+
   def set_pair
     @pair = domain_scope.find(params[:id])
   end
@@ -133,26 +145,13 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
     DataImporters::FinderRegistry.entry_for_model(pair.item_type)
   end
 
-  # One query per item type for the records, and for their summaries
-  # (FinderBase#summarize_all: title, creators, year, ranked position, list
-  # count, identifiers) one query per type for the ranked positions and one
-  # for the list counts. A record a merge or delete has since removed is
-  # simply absent; its side says so and the row offers dismissal only.
+  # See Services::DuplicateCandidates::PairRecords; a record a merge or delete
+  # has since removed is absent, its side says so and the row offers dismissal
+  # only.
   def load_pair_records(pairs)
-    @records = {}
-    @summaries = {}
-    pairs.group_by(&:item_type).each do |type, rows|
-      entry = DataImporters::FinderRegistry.entry_for_model(type)
-      next unless entry
-
-      ids = rows.flat_map { |row| [row.item_a_id, row.item_b_id] }.uniq
-      records = entry.model_class.where(id: ids).includes(:identifiers, *entry.preloads).to_a
-      summaries = entry.finder_class.new.summarize_all(records)
-      records.each do |record|
-        @records[[type, record.id]] = record
-        @summaries[[type, record.id]] = summaries[record.id]
-      end
-    end
+    loaded = ::Services::DuplicateCandidates::PairRecords.call(pairs)
+    @records = loaded.records
+    @summaries = loaded.summaries
   end
 
   def record_for(pair, id)

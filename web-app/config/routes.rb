@@ -698,6 +698,10 @@ Rails.application.routes.draw do
           scope module: :books do
             get "books", to: "books#index"
             get "authors", to: "authors#index"
+            get "duplicate_candidates", to: "duplicate_candidates#index"
+            get "duplicate_candidates/:id", to: "duplicate_candidates#show", constraints: {id: /\d+/}
+            post "duplicate_candidates/:id/merge", to: "duplicate_candidates#merge", constraints: {id: /\d+/}
+            post "duplicate_candidates/:id/dismiss", to: "duplicate_candidates#dismiss", constraints: {id: /\d+/}
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"

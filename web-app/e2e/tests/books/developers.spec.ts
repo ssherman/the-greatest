@@ -8,7 +8,7 @@ test.describe('Books API developer pages, signed out', () => {
   test('the documentation page renders and lists the books endpoints', async ({ page }) => {
     await page.goto('/developers');
 
-    await expect(page.getByRole('heading', { level: 1, name: /API/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'The Greatest Books API', exact: true })).toBeVisible();
     await expect(page.locator('#endpoint-listBooks')).toBeVisible();
     await expect(page.locator('#endpoint-listAuthors')).toBeVisible();
     await expect(page.locator('#errors-rate_limited')).toBeVisible();
@@ -40,7 +40,7 @@ test.describe('Books API developer pages, signed out', () => {
   test('the footer links to the documentation', async ({ page }) => {
     await page.goto('/');
 
-    await page.locator('footer').getByRole('link', { name: 'API', exact: true }).click();
+    await page.locator('footer').getByRole('link', { name: 'API & MCP', exact: true }).click();
 
     await expect(page).toHaveURL(/\/developers$/);
     await expect(page.getByRole('heading', { level: 1, name: /API/ })).toBeVisible();
@@ -69,6 +69,15 @@ test.describe('Books API developer pages, signed out', () => {
     );
     await expect(page.locator('#mcp-tool-find_book')).toBeVisible();
     await expect(page.locator('#mcp-tool-search_books')).toBeVisible();
+  });
+
+  test('the top of the documentation page points to the MCP section', async ({ page }) => {
+    await page.goto('/developers');
+
+    await page.locator('#mcp-pointer').getByRole('link').click();
+
+    await expect(page).toHaveURL(/\/developers#mcp$/);
+    await expect(page.locator('#mcp')).toBeInViewport();
   });
 
   test('the documentation page gives sign-in instructions with the exact address', async ({ page }) => {

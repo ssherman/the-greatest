@@ -14,11 +14,7 @@ module Api
 
           def policy_class = ::Books::AuthorPolicy
 
-          def resource_for(author)
-            author = ::Books::Author.includes(:primary_ranked_item).find(author.id)
-            counts = ::Books::BookAuthor.where(author_id: author.id).group(:author_id).count
-            AuthorResource.new(author, params: {book_counts: counts}).to_h
-          end
+          def resource_for(author) = author_merge_resource(author)
         end
       end
     end

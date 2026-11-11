@@ -10,6 +10,7 @@ require "test_helper"
 #  occurrences       :integer          default(1), not null
 #  resolution_note   :text
 #  resolved_at       :datetime
+#  resolved_via      :integer
 #  source            :integer          not null
 #  status            :integer          default("pending"), not null
 #  created_at        :datetime         not null

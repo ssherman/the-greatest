@@ -18,6 +18,18 @@ module Admin
         css_select("[data-testid=pair-row]").map { |row| row["data-pair-id"].to_i }
       end
 
+      def merged_pair(a, b, via)
+        ids = [books_books(a).id, books_books(b).id].sort
+        DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: ids[0], item_b_id: ids[1],
+          source: :human, status: :merged, resolved_at: Time.current, resolved_by: @admin, resolved_via: via)
+      end
+
+      test "index renders for admins" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_duplicate_candidates_path
+        assert_response :success
+      end
+
       test "index redirects unauthenticated users" do
         get admin_books_duplicate_candidates_path
         assert_redirected_to books_root_path
@@ -41,6 +53,25 @@ module Admin
         assert_empty pair_ids
 
         get admin_books_duplicate_candidates_path(status: "bogus")
+        assert_equal [@pending.id], pair_ids
+      end
+
+      test "via narrows a resolved tab to pairs resolved that way; unknown via is ignored" do
+        sign_in_as(@admin, stub_auth: true)
+        via_api = merged_pair(:got, :cannery_row, :api)
+        via_ui = merged_pair(:clash, :war_and_peace, :admin_ui)
+
+        get admin_books_duplicate_candidates_path(status: "merged", via: "api")
+        assert_response :success
+        assert_equal [via_api.id], pair_ids
+
+        get admin_books_duplicate_candidates_path(status: "merged", via: "admin_ui")
+        assert_equal [via_ui.id], pair_ids
+
+        get admin_books_duplicate_candidates_path(status: "merged", via: "bogus")
+        assert_equal [via_api.id, via_ui.id].sort, pair_ids.sort
+
+        get admin_books_duplicate_candidates_path(status: "pending", via: "api")
         assert_equal [@pending.id], pair_ids
       end
 
@@ -132,6 +163,8 @@ module Admin
         assert_not ::Books::Book.exists?(a.id)
         assert ::Books::Book.exists?(b.id)
         assert @pending.reload.merged?
+        assert_equal @admin, @pending.resolved_by
+        assert @pending.resolved_via_admin_ui?
       end
 
       test "merge B into A deletes B" do
@@ -275,6 +308,7 @@ module Admin
         @pending.reload
         assert @pending.not_duplicate?
         assert_equal @admin, @pending.resolved_by
+        assert @pending.resolved_via_admin_ui?
         assert_equal "Different novels.", @pending.resolution_note
         assert_not_nil @pending.resolved_at
       end

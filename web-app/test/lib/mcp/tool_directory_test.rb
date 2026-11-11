@@ -10,11 +10,11 @@ module Mcp
       assert_equal 27, entries.size
     end
 
-    test "the admin books directory is the 14 admin tools, six destructive" do
+    test "the admin books directory is the 18 admin tools, seven destructive" do
       entries = Mcp::ToolDirectory.entries(document: :admin, domain: :books)
 
-      assert_equal 14, entries.size
-      assert_equal %w[delete_admin_category merge_author merge_book merge_categories untag_author untag_book],
+      assert_equal 18, entries.size
+      assert_equal %w[delete_admin_category merge_author merge_book merge_categories merge_duplicate_candidate untag_author untag_book],
         entries.select(&:destructive).map(&:name).sort
     end
 
@@ -45,6 +45,12 @@ module Mcp
       assert_equal Mcp::Sites::Books::FindBook.title, find_book.title
       assert_equal Mcp::Sites::Books::FindBook.description, find_book.description
       assert_equal false, find_book.destructive
+    end
+
+    test "public_tools? is true only for a site with a public MCP endpoint" do
+      assert Mcp::ToolDirectory.public_tools?(:books)
+      assert_not Mcp::ToolDirectory.public_tools?(:music)
+      assert_not Mcp::ToolDirectory.public_tools?(:games)
     end
   end
 end
