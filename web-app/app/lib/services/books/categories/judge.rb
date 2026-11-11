@@ -166,7 +166,7 @@ module Services
         def mapping_facts(data)
           {"resolved" => data[:resolved].map { |entry|
             {"id" => entry[:category].id, "name" => entry[:category].name, "type" => entry[:type], "via" => entry[:via],
-             "confidence" => entry[:confidence]}
+             "confidence" => entry[:confidence], "originals" => Array(entry[:originals])}
           }, "unmatched" => data[:unmatched].map(&:deep_stringify_keys)}
         end
 

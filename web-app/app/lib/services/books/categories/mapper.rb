@@ -17,7 +17,7 @@ module Services
         MAX_DEPTH = 12
         ROW_COLUMNS = %i[id name alternative_names parent_id merged_into_id deleted].freeze
         Row = Struct.new(*ROW_COLUMNS, keyword_init: true)
-        Item = Struct.new(:type, :proposed, :confidence, :evidence, :kind, :hint, :index, :category_id, :via, :unmatched_via, :candidate_ids, :original, keyword_init: true)
+        Item = Struct.new(:type, :proposed, :confidence, :evidence, :kind, :hint, :index, :category_id, :via, :unmatched_via, :candidate_ids, :original, :show_hint, keyword_init: true)
 
         def self.call(book:, answer:, vocabulary:)
           new(book: book, answer: answer, vocabulary: vocabulary).call
@@ -101,12 +101,13 @@ module Services
 
         def resolve_by_name(item)
           exact = exact_matches(item)
+          exact = settle_outside_fictional(item, exact) if item.type == "location" && fictional_filter(item)
           if exact.size == 1
             item.category_id, item.via = exact.first
             return
           end
 
-          candidates = find_candidate_ids(item, exact.map(&:first))
+          candidates = find_candidate_ids(item, (exact.map(&:first) + Array(item.candidate_ids)).uniq)
           item.candidate_ids = candidates if candidates.any?
         end
 
@@ -125,7 +126,7 @@ module Services
 
         # Legacy files some fictional towns as ordinary places under real ones (Maycomb under
         # Alabama), so a fictional name matches anywhere in the tree; a hit inside the Fictional
-        # Location subtree wins over the others.
+        # Location subtree wins over the others and ignores the parent hint.
         def prefer_fictional_subtree(item, ids)
           return ids unless item.type == "location" && fictional_filter(item)
 
@@ -142,6 +143,20 @@ module Services
           return false if fictional_ids.include?(id)
 
           hint_matches?(item, id)
+        end
+
+        # Exact hits for a fictional name, none inside the subtree. One that the parent hint
+        # confirms is accepted; otherwise they all go to the chooser (hint shown), never straight
+        # to exact: a lone Jefferson in Iowa is not Faulkner's Jefferson.
+        def settle_outside_fictional(item, exact)
+          return exact if exact.empty? || exact.any? { |id, _| fictional_ids.include?(id) }
+
+          hinted = item.hint.present? ? exact.select { |id, _| hint_matches?(item, id) } : []
+          return hinted if hinted.size == 1
+
+          item.show_hint = true
+          item.candidate_ids = exact.map(&:first)
+          (exact.size == 1) ? [] : exact
         end
 
         def fictional_filter(item)
@@ -225,7 +240,7 @@ module Services
           questions = open_items.map do |item|
             question = {proposed: item.proposed, category_type: item.type,
                         candidates: item.candidate_ids.map { |id| {id: id, label: label(item.type, id)} }}
-            question[:hint] = item.hint if item.type == "location" && item.hint.present? && !fictional_filter(item)
+            question[:hint] = item.hint if item.type == "location" && item.hint.present? && (!fictional_filter(item) || item.show_hint)
             question
           end
           Services::Ai::Tasks::Books::CategoryChoiceTask.new(parent: book, book_line: book_line, questions: questions).call
@@ -297,10 +312,15 @@ module Services
           items.each do |item|
             category = categories[item.category_id]
             if category
-              next unless seen.add?(category.id)
+              unless seen.add?(category.id)
+                # A deduped fictional parent still protects the fictional name it was proposed under.
+                kept = resolved.find { |entry| entry[:category].id == category.id }
+                kept[:originals] |= [item.original] if item.original
+                next
+              end
 
-              resolved << {type: item.type, category: category, proposed: item.proposed, confidence: item.confidence, evidence: item.evidence, via: item.via}
-              resolved.last[:original] = item.original if item.original
+              resolved << {type: item.type, category: category, proposed: item.proposed, confidence: item.confidence, evidence: item.evidence, via: item.via,
+                           originals: [item.original].compact}
             else
               entry = {type: item.type, proposed: item.proposed, via: item.unmatched_via || "no_candidate"}
               # What the chooser was offered: a legacy link among these is one the judge was naming.

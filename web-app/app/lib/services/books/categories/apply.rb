@@ -93,8 +93,8 @@ module Services
             # Genres and audiences arrive as ids, not names.
             next unless %w[subject location].include?(entry[:type].to_s)
 
-            # A fictional place mapped to its real parent keeps the name it was proposed under.
-            [entry[:proposed], entry[:original]].each do |name|
+            # A fictional place mapped to its real parent keeps the names it was proposed under.
+            ([entry[:proposed]] + Array(entry[:originals])).each do |name|
               key = ::Services::CategoryCleanup::NameNormalizer.twin_key(name)
               keys[entry[:type].to_s] << key if key
             end

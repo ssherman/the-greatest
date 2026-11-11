@@ -259,6 +259,37 @@ module Services
           assert_empty result.data[:unmatched]
         end
 
+        test "a lone fictional-name hit under an unrelated real place goes to the chooser, and a decline falls back to the parent" do
+          location("Fictional Location")
+          iowa = location("Iowa")
+          jefferson = location("Jefferson", parent: iowa)
+          mississippi = location("Mississippi")
+          Services::Ai::Tasks::Books::CategoryChoiceTask.expects(:new).with do |args|
+            args[:questions].first[:candidates].map { |c| c[:id] }.include?(jefferson.id) && args[:questions].first[:hint] == "Mississippi"
+          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: nil}]}, ai_chat: nil)))
+          result = map(answer(locations: [loc("Jefferson", kind: "fictional", parent: "Mississippi")]))
+          assert_equal [[mississippi, "fictional_parent"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
+        end
+
+        test "several fictional-name hits outside the subtree all go to the chooser" do
+          location("Fictional Location")
+          a = location("Jefferson", parent: location("Iowa"))
+          b = location("Jefferson", parent: location("Ohio"))
+          Services::Ai::Tasks::Books::CategoryChoiceTask.expects(:new).with do |args|
+            ids = args[:questions].first[:candidates].map { |c| c[:id] }
+            ids.include?(a.id) && ids.include?(b.id)
+          end.returns(stub(call: Services::Ai::Result.new(success: true, data: {choices: [{question: 1, category_id: b.id}]}, ai_chat: nil)))
+          result = map(answer(locations: [loc("Jefferson", kind: "fictional", parent: "Texas")]))
+          assert_equal [[b, "chosen"]], result.data[:resolved].map { |r| [r[:category], r[:via]] }
+        end
+
+        test "a deduped fictional parent merges its original into the kept entry" do
+          location("Fictional Location")
+          alabama = location("Alabama", parent: location("United States"))
+          result = map(answer(locations: [loc("Alabama"), loc("Maycomb", kind: "fictional", parent: "Alabama")]))
+          assert_equal [[alabama, "exact", ["Maycomb"]]], result.data[:resolved].map { |r| [r[:category], r[:via], r[:originals]] }
+        end
+
         test "a fictional name found in the subtree and under a real place resolves in the subtree" do
           root = location("Fictional Location")
           inside = location("Jefferson", parent: root)
@@ -271,7 +302,7 @@ module Services
           location("Fictional Location")
           alabama = location("Alabama", parent: location("United States"))
           result = map(answer(locations: [loc("Maycomb", kind: "fictional", parent: "Alabama")]))
-          assert_equal [[alabama, "Maycomb"]], result.data[:resolved].map { |r| [r[:category], r[:original]] }
+          assert_equal [[alabama, ["Maycomb"]]], result.data[:resolved].map { |r| [r[:category], r[:originals]] }
         end
 
         test "a real Paris never resolves to a fictional Paris" do

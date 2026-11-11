@@ -248,7 +248,7 @@ module Services
           jefferson = category("location", "Jefferson")
           other = category("location", "Lyon")
           [jefferson, other].each { |c| link(c) }
-          parent = entry(category("location", "Mississippi")).merge(via: "fictional_parent", proposed: "Mississippi (setting of Jefferson)", original: "Jefferson")
+          parent = entry(category("location", "Mississippi")).merge(via: "fictional_parent", proposed: "Mississippi (setting of Jefferson)", originals: ["Jefferson"])
           result = perform(resolved: [parent])
           assert_equal [other.id], result.data[:removed].map { |r| r[:id] }
           assert_equal "legacy", sources_of(jefferson)
