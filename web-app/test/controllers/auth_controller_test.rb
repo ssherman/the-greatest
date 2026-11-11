@@ -217,13 +217,16 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   test "check_provider describes the same row sign-in would bind to" do
     email = "duplicate-order@example.com"
     now = Time.current
-    # Explicit ids inserted HIGH first, so the two fresh tuples land in the
-    # heap in reverse id order and an unordered scan reaches the high-id row
-    # first. Rewriting a row to relocate it does not work here: under the
+    # Explicit ids inserted HIGH first, so the two fresh tuples usually land in
+    # the heap in reverse id order and an unordered scan reaches the high-id row
+    # first. Usually, not always: Postgres does not promise where a tuple goes,
+    # so there is deliberately no "scan reaches the high id first" precondition
+    # -- one like it in AuthorBooksQueryTest failed CI with nothing wrong in the
+    # code. An unlucky run passes without exercising the ordering; it never
+    # fails falsely. (Rewriting a row to relocate it is worse: under the
     # parallel suite Postgres does a HOT update in place and the row never
-    # moves, which silently turns this into a test that cannot fail. Ids are
-    # far above the sequence so they cannot collide, and the test transaction
-    # rolls them back.
+    # moves.) Ids are far above the sequence so they cannot collide, and the
+    # test transaction rolls them back.
     high_id = 2_000_000_001
     low_id = 2_000_000_000
     User.insert_all(
@@ -234,12 +237,6 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
          external_provider: User.external_providers[:password], created_at: now, updated_at: now}
       ]
     )
-
-    scan_order = User.connection.select_values(
-      "SELECT id FROM users WHERE LOWER(email) = #{User.connection.quote(email)}"
-    )
-    assert_equal [high_id, low_id], scan_order,
-      "precondition failed: the unordered scan must reach the high-id row first, or this test cannot fail"
 
     post auth_check_provider_path, params: {email: email}, as: :json
 
