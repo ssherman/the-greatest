@@ -172,7 +172,7 @@ module Books
           "nav is missing a link to /#{collection.slug} in one or both copies"
       end
       assert_select "a[href=?]", "/the-greatest-books/since/2000", count: 2
-      assert_select "a[href=?]", "/lists/463", count: 2
+      assert_select "a[href=?]", "/lists/users-favorites", count: 2
     end
   end
 end

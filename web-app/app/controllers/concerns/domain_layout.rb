@@ -6,14 +6,21 @@
 module DomainLayout
   extend ActiveSupport::Concern
 
-  private
-
-  def resolve_layout
-    case Current.domain
+  # Public so ApplicationController#render_not_found can pick the same layout
+  # without including this concern into every controller, some of which define
+  # a resolve_layout of their own.
+  def self.for(domain)
+    case domain
     when :games then "games/application"
     when :movies then "movies/application"
     when :books then "books/application"
     else "music/application"
     end
+  end
+
+  private
+
+  def resolve_layout
+    DomainLayout.for(Current.domain)
   end
 end
