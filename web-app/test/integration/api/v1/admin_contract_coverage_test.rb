@@ -59,6 +59,20 @@ module Api
         ["GET", "/api/v1/admin/match_decisions/{id}", "403"] => -> { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}", headers: bearer(MEMBER) },
         ["GET", "/api/v1/admin/match_decisions/{id}", "404"] => -> { get "/api/v1/admin/match_decisions/999999999", headers: bearer(READ) },
         ["GET", "/api/v1/admin/match_decisions/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "200"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {verdict: "confirmed", note: "Same book."}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "400"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "401"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "403"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "404"] => -> { post "/api/v1/admin/match_decisions/999999999/review", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "422"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:reviewed_book_match).id}/review", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/review", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "200"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", params: {note: "Wrong person."}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "400"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "401"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "403"] => -> { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "404"] => -> { post "/api/v1/admin/match_decisions/999999999/reject_link", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "422"] => -> { post "/api/v1/admin/match_decisions/#{link_decision(outcome: :unmatched).id}/reject_link", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/match_decisions/{id}/reject_link", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/match_decisions/#{link_decision.id}/reject_link", as: :json, headers: bearer(MERGE) } },
         ["GET", "/api/v1/admin/categories", "200"] => -> { get "/api/v1/admin/categories?q=nov", headers: bearer(READ) },
         ["GET", "/api/v1/admin/categories", "400"] => -> { get "/api/v1/admin/categories?status=bogus", headers: bearer(READ) },
         ["GET", "/api/v1/admin/categories", "401"] => -> { get "/api/v1/admin/categories" },
@@ -150,8 +164,18 @@ module Api
 
       def politics_id = categories(:books_politics_subject).id
 
+      def link_decision(outcome: :matched)
+        MatchDecision.create!(
+          finder: "Services::Books::Authors::ResolveWikidata", subject: books_authors(:tolstoy), outcome: outcome,
+          confidence: :medium, decided_by: :ai, needs_review: true, query: {"name" => "Leo Tolstoy"},
+          candidates: [{"external_source" => "wikidata", "external_key" => "Q7243"}],
+          selected_index: (outcome == :matched) ? 1 : nil
+        )
+      end
+
       setup do
         host! "dev-new.thegreatestbooks.org"
+        stub_workflow_dispatch
         ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
         ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
       end

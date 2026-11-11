@@ -704,6 +704,8 @@ Rails.application.routes.draw do
             post "duplicate_candidates/:id/dismiss", to: "duplicate_candidates#dismiss", constraints: {id: /\d+/}
             get "match_decisions", to: "match_decisions#index"
             get "match_decisions/:id", to: "match_decisions#show", constraints: {id: /\d+/}
+            post "match_decisions/:id/review", to: "match_decisions#review", constraints: {id: /\d+/}
+            post "match_decisions/:id/reject_link", to: "match_decisions#reject_link", constraints: {id: /\d+/}
             get "categories", to: "categories#index"
             get "categories/:id", to: "categories#show", constraints: {id: /\d+/}
             post "categories", to: "categories#create"

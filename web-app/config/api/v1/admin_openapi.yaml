@@ -505,6 +505,116 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/match_decisions/{id}/review:
+    x-domain: books
+    post:
+      operationId: reviewMatchDecision
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Review a match decision
+      description: |
+        Marks the decision reviewed by the token's owner via the API, with an optional `verdict` (`confirmed` or `rejected`) and `note`. Refused (422) when the decision is already reviewed, and when `verdict` is `rejected` on a matched Wikidata or VIAF link decision: use the reject-link operation, which also removes the identifier. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Marks a match decision reviewed, which takes it out of the pending queue. `verdict` is optional:
+          confirmed (the finder was right) or rejected (it was wrong); `note` is optional and shown to admins.
+          A decision that is already reviewed is a 422, as is verdict rejected on a matched Wikidata or VIAF
+          link decision; use reject_match_decision_link for those. Returns the decision with its detail.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MatchDecisionReviewRequest"
+      responses:
+        "200":
+          description: The decision, now reviewed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMatchDecisionDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/match_decisions/{id}/reject_link:
+    x-domain: books
+    post:
+      operationId: rejectMatchDecisionLink
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Reject a Wikidata or VIAF link (permanent)
+      description: |
+        Says a matched Wikidata or VIAF record is not this author. PERMANENTLY removes the identifier that record wrote (and a superseded one kept beside it), reverts the facts the link's runs applied, reverts and deprecates AI results that used it, marks this decision and every decision of the same record rejected and reviewed, and runs the author's Wikidata step again. The same decisions a person rejects on the admin page. `note` is appended to the decision's review note. Refused (422) for decisions that are not matched Wikidata or VIAF links and for one already rejected. Requires `books:admin:merge`, and the token's owner must be allowed to delete authors.
+      x-mcp:
+        destructive: true
+        description: >-
+          Rejects a matched Wikidata or VIAF link as the wrong person. This permanently deletes the author's
+          identifier from that record, reverts the facts it wrote, rejects every decision of the same record
+          and starts the author's enrichment again; it cannot be undone. `note` is optional. Returns the
+          decision, the ids of every decision rejected with it, and what was reverted. A 422 means the decision
+          is not a matched Wikidata or VIAF link, or was already rejected.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MatchDecisionRejectLinkRequest"
+      responses:
+        "200":
+          description: The rejected decision and what the rejection did.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMatchDecisionRejectLink"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories:
     x-domain: books
     get:
@@ -1709,6 +1819,44 @@ components:
                   current:
                     description: The record's live summary (title, creators, year, ranked_position, list_count, identifiers); null when no local record.
                     type: [object, "null"]
+    MatchDecisionReviewRequest:
+      type: object
+      properties:
+        verdict:
+          type: [string, "null"]
+          enum: [confirmed, rejected, null]
+          description: Optional. `rejected` is refused for a matched Wikidata or VIAF link decision (use reject-link).
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Shown to admins reviewing the queue. Optional.
+    MatchDecisionRejectLinkRequest:
+      type: object
+      properties:
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Appended to the decision's review note. Optional.
+    AdminMatchDecisionRejectLink:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [decision, rejected, reverted, descriptions_deprecated]
+          properties:
+            decision:
+              $ref: "#/components/schemas/AdminMatchDecision"
+            rejected:
+              type: array
+              description: Ids of every decision rejected, this one included.
+              items: {type: integer}
+            reverted:
+              type: array
+              description: The facts and identifiers removed from the author.
+              items: {type: string}
+            descriptions_deprecated:
+              type: integer
     AdminMatchDecisionCollection:
       type: object
       required: [data, meta, links]

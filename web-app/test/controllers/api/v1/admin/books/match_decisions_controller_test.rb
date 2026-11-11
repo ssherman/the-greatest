@@ -169,6 +169,187 @@ module Api
             assert_api_response_conform(status: 404, api: :admin)
           end
 
+          # ---- review and reject_link ------------------------------------------
+
+          def review(id, body = {}, token: ApiTokenSecrets::ADMIN)
+            post "/api/v1/admin/match_decisions/#{id}/review", params: body, as: :json, headers: bearer(token)
+          end
+
+          def reject_link(id, body = {}, token: ApiTokenSecrets::ADMIN)
+            post "/api/v1/admin/match_decisions/#{id}/reject_link", params: body, as: :json, headers: bearer(token)
+          end
+
+          def link_decision(finder: "Services::Books::Authors::ResolveWikidata", outcome: :matched, key: "Q7243")
+            MatchDecision.create!(
+              finder: finder, subject: books_authors(:tolstoy), record: nil, outcome: outcome, confidence: :medium,
+              decided_by: :ai, needs_review: true, query: {"name" => "Leo Tolstoy"},
+              candidates: [{"record_type" => nil, "record_id" => nil, "external_source" => "wikidata", "external_key" => key,
+                            "sources" => ["name_search"], "scores" => {}, "evidence" => {"external_title" => "Leo Tolstoy"}}],
+              selected_index: (outcome == :matched) ? 1 : nil, reason: "Works match."
+            )
+          end
+
+          test "review stamps who, when, how, the verdict and the note, and returns the detail row" do
+            review(@low.id, {verdict: "confirmed", note: "Same book."})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            @low.reload
+            assert @low.reviewed_at.present?
+            assert_equal users(:admin_user), @low.reviewed_by
+            assert @low.verdict_confirmed?
+            assert_equal "Same book.", @low.review_note
+            assert @low.reviewed_via_api?
+            assert_equal [@low.id, "confirmed", "api"], json[:data].then { |d| [d[:id], d[:review][:verdict], d[:review][:reviewed_via]] }
+            assert json[:data].key?(:candidates)
+          end
+
+          test "review without a verdict or note is fine" do
+            review(@low.id)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert @low.reload.reviewed_at.present?
+            assert_nil @low.verdict
+          end
+
+          test "reviewing an already reviewed decision is a 422 and changes nothing" do
+            before = @reviewed.reload.attributes
+            review(@reviewed.id, {note: "again"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_equal before, @reviewed.reload.attributes
+          end
+
+          test "a bad verdict or an overlong note is a 400" do
+            review(@low.id, {verdict: "maybe"})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            review(@low.id, {note: "x" * 1001})
+            assert_api_response_conform(status: 400, api: :admin)
+            assert_nil @low.reload.reviewed_at
+          end
+
+          test "rejecting a matched Wikidata decision by review points at reject_match_decision_link and changes nothing" do
+            decision = link_decision
+            review(decision.id, {verdict: "rejected"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_includes json[:detail], "reject_match_decision_link"
+            assert_nil decision.reload.reviewed_at
+            assert_nil decision.verdict
+          end
+
+          test "rejecting an unmatched link decision, or an author finder decision, by review is allowed" do
+            unmatched = link_decision(outcome: :unmatched)
+            review(unmatched.id, {verdict: "rejected"})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert unmatched.reload.verdict_rejected?
+
+            author_decision = MatchDecision.create!(finder: "DataImporters::Books::Author::Finder", outcome: :matched,
+              confidence: :low, decided_by: :ai, needs_review: true, record: books_authors(:tolstoy), query: {"name" => "x"},
+              candidates: [{"record_type" => "Books::Author", "record_id" => books_authors(:tolstoy).id, "sources" => [], "scores" => {}, "evidence" => {}}],
+              selected_index: 1)
+            review(author_decision.id, {verdict: "rejected"})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert author_decision.reload.verdict_rejected?
+          end
+
+          test "review of an unknown id is 404, of another domain's decision is 404, and needs the write scope" do
+            review(999_999_999)
+            assert_api_response_conform(status: 404, api: :admin)
+
+            review(@music.id)
+            assert_api_response_conform(status: 404, api: :admin)
+
+            review(@low.id, {}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_nil @low.reload.reviewed_at
+          end
+
+          test "review by a user without a books write role is a 403" do
+            ::Books::BookPolicy.any_instance.stubs(:update?).returns(false)
+
+            review(@low.id)
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+            assert_nil @low.reload.reviewed_at
+          end
+
+          test "reject_link removes the identifier, rejects the decision with the note, and stamps the cascade via the API" do
+            stub_workflow_dispatch
+            author = books_authors(:tolstoy)
+            author.identifiers.create!(identifier_type: "books_author_wikidata_qid", value: "Q7243")
+            decision = link_decision
+            sibling = link_decision
+
+            reject_link(decision.id, {note: "Wrong Tolstoy."})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_not author.identifiers.exists?(identifier_type: "books_author_wikidata_qid", value: "Q7243")
+            decision.reload
+            assert decision.verdict_rejected?
+            assert_equal "Link rejected. \u2014 Wrong Tolstoy.", decision.review_note
+            assert_equal [decision.id, sibling.id].sort, json[:data][:rejected].sort
+            assert_equal decision.id, json[:data][:decision][:id]
+            assert_includes json[:data][:reverted], "wikidata_qid"
+            assert_equal 0, json[:data][:descriptions_deprecated]
+
+            sibling.reload
+            assert sibling.verdict_rejected?
+            assert sibling.reviewed_via_api?
+            assert_equal users(:admin_user), sibling.reviewed_by
+            assert_equal "Link rejected.", sibling.review_note
+          end
+
+          test "reject_link without a note leaves the service's note" do
+            stub_workflow_dispatch
+            decision = link_decision
+            reject_link(decision.id)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal "Link rejected.", decision.reload.review_note
+            assert decision.reviewed_via_api?
+          end
+
+          test "reject_link refuses what the service refuses, with its message" do
+            stub_workflow_dispatch
+            unmatched = link_decision(outcome: :unmatched)
+            reject_link(unmatched.id)
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], "Only a decision that matched a record can be rejected."
+
+            reject_link(@low.id)
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], "Only a Wikidata or VIAF link decision can be rejected."
+
+            done = link_decision
+            done.update!(verdict: :rejected)
+            reject_link(done.id)
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], "already rejected"
+          end
+
+          test "reject_link needs the merge scope and a books delete role, and a bad note is a 400" do
+            decision = link_decision
+            reject_link(decision.id, {}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 403, api: :admin)
+
+            ::Books::AuthorPolicy.any_instance.stubs(:destroy?).returns(false)
+            reject_link(decision.id)
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+            assert_nil decision.reload.verdict
+
+            ::Books::AuthorPolicy.any_instance.unstub(:destroy?)
+            reject_link(decision.id, {note: "x" * 1001})
+            assert_api_response_conform(status: 400, api: :admin)
+            assert_nil decision.reload.verdict
+          end
+
+          test "reject_link of an unknown id is 404" do
+            reject_link(999_999_999)
+            assert_api_response_conform(status: 404, api: :admin)
+          end
+
           test "a read token works and a non-admin token is 403" do
             list(token: ApiTokenSecrets::ADMIN_READ)
             assert_response :success
