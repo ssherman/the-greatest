@@ -2,7 +2,16 @@
 <% content_for :title, "Match Decisions" %>
 
 <div class="space-y-4">
-  <h1 class="text-2xl font-bold">Match Decisions</h1>
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-2xl font-bold">Match Decisions</h1>
+    <% if @agent_prompt %>
+      <div data-controller="clipboard-copy">
+        <textarea hidden readonly data-clipboard-copy-target="source"><%= @agent_prompt %></textarea>
+        <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+                data-clipboard-copy-target="button" data-testid="copy-agent-prompt">Copy prompt</button>
+      </div>
+    <% end %>
+  </div>
 
   <%= form_with url: decisions_index_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "decision-filters"} do |form| %>
     <div>

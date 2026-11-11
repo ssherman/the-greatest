@@ -34,6 +34,7 @@ class Admin::MatchDecisionsBaseController < Admin::BaseController
     # The via filter narrows reviewed rows only; pending rows have no reviewer.
     @via = params[:via] if VIAS.include?(params[:via]) && @reviewed != "pending"
     @pagy, @decisions = pagy(filtered_scope.includes(:record, :reviewed_by).newest_first, limit: PER_PAGE)
+    @agent_prompt = Services::AgentPrompts.call(domain: domain, queue: :match_decisions)
   end
 
   def show
