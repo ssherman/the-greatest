@@ -26,6 +26,7 @@
           <legend class="fieldset-legend">Slug <span class="text-error">*</span></legend>
           <%= f.text_field :slug, class: "input w-full #{"input-error" if @archive.errors[:slug].any?}", required: true %>
           <p class="label">Lowercase letters, numbers and single hyphens. It is the archive's public address.</p>
+          <p class="label whitespace-normal">Changing the slug changes the public address. The old address can stay cached for up to 24 hours.</p>
         </fieldset>
 
         <fieldset class="fieldset">
