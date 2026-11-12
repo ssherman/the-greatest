@@ -88,9 +88,10 @@ second export on the same day reuses the day's file name and the trainer reports
    skip it until then (production had none on 2026-11-12).
 4. **`bin/rails books:goodreads_replay:apply`.** The sync puts legacy users' list items and reviews
    back the way legacy has them, which undoes the replay's approved relinks until this re-applies
-   them. It applies every approved verdict that has not been applied, of every kind (fixes, merges,
-   strips), not only relinks. On 2026-11-12 there were no approved relinks, and the 42 approved but
-   unapplied verdicts all named books already merged away, so it changes nothing.
+   them. It re-runs every approved verdict of every kind (fixes, author and book merges, relinks,
+   strips, provisional marks), applied or not; each handler does nothing when its change is already
+   there. On 2026-11-12 there were no approved relinks, and the 42 approved verdicts never applied all
+   named books already merged away, so it changes nothing.
 5. **`bin/rails books:goodreads_replay:repair_ratings`.** Run it after `apply`. The sync overwrites
    legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
    fractional rating back.
@@ -502,8 +503,10 @@ new-app list. Before step 1:
 
 1. `bin/rails data_migration:sync_report`: no `MISSING` line.
 2. `bin/rails data_migration:sync` (about 10 minutes; do not deploy while it runs).
-3. `bin/rails data_migration:sync_report` again: every count 0. The "legacy edits to existing books" line then
-   counts the books the sync just copied; that is expected.
+3. `bin/rails data_migration:sync_report` again: every "would insert", insert, update, delete and dropped count
+   is 0, and there is no `MISSING` line. Totals stay non-zero (the legacy and here columns, redirects recorded,
+   users deleted on legacy, merge collisions), and the "legacy edits to existing books" line counts the books
+   the sync just copied; all of that is expected.
 4. `bin/rails books:authors:merge_unknown`, and `APPLY=1` only if it lists authors.
 5. `bin/rails books:goodreads_replay:load`.
 6. Rankings (section 4 step 6).
