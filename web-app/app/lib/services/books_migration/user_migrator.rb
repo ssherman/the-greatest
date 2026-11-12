@@ -59,9 +59,13 @@ module Services
       # Hash (passing the raw string double-encodes it). Blank/nil -> nil; a
       # malformed JSON string raises (the base rescue names the legacy id and
       # aborts the run, which is idempotent-resumable).
+      #
+      # Legacy wrote some provider_data with the same key twice (2,797 users as
+      # of 2026-11-12). json 3 raises on that where json 2 kept the last value,
+      # which failed the sync's users step; allow_duplicate_key keeps the old result.
       def parse_provider_data(value)
         return nil if value.blank?
-        JSON.parse(value)
+        JSON.parse(value, allow_duplicate_key: true)
       end
     end
   end

@@ -91,6 +91,19 @@ class Services::BooksMigration::UserMigratorTest < ActiveSupport::TestCase
     assert_equal({"2" => {"providerId" => "google.com"}}, User.find(90010).provider_data)
   end
 
+  test "provider_data with a repeated key migrates, the last value winning" do
+    raw = "{\"4\":{\"providerId\":\"password\",\"uid\":\"a\"},\"4\":{\"providerId\":\"password\",\"uid\":\"b\"}}"
+    result = run_migrator([legacy_attrs("id" => 90012, "provider_data" => raw)])
+    assert result[:success], result[:error]
+    assert_equal({"4" => {"providerId" => "password", "uid" => "b"}}, User.find(90012).provider_data)
+  end
+
+  test "malformed provider_data still fails the run" do
+    result = run_migrator([legacy_attrs("id" => 90013, "provider_data" => "{not json")])
+    assert_not result[:success]
+    assert_match "90013", result[:error]
+  end
+
   test "stores a blank provider_data as nil without crashing" do
     result = run_migrator([legacy_attrs("id" => 90011, "provider_data" => "")])
     assert result[:success], result[:error]
