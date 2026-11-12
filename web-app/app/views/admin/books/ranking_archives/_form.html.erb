@@ -1,0 +1,52 @@
+<%= form_with model: @archive, scope: :books_ranking_archive, url: admin_books_ranking_archive_path(@archive), method: :patch, class: "space-y-6" do |f| %>
+  <% if @archive.errors.any? %>
+    <div class="alert alert-error">
+      <div>
+        <h3 class="font-bold"><%= pluralize(@archive.errors.count, "error") %> prohibited this archive from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @archive.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Archive Details</h2>
+
+      <div class="grid grid-cols-1 gap-4">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Name <span class="text-error">*</span></legend>
+          <%= f.text_field :name, class: "input w-full #{"input-error" if @archive.errors[:name].any?}", required: true, autofocus: true %>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Slug <span class="text-error">*</span></legend>
+          <%= f.text_field :slug, class: "input w-full #{"input-error" if @archive.errors[:slug].any?}", required: true %>
+          <p class="label whitespace-normal">Lowercase letters, numbers and single hyphens. It is the archive's public address.</p>
+          <p class="label whitespace-normal">Changing the slug changes the public address. The old address can stay cached for up to 24 hours.</p>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Description</legend>
+          <%= f.text_area :description, rows: 4, class: "textarea w-full" %>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <label class="label cursor-pointer justify-start gap-2">
+            <%= f.check_box :hidden, class: "checkbox" %>
+            <span class="font-semibold">Hidden</span>
+          </label>
+          <p class="label whitespace-normal">Pages already cached can stay reachable for up to 24 hours after an archive is hidden or deleted.</p>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", admin_books_ranking_archive_path(@archive), class: "btn btn-ghost" %>
+    <%= f.submit "Update Archive", class: "btn btn-primary" %>
+  </div>
+<% end %>

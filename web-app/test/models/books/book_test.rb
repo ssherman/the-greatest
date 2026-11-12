@@ -442,13 +442,15 @@ module Books
       assert_nil row.to_id
     end
 
-    test "destroying a new-app book records nothing" do
+    test "destroying a new-app book records it as deleted" do
       book = ::Books::Book.create!(title: "New App Book")
       assert_operator book.id, :>=, Services::BooksMigration::RESERVED_CEILINGS.fetch("books_books")
 
-      assert_no_difference -> { RecordRedirect.count } do
+      assert_difference -> { RecordRedirect.count }, 1 do
         book.destroy!
       end
+      row = RecordRedirect.find_by!(item_type: "Books::Book", from_id: book.id)
+      assert_nil row.to_id
     end
 
     test "ordered_by_primary_rank puts ranked books first by rank, then the unranked by title" do

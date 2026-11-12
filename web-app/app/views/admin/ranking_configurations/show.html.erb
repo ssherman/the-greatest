@@ -359,6 +359,22 @@
         </div>
       </div>
 
+      <% if @ranking_configuration.ranking_archive_class && @ranking_configuration.global? && ranking_configuration_policy.execute_action? %>
+        <div class="card bg-base-100 shadow-xl" data-testid="archive-now-card">
+          <div class="card-body">
+            <h2 class="card-title">Archive this ranking</h2>
+            <p class="text-sm text-base-content/70">Freeze the current ranking as a named archive, for example before an algorithm change.</p>
+            <%= form_with url: execute_action_ranking_configuration_path(@ranking_configuration, action_name: "ArchiveRanking"), method: :post, class: "flex flex-col gap-3 sm:flex-row sm:items-end" do |f| %>
+              <fieldset class="fieldset flex-1">
+                <%= f.label :name, "Archive name", class: "label" %>
+                <%= f.text_field :name, required: true, maxlength: 255, class: "input w-full" %>
+              </fieldset>
+              <%= f.submit "Archive now", class: "btn btn-primary" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
       <% if CsvExports::Registry.exportable?(@ranking_configuration) %>
         <% export = @ranking_configuration.csv_export %>
         <div class="card bg-base-100 shadow-xl" data-testid="csv-export-card">

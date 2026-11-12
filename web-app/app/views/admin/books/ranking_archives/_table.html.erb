@@ -1,0 +1,45 @@
+<div class="overflow-x-auto">
+  <table class="table table-zebra">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Captured</th>
+        <th>Books</th>
+        <th>Origin</th>
+        <th>Status</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if archives.any? %>
+        <% archives.each do |archive| %>
+          <tr>
+            <td><%= link_to archive.name, admin_books_ranking_archive_path(archive), class: "link", data: {turbo_frame: "_top"} %></td>
+            <td class="text-sm text-base-content/70"><%= archive.captured_at.to_date %></td>
+            <td><%= archive.items_count %></td>
+            <td><%= archive_origin_label(archive) %></td>
+            <td><%= archive.hidden? ? "Hidden" : "Visible" %></td>
+            <td class="text-right">
+              <div class="flex items-center justify-end gap-1">
+                <%= link_to "View", admin_books_ranking_archive_path(archive), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% if current_user_can_write? %>
+                  <%= link_to "Edit", edit_admin_books_ranking_archive_path(archive), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="6" class="text-center text-base-content/70 py-8">No archives yet.</td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if defined?(pagy) && pagy && pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== pagy.series_nav(anchor_string: 'data-turbo-frame="ranking_archives_table"') %>
+  </div>
+<% end %>

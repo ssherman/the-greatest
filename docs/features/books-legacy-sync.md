@@ -42,13 +42,17 @@ Details: `docs/features/books-categories.md`.
 
 ## Redirects
 
-`record_redirects` records what became of a legacy-origin book or author (id below
-its ceiling) that no longer exists: merged into `to_id`, or deleted (`to_id` NULL).
-The mergers write it before destroying the source; an `after_destroy` on
+`record_redirects` records what became of a book or author that no longer exists:
+merged into `to_id`, or deleted (`to_id` NULL). Every book is recorded, whatever its
+id, because ranking archives store book ids and resolve a merged or deleted one
+through this table. An author is recorded only when legacy-origin (id below its
+ceiling). The mergers write it before destroying the source; an `after_destroy` on
 `Books::Book`/`Books::Author` records every other delete. A merge or delete also
 repoints rows that named the departing record, so chains through new-app books
 resolve. The sync never re-inserts a redirected id, and routes a new book's author
-or a new identifier's book through `Services::BooksMigration::Redirects`.
+or a new identifier's book through `Services::BooksMigration::Redirects`. It only
+ever asks about legacy ids, so rows for new-app books are never looked up by it; the
+sync report's "redirects recorded" figure counts them.
 
 A book removed without callbacks (`delete_all`, raw SQL) leaves no redirect. A later
 sync that meets its id fails and names the legacy row.

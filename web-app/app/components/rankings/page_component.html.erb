@@ -209,4 +209,10 @@
         target: "_blank", rel: "noopener", class: "link link-primary" %>
     or <button type="button" class="link link-primary text-left" data-action="contact--form#open">get in touch</button>.
   </p>
+  <% if domain == :books %>
+    <p class="leading-relaxed mt-4">
+      The ranking changes as lists are added. To see it as it stood in an earlier month,
+      <%= link_to "browse past rankings", helpers.books_ranking_archives_path, class: "link link-primary" %>.
+    </p>
+  <% end %>
 </div>

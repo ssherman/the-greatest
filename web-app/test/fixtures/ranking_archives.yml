@@ -1,0 +1,59 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: ranking_archives
+#
+#  id                              :bigint           not null, primary key
+#  captured_at                     :datetime         not null
+#  description                     :text
+#  hidden                          :boolean          default(FALSE), not null
+#  item_ids                        :bigint           default([]), not null, is an Array
+#  items_count                     :integer          default(0), not null
+#  name                            :string           not null
+#  period                          :date
+#  positions                       :integer          default([]), not null, is an Array
+#  scores                          :decimal(10, 2)   default([]), not null, is an Array
+#  slug                            :string           not null
+#  type                            :string           not null
+#  created_at                      :datetime         not null
+#  updated_at                      :datetime         not null
+#  legacy_ranking_configuration_id :integer
+#  ranking_configuration_id        :bigint
+#
+# Indexes
+#
+#  index_ranking_archives_on_config_and_period                (ranking_configuration_id,period) UNIQUE WHERE (period IS NOT NULL)
+#  index_ranking_archives_on_legacy_config                    (legacy_ranking_configuration_id) UNIQUE WHERE (legacy_ranking_configuration_id IS NOT NULL)
+#  index_ranking_archives_on_ranking_configuration_id         (ranking_configuration_id)
+#  index_ranking_archives_on_type_and_hidden_and_captured_at  (type,hidden,captured_at)
+#  index_ranking_archives_on_type_and_slug                    (type,slug) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ranking_configuration_id => ranking_configurations.id) ON DELETE => nullify
+#
+books_january_2027:
+  type: Books::RankingArchive
+  name: January 2027
+  slug: january-2027
+  period: 2027-01-01
+  captured_at: 2027-01-01 05:15:00
+  ranking_configuration: books_global
+  item_ids: <%= [ActiveRecord::FixtureSet.identify(:war_and_peace), ActiveRecord::FixtureSet.identify(:crime_and_punishment)].inspect %>
+  positions: [1, 2]
+  scores: [100.0, 90.0]
+  items_count: 2
+  hidden: false
+
+books_hidden_legacy:
+  type: Books::RankingArchive
+  name: List Dates V7
+  slug: list-dates-v7
+  captured_at: 2020-06-01 00:00:00
+  item_ids: <%= [ActiveRecord::FixtureSet.identify(:war_and_peace)].inspect %>
+  positions: [1]
+  scores: [100.0]
+  items_count: 1
+  hidden: true
+  legacy_ranking_configuration_id: 33

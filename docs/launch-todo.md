@@ -696,3 +696,26 @@ already has tunnels enabled, so a VM created before the token exists starts `clo
    one start every 8 seconds. To see the counts first, `bin/rails wikidata:recheck` is a dry run;
    `APPLY=1` queues the work. It selects no book while their evidence rows list `worldcat` in
    `sources_failed` (until WorldCat is reachable from production), because those books are left to a normal re-gather.
+
+## 16. Ranking archives (the migration once; the monthly job needs nothing)
+
+Frozen copies of the books ranking, shown at `/rankings/archive`. The monthly job is scheduled and
+needs no action; the one manual step is copying the archived legacy rankings in. Details:
+`docs/features/ranking-archives.md`.
+
+Steps marked "Shane runs with `!`" change production, so an agent does not run them.
+
+1. **After deploy, check the first automatic archive.** The next 05:15 UTC run creates an archive named
+   for the month it is deployed in. Check `/admin/ranking_archives`. If it should not be public, hide it;
+   do not delete it, because the next run would create it again.
+2. **Copy the legacy archives. Shane runs with `!`.** In production,
+   `bin/rails data_migration:ranking_archives`. Expect `unknown: 0` and a `count` of about 43 (43 on the
+   2026-11-10 development run); `skipped_empty` lists any archived ranking with no ranked rows. An unknown
+   id is a book id that is neither a live book nor a `record_redirects` row. If the task aborts with
+   unknown ids there are two causes. The books sync may be behind legacy: run the read-only
+   `bin/rails data_migration:sync_report` to see, then `data_migration:sync` (a plain sync holds back the
+   last 24 hours of legacy changes unless `FINAL=1`), and retry. Or a book was removed here without
+   callbacks: stop and investigate the listed ids before retrying, and do not force the migration.
+3. **Re-running it at cutover is harmless.** It creates only archives that do not exist yet, so it
+   reports `count: 0` if legacy archived nothing new.
+4. **Spot-check.** Open `/rankings/archive` and one old archive.

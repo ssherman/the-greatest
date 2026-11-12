@@ -1,0 +1,70 @@
+<% content_for :title, @archive.name %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold"><%= @archive.name %></h1>
+    <div class="flex gap-2">
+      <%= link_to "Back", admin_books_ranking_archives_path, class: "btn btn-ghost" %>
+      <% unless @archive.hidden? %>
+        <%= link_to "Public page", books_ranking_archive_path(slug: @archive.slug), class: "btn btn-outline" %>
+      <% end %>
+      <% if current_user_can_write? %>
+        <%= link_to "Edit", edit_admin_books_ranking_archive_path(@archive), class: "btn btn-primary" %>
+      <% end %>
+      <% if current_user_can_delete? %>
+        <%= button_to "Delete", admin_books_ranking_archive_path(@archive), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: archive_delete_confirmation(@archive)}} %>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Details</h2>
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div><dt class="text-base-content/60">Slug</dt><dd><%= @archive.slug %></dd></div>
+        <div><dt class="text-base-content/60">Captured</dt><dd><%= @archive.captured_at.to_date %></dd></div>
+        <div><dt class="text-base-content/60">Books</dt><dd><%= @archive.items_count %></dd></div>
+        <div><dt class="text-base-content/60">Origin</dt><dd><%= archive_origin_label(@archive) %></dd></div>
+        <div><dt class="text-base-content/60">Status</dt><dd><%= @archive.hidden? ? "Hidden" : "Visible" %></dd></div>
+        <% if @archive.period.present? %>
+          <div><dt class="text-base-content/60">Period</dt><dd><%= @archive.period %></dd></div>
+        <% end %>
+        <% if @archive.ranking_configuration.present? %>
+          <div><dt class="text-base-content/60">Source configuration</dt><dd><%= link_to @archive.ranking_configuration.name, admin_books_ranking_configuration_path(@archive.ranking_configuration), class: "link" %></dd></div>
+        <% end %>
+        <% if @archive.legacy_ranking_configuration_id.present? %>
+          <div><dt class="text-base-content/60">Legacy configuration id</dt><dd><%= @archive.legacy_ranking_configuration_id %></dd></div>
+        <% end %>
+      </dl>
+      <% if @archive.description.present? %>
+        <p class="mt-4 whitespace-pre-line"><%= @archive.description %></p>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">First <%= Admin::Books::RankingArchivesController::ENTRIES_ON_SHOW %> entries</h2>
+      <% if @entries.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-zebra">
+            <thead>
+              <tr><th>Rank</th><th>Book</th><th>Score</th></tr>
+            </thead>
+            <tbody>
+              <% @entries.each do |entry| %>
+                <tr>
+                  <td><%= entry.rank %></td>
+                  <td><%= link_to entry.item.title, admin_books_book_path(entry.item), class: "link" %></td>
+                  <td><%= entry.score %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">There are no entries to show.</p>
+      <% end %>
+    </div>
+  </div>
+</div>
