@@ -60,8 +60,9 @@ sync that meets its id fails and names the legacy row.
 ## Users' data
 
 Legacy stays the source of truth for legacy users' data until the cutover. Each run makes the
-legacy-origin rows (ids below their table's ceiling) match legacy, and never touches new-app rows
-or other domains' lists.
+legacy-origin rows (ids below their table's ceiling) match legacy. It never touches lists created
+in this app or other domains' lists. A legacy-origin list is matched as a whole, though: an item
+added to one in this app is deleted when legacy does not have it (18 such items on 2026-11-12).
 
 | Data | Each run |
 |---|---|
