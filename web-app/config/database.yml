@@ -17,7 +17,9 @@ default: &default
   encoding: unicode
   # For details on connection pooling, see Rails configuration guide
   # https://guides.rubyonrails.org/configuring.html#database-pooling
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 50 } %>
+  # Enough connections for Puma's threads, and for Sidekiq's: SIDEKIQ_CONCURRENCY plus the
+  # three one-thread capsules (config/initializers/sidekiq.rb) and a little spare.
+  pool: <%= [ENV.fetch("RAILS_MAX_THREADS") { 50 }.to_i, ENV.fetch("SIDEKIQ_CONCURRENCY", 0).to_i + 5].max %>
   host: localhost
   port: 6543
   database: the-greatest
