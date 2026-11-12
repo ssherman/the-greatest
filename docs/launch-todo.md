@@ -493,7 +493,9 @@ Do not start until the new enrichment steps (categories, origin) and the Goodrea
 Every step below only queues a Sidekiq job; wait for the jobs to finish before the next step.
 
 1. **Gate on, enrichment off.** Set `GOODREADS_REIMPORT_ENABLED=true` in the production env (SOPS) and restart
-   the worker. Leave `GOODREADS_REIMPORT_ENRICHMENT` unset.
+   the worker. Leave `GOODREADS_REIMPORT_ENRICHMENT` unset. Check `SIDEKIQ_CONCURRENCY` is `25`: each match
+   spends ~11 s waiting on the AI (flex tier), so ~210k editions take about a day at 25 threads and about five
+   at 5. Lower it to `10` once the run is finished.
 2. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The mixed books are read
    from it.
 3. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It records verdicts and

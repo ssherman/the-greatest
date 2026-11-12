@@ -1,5 +1,8 @@
 ---
-:concurrency: 5
+# Threads for the queues below (the serial, goodreads_fetch and evidence capsules in
+# config/initializers/sidekiq.rb add one thread each). Set per environment; raise it for
+# a bulk run whose jobs mostly wait on a remote API, such as the Goodreads re-import.
+:concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 5).to_i %>
 # Strict priority, in this order. author_chain is last: the books author
 # chain (Books::Authors::*Job) can hold tens of thousands of jobs during a
 # backfill, and must never queue ahead of members' jobs on low.
