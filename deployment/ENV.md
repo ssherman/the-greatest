@@ -241,10 +241,14 @@ These variables are used by nginx's built-in template system for environment var
 ### Sidekiq Configuration
 
 #### SIDEKIQ_CONCURRENCY
-- **Description**: Number of Sidekiq worker threads
+- **Description**: Threads for Sidekiq's main queues (`critical`, `default`, `low`, `author_chain`), read by
+  `config/sidekiq.yml`. The `serial`, `goodreads_fetch` and `evidence` capsules add one thread each on top.
+  The database pool (`config/database.yml`) grows to at least this plus 5, so every thread gets a connection.
 - **Required**: No
-- **Default**: `10`
-- **Recommended**: Adjust based on server resources and job types
+- **Default**: `5`
+- **Recommended**: `10`. Raise it (e.g. `25`) for a bulk run whose jobs mostly wait on a remote API, such as the
+  Goodreads re-import's matching (`docs/launch-todo.md` §12), then lower it again. Check Postgres headroom
+  (`max_connections` 200) before going much higher.
 
 #### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD
 - **Description**: Basic-auth credentials for the Sidekiq dashboard at `/sidekiq-admin`
