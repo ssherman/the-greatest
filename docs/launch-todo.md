@@ -82,15 +82,25 @@ second export on the same day reuses the day's file name and the trainer reports
    goals, saved searches, recommendation settings, reviews and corrections, then rebuilds the
    favorites lists. A step that would delete more than 5% of a table (and over 500 rows) refuses;
    if the deletions are real, re-run with `SYNC_ALLOW_DELETES=1`.
-3. **`bin/rails firebase:backfill_v1_uids`.** The user overwrite still resets `auth_uid` from legacy.
+3. **`bin/rails firebase:backfill_v1_uids`, only once the V1 Firebase import has run** (section 1
+   step 4). The user overwrite resets `auth_uid` from legacy, and this puts the V1 uids back. Before
+   that import it would point about 30,000 accounts at Firebase identities that do not exist yet:
+   skip it until then (production had none on 2026-11-12).
 4. **`bin/rails books:goodreads_replay:apply`.** The sync puts legacy users' list items and reviews
    back the way legacy has them, which undoes the replay's approved relinks until this re-applies
-   them.
+   them. It re-runs every approved verdict of every kind (fixes, author and book merges, relinks,
+   strips, provisional marks), applied or not; each handler does nothing when its change is already
+   there. On 2026-11-12 there were no approved relinks, and the 42 approved verdicts never applied all
+   named books already merged away, so it changes nothing.
 5. **`bin/rails books:goodreads_replay:repair_ratings`.** Run it after `apply`. The sync overwrites
    legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
    fractional rating back.
 6. **Rankings.** The books list weights and book rankings. Author rankings follow.
-7. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run. The sync keeps
+   While the section 12 re-import is still to run, also run `bin/rails books:goodreads_replay:load`
+   after the sync: it adds the legacy Goodreads imports made since the last load (27 on 2026-11-12),
+   so the re-import covers them. It reuses imports already loaded.
+7. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run, and never while
+   the section 12 re-import is matching: both need Open Library's one `/resolve` slot. The sync keeps
    adding legacy identifiers; this re-verifies the books that got new ones. Once the `post_import`
    books have been verified, the recheck needs `post_import` too
    (`books:verify[all,recheck,post_import]`).
@@ -486,8 +496,26 @@ Matches every legacy CSV row to the exact book it names and moves each reader's 
 `docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md`; how it works, and where each output lands:
 `docs/features/goodreads-reimport.md`. It replaces stage two of section 11.
 
-**Do not run `data_migration:sync` until it has been checked against this run and changed so it cannot revert
-it** (spec section 3.9). As it stands it rewrites legacy users' lists and would undo moved rows.
+**Sync first, then not again until the sync is changed.** A `data_migration:sync` before the first row moves is
+safe, and it brings over the legacy books, users and imports this run should cover. A dev rehearsal on 2026-11-12
+(copies of production and legacy from 2026-11-11) changed no existing book, author, category, identifier or
+new-app list. Before step 1:
+
+1. `bin/rails data_migration:sync_report`: no `MISSING` line.
+2. `bin/rails data_migration:sync` (about 10 minutes; do not deploy while it runs).
+3. `bin/rails data_migration:sync_report` again: every "would insert", insert, update, delete and dropped count
+   is 0, and there is no `MISSING` line. Totals stay non-zero (the legacy and here columns, redirects recorded,
+   users deleted on legacy, merge collisions), and the "legacy edits to existing books" line counts the books
+   the sync just copied; all of that is expected.
+4. `bin/rails books:authors:merge_unknown`, and `APPLY=1` only if it lists authors.
+5. `bin/rails books:goodreads_replay:load`.
+6. Rankings (section 4 step 6).
+
+Skip section 4's `firebase:backfill_v1_uids` (see its condition) and `books:verify[all,recheck]` (after this run).
+
+Once step 9 below has moved a row, **do not run `data_migration:sync` until it has been checked against this run
+and changed so it cannot revert it** (spec section 3.9). As it stands it rewrites legacy users' lists and would
+undo moved rows.
 
 Do not start until the new enrichment steps (categories, origin) and the Goodreads search page fix are deployed.
 Every step below only queues a Sidekiq job; wait for the jobs to finish before the next step.
