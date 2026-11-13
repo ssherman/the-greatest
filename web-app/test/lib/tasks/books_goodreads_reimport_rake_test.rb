@@ -25,7 +25,7 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
     JOBS::MatchEditionsJob.expects(:enqueue).never
     JOBS::ApplyJob.expects(:perform_async).never
 
-    %w[archive_mixed match decide apply check_authors].each do |name|
+    %w[archive_mixed match recheck_creates decide apply check_authors].each do |name|
       Rake::Task["books:goodreads_reimport:#{name}"].reenable
       assert_raises(SystemExit) { capture_io { Rake::Task["books:goodreads_reimport:#{name}"].invoke("all") } }
     end
@@ -49,6 +49,16 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
     Rake::Task["books:goodreads_reimport:match"].reenable
     JOBS::MatchEditionsJob.expects(:enqueue).with(limit: nil).returns(9)
     assert_match(/queued 9 editions/, run_task("match", "all"))
+  end
+
+  test "recheck_creates passes the limit" do
+    @config.enabled = true
+    JOBS::RecheckCreatesJob.expects(:enqueue).with(limit: 25).returns(25)
+    assert_match(/queued 25 create verdicts/, run_task("recheck_creates", "25"))
+
+    Rake::Task["books:goodreads_reimport:recheck_creates"].reenable
+    JOBS::RecheckCreatesJob.expects(:enqueue).with(limit: nil).returns(4)
+    assert_match(/queued 4 create verdicts/, run_task("recheck_creates", "all"))
   end
 
   test "a bad limit aborts" do

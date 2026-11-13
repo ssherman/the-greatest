@@ -102,6 +102,12 @@ rejected ones are never carried out.
 
 ## Reviewing proposed matches
 
+Before a match says "create a new book", it takes a second look for an English edition. The finder searches an
+English catalog, so a translated edition that legacy never put on a book (*Der talentierte Mr. Ripley*) finds
+nothing. The AI names the English edition's title, the finder searches with it, and any books it finds go to the
+same-work check again; the English search's own pick is the one an AI "high" may confirm by itself. The suggestion is
+stored on the verdict as `english_title`. `recheck_creates` re-runs this for create verdicts recorded before it existed.
+
 The AI always sees the book the reader is on today as one of its choices, even when the finder missed it (a
 translated title finds nothing in an English catalog). When the AI confirms the finder's match with high
 confidence, it is approved by itself; so is the reader's current book when the finder found nothing and that

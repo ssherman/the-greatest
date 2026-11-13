@@ -545,6 +545,10 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
    deletes nothing.
 4. **Match every edition.** `bin/rails "books:goodreads_reimport:match[200]"` first, then
    `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions left.
+   **Once, for the 2026-11-13 production run only:** its "create a new book" verdicts were recorded before the match
+   searched again by English title, so run `bin/rails "books:goodreads_reimport:recheck_creates[all]"` (about 5,700
+   verdicts, a few AI calls each) and wait for it, then run `recheck_creates[all]` again to pick up any it had to
+   retry. Verdicts you already approved or rejected by hand are left alone. Later runs do this as part of `match`.
 5. **Report and review.** `bin/rails books:goodreads_reimport:report`; find the file at
    `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). The worker writes it
    into the shared storage volume, mounted in both web and worker, so read it from either container. The

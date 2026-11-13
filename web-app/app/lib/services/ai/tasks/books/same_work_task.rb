@@ -12,11 +12,13 @@ module Services
           VALID_CONFIDENCE = %w[high medium low].freeze
           EDITION_TITLES = 3
 
-          attr_reader :facts, :books
+          attr_reader :facts, :books, :english_title
 
-          def initialize(facts:, books:, parent: nil, provider: nil, model: nil)
+          # english_title: the English edition's title EnglishTitleTask suggested, when the edition is a translation.
+          def initialize(facts:, books:, english_title: nil, parent: nil, provider: nil, model: nil)
             @facts = facts
             @books = books
+            @english_title = english_title
             super(parent: parent, provider: provider, model: model)
           end
 
@@ -52,6 +54,7 @@ module Services
             lines << "Original publication year: #{facts.year}" if facts.year.present?
             lines << "ISBN13: #{facts.isbn13}" if facts.isbn13.present?
             lines << "Series: #{facts.series_name}#{" ##{facts.series_number}" if facts.series_number.present?}" if facts.series_name.present?
+            lines << "English title of this work (suggested): #{english_title}" if english_title.present?
             lines << ""
             lines << "Candidate books:"
             books.each_with_index { |book, index| lines << "#{index + 1}. #{describe(book)}" }

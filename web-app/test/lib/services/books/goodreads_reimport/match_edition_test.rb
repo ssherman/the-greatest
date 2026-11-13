@@ -11,11 +11,52 @@ module Services
           def call(**) = response
         end
 
+        # Answers each call in turn and keeps the queries it was asked.
+        class SeqFinder
+          attr_reader :queries
+
+          def initialize(*responses)
+            @responses = responses
+            @queries = []
+          end
+
+          def call(query:, **)
+            @queries << query
+            @responses.shift
+          end
+        end
+
         setup do
           @edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 90_001, signature: "me-sig", title: "War and Peace", primary_author: "Leo Tolstoy")
           @pick = books_books(:war_and_peace)
           @other = books_books(:crime_and_punishment)
           @key = "reimport:edition:#{@edition.id}"
+          # Every "none" asks for an English title; by default there is none, so the earlier behaviour is unchanged.
+          Services::Ai::Tasks::Books::EnglishTitleTask.any_instance.stubs(:call)
+            .returns(Services::Ai::Result.new(success: true, data: {title: nil, confidence: "high", reason: "already English"}))
+        end
+
+        def english_returning(title, confidence = "high", success: true)
+          result = if success
+            Services::Ai::Result.new(success: true, data: {title: title, confidence: confidence, reason: "translated"})
+          else
+            Services::Ai::Result.new(success: false, error: "boom")
+          end
+          klass = stub
+          klass.stubs(:new).returns(stub(call: result))
+          klass
+        end
+
+        # The same-work task answering each call in turn; the books each call was offered land in offered.
+        def tasks_returning(*book_ids, offered: [])
+          klass = stub
+          tasks = book_ids.map { |id| stub(call: Services::Ai::Result.new(success: true, data: {book_id: id, confidence: "high", reason: "r"})) }
+          klass.stubs(:new).with { |args| offered << args }.returns(*tasks)
+          klass
+        end
+
+        def run_english(finder, task_class, english_class)
+          MatchEdition.call(edition: @edition, finder: finder, task_class: task_class, english_task_class: english_class)
         end
 
         def match(record: nil, candidates: [], decided_by: :rule, sources_failed: [])
@@ -312,6 +353,106 @@ module Services
           run_match(finder_match, klass)
 
           assert_equal extra.first(5).map(&:id) + [@other.id], captured.map(&:id)
+        end
+
+        test "a none answer asks for the English title and matches the book the English search picks" do
+          derived = derived_book
+          finder = SeqFinder.new(match(candidates: [derived]), match(record: @pick))
+          offered = []
+
+          result = run_english(finder, tasks_returning(nil, @pick.id, offered: offered), english_returning("War and Peace"))
+
+          assert_equal :matched, result.data[:outcome]
+          assert verdict.approved?
+          assert_equal @pick.id, verdict.payload["book_id"]
+          assert_equal({"title" => "War and Peace", "confidence" => "high", "reason" => "translated"}, verdict.payload["english_title"])
+          english_query = finder.queries.last
+          assert_equal "War and Peace", english_query.title
+          assert_empty english_query.isbn13
+          assert_empty english_query.goodreads_id
+          assert_equal [@pick.id, derived.id], offered.last[:books].map(&:id)
+          assert_equal "War and Peace", offered.last[:english_title]
+          assert_equal [@pick.id, derived.id], verdict.payload["candidate_book_ids"]
+        end
+
+        test "no candidates at all, a translated edition: the English search finds the book" do
+          finder = SeqFinder.new(match, match(record: @pick))
+          offered = []
+
+          result = run_english(finder, tasks_returning(@pick.id, offered: offered), english_returning("War and Peace"))
+
+          assert_equal :matched, result.data[:outcome]
+          assert verdict.approved?
+          assert_equal 1, offered.size
+        end
+
+        test "the AI picking a book the English search only listed waits for review" do
+          finder = SeqFinder.new(match, match(candidates: [@pick]))
+
+          run_english(finder, tasks_returning(@pick.id), english_returning("War and Peace"))
+
+          assert verdict.proposed?
+          assert_equal @pick.id, verdict.payload["book_id"]
+        end
+
+        test "the AI saying none after the English search: create, proposed when the English search picked a book" do
+          finder = SeqFinder.new(match, match(record: @pick))
+
+          result = run_english(finder, tasks_returning(nil), english_returning("War and Peace"))
+
+          assert_equal :create, result.data[:outcome]
+          assert verdict.proposed?
+        end
+
+        test "no English title: create as before, the same-work AI asked once" do
+          offered = []
+          run_english(SeqFinder.new(match(candidates: [derived_book])), tasks_returning(nil, offered: offered), english_returning(nil))
+
+          assert verdict.approved?
+          assert_equal "create", verdict.payload["outcome"]
+          assert_nil verdict.payload["english_title"]["title"]
+          assert_equal 1, offered.size
+        end
+
+        test "an English search that finds nothing new creates without asking the AI again" do
+          derived = derived_book
+          offered = []
+          finder = SeqFinder.new(match(candidates: [derived]), match(candidates: [derived]))
+
+          run_english(finder, tasks_returning(nil, offered: offered), english_returning("War and Peace"))
+
+          assert_equal "create", verdict.payload["outcome"]
+          assert_equal "War and Peace", verdict.payload["english_title"]["title"]
+          assert_equal 1, offered.size
+        end
+
+        test "an English title failure or a failed English search records nothing and returns :retry" do
+          assert_equal :retry, run_english(SeqFinder.new(match), tasks_returning, english_returning(nil, success: false)).data[:outcome]
+          finder = SeqFinder.new(match, match(sources_failed: [:worldcat]))
+          assert_equal :retry, run_english(finder, tasks_returning, english_returning("War and Peace")).data[:outcome]
+          assert_not ::Books::RepairVerdict.exists?(subject_key: @key)
+        end
+
+        test "a matched answer never asks for an English title" do
+          english = mock
+          english.expects(:new).never
+
+          run_english(SeqFinder.new(match(record: @pick)), tasks_returning(@pick.id), english)
+
+          assert verdict.approved?
+          assert_nil verdict.payload["english_title"]
+        end
+
+        test "a superseded verdict is matched again and replaced" do
+          old = ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: @key, payload: {"outcome" => "create"}, decided_by: :ai,
+            status: :approved, confidence: :high, superseded_at: Time.current)
+
+          result = run_english(SeqFinder.new(match, match(record: @pick)), tasks_returning(@pick.id), english_returning("War and Peace"))
+
+          assert_equal :matched, result.data[:outcome]
+          assert_equal old.id, verdict.id
+          assert_nil verdict.superseded_at
+          assert_equal @pick.id, verdict.payload["book_id"]
         end
       end
     end
