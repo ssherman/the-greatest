@@ -1019,6 +1019,94 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/descriptions:
+    x-domain: books
+    get:
+      operationId: getBookDescriptions
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: A book's descriptions
+      description: |
+        Every description the book holds, of every kind and locale, highest rank first then by source, with `shown_description_id` naming the English summary the book's public page shows (a preferred one wins, otherwise the highest-priority source; a deprecated description is listed but never shown), or null when none qualifies. A book that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the descriptions of book `id` (from search_admin_books): each with its `id`, `kind`, `locale`, `rank`
+          (preferred, normal or deprecated), `source`, `source_name`, `source_url`, `license`, the full `content` and
+          its timestamps. `shown_description_id` is the one the public book page shows, or null; a deprecated
+          description is never shown. A 404 means no such book.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The book's descriptions and which one is shown.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/descriptions:
+    x-domain: books
+    get:
+      operationId: getAuthorDescriptions
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: An author's descriptions
+      description: |
+        Every description the author holds, of every kind and locale, highest rank first then by source, with `shown_description_id` naming the English summary the author's public page shows (a preferred one wins, otherwise the highest-priority source; a deprecated description is listed but never shown), or null when none qualifies. An author that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the descriptions of author `id` (from search_admin_authors): each with its `id`, `kind`, `locale`,
+          `rank` (preferred, normal or deprecated), `source`, `source_name`, `source_url`, `license`, the full `content`
+          and its timestamps. `shown_description_id` is the one the public author page shows, or null; a deprecated
+          description is never shown. A 404 means no such author.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The author's descriptions and which one is shown.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories:
     x-domain: books
     get:
@@ -2287,6 +2375,42 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminMatchDecisionFull"
+    AdminDescription:
+      type: object
+      required: [id, kind, locale, rank, source, source_name, source_url, license, content, retrieved_at, created_at, updated_at]
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [summary, long, first_sentence, blurb]}
+        locale: {type: string}
+        rank:
+          type: string
+          enum: [deprecated, normal, preferred]
+          description: A preferred description wins over the others; a deprecated one is never shown.
+        source:
+          type: string
+          enum: [manual, ai_generated, wikipedia, openlibrary, musicbrainz, igdb, publisher, goodreads, other]
+        source_name:
+          type: [string, "null"]
+          description: Names the source when `source` is `other`; null otherwise.
+        source_url: {type: [string, "null"]}
+        license:
+          type: [string, "null"]
+          enum: [cc0, cc_by_sa_4, proprietary, null]
+        content: {type: string}
+        retrieved_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdminDescriptionList:
+      type: object
+      required: [data, shown_description_id]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminDescription"
+        shown_description_id:
+          type: [integer, "null"]
+          description: The id of the English summary the public page shows; null when none qualifies.
     AdminIdentifier:
       type: object
       required: [id, identifier_type, value, source, created_at, edition]
