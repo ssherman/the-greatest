@@ -764,3 +764,20 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
 3. **Re-running it at cutover is harmless.** It creates only archives that do not exist yet, so it
    reports `count: 0` if legacy archived nothing new.
 4. **Spot-check.** Open `/rankings/archive` and one old archive.
+
+## 17. Measure migrated cover images (once, production only)
+
+The July 2026 image migration left about 6,756 book covers unmeasured: their blobs have
+`{"identified": true}` and no width or height. Link previews only show a cover thumbnail when both
+dimensions are known and at least 200, so these books get no thumbnail until they are measured.
+
+1. **After deploy, run the backfill.** In production, `bin/rails images:analyze_missing_dimensions`. It
+   enqueues `Images::AnalyzeDimensionsJob` in slices of 500 on the `low` queue and prints the blob and job
+   counts. It is safe to re-run: it selects only blobs still missing a width, and the job skips any that
+   gained one. A blob that cannot be read is logged and the rest of its batch carries on.
+2. **Production only. Do not run it in development.** The development database is a production restore, so
+   its book blob keys point at files in the production bucket, not the development one. In development every
+   download fails, and each failure is logged.
+3. **Check.** Paste a ranked book link and a ranked game link into Discord. Both should show a small cover
+   thumbnail. Discord cannot reach dev hostnames, so this can only be checked in production. Discord caches
+   unfurls per URL, so test with a link you have not shared before.
