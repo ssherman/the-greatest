@@ -95,6 +95,33 @@ module Sitemaps
       assert_not_includes paths, "/albums/categories/#{category.slug}"
     end
 
+    test "games keys are exactly the games sources, in order" do
+      assert_equal %w[pages news games lists categories], Sitemaps::Registry.sources(:games).map(&:key)
+    end
+
+    test "games lists a ranked game and omits an unranked one" do
+      paths = Sitemaps::Registry.find(:games, "games").entries(offset: 0, limit: 1000).map(&:path)
+      assert_includes paths, "/game/#{games_games(:breath_of_the_wild).slug}"
+      RankedItem.find_by!(item: games_games(:half_life_2)).update!(rank: nil)
+      paths = Sitemaps::Registry.find(:games, "games").entries(offset: 0, limit: 1000).map(&:path)
+      assert_not_includes paths, "/game/#{games_games(:half_life_2).slug}"
+    end
+
+    test "games lists an active ranked list" do
+      list = lists(:games_list)
+      list.update!(status: :active)
+      paths = Sitemaps::Registry.find(:games, "lists").entries(offset: 0, limit: 1000).map(&:path)
+      assert_includes paths, "/lists/#{list.id}"
+    end
+
+    test "games categories need enough ranked games" do
+      category = categories(:games_action_genre)
+      Sitemaps::Thresholds.stubs(:filter_single).returns(2)
+      assert_includes Sitemaps::Registry.find(:games, "categories").entries(offset: 0, limit: 1000).map(&:path), "/categories/#{category.slug}"
+      Sitemaps::Thresholds.stubs(:filter_single).returns(3)
+      assert_not_includes Sitemaps::Registry.find(:games, "categories").entries(offset: 0, limit: 1000).map(&:path), "/categories/#{category.slug}"
+    end
+
     test "page_size defaults to PAGE_SIZE" do
       assert_equal 50_000, Sitemaps::Registry.page_size
     end

@@ -29,6 +29,7 @@ module Sitemaps
       ]
       sources.concat(books_sources) if domain == :books
       sources.concat(music_sources) if domain == :music
+      sources.concat(games_sources) if domain == :games
       sources
     end
 
@@ -71,6 +72,20 @@ module Sitemaps
       ]
     end
     private_class_method :music_sources
+
+    def self.games_sources
+      games_rc = ::Games::RankingConfiguration
+      [
+        RankedItems.new(key: "games", scope: ::Games::Game.all,
+          ranking_configuration_class: games_rc, path_prefix: "/game/"),
+        RankedLists.new(key: "lists", list_class: ::Games::List,
+          ranking_configuration_class: games_rc, path_prefix: "/lists/"),
+        # /categories/:slug shows the ranked games in the category.
+        RankedCategories.new(key: "categories", scope: ::Games::Category.active, path_prefix: "/categories/",
+          counts: -> { ranked_category_counts(::Games::Game, games_rc) })
+      ]
+    end
+    private_class_method :games_sources
 
     # {category_id => ranked items of item_class in the primary RC}. The same
     # join the category controllers use, plus rank IS NOT NULL.
