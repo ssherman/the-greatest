@@ -1,5 +1,11 @@
 <%
   content_for :page_title, "#{@game.title} - #{@developer_names} | The Greatest Games"
+  content_for :og_title, @developer_names.present? ? "#{@game.title} - #{@developer_names}" : @game.title
+  share_image = share_image_url(@game.primary_image)
+  if share_image
+    content_for :og_image, share_image
+    content_for :og_image_alt, @game.title
+  end
   content_for :meta_description, "Explore our ranking and review of #{@game.title} by #{@developer_names}. Platforms, genres, and why it's one of the greatest #{@genre_text} games of all time."
 %>
 

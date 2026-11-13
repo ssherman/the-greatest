@@ -50,4 +50,15 @@ test.describe('Game Detail Page', () => {
     // Verify ranking blurb is shown
     await expect(page.locator('text=/greatest video game of all time/')).toBeVisible();
   });
+
+  // Reads the tags only; the image itself is never fetched.
+  test('game show page carries a summary link preview', async ({ page }) => {
+    await page.goto('/video-games');
+    await page.locator('.card .card-title a').first().click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\//);
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary');
+    expect(await page.locator('meta[property="og:title"]').getAttribute('content')).not.toContain('The Greatest Games');
+  });
 });
