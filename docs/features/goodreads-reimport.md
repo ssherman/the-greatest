@@ -105,8 +105,9 @@ rejected ones are never carried out.
 The AI always sees the book the reader is on today as one of its choices, even when the finder missed it (a
 translated title finds nothing in an English catalog). When the AI confirms the finder's match with high
 confidence, it is approved by itself; so is the reader's current book when the finder found nothing and that
-book is not a mixed book, and a new book when the AI says "none of these" with high confidence. When they
-disagree or the AI doubts it, the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimport_match`:
+book is not a mixed book, and a new book when the AI says "none of these" with high confidence and no candidate
+is a trusted book (pre-import, new-app, or on a curated list). A "none" beside a trusted book is proposed: a wrong
+one would duplicate a book readers know. When they disagree or the AI doubts it, the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimport_match`:
 
 - Approve a match that is right; `apply` then writes it.
 - Reject one that is wrong. A rejected match stays rejected and its rows **wait**: they are not moved, and the

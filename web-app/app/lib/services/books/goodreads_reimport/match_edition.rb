@@ -9,7 +9,7 @@ module Services
       # double-checks the candidates, because a finder match on a near-identical title can be a different volume or
       # an adaptation. Only an AI "high" on the finder's own pick, or on the book the reader is already on when the
       # finder picked nothing and it is not mixed, is approved without an admin; any other pick, doubt, or "none of
-      # these" next to a finder match waits for review. A finder or AI failure records nothing, so the edition simply
+      # these" next to a finder match or a trusted candidate waits for review. A finder or AI failure records nothing, so the edition simply
       # comes up again.
       class MatchEdition
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
@@ -87,8 +87,11 @@ module Services
           auto = if book_id.present?
             confidence == "high" && book_id == (match.record&.id || trusted_current_book_id)
           else
-            # "None of these" creates a book, so an AI answer needs high confidence; no candidates = rule only.
-            match.unmatched? && (answer.nil? || confidence == "high")
+            # "None of these" creates a book, so an AI answer needs high confidence, and none of the candidates may be a
+            # trusted book (pre-import, new-app, or on a curated list): a wrong "none" next to one duplicates a book
+            # readers know, as Flowers for Algernon nearly was when the AI read its catalog year as the short story's.
+            # No candidates = rule only.
+            match.unmatched? && (answer.nil? || (confidence == "high" && books.none? { |book| trusted_book?(book) }))
           end
           payload = {
             "goodreads_edition_id" => @edition.id, "goodreads_book_id" => @edition.goodreads_book_id, "facts" => @facts.to_h,
@@ -107,6 +110,8 @@ module Services
 
           done(book_id.present? ? :matched : :create, recorded.data[:verdict])
         end
+
+        def trusted_book?(book) = ::Services::Books::GoodreadsRebuild::Cohort.trusted?(book.id)
 
         def done(outcome, verdict = nil)
           Result.new(success?: true, data: {outcome: outcome, verdict: verdict}, errors: [])

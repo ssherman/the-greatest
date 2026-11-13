@@ -41,6 +41,7 @@ module Services
               - A different volume or part of a series, an adaptation (graphic novel, abridgement, film tie-in rewrite), a study guide, a summary or a box set is a different book, even when the title and author are nearly identical.
               - The first name under "Authors" is the credited author. Any further names may be co-authors, translators or illustrators; do not require a candidate to list them.
               - Judge by the title in full, the authors and the years. Do not decide by which candidate looks most popular.
+              - A different year alone does not make a different work: a catalog year can be wrong, or be the year of an earlier form of the work (a serial, or a story later expanded into a novel under the same title).
               Give confidence: "high" when the title, author and work are unambiguous, "medium" when it is likely, "low" when you are guessing.
               Use a null candidate_number when no candidate is the same work.
             SYSTEM
