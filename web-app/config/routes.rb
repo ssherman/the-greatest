@@ -459,6 +459,18 @@ Rails.application.routes.draw do
     get "news/:slug", to: "news_posts#show", as: :news_post, constraints: {format: /html/}
   end
 
+  # Per-host sitemaps. The index is /sitemap.xml; each source is split into
+  # /sitemaps/<source>-<page>.xml files. format: false keeps ".xml" part of the
+  # literal path (the format is defaulted), and the source constraint admits
+  # underscores so /sitemaps/album_lists-2.xml splits at the last hyphen.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "sitemap.xml", to: "sitemaps#index", as: :sitemap, format: false, defaults: {format: :xml}
+    get "sitemaps/:source-:page.xml", to: "sitemaps#show", as: :sitemap_file, format: false,
+      defaults: {format: :xml}, constraints: {source: /[a-z_]+/, page: /\d+/}
+  end
+
   # Privacy and deletion policies. One company, one policy, so like /news these
   # are one controller and one set of views for every site, with the layout
   # resolved from Current.domain -- and domain-constrained the same way, since
