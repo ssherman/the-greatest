@@ -24,7 +24,7 @@ In `merge_book` and `merge_author`, `id` is the book or author that survives and
 
 ## Match decisions and identifiers
 
-`list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link` and the identifier tools are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. A `merge_author` made while working the match decision queue is part of that queue's work: decide it yourself and do not ask (a dry run first is optional). `reject_match_decision_link` and `remove_book_identifier` and `remove_author_identifier` are permanent.
+`list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link` and the identifier tools are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. A `merge_author` made while working the match decision queue is part of that queue's work: decide it yourself and do not ask (a dry run first is optional). `reject_match_decision_link`, `remove_book_identifier`, `remove_author_identifier` and `delete_description` are permanent.
 
 ## After a merge
 

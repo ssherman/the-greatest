@@ -6,7 +6,7 @@ class Admin::DescriptionsController < Admin::BaseController
   before_action :set_description, only: [:update, :destroy, :set_preferred]
 
   def index
-    @descriptions = @parent.descriptions.order(rank: :desc, source: :asc)
+    @descriptions = @parent.descriptions.reorder(rank: :desc, source: :asc)
     render layout: false
   end
 
@@ -91,7 +91,7 @@ class Admin::DescriptionsController < Admin::BaseController
         render turbo_stream: [
           turbo_stream.replace("flash", partial: "admin/shared/flash", locals: {flash: {notice: notice}}),
           turbo_stream.replace("descriptions_list", template: "admin/descriptions/index",
-            locals: {parent: describable, descriptions: describable.descriptions.reload.order(rank: :desc, source: :asc)})
+            locals: {parent: describable, descriptions: describable.descriptions.reload.reorder(rank: :desc, source: :asc)})
         ]
       end
       format.html { redirect_to redirect_path_for(describable), notice: notice }

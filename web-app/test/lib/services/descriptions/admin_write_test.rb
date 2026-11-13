@@ -39,13 +39,23 @@ module Services
       end
 
       test "an :other source is unique per source_name" do
-        AdminWrite.create(describable: @book, attrs: {content: "A", source: "other", source_name: "Penguin"})
+        assert AdminWrite.create(describable: @book, attrs: {content: "A", source: "other", source_name: "Penguin"}).success?
 
         same = AdminWrite.create(describable: @book, attrs: {content: "B", source: "other", source_name: "Penguin"})
         different = AdminWrite.create(describable: @book, attrs: {content: "C", source: "other", source_name: "Folio"})
 
         assert_equal :conflict, same.data[:code]
         assert different.success?
+      end
+
+      test "a lost race past the uniqueness validation is a conflict naming the winner" do
+        Description.any_instance.stubs(:save).raises(ActiveRecord::RecordNotUnique)
+
+        result = AdminWrite.create(describable: @book, attrs: {content: "Another", source: "ai_generated"})
+
+        refute result.success?
+        assert_equal :conflict, result.data[:code]
+        assert_equal @ai.id, result.data[:existing_id]
       end
 
       test "update changes the permitted fields" do
