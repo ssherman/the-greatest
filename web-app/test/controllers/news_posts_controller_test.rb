@@ -347,7 +347,30 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
       "og:image must be absolute for share-card scrapers, got #{content.inspect}"
     assert_not_includes content, "/rails/active_storage/",
       "og:image must go through the images CDN, not the Rails origin, got #{content.inspect}"
-    assert_select "meta[name='twitter:card'][content=?]", "summary_large_image"
+    assert_select "meta[name='twitter:card'][content=?]", "summary"
+  end
+
+  test "a post with a share image asks for the small summary card" do
+    post = news_posts(:books_december_update)
+    post.share_image.attach(io: File.open(file_fixture("test_image.png")),
+      filename: "card.png", content_type: "image/png")
+
+    get news_post_path(slug: "december-update")
+
+    assert_select "meta[property='og:image']", count: 1
+    assert_select "meta[name='twitter:card'][content=?]", "summary"
+    assert_select "meta[name='twitter:card'][content='summary_large_image']", count: 0
+  end
+
+  test "no site emits a large card" do
+    %w[dev-new.thegreatestbooks.org dev.thegreatestmusic.org dev.thegreatest.games].each do |h|
+      host! h
+      get news_path
+
+      assert_response :success
+      assert_select "meta[name='twitter:card'][content=?]", "summary"
+      assert_select "meta[name='twitter:card'][content='summary_large_image']", count: 0
+    end
   end
 
   test "show falls back to a summary card when no share image is attached" do

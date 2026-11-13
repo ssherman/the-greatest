@@ -17,10 +17,11 @@
     <meta property="og:url" content="<%= content_for?(:canonical_url) ? yield(:canonical_url) : request.original_url %>">
     <% if content_for?(:og_image) %>
       <meta property="og:image" content="<%= yield(:og_image) %>">
-      <meta name="twitter:card" content="summary_large_image">
-    <% else %>
-      <meta name="twitter:card" content="summary">
+      <% if content_for?(:og_image_alt) %>
+        <meta property="og:image:alt" content="<%= yield(:og_image_alt) %>">
+      <% end %>
     <% end %>
+    <meta name="twitter:card" content="summary">
     <%# Per-page <link> elements (RSS autodiscovery today). Renders nothing
         when no page sets it, so every existing page is byte-identical. %>
     <%= yield(:head_links) if content_for?(:head_links) %>
