@@ -54,6 +54,40 @@ module Books
       end
     end
 
+    test "counts_by_country matches the filtered relation" do
+      RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 3, score: 5)
+      Books::BookCountry.create!(book: books_books(:war_and_peace), country: books_countries(:algerian))
+
+      counts = Books::RankedBooksQuery.counts_by_country(ranking_configuration: @rc)
+
+      [books_countries(:french), books_countries(:algerian)].each do |c|
+        assert_equal Books::RankedBooksQuery.call(ranking_configuration: @rc, countries: [c]).count, counts[c.id]
+      end
+      assert_equal 2, counts[books_countries(:french).id]
+    end
+
+    test "counts_by_country counts a book with two country rows once" do
+      Books::BookCountry.create!(book: books_books(:war_and_peace), country: books_countries(:algerian))
+      Books::BookCountry.create!(book: books_books(:war_and_peace), country: books_countries(:japanese))
+
+      counts = Books::RankedBooksQuery.counts_by_country(ranking_configuration: @rc)
+
+      assert_equal 1, counts[books_countries(:french).id]
+      assert_equal 1, counts[books_countries(:algerian).id]
+    end
+
+    test "counts_by_category_and_country matches the filtered relation" do
+      cat = categories(:books_classics_genre)
+      Books::BookCountry.create!(book: books_books(:war_and_peace), country: books_countries(:algerian))
+
+      counts = Books::RankedBooksQuery.counts_by_category_and_country(ranking_configuration: @rc, category_ids: [cat.id])
+
+      [books_countries(:french), books_countries(:algerian)].each do |c|
+        assert_equal Books::RankedBooksQuery.call(ranking_configuration: @rc, categories: [cat], countries: [c]).count, counts[[cat.id, c.id]]
+      end
+      assert_equal 1, counts[[cat.id, books_countries(:french).id]]
+    end
+
     test "filters to books carrying a single category" do
       # classics_genre, not novels_genre: crime_and_punishment carries novels_genre
       # too (see test/fixtures/category_items.yml), so it would no longer isolate

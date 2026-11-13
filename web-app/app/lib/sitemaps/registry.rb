@@ -38,7 +38,8 @@ module Sitemaps
         RankedItems.new(key: "authors", scope: ::Books::Author.catalog,
           ranking_configuration_class: ::Books::Authors::RankingConfiguration, path_prefix: "/author/"),
         RankedLists.new(key: "lists", list_class: ::Books::List,
-          ranking_configuration_class: ::Books::RankingConfiguration, path_prefix: "/lists/")
+          ranking_configuration_class: ::Books::RankingConfiguration, path_prefix: "/lists/"),
+        Sitemaps::Books::FilterPages.new
       ]
     end
     private_class_method :books_sources

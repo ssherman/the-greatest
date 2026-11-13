@@ -38,6 +38,27 @@ module Books
         .count
     end
 
+    # {country_id => distinct ranked books of that country}: the same count
+    # `call(countries: [country])` gives. DISTINCT because a book can carry
+    # several country rows.
+    def self.counts_by_country(ranking_configuration:)
+      ranked_books(ranking_configuration)
+        .joins("INNER JOIN books_book_countries ON books_book_countries.book_id = ranked_items.item_id")
+        .group("books_book_countries.country_id")
+        .count("DISTINCT ranked_items.item_id")
+    end
+
+    # {[category_id, country_id] => distinct ranked books carrying both}: the same
+    # count `call(categories: [category], countries: [country])` gives.
+    def self.counts_by_category_and_country(ranking_configuration:, category_ids:)
+      ranked_books(ranking_configuration)
+        .joins("INNER JOIN category_items ON category_items.item_id = ranked_items.item_id AND category_items.item_type = 'Books::Book'")
+        .joins("INNER JOIN books_book_countries ON books_book_countries.book_id = ranked_items.item_id")
+        .where(category_items: {category_id: category_ids})
+        .group("category_items.category_id", "books_book_countries.country_id")
+        .count("DISTINCT ranked_items.item_id")
+    end
+
     def self.ranked_books(ranking_configuration)
       RankedItem
         .where(ranking_configuration_id: ranking_configuration.id, item_type: "Books::Book")
