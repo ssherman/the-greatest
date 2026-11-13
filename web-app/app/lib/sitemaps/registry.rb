@@ -28,6 +28,7 @@ module Sitemaps
         NewsPosts.new(domain: domain)
       ]
       sources.concat(books_sources) if domain == :books
+      sources.concat(music_sources) if domain == :music
       sources
     end
 
@@ -43,6 +44,49 @@ module Sitemaps
       ]
     end
     private_class_method :books_sources
+
+    def self.music_sources
+      albums_rc = ::Music::Albums::RankingConfiguration
+      songs_rc = ::Music::Songs::RankingConfiguration
+      artists_rc = ::Music::Artists::RankingConfiguration
+      [
+        RankedItems.new(key: "albums", scope: ::Music::Album.all,
+          ranking_configuration_class: albums_rc, path_prefix: "/album/"),
+        RankedItems.new(key: "songs", scope: ::Music::Song.all,
+          ranking_configuration_class: songs_rc, path_prefix: "/song/"),
+        RankedItems.new(key: "artists", scope: ::Music::Artist.all,
+          ranking_configuration_class: artists_rc, path_prefix: "/artists/"),
+        RankedLists.new(key: "album_lists", list_class: ::Music::Albums::List,
+          ranking_configuration_class: albums_rc, path_prefix: "/albums/lists/"),
+        RankedLists.new(key: "song_lists", list_class: ::Music::Songs::List,
+          ranking_configuration_class: songs_rc, path_prefix: "/songs/lists/"),
+        # /categories/:slug shows ranked artists plus ranked albums.
+        RankedCategories.new(key: "categories", scope: ::Music::Category.active, path_prefix: "/categories/",
+          counts: -> {
+            ranked_category_counts(::Music::Artist, artists_rc)
+              .merge(ranked_category_counts(::Music::Album, albums_rc)) { |_id, a, b| a + b }
+          }),
+        RankedCategories.new(key: "album_categories", scope: ::Music::Category.active, path_prefix: "/albums/categories/",
+          counts: -> { ranked_category_counts(::Music::Album, albums_rc) })
+      ]
+    end
+    private_class_method :music_sources
+
+    # {category_id => ranked items of item_class in the primary RC}. The same
+    # join the category controllers use, plus rank IS NOT NULL.
+    def self.ranked_category_counts(item_class, ranking_configuration_class)
+      rc = ranking_configuration_class.default_primary
+      return {} unless rc
+
+      ::CategoryItem
+        .where(item_type: item_class.name)
+        .joins("JOIN ranked_items ON ranked_items.item_id = category_items.item_id AND ranked_items.item_type = category_items.item_type")
+        .where(ranked_items: {ranking_configuration_id: rc.id})
+        .where.not(ranked_items: {rank: nil})
+        .group(:category_id)
+        .count
+    end
+    private_class_method :ranked_category_counts
 
     def self.find(domain, key)
       sources(domain).find { |source| source.key == key }
