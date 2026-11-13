@@ -112,3 +112,11 @@
 - [ ] **Step 5: launch-todo.** Add a short final section, "Measure migrated cover images (once)". Explain that 6,756 book covers from the July 2026 image migration were never measured, so they get no link-preview thumbnail until they are. After deploy, run `bin/rails images:analyze_missing_dimensions` in production. It is safe to re-run, because it only touches blobs still missing a width. Note that the dev and production buckets differ, so dev needs its own run.
 - [ ] **Step 6: Full verification:** `bin/rails test` (no new warnings), `bundle exec standardrb`, `CI=1 bin/rails zeitwerk:check`.
 - [ ] **Step 7: Commit** `"Images: backfill job to measure covers missing dimensions"`
+
+---
+
+## After deploy (Shane, production only)
+
+1. Run `bin/rails images:analyze_missing_dimensions` and let the jobs drain.
+2. Paste a ranked game link and a ranked book link into Discord. Both should show a small cover thumbnail. Discord can't reach dev hostnames, so this check can only happen in production.
+3. Discord caches unfurls per URL. A link pasted before deploy may keep its old text-only card for a while, so test with a link you haven't shared before.
