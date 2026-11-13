@@ -23,11 +23,25 @@ module Sitemaps
       return [] unless STATIC_PATHS.key?(domain)
       return [] if domain == :books && !::Books::PublicIndexing.enabled?
 
-      [
+      sources = [
         StaticPages.new(paths: STATIC_PATHS.fetch(domain)),
         NewsPosts.new(domain: domain)
       ]
+      sources.concat(books_sources) if domain == :books
+      sources
     end
+
+    def self.books_sources
+      [
+        RankedItems.new(key: "books", scope: ::Books::Book.catalog,
+          ranking_configuration_class: ::Books::RankingConfiguration, path_prefix: "/book/"),
+        RankedItems.new(key: "authors", scope: ::Books::Author.catalog,
+          ranking_configuration_class: ::Books::Authors::RankingConfiguration, path_prefix: "/author/"),
+        RankedLists.new(key: "lists", list_class: ::Books::List,
+          ranking_configuration_class: ::Books::RankingConfiguration, path_prefix: "/lists/")
+      ]
+    end
+    private_class_method :books_sources
 
     def self.find(domain, key)
       sources(domain).find { |source| source.key == key }
