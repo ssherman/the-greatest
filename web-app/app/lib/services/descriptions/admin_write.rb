@@ -43,8 +43,8 @@ module Services
       # promote-first callback: the partial unique index index_descriptions_one_preferred_per_key
       # rejects two preferred rows for the same (describable, kind, locale) mid-callback.
       def self.set_preferred(description:)
-        Description.transaction do
-          Description
+        ::Description.transaction do
+          ::Description
             .where(describable_type: description.describable_type,
               describable_id: description.describable_id,
               kind: description.kind, locale: description.locale, rank: :preferred)
@@ -75,7 +75,7 @@ module Services
       private_class_method :failure
 
       def self.existing_id_for(description)
-        Description
+        ::Description
           .where(describable_type: description.describable_type, describable_id: description.describable_id,
             kind: description.kind, locale: description.locale, source: description.source,
             source_name: description.source_name)

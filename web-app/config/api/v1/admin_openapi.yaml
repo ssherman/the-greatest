@@ -1167,7 +1167,7 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Add a description to an author
       description: |
-        Adds an English summary to the author. `source` says where the text came from and is required: `ai_generated` for text you write yourself, otherwise the source it was copied from. `other` needs `source_name`; `wikipedia` needs `source_url` and defaults `license` to `cc_by_sa_4`. A author holds one description per source (per `source_name` for `other`): a second one is 422 naming the existing description, which can be edited instead. `content` is at most 100,000 characters. A author that does not exist is 404. The new description is not preferred; it is shown only if it outranks the others. Requires `books:admin:write`, and the token's owner must be allowed to change the author.
+        Adds an English summary to the author. `source` says where the text came from and is required: `ai_generated` for text you write yourself, otherwise the source it was copied from. `other` needs `source_name`; `wikipedia` needs `source_url` and defaults `license` to `cc_by_sa_4`. An author holds one description per source (per `source_name` for `other`): a second one is 422 naming the existing description, which can be edited instead. `content` is at most 100,000 characters. An author that does not exist is 404. The new description is not preferred; it is shown only if it outranks the others. Requires `books:admin:write`, and the token's owner must be allowed to change the author.
       x-mcp:
         description: >-
           Adds an English summary to the author `id` (from search_admin_authors) and returns the new row with `shown_description_id`.
@@ -1327,7 +1327,7 @@ paths:
         description: >-
           Makes description `id` (from get_book_descriptions or get_author_descriptions) the preferred one for its
           record, kind and locale, demoting the previous preferred one to normal. A preferred description is shown on the
-          public page whatever its source; without one, the highest-priority source is shown (The English summary the public page shows is the record's preferred description if it has one, otherwise the highest-priority source: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown.). Returns the row
+          public page whatever its source; without one, the highest-priority source is shown: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. Returns the row
           and `shown_description_id`. A 404 means no such book or author description.
       parameters:
         - $ref: "#/components/parameters/id"

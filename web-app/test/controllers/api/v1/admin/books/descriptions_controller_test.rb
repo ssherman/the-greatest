@@ -266,6 +266,42 @@ module Api
             assert_equal "other", row.reload.source
           end
 
+          test "clearing the source_url of a wikipedia description is a 400 and keeps it" do
+            row = descriptions(:war_and_peace_wikipedia)
+
+            [nil, ""].each do |blank|
+              send_json :patch, "/api/v1/admin/descriptions/#{row.id}", {source_url: blank}
+              assert_api_response_conform(status: 400, api: :admin)
+            end
+            assert_equal "https://en.wikipedia.org/wiki/War_and_Peace", row.reload.source_url
+          end
+
+          test "a content-only update of a wikipedia description without a url is allowed" do
+            row = descriptions(:war_and_peace_wikipedia)
+            row.update_columns(source_url: nil)
+
+            send_json :patch, "/api/v1/admin/descriptions/#{row.id}", {content: "Fixed."}
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["Fixed.", nil], [row.reload.content, row.source_url]
+          end
+
+          test "moving a wikipedia description to another source may clear its url" do
+            row = descriptions(:war_and_peace_wikipedia)
+
+            send_json :patch, "/api/v1/admin/descriptions/#{row.id}", {source: "publisher", source_url: nil}
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["publisher", nil], [row.reload.source, row.source_url]
+          end
+
+          test "license and source_url can be cleared on a non-wikipedia description" do
+            row = descriptions(:tolstoy_google)
+            row.update_columns(license: ::Description.licenses[:cc0], source_url: "https://example.com/x")
+
+            send_json :patch, "/api/v1/admin/descriptions/#{row.id}", {license: nil, source_url: nil}
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [nil, nil], [row.reload.license, row.source_url]
+          end
+
           test "an update the policy refuses is a 403 and changes nothing" do
             ::Books::BookPolicy.any_instance.stubs(:update?).returns(false)
             row = descriptions(:war_and_peace_ai)

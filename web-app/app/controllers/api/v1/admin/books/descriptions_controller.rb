@@ -138,13 +138,19 @@ module Api
             attrs
           end
 
+          # A description that is (or becomes) wikipedia keeps its source_url: setting
+          # the source to wikipedia needs one, and clearing it on an existing
+          # wikipedia row is refused. A URL-less imported row still accepts other
+          # edits, so a URL is not demanded when the body leaves it alone.
           def apply_wikipedia_rule(attrs, description)
-            return unless attrs["source"] == "wikipedia"
+            if attrs["source"] == "wikipedia"
+              url = attrs.key?("source_url") ? attrs["source_url"] : description&.source_url
+              raise ::Api::Page::InvalidParameter, "source_url is required when source is wikipedia" if url.blank?
 
-            url = attrs.key?("source_url") ? attrs["source_url"] : description&.source_url
-            raise ::Api::Page::InvalidParameter, "source_url is required when source is wikipedia" if url.blank?
-
-            attrs["license"] = "cc_by_sa_4" unless attrs.key?("license") || description&.license
+              attrs["license"] = "cc_by_sa_4" unless attrs.key?("license") || description&.license
+            elsif description&.source_wikipedia? && !attrs.key?("source") && attrs.key?("source_url") && attrs["source_url"].blank?
+              raise ::Api::Page::InvalidParameter, "source_url is required when source is wikipedia"
+            end
           end
 
           def render_written(description, status: :ok)
