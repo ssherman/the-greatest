@@ -49,6 +49,7 @@ module Services
             assert_match(/combo/i, message)
             assert_match(/English/, message)
             assert_match(/translators/, message)
+            assert_match(/different year alone/i, message)
           end
 
           test "maps the candidate number back to the book id" do

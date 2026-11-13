@@ -144,6 +144,8 @@ For each distinct Goodreads edition in the rows:
   that some reader's row keeps is not deleted (marked `kept`: no guesses, no redirect); one nobody's edition
   matches is emptied and deleted with a redirect as before. A create still may not adopt a mixed record.
   Also: an AI "none of these" auto-approves a create only at high confidence.
+  Amended 2026-11-13 (Shane, after the first production `match[200]`): and only when no candidate is a trusted book.
+  The AI answered "none" at high beside *Flowers for Algernon* (13 lists) because the catalog year was the short story's.
 - **Finder:** the existing book finder in blinded mode (`identifier_sources: TRUSTED_IDENTIFIER_SOURCES`, legacy and
   merge alternate titles ignored). The query is built from the CSV row's full title, authors, ISBNs, year and
   Goodreads id (`ExportFacts`).

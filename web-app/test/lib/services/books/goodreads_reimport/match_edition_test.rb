@@ -84,13 +84,33 @@ module Services
           assert_equal "matched", verdict.payload["outcome"]
         end
 
-        test "AI says none and the finder was unmatched: create, auto-approved" do
-          result = run_match(match(candidates: [@other]), task_returning(nil, "high"))
+        # An import-made book on no list: a post-import id (Cohort) with no list item. Fixture books are trusted by id.
+        def derived_book(id = 20_001) = ::Books::Book.create!(id: id, title: "Derived #{id}")
+
+        test "AI says none at high and every candidate is import-made: create, auto-approved" do
+          result = run_match(match(candidates: [derived_book]), task_returning(nil, "high"))
 
           assert_equal :create, result.data[:outcome]
           assert verdict.approved?
           assert_equal "create", verdict.payload["outcome"]
           assert_nil verdict.payload["book_id"]
+        end
+
+        test "AI says none at high next to a trusted candidate: create, proposed" do
+          # Flowers for Algernon: the AI read the catalog year as the short story's and answered none beside the novel.
+          result = run_match(match(candidates: [derived_book, @other]), task_returning(nil, "high"))
+
+          assert_equal :create, result.data[:outcome]
+          assert verdict.proposed?
+          assert_equal "create", verdict.payload["outcome"]
+        end
+
+        test "AI says none at high next to a listed import-made candidate: create, proposed" do
+          listed = derived_book
+          ListItem.create!(list: lists(:books_list), listable: listed, position: 99)
+          run_match(match(candidates: [listed]), task_returning(nil, "high"))
+
+          assert verdict.proposed?
         end
 
         test "AI says none at medium or low with candidates: create, proposed" do
@@ -263,8 +283,8 @@ module Services
           assert verdict.proposed?
         end
 
-        test "the AI saying none with the current book offered: high creates, medium waits" do
-          @edition.update!(book_id: @other.id)
+        test "the AI saying none with an import-made current book offered: high creates, medium waits" do
+          @edition.update!(book_id: derived_book.id)
           run_match(match, task_returning(nil, "high"))
           assert verdict.approved?
           assert_equal "create", verdict.payload["outcome"]
@@ -272,6 +292,14 @@ module Services
           verdict.destroy!
           run_match(match, task_returning(nil, "medium"))
           assert verdict.proposed?
+        end
+
+        test "the AI saying none at high when the reader is on a trusted book waits for review" do
+          @edition.update!(book_id: @other.id)
+          run_match(match, task_returning(nil, "high"))
+
+          assert verdict.proposed?
+          assert_equal "create", verdict.payload["outcome"]
         end
 
         test "the current book follows merges, counts once, and keeps a place in a full list" do
