@@ -281,6 +281,21 @@ the sync never undoes them.
   If you reverse steps 4 and 5, or skip step 4, every legacy member gets a welcome email at the
   next 05:00 UTC sweep.
 - After the deploy, check Admin → Webhook Events for `ignored` rows.
+- **Turn on search indexing: set `BOOKS_PUBLIC_INDEXING=true`.** Until this is set, every books
+  page renders `noindex` (`Books::PublicIndexing`, decision D2 in
+  `docs/superpowers/specs/2026-07-31-books-public-ui-design.md`). Set it only after
+  thegreatestbooks.org serves this app and `BOOKS_DOMAIN` lists the apex first. Turned on earlier,
+  `new.thegreatestbooks.org` competes with the live legacy site as duplicate content. Add it with
+  `sops secrets/.env.production`, then merge (merging deploys). Pages are edge-cached for up to
+  24h with their old `noindex` tag, so purge the books cache afterwards or wait a day. Then spot-check
+  a ranked book page: `meta name="robots"` should read `index, follow`.
+- **Sitemap, once `BOOKS_PUBLIC_INDEXING` is on.** Until then books serves no sitemap
+  (`docs/features/sitemaps.md`, "The books gate"). After the switch is on, check that
+  `https://thegreatestbooks.org/sitemap.xml` returns 200 and that `/robots.txt` ends with its
+  `Sitemap:` line, then submit `/sitemap.xml` in Google Search Console for the books site.
+  `robots.txt` is edge-cached for 24h: purge `/robots.txt` (and `/sitemap.xml`) after flipping, or
+  wait up to 24h. Sitemap URLs use the FIRST host in `BOOKS_DOMAIN`, so it must be the apex at
+  cutover (see the "Confirm the production books hostname is admitted" step below).
 
 ## 8. After launch
 

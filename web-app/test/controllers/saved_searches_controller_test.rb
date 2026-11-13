@@ -380,7 +380,7 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "robots.txt disallows /searches" do
-    assert_includes Rails.root.join("public/robots.txt").read, "Disallow: /searches"
+    assert_includes Rails.root.join("app/views/robots/show.text.erb").read, "Disallow: /searches"
   end
 
   # --- new / create ---

@@ -62,7 +62,7 @@ one, whose refresh requests the author rankings when it lands.
 | Other people's views of a member's list | `MyListsController#show`, through `UserList.catalog_items` (the owner still sees everything) |
 | Public reading-goal page | `ProgressQuery` with `catalog_only: true` for public goals. The page is edge-cached, so the owner sees the filtered page too |
 | Public API | book and author `show`, a book's lists, and list items through `book_items` |
-| Sitemaps | none exist yet. When built, they must read through `catalog` |
+| Sitemaps | listed through `catalog`; see `sitemaps.md` |
 
 Curated list pages (`Books::ListsController#show`) are not filtered: imports never write curated
 list items, and the legacy replay never flags a book on a curated list provisional on its own. Such
