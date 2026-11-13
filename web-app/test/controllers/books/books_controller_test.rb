@@ -8,6 +8,66 @@ module Books
       @book = books_books(:war_and_peace)
     end
 
+    def attach_cover(record, metadata)
+      image = Image.new(parent: record, primary: true)
+      image.file.attach(ActiveStorage::Blob.create_and_upload!(
+        io: File.open(file_fixture("test_image.png")), filename: "c.png",
+        content_type: "image/png", metadata: metadata
+      ))
+      image.save!
+      image
+    end
+
+    test "a qualifying cover becomes og:image with the title as alt" do
+      image = attach_cover(@book, {width: 300, height: 450, analyzed: true})
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      cdn = Rails.application.config.domain_settings[:books][:images_cdn][:default]
+      assert_equal "#{cdn}/#{image.file.key}", css_select("meta[property='og:image']").first["content"]
+      assert_select "meta[property='og:image:alt'][content=?]", @book.title
+      assert_select "meta[name='twitter:card'][content=summary]"
+    end
+
+    test "og:title is title by authors with no site suffix" do
+      names = @book.book_authors.map { |ba| ba.author.name }.join(", ")
+      assert_predicate names, :present?
+
+      get "/book/#{@book.slug}"
+
+      assert_select "meta[property='og:title'][content=?]", "#{@book.title} by #{names}"
+    end
+
+    test "og:title is the bare title for a book with no authors" do
+      @book.book_authors.destroy_all
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_select "meta[property='og:title'][content=?]", @book.title
+    end
+
+    test "a book without a cover has no og:image" do
+      @book.images.destroy_all
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_select "meta[property='og:image']", 0
+      assert_select "meta[property='og:image:alt']", 0
+    end
+
+    test "a cover without measured dimensions has no og:image" do
+      @book.images.destroy_all
+      attach_cover(@book, {identified: true})
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_select "meta[property='og:image']", 0
+    end
+
     test "renders a book by slug" do
       get "/book/#{@book.slug}"
       assert_response :success

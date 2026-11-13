@@ -6,6 +6,71 @@ module Games
       host! "dev.thegreatest.games"
     end
 
+    def attach_cover(game, metadata)
+      image = Image.new(parent: game, primary: true)
+      image.file.attach(ActiveStorage::Blob.create_and_upload!(
+        io: File.open(file_fixture("test_image.png")), filename: "c.png",
+        content_type: "image/png", metadata: metadata
+      ))
+      image.save!
+      image
+    end
+
+    test "a qualifying cover becomes og:image with the title as alt" do
+      game = games_games(:breath_of_the_wild)
+      image = attach_cover(game, {width: 300, height: 400, analyzed: true})
+
+      get game_path(game)
+
+      assert_response :success
+      cdn = Rails.application.config.domain_settings[:games][:images_cdn][:default]
+      assert_equal "#{cdn}/#{image.file.key}", css_select("meta[property='og:image']").first["content"]
+      assert_select "meta[property='og:image:alt'][content=?]", game.title
+      assert_select "meta[name='twitter:card'][content=summary]"
+    end
+
+    test "og:title is title - developers with no site suffix" do
+      game = games_games(:breath_of_the_wild)
+      developers = game.game_companies.select(&:developer?).map { |gc| gc.company.name }.join(", ")
+      assert_predicate developers, :present?
+
+      get game_path(game)
+
+      assert_select "meta[property='og:title'][content=?]", "#{game.title} - #{developers}"
+    end
+
+    test "og:title is the bare title for a game with no developers" do
+      game = games_games(:breath_of_the_wild)
+      game.game_companies.destroy_all
+
+      get game_path(game)
+
+      assert_response :success
+      assert_select "meta[property='og:title'][content=?]", game.title
+    end
+
+    test "a game without a cover has no og:image" do
+      game = games_games(:breath_of_the_wild)
+      game.images.destroy_all
+
+      get game_path(game)
+
+      assert_response :success
+      assert_select "meta[property='og:image']", 0
+      assert_select "meta[property='og:image:alt']", 0
+    end
+
+    test "a cover without measured dimensions has no og:image" do
+      game = games_games(:breath_of_the_wild)
+      game.images.destroy_all
+      attach_cover(game, {identified: true})
+
+      get game_path(game)
+
+      assert_response :success
+      assert_select "meta[property='og:image']", 0
+    end
+
     test "should get show with default ranking configuration" do
       get game_path(games_games(:breath_of_the_wild))
       assert_response :success

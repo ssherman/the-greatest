@@ -11,10 +11,9 @@
   # That fallback can itself fail (an undecodable upload, a transient service
   # error), and .processed re-attempts synchronously on every request, so an
   # unrescued failure here would take the whole public post page down every
-  # time it's hit. Rescue and degrade to no image -- the layout correctly
-  # downgrades og:image/twitter:card to a plain "summary" when og_image is
-  # unset -- but log it, since a silently dropped share image is itself a bug
-  # worth knowing about.
+  # time it's hit. Rescue and degrade to no image -- the layout simply
+  # omits og:image when og_image is unset -- but log it, since a silently
+  # dropped share image is itself a bug worth knowing about.
   share_image_variant = begin
     @news_post.share_image.variant(:card).processed if @news_post.share_image.attached?
   rescue => e

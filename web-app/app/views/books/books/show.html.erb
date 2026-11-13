@@ -5,6 +5,12 @@
   authors = @book.book_authors.map(&:author)
   author_names = authors.map(&:name).join(", ")
   content_for :page_title, "#{@book.title}#{" by #{author_names}" if author_names.present?} | The Greatest Books"
+  content_for :og_title, "#{@book.title}#{" by #{author_names}" if author_names.present?}"
+  share_image = share_image_url(@book.primary_image)
+  if share_image
+    content_for :og_image, share_image
+    content_for :og_image_alt, @book.title
+  end
   content_for :meta_description, "Read about #{@book.title}#{" by #{author_names}" if author_names.present?}, its ranking, categories, and the best-books lists it appears on."
 %>
 

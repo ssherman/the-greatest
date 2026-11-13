@@ -99,4 +99,16 @@ test.describe('Book detail page', () => {
     await expect(trail.getByRole('link', { name: 'E2E Scratch Region' })).toHaveAttribute('href', /e2e-scratch-region/);
     await expect(trail.getByRole('link', { name: 'E2E Scratch Country' })).toHaveCount(0);
   });
+
+  // Reads the tags only. Dev blob keys point at the production bucket, so the
+  // image itself is never fetched or rendered here.
+  test('a book with a measured cover carries a summary link preview', async ({ page }) => {
+    await page.goto('/book/war-and-peace');
+
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\//);
+    await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute('content', /War and Peace/);
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary');
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /^War and Peace by .+/);
+    expect(await page.locator('meta[property="og:title"]').getAttribute('content')).not.toContain('The Greatest Books');
+  });
 });
