@@ -281,6 +281,10 @@ the sync never undoes them.
   If you reverse steps 4 and 5, or skip step 4, every legacy member gets a welcome email at the
   next 05:00 UTC sweep.
 - After the deploy, check Admin → Webhook Events for `ignored` rows.
+- **Sitemap, once `BOOKS_PUBLIC_INDEXING` is on.** Until then books serves no sitemap
+  (`docs/features/sitemaps.md`, "The books gate"). After the switch is on, check that
+  `https://thegreatestbooks.org/sitemap.xml` returns 200 and that `/robots.txt` ends with its
+  `Sitemap:` line, then submit `/sitemap.xml` in Google Search Console for the books site.
 
 ## 8. After launch
 
