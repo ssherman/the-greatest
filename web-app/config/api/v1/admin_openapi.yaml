@@ -1019,6 +1019,346 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/descriptions:
+    x-domain: books
+    get:
+      operationId: getBookDescriptions
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: A book's descriptions
+      description: |
+        Every description the book holds, of every kind and locale, highest rank first then by source, with `shown_description_id` naming the English summary the book's public page shows (a preferred one wins, otherwise the highest-priority source; a deprecated description is listed but never shown), or null when none qualifies. A book that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the descriptions of book `id` (from search_admin_books): each with its `id`, `kind`, `locale`, `rank`
+          (preferred, normal or deprecated), `source`, `source_name`, `source_url`, `license`, the full `content` and
+          its timestamps. `shown_description_id` is the one the public book page shows, or null; a deprecated
+          description is never shown. A 404 means no such book.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The book's descriptions and which one is shown.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: addBookDescription
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add a description to a book
+      description: |
+        Adds an English summary to the book. `source` says where the text came from and is required: `ai_generated` for text you write yourself, otherwise the source it was copied from. `other` needs `source_name`; `wikipedia` needs `source_url` and defaults `license` to `cc_by_sa_4`. A book holds one description per source (per `source_name` for `other`): a second one is 422 naming the existing description, which can be edited instead. `content` is at most 100,000 characters. A book that does not exist is 404. The new description is not preferred; it is shown only if it outranks the others. Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+      x-mcp:
+        description: >-
+          Adds an English summary to the book `id` (from search_admin_books) and returns the new row with `shown_description_id`.
+          `source` is required: use `ai_generated` for text you wrote yourself, or the source you copied the text from
+          (manual, goodreads, wikipedia, openlibrary, publisher, other) with `source_url` where you have one. `other` needs
+          `source_name`; `wikipedia` needs `source_url` and defaults `license` to cc_by_sa_4. The English summary the public page shows is the record's preferred description if it has one, otherwise the highest-priority source: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. The new description
+          is created at normal rank, so call set_preferred_description to force it. A second description from the same
+          source is refused with the existing id: use update_description on that one. Wrong text that should go away is
+          removed with delete_description.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescriptionCreateRequest"
+      responses:
+        "201":
+          description: The description was added.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionWrite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}/descriptions:
+    x-domain: books
+    get:
+      operationId: getAuthorDescriptions
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: An author's descriptions
+      description: |
+        Every description the author holds, of every kind and locale, highest rank first then by source, with `shown_description_id` naming the English summary the author's public page shows (a preferred one wins, otherwise the highest-priority source; a deprecated description is listed but never shown), or null when none qualifies. An author that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the descriptions of author `id` (from search_admin_authors): each with its `id`, `kind`, `locale`,
+          `rank` (preferred, normal or deprecated), `source`, `source_name`, `source_url`, `license`, the full `content`
+          and its timestamps. `shown_description_id` is the one the public author page shows, or null; a deprecated
+          description is never shown. A 404 means no such author.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The author's descriptions and which one is shown.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: addAuthorDescription
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add a description to an author
+      description: |
+        Adds an English summary to the author. `source` says where the text came from and is required: `ai_generated` for text you write yourself, otherwise the source it was copied from. `other` needs `source_name`; `wikipedia` needs `source_url` and defaults `license` to `cc_by_sa_4`. An author holds one description per source (per `source_name` for `other`): a second one is 422 naming the existing description, which can be edited instead. `content` is at most 100,000 characters. An author that does not exist is 404. The new description is not preferred; it is shown only if it outranks the others. Requires `books:admin:write`, and the token's owner must be allowed to change the author.
+      x-mcp:
+        description: >-
+          Adds an English summary to the author `id` (from search_admin_authors) and returns the new row with `shown_description_id`.
+          `source` is required: use `ai_generated` for text you wrote yourself, or the source you copied the text from
+          (manual, goodreads, wikipedia, openlibrary, publisher, other) with `source_url` where you have one. `other` needs
+          `source_name`; `wikipedia` needs `source_url` and defaults `license` to cc_by_sa_4. The English summary the public page shows is the record's preferred description if it has one, otherwise the highest-priority source: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. The new description
+          is created at normal rank, so call set_preferred_description to force it. A second description from the same
+          source is refused with the existing id: use update_description on that one. Wrong text that should go away is
+          removed with delete_description.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescriptionCreateRequest"
+      responses:
+        "201":
+          description: The description was added.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionWrite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/descriptions/{id}:
+    x-domain: books
+    patch:
+      operationId: updateDescription
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a book's or author's description
+      description: |
+        Changes any of `content`, `source`, `source_name`, `source_url` and `license`; fields not sent are untouched. Kind, locale and rank are not editable here (see the prefer operation for rank). Setting `source` to something other than `other` drops the old `source_name` unless one is sent. The same rules as adding apply: `other` needs `source_name`, `wikipedia` needs `source_url`, and changing the source to one the record already holds is 422 naming that description. A description that does not exist, or belongs to anything but a book or author, is 404. Requires `books:admin:write`, and the token's owner must be allowed to change the book or author.
+      x-mcp:
+        description: >-
+          Edits description `id` (from get_book_descriptions or get_author_descriptions): send only the fields to change
+          among `content`, `source`, `source_name`, `source_url` and `license`. Use it to correct text or fix a wrong
+          `source`; text that describes the wrong book is better removed with delete_description.
+          Changing the source can change which description is shown. The English summary the public page shows is the record's preferred description if it has one, otherwise the highest-priority source: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. Returns the row and `shown_description_id`.
+          A 404 means no such book or author description.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescriptionUpdateRequest"
+      responses:
+        "200":
+          description: The description as it now stands.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionWrite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteDescription
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Delete a book's or author's description (permanent)
+      description: |
+        Deletes the description, whatever its source or rank, and returns it as it was, with the `shown_description_id` the record's public page now has. There is no undelete. A description that does not exist, or belongs to anything but a book or author, is 404. Requires `books:admin:merge`, and the token's owner must be allowed to delete the book or author.
+      x-mcp:
+        destructive: true
+        description: >-
+          Permanently deletes description `id` (from get_book_descriptions or get_author_descriptions) and returns the
+          deleted row with the `shown_description_id` the public page now has. There is no undelete: keep the `content`
+          from the result if it may be needed. The English summary the public page shows is the record's preferred description if it has one, otherwise the highest-priority source: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. Deleting the shown description makes the next one by that order
+          appear, or none. A 404 means no such book or author description.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The description was deleted; `data` is the row as it was.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionWrite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/descriptions/{id}/prefer:
+    x-domain: books
+    post:
+      operationId: setPreferredDescription
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Make a description the preferred one
+      description: |
+        Marks the description preferred and demotes whichever other description of the same record, kind and locale was preferred, so exactly one is. A preferred description is the one the public page shows. Preferring one that already is preferred changes nothing. A description that does not exist, or belongs to anything but a book or author, is 404. Requires `books:admin:write`, and the token's owner must be allowed to change the book or author.
+      x-mcp:
+        description: >-
+          Makes description `id` (from get_book_descriptions or get_author_descriptions) the preferred one for its
+          record, kind and locale, demoting the previous preferred one to normal. A preferred description is shown on the
+          public page whatever its source; without one, the highest-priority source is shown: manual, then ai_generated, goodreads, wikipedia, openlibrary, publisher, other. A deprecated description is never shown. Returns the row
+          and `shown_description_id`. A 404 means no such book or author description.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The description, now preferred.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDescriptionWrite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/categories:
     x-domain: books
     get:
@@ -2287,6 +2627,95 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminMatchDecisionFull"
+    AdminDescription:
+      type: object
+      required: [id, kind, locale, rank, source, source_name, source_url, license, content, retrieved_at, created_at, updated_at]
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [summary, long, first_sentence, blurb]}
+        locale: {type: string}
+        rank:
+          type: string
+          enum: [deprecated, normal, preferred]
+          description: A preferred description wins over the others; a deprecated one is never shown.
+        source:
+          type: string
+          enum: [manual, ai_generated, wikipedia, openlibrary, musicbrainz, igdb, publisher, goodreads, other]
+        source_name:
+          type: [string, "null"]
+          description: Names the source when `source` is `other`; null otherwise.
+        source_url: {type: [string, "null"]}
+        license:
+          type: [string, "null"]
+          enum: [cc0, cc_by_sa_4, proprietary, null]
+        content: {type: string}
+        retrieved_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdminDescriptionList:
+      type: object
+      required: [data, shown_description_id]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminDescription"
+        shown_description_id:
+          type: [integer, "null"]
+          description: The id of the English summary the public page shows; null when none qualifies.
+    DescriptionCreateRequest:
+      type: object
+      required: [content, source]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+        source:
+          type: string
+          enum: [manual, ai_generated, wikipedia, openlibrary, musicbrainz, igdb, publisher, goodreads, other]
+          description: Where the text came from. `ai_generated` for text you wrote yourself.
+        source_name:
+          type: string
+          maxLength: 2000
+          description: Required when `source` is `other`; not allowed otherwise.
+        source_url:
+          type: string
+          maxLength: 2000
+          description: Required when `source` is `wikipedia`.
+        license:
+          type: string
+          enum: [cc0, cc_by_sa_4, proprietary]
+          description: Defaults to `cc_by_sa_4` when `source` is `wikipedia`.
+    DescriptionUpdateRequest:
+      type: object
+      description: Any subset of the fields; fields not sent are untouched.
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+        source:
+          type: string
+          enum: [manual, ai_generated, wikipedia, openlibrary, musicbrainz, igdb, publisher, goodreads, other]
+        source_name:
+          type: [string, "null"]
+          maxLength: 2000
+        source_url:
+          type: [string, "null"]
+          maxLength: 2000
+        license:
+          type: [string, "null"]
+          enum: [cc0, cc_by_sa_4, proprietary, null]
+    AdminDescriptionWrite:
+      type: object
+      required: [data, shown_description_id]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminDescription"
+        shown_description_id:
+          type: [integer, "null"]
+          description: The id of the English summary the record's public page shows after this change; null when none qualifies.
     AdminIdentifier:
       type: object
       required: [id, identifier_type, value, source, created_at, edition]

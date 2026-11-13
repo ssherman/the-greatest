@@ -726,6 +726,13 @@ Rails.application.routes.draw do
             get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
             get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
             get "identifiers", to: "identifiers#lookup"
+            get "books/:id/descriptions", to: "descriptions#book_index", constraints: {id: /\d+/}
+            get "authors/:id/descriptions", to: "descriptions#author_index", constraints: {id: /\d+/}
+            post "books/:id/descriptions", to: "descriptions#book_create", constraints: {id: /\d+/}
+            post "authors/:id/descriptions", to: "descriptions#author_create", constraints: {id: /\d+/}
+            patch "descriptions/:id", to: "descriptions#update", constraints: {id: /\d+/}
+            post "descriptions/:id/prefer", to: "descriptions#prefer", constraints: {id: /\d+/}
+            delete "descriptions/:id", to: "descriptions#destroy", constraints: {id: /\d+/}
             post "books/:id/identifiers", to: "identifiers#book_create", constraints: {id: /\d+/}
             post "authors/:id/identifiers", to: "identifiers#author_create", constraints: {id: /\d+/}
             delete "books/:id/identifiers/:identifier_id", to: "identifiers#book_destroy", constraints: {id: /\d+/, identifier_id: /\d+/}

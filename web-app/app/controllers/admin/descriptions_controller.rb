@@ -6,51 +6,38 @@ class Admin::DescriptionsController < Admin::BaseController
   before_action :set_description, only: [:update, :destroy, :set_preferred]
 
   def index
-    @descriptions = @parent.descriptions.order(rank: :desc, source: :asc)
+    @descriptions = @parent.descriptions.reorder(rank: :desc, source: :asc)
     render layout: false
   end
 
   def create
-    @description = @parent.descriptions.build(description_params)
-    @description.kind = :summary
-    @description.locale = "en"
-    @description.rank = :normal
+    result = Services::Descriptions::AdminWrite.create(describable: @parent, attrs: description_params)
 
-    if @description.save
+    if result.success?
       respond_with_list(@parent, notice: "Description added.")
     else
-      respond_with_error(@description)
+      respond_with_error(result.data[:description])
     end
   end
 
   def update
-    if @description.update(description_params)
+    result = Services::Descriptions::AdminWrite.update(description: @description, attrs: description_params)
+
+    if result.success?
       respond_with_list(@description.describable, notice: "Description updated.")
     else
-      respond_with_error(@description)
+      respond_with_error(result.data[:description])
     end
   end
 
   def destroy
     describable = @description.describable
-    @description.destroy!
+    Services::Descriptions::AdminWrite.destroy(description: @description)
     respond_with_list(describable, notice: "Description deleted.")
   end
 
-  # Demote-then-promote in a transaction. This cannot mirror Image's after_save
-  # promote-first callback: the partial unique index index_descriptions_one_preferred_per_key
-  # rejects two preferred rows for the same (describable, kind, locale) mid-callback.
   def set_preferred
-    Description.transaction do
-      Description
-        .where(describable_type: @description.describable_type,
-          describable_id: @description.describable_id,
-          kind: @description.kind, locale: @description.locale, rank: :preferred)
-        .where.not(id: @description.id)
-        .update_all(rank: 0)
-      @description.update!(rank: :preferred)
-    end
-
+    Services::Descriptions::AdminWrite.set_preferred(description: @description)
     respond_with_list(@description.describable, notice: "Preferred description updated.")
   end
 
@@ -104,7 +91,7 @@ class Admin::DescriptionsController < Admin::BaseController
         render turbo_stream: [
           turbo_stream.replace("flash", partial: "admin/shared/flash", locals: {flash: {notice: notice}}),
           turbo_stream.replace("descriptions_list", template: "admin/descriptions/index",
-            locals: {parent: describable, descriptions: describable.descriptions.reload.order(rank: :desc, source: :asc)})
+            locals: {parent: describable, descriptions: describable.descriptions.reload.reorder(rank: :desc, source: :asc)})
         ]
       end
       format.html { redirect_to redirect_path_for(describable), notice: notice }
