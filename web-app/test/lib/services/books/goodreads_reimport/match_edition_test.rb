@@ -443,16 +443,62 @@ module Services
           assert_nil verdict.payload["english_title"]
         end
 
-        test "a superseded verdict is matched again and replaced" do
-          old = ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: @key, payload: {"outcome" => "create"}, decided_by: :ai,
-            status: :approved, confidence: :high, superseded_at: Time.current)
+        def old_create(**attrs)
+          ::Books::RepairVerdict.create!(kind: :reimport_match, subject_key: @key, payload: {"outcome" => "create"}, decided_by: :ai,
+            status: :approved, confidence: :high, **attrs)
+        end
 
-          result = run_english(SeqFinder.new(match, match(record: @pick)), tasks_returning(@pick.id), english_returning("War and Peace"))
+        test "a recheck replaces an unreviewed create verdict with the English match" do
+          old = old_create
+
+          result = MatchEdition.call(edition: @edition, finder: SeqFinder.new(match, match(record: @pick)), task_class: tasks_returning(@pick.id),
+            english_task_class: english_returning("War and Peace"), recheck: true)
 
           assert_equal :matched, result.data[:outcome]
           assert_equal old.id, verdict.id
-          assert_nil verdict.superseded_at
+          assert verdict.approved?
           assert_equal @pick.id, verdict.payload["book_id"]
+          assert_equal "War and Peace", verdict.payload["english_title"]["title"]
+        end
+
+        test "without recheck an existing create verdict is kept" do
+          old_create
+          finder = mock
+          finder.expects(:call).never
+
+          assert_equal :kept, MatchEdition.call(edition: @edition, finder: finder).data[:outcome]
+        end
+
+        test "a recheck leaves a reviewed, applied or already checked verdict alone without searching" do
+          [{reviewed_at: Time.current}, {applied_at: Time.current}, {payload: {"outcome" => "create", "english_title" => {}}}].each do |attrs|
+            ::Books::RepairVerdict.where(subject_key: @key).delete_all
+            old = old_create(**attrs)
+            finder = mock
+            finder.expects(:call).never
+
+            assert_equal :kept, MatchEdition.call(edition: @edition, finder: finder, recheck: true).data[:outcome], attrs.keys.inspect
+            assert_equal old.payload, old.reload.payload
+          end
+        end
+
+        test "a recheck keeps a verdict reviewed or applied while its edition was being matched" do
+          [{status: :rejected, reviewed_at: Time.current}, {applied_at: Time.current}].each do |change|
+            ::Books::RepairVerdict.where(subject_key: @key).delete_all
+            old = old_create
+            english = stub
+            english.stubs(:new).returns(stub.tap do |task|
+              task.stubs(:call).with do
+                old.update!(change)
+                true
+              end.returns(Services::Ai::Result.new(success: true, data: {title: "War and Peace", confidence: "high", reason: "r"}))
+            end)
+
+            result = MatchEdition.call(edition: @edition, finder: SeqFinder.new(match, match(record: @pick)), task_class: tasks_returning(@pick.id),
+              english_task_class: english, recheck: true)
+
+            assert_equal :kept, result.data[:outcome], change.keys.inspect
+            assert_equal({"outcome" => "create"}, old.reload.payload, change.keys.inspect)
+          end
         end
       end
     end

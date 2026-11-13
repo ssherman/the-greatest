@@ -39,24 +39,17 @@ class Books::GoodreadsReimport::RecheckCreatesJobTest < ActiveSupport::TestCase
     assert_equal 1, Books::GoodreadsReimport::RecheckCreatesJob.enqueue(limit: 1)
   end
 
-  test "supersedes each verdict and matches its edition again" do
+  test "matches each verdict's edition again as a recheck, leaving the verdict to MatchEdition" do
     ed = edition(1)
     v = verdict(ed)
-    MATCH.expects(:call).with { |args| args[:edition] == ed && v.reload.superseded_at.present? }.returns(result(:matched))
-
-    Books::GoodreadsReimport::RecheckCreatesJob.new.perform([v.id])
-  end
-
-  test "a retry restores the old verdict, so the next enqueue picks it up again" do
-    v = verdict(edition(1))
-    MATCH.expects(:call).returns(result(:retry))
+    MATCH.expects(:call).with(edition: ed, recheck: true).returns(result(:matched))
 
     Books::GoodreadsReimport::RecheckCreatesJob.new.perform([v.id])
 
     assert_nil v.reload.superseded_at
   end
 
-  test "an error restores the old verdict and the batch carries on" do
+  test "an error leaves the verdict a candidate and the batch carries on" do
     a = verdict(edition(1))
     b = verdict(edition(2))
     MATCH.expects(:call).twice.raises(RuntimeError, "boom").then.returns(result(:create))
@@ -64,7 +57,7 @@ class Books::GoodreadsReimport::RecheckCreatesJobTest < ActiveSupport::TestCase
 
     Books::GoodreadsReimport::RecheckCreatesJob.new.perform([a.id, b.id])
 
-    assert_nil a.reload.superseded_at
+    assert Books::GoodreadsReimport::RecheckCreatesJob.candidates.exists?(id: a.id)
   end
 
   test "a verdict reviewed or applied since it was queued is left alone" do

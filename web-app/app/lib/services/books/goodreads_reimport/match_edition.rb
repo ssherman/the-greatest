@@ -24,25 +24,39 @@ module Services
           )
         end
 
-        def self.call(edition:, finder: nil, task_class: ::Services::Ai::Tasks::Books::SameWorkTask,
-          english_task_class: ::Services::Ai::Tasks::Books::EnglishTitleTask)
-          new(edition: edition, finder: finder, task_class: task_class, english_task_class: english_task_class).call
+        # The "create a new book" verdicts recorded before the English-title search, which recheck: true may replace:
+        # unreviewed, unapplied and current, with no English check yet.
+        def self.recheckable
+          ::Books::RepairVerdict.current.where(kind: :reimport_match, status: [:approved, :proposed], reviewed_at: nil, applied_at: nil)
+            .where("payload->>'outcome' = 'create'").where.not("payload ? 'english_title'")
         end
 
-        def initialize(edition:, finder:, task_class:, english_task_class:)
+        # recheck: match an edition whose verdict is recheckable again, and replace that verdict only if it is still
+        # recheckable when the new one is written (RecheckCreatesJob). Until then the old verdict is untouched, so an
+        # interrupted recheck leaves it as it was, and a review made meanwhile wins.
+        def self.call(edition:, finder: nil, task_class: ::Services::Ai::Tasks::Books::SameWorkTask,
+          english_task_class: ::Services::Ai::Tasks::Books::EnglishTitleTask, recheck: false)
+          new(edition: edition, finder: finder, task_class: task_class, english_task_class: english_task_class, recheck: recheck).call
+        end
+
+        def initialize(edition:, finder:, task_class:, english_task_class:, recheck:)
           @edition = edition
           @finder = finder
           @task_class = task_class
           @english_task_class = english_task_class
+          @recheck = recheck
           @key = "reimport:edition:#{edition.id}"
         end
 
         def call
           existing = ::Books::RepairVerdict.find_by(kind: :reimport_match, subject_key: @key)
-          # A rejected verdict is an admin's "no" and RecordVerdict would suppress any new one, so leave it alone. A
-          # superseded one (RecheckCreatesJob) is matched again and replaced.
+          # A rejected verdict is an admin's "no" and RecordVerdict would suppress any new one, so leave it alone.
           return done(:rejected, existing) if existing&.rejected? && existing.superseded_at.nil?
-          return done(:kept, existing) if existing && !existing.rejected? && existing.superseded_at.nil?
+          if @recheck
+            return done(:kept, existing) unless existing && self.class.recheckable.exists?(id: existing.id)
+          elsif existing && !existing.rejected?
+            return done(:kept, existing)
+          end
 
           @facts = EditionFacts.call(edition: @edition)
           match = finder.call(query: @facts.to_query, verify: true, subject: @edition)
@@ -148,15 +162,27 @@ module Services
             "candidate_book_ids" => books.map(&:id)
           }
           payload["english_title"] = @english_title.stringify_keys if @english_title
-          recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
+          attributes = {
             kind: :reimport_match, subject_key: @key, payload: payload, decided_by: answer ? :ai : :rule,
             confidence: answer ? confidence : :certain, reason: answer ? ai[:reason] : "no candidate book found",
             ai_chat_id: answer&.ai_chat&.id, auto: auto, replace_superseded: true
-          )
+          }
+          recorded = @recheck ? replace_recheckable(attributes) : ::Services::Books::GoodreadsReplay::RecordVerdict.call(**attributes)
           outcome = recorded.data[:outcome]
           return done(outcome, recorded.data[:verdict]) if %i[suppressed kept].include?(outcome)
 
           done(book_id.present? ? :matched : :create, recorded.data[:verdict])
+        end
+
+        # The old verdict is locked and checked again before it is replaced: a review or apply made while this edition
+        # was being matched keeps it (RecordVerdict updates an unreviewed verdict in place).
+        def replace_recheckable(attributes)
+          ::Books::RepairVerdict.transaction do
+            locked = self.class.recheckable.lock.find_by(subject_key: @key)
+            next GoodreadsReplay::RecordVerdict::Result.new(success?: true, data: {verdict: nil, outcome: :kept}, errors: []) unless locked
+
+            ::Services::Books::GoodreadsReplay::RecordVerdict.call(**attributes)
+          end
         end
 
         def trusted_book?(book) = ::Services::Books::GoodreadsRebuild::Cohort.trusted?(book.id)

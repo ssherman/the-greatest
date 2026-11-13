@@ -1,9 +1,10 @@
 # Matches again the editions whose reimport_match verdict says "create a new book" but was recorded before
 # MatchEdition looked for an English edition (it now asks for the English title of a translated edition and searches
 # with it, so Der talentierte Mr. Ripley finds The Talented Mr. Ripley instead of becoming a German duplicate).
-# .enqueue queues them 100 at a time. Each verdict is superseded, then MatchEdition records over it; a retry or an
-# error restores it, so the next enqueue picks it up again. Verdicts an admin reviewed, applied ones, and ones that
-# already carry an English check are left alone. Does nothing while the re-import gate is off.
+# .enqueue queues them 100 at a time. MatchEdition (recheck: true) replaces a verdict only if, when the new answer is
+# written, it is still unreviewed, unapplied and unchecked; until then it is untouched, so a retry, an error or a
+# killed worker leaves it for the next enqueue, and a review made meanwhile wins. Does nothing while the re-import
+# gate is off.
 class Books::GoodreadsReimport::RecheckCreatesJob
   include Sidekiq::Job
 
@@ -11,10 +12,7 @@ class Books::GoodreadsReimport::RecheckCreatesJob
 
   BATCH_SIZE = 100
 
-  def self.candidates
-    ::Books::RepairVerdict.current.where(kind: :reimport_match, status: [:approved, :proposed], reviewed_at: nil, applied_at: nil)
-      .where("payload->>'outcome' = 'create'").where.not("payload ? 'english_title'")
-  end
+  def self.candidates = ::Services::Books::GoodreadsReimport::MatchEdition.recheckable
 
   # Returns how many verdicts were queued.
   def self.enqueue(limit: nil)
@@ -40,12 +38,8 @@ class Books::GoodreadsReimport::RecheckCreatesJob
     edition = ::Books::GoodreadsEdition.find_by(id: verdict.payload["goodreads_edition_id"])
     return :no_edition unless edition
 
-    verdict.update!(superseded_at: Time.current)
-    outcome = ::Services::Books::GoodreadsReimport::MatchEdition.call(edition: edition).data[:outcome]
-    verdict.update!(superseded_at: nil) if outcome == :retry
-    outcome
+    ::Services::Books::GoodreadsReimport::MatchEdition.call(edition: edition, recheck: true).data[:outcome]
   rescue => e
-    verdict.update!(superseded_at: nil)
     Rails.logger.error("recheck_creates: verdict #{verdict.id} failed: #{e.class}: #{e.message}")
     :errors
   end
