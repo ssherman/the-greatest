@@ -142,13 +142,12 @@ reverse doesn't hold. Music and games pages that set no `@indexable` (song, albu
 pages, music lists, music and games categories) stay indexable whether ranked or not, and the
 sitemap lists only the ranked ones. No music or games controller changes its indexing in this work.
 
-Where a page already computes a real rule (books book, author, list and category pages; games
-lists), that rule moves into one place both can call: a scope for the sitemap, a predicate for the
-controller. That way the two cannot drift. For example,
-`@indexable = @ranked_item.present? && !@book.provisional?` becomes a predicate backed by the same
-conditions as the books sitemap scope. The exact shape is up to the builder.
-
-Either way, the consistency test (see Testing) is what enforces the rule.
+*Revised during planning:* an earlier draft also moved each page's rule into a predicate shared
+with the sitemap. That does not fit the code. Controllers judge "ranked" against whichever ranking
+configuration the URL selects (including `/rc/` alternates), and views lean on `@indexable` beyond
+the robots tag. The sitemap only ever uses the primary configuration. So controllers are left
+alone, and the **consistency test** (see Testing) is the guard: it requests every URL every sitemap
+lists and asserts the page renders `index`.
 
 ### `lastmod`
 
@@ -156,15 +155,17 @@ Each `<url>` carries `<lastmod>` from the record's `updated_at`. Google uses `la
 proves accurate, so **the builder must first check whether ranking recalculations or other bulk
 jobs touch `updated_at` on every item**. If they do, every record looks changed every week and the
 dates become noise. In that case, use a better-behaved column if one exists, otherwise omit
-`lastmod` for that type. The child files in the index carry the max `lastmod` of their URLs.
+`lastmod` for that type. (Checked during planning: recalculation upserts `ranked_items` only, so
+item `updated_at` is honest.) The child files in the index carry their source's max `lastmod`,
+which is exact while each source fits in one file, as all do today.
 `priority` and `changefreq` are omitted, because Google ignores them.
 
 ### Hosts and canonical URLs
 
-URLs are absolute and use the same host that the pages' canonical links use. Existing views build
-canonical URLs as `request.base_url + path`, so a sitemap fetched on a host lists that host's URLs.
-The builder confirms that the www/apex redirect leaves only one host serving pages, so no sitemap
-lists URLs that redirect. Books pre-cutover runs on `new.thegreatestbooks.org`; at cutover the
+URLs are absolute and built from `Api::Host.base_url(domain)`, the first host in
+`config.domains`, which is the same source the routes constrain on. `request.host` is never used
+to build a URL (`CurrentDomain` says so explicitly). *Revised during planning:* an earlier draft
+said `request.base_url`. Books pre-cutover runs on `new.thegreatestbooks.org`; at cutover the
 apex moves to the new app and the same code serves it.
 
 ### Books gate
