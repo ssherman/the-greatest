@@ -53,6 +53,14 @@ preview tags."
   it's the title plus the existing developer text, minus the suffix.
 - No change to `og:description`. It keeps falling back to the page's meta description.
 
+## Measuring migrated covers (decided with Shane during planning)
+
+6,756 book covers, 3,514 of them on ranked books (17%), came from the July 2026 image migration
+with blob metadata `{"identified": true}` and no width or height. Under the rule above they'd get
+no image. A one-off Sidekiq job measures them with `blob.analyze`, started by a rake task Shane runs
+in production after deploy (added to `docs/launch-todo.md`). Everything uploaded since July is
+measured normally, so this is not recurring.
+
 ## Tests
 
 - Layout/controller test: `twitter:card` is `summary` on a book, a game, a music page and a news post
