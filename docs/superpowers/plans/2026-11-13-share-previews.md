@@ -84,7 +84,7 @@
   - when present, set `content_for :og_image, url` and `content_for :og_image_alt, @book.title`
   - set `content_for :og_title` per Global Constraints, reusing the view's existing `author_names` / `@developer_names`
 - [ ] **Step 4: Run** the same command. Expected: PASS.
-- [ ] **Step 5: E2E.** Extend the book-detail and game-detail specs. On a page whose cover has dimensions in the dev DB, expect `meta[property="og:image"]` to have a `content` starting with `https://` and `meta[name="twitter:card"]` to be `summary`. Pick the page through existing spec conventions, not a hard-coded id, if the spec already navigates from the index. Before running, confirm port 3000 belongs to this worktree using the AGENTS.md snippet. If it doesn't, stop and report. Start with `yarn build:all` and `bin/rails server`, and stop the server afterwards.
+- [ ] **Step 5: E2E.** Book images are broken in dev: the restored blob keys point at the production bucket. That's expected, and the E2E check must not fetch or render the image. It only reads the meta tag, which comes from the database. Extend the book-detail and game-detail specs. On a page whose cover has dimensions in the dev DB, expect `meta[property="og:image"]` to have a `content` starting with `https://` and `meta[name="twitter:card"]` to be `summary`. Pick the page through existing spec conventions, not a hard-coded id, if the spec already navigates from the index. Before running, confirm port 3000 belongs to this worktree using the AGENTS.md snippet. If it doesn't, stop and report. Start with `yarn build:all` and `bin/rails server`, and stop the server afterwards.
 - [ ] **Step 6: Commit** `"Link previews: cover thumbnail on book and game pages"`
 
 ---
@@ -109,7 +109,7 @@
 - [ ] **Step 2: Run** `bin/rails test test/sidekiq/images/analyze_dimensions_job_test.rb`. Expected: FAIL.
 - [ ] **Step 3: Implement** the job and rake task. Use `sidekiq_options queue: :low` if the app defines that queue; check `config/sidekiq.yml`.
 - [ ] **Step 4: Run** the job test. Expected: PASS. Then `bin/rails -T images` lists the task.
-- [ ] **Step 5: launch-todo.** Add a short final section, "Measure migrated cover images (once)". Explain that 6,756 book covers from the July 2026 image migration were never measured, so they get no link-preview thumbnail until they are. After deploy, run `bin/rails images:analyze_missing_dimensions` in production. It is safe to re-run, because it only touches blobs still missing a width. Note that the dev and production buckets differ, so dev needs its own run.
+- [ ] **Step 5: launch-todo.** Add a short final section, "Measure migrated cover images (once)". Explain that 6,756 book covers from the July 2026 image migration were never measured, so they get no link-preview thumbnail until they are. After deploy, run `bin/rails images:analyze_missing_dimensions` in production. It is safe to re-run, because it only touches blobs still missing a width. **Production only.** The dev database is a production restore, so its book blob keys point at files in the production bucket, not the dev bucket. In dev every download fails, and each failure is logged.
 - [ ] **Step 6: Full verification:** `bin/rails test` (no new warnings), `bundle exec standardrb`, `CI=1 bin/rails zeitwerk:check`.
 - [ ] **Step 7: Commit** `"Images: backfill job to measure covers missing dimensions"`
 
