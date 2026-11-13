@@ -13,6 +13,12 @@ module Sitemaps
 
     def self.page_size = PAGE_SIZE
 
+    # Child files a source spans, at least one. The index advertises exactly
+    # this many and the controller serves exactly this many; keep it the only copy.
+    def self.page_count(source)
+      [(source.count / page_size.to_f).ceil, 1].max
+    end
+
     def self.sources(domain)
       return [] unless STATIC_PATHS.key?(domain)
       return [] if domain == :books && !::Books::PublicIndexing.enabled?

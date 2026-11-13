@@ -38,6 +38,15 @@ module Sitemaps
       assert_not_same Sitemaps::Registry.sources(:music).first, Sitemaps::Registry.sources(:music).first
     end
 
+    test "page_count rounds up, honours page_size and is at least one" do
+      source = Sitemaps::StaticPages.new(paths: %w[/a /b /c])
+      Sitemaps::Registry.stubs(:page_size).returns(2)
+      assert_equal 2, Sitemaps::Registry.page_count(source)
+      Sitemaps::Registry.stubs(:page_size).returns(3)
+      assert_equal 1, Sitemaps::Registry.page_count(source)
+      assert_equal 1, Sitemaps::Registry.page_count(Sitemaps::StaticPages.new(paths: []))
+    end
+
     test "page_size defaults to PAGE_SIZE" do
       assert_equal 50_000, Sitemaps::Registry.page_size
     end

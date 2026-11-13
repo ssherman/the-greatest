@@ -17,8 +17,7 @@ class SitemapsController < ApplicationController
 
     page = params[:page].to_i
     size = Sitemaps::Registry.page_size
-    pages = [(source.count / size.to_f).ceil, 1].max
-    raise ActiveRecord::RecordNotFound if page < 1 || page > pages
+    raise ActiveRecord::RecordNotFound if page < 1 || page > Sitemaps::Registry.page_count(source)
 
     @entries = source.entries(offset: (page - 1) * size, limit: size)
   end
