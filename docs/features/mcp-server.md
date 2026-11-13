@@ -198,9 +198,29 @@ Identifier tools:
 - `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
 - `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
 
-Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 29 tools.
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 36 tools (the description tools below included).
 
 The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
+
+## Description tools
+
+An agent can read and fix the descriptions of books and authors with the same five actions as the admin description panel. `Api::V1::Admin::Books::DescriptionsController` is a thin mapper over `Services::Descriptions::AdminWrite`, which the admin page (`Admin::DescriptionsController`) calls too, so the two cannot drift.
+
+- `get_book_descriptions` and `get_author_descriptions` (`books:admin:read`): every description of every kind and locale, rank descending then source (the page sorts the same way), plus `shown_description_id`, the English summary the public page shows (`Descriptions::Resolver`: a preferred description wins, else source priority manual > ai_generated > goodreads > wikipedia > openlibrary > publisher > other; a deprecated one is listed, never shown).
+- `add_book_description` and `add_author_description` (`books:admin:write`): body `content`, `source` (required), `source_name`, `source_url`, `license`. Created as `summary`, `en`, `normal` like the page. Returns 201 with the row and `shown_description_id`.
+- `update_description` (`books:admin:write`): any subset of those fields. Kind, locale and rank are not editable.
+- `set_preferred_description` (`books:admin:write`): demote-then-promote in one transaction, so exactly one description per record, kind and locale is preferred.
+- `delete_description` (`books:admin:merge`, destructive): permanent; returns the deleted row and the `shown_description_id` the record has afterwards.
+
+Rulings:
+
+- The agent picks `source`. The tool text says to use `ai_generated` for text it wrote itself, and otherwise the source the text came from.
+- `source: wikipedia` needs `source_url` (400) and defaults `license` to `cc_by_sa_4` when omitted. This is the API's rule only; the admin page is unchanged. On update the URL requirement applies when the source is being set to wikipedia and no URL is held.
+- One description per record, kind, locale, source and (for `other`) source name. A second one is 422 naming the existing description's id; the agent edits that one instead. A validation failure (bad source, `other` without `source_name`, content over `Correction::MAX_TEXT_VALUE_LENGTH`) is 400.
+- Update, prefer and delete find the description by id only when its describable is a `Books::Book` or `Books::Author`; a music or games description, or a missing id, is 404.
+- Setting `source` to something other than `other` without sending `source_name` drops the old name, as the page does.
+- Policies: `update?` on the book or author for add, update and prefer; `destroy?` for delete. Each write logs `event=api_admin_description` with field names only, never the text.
+- Cache: the admin page's writes trigger no cache refresh of the public page, so these do not either.
 
 ## Logging
 
