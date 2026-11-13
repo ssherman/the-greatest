@@ -35,6 +35,14 @@ namespace :books do
       puts "queued #{Books::GoodreadsReimport::MatchEditionsJob.enqueue(limit: count)} editions for matching"
     end
 
+    desc "Queue a second match of <count> \"create a new book\" verdicts recorded before the English-title search, or all " \
+      "(unreviewed and unapplied only)"
+    task :recheck_creates, [:limit] => :environment do |_task, args|
+      count = limit.call("recheck_creates", args[:limit])
+      gate.call
+      puts "queued #{Books::GoodreadsReimport::RecheckCreatesJob.enqueue(limit: count)} create verdicts for a second match"
+    end
+
     desc "Queue the row decisions for <count> users without all rows decided, or all; also queues the guesses for mixed books"
     task :decide, [:limit] => :environment do |_task, args|
       count = limit.call("decide", args[:limit])

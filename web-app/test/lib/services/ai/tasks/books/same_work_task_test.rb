@@ -52,6 +52,13 @@ module Services
             assert_match(/different year alone/i, message)
           end
 
+          test "an English title, when given, is shown as a suggestion" do
+            refute_includes @task.send(:user_prompt), "English title"
+            prompt = SameWorkTask.new(facts: @facts, books: [@first], english_title: "The Hobbit").send(:user_prompt)
+
+            assert_includes prompt, "English title of this work (suggested): The Hobbit"
+          end
+
           test "maps the candidate number back to the book id" do
             result = @task.send(:process_and_persist, {parsed: {candidate_number: 2, confidence: "high", reason: "x"}})
 
