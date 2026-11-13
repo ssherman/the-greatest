@@ -459,6 +459,11 @@ Rails.application.routes.draw do
     get "news/:slug", to: "news_posts#show", as: :news_post, constraints: {format: /html/}
   end
 
+  # robots.txt for every host, movies included (each served the old static
+  # file). Deliberately unconstrained and above the per-domain catch-alls so no
+  # domain block can shadow it. The rules are in app/views/robots/show.text.erb.
+  get "robots.txt", to: "robots#show", format: false, defaults: {format: :text}
+
   # Per-host sitemaps. The index is /sitemap.xml; each source is split into
   # /sitemaps/<source>-<page>.xml files. format: false keeps ".xml" part of the
   # literal path (the format is defaulted), and the source constraint admits
