@@ -118,5 +118,6 @@
 ## After deploy (Shane, production only)
 
 1. Run `bin/rails images:analyze_missing_dimensions` and let the jobs drain.
-2. Paste a ranked game link and a ranked book link into Discord. Both should show a small cover thumbnail. Discord can't reach dev hostnames, so this check can only happen in production.
+2. Book and game show pages are edge-cached for up to 24h (`Cacheable#cache_for_show_page`: 24h + 1h stale-while-revalidate), so after deploy and after the backfill drains Cloudflare may serve HTML without `og:image`. First run `curl -s <url> | grep og:image`. If the tag is missing, wait a day or purge that single URL before testing in Discord. Do not purge the whole zone.
+2a. Paste a ranked game link and a ranked book link into Discord. Both should show a small cover thumbnail. Discord can't reach dev hostnames, so this check can only happen in production.
 3. Discord caches unfurls per URL. A link pasted before deploy may keep its old text-only card for a while, so test with a link you haven't shared before.

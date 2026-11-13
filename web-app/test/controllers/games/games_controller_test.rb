@@ -23,7 +23,8 @@ module Games
       get game_path(game)
 
       assert_response :success
-      assert_match %r{\Ahttps://[^/]+/#{image.file.key}\z}, css_select("meta[property='og:image']").first["content"]
+      cdn = Rails.application.config.domain_settings[:games][:images_cdn][:default]
+      assert_equal "#{cdn}/#{image.file.key}", css_select("meta[property='og:image']").first["content"]
       assert_select "meta[property='og:image:alt'][content=?]", game.title
       assert_select "meta[name='twitter:card'][content=summary]"
     end
@@ -38,6 +39,16 @@ module Games
       assert_select "meta[property='og:title'][content=?]", "#{game.title} - #{developers}"
     end
 
+    test "og:title is the bare title for a game with no developers" do
+      game = games_games(:breath_of_the_wild)
+      game.game_companies.destroy_all
+
+      get game_path(game)
+
+      assert_response :success
+      assert_select "meta[property='og:title'][content=?]", game.title
+    end
+
     test "a game without a cover has no og:image" do
       game = games_games(:breath_of_the_wild)
       game.images.destroy_all
@@ -46,6 +57,7 @@ module Games
 
       assert_response :success
       assert_select "meta[property='og:image']", 0
+      assert_select "meta[property='og:image:alt']", 0
     end
 
     test "a cover without measured dimensions has no og:image" do

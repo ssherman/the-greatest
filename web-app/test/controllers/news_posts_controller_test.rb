@@ -362,6 +362,20 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[name='twitter:card'][content='summary_large_image']", count: 0
   end
 
+  test "music emits a summary card, not a large one, when a share image is attached" do
+    post = news_posts(:music_launch)
+    post.share_image.attach(io: File.open(file_fixture("test_image.png")),
+      filename: "card.png", content_type: "image/png")
+    host! "dev.thegreatestmusic.org"
+
+    get news_post_path(slug: "the-greatest-music-is-live")
+
+    assert_response :success
+    assert_select "meta[property='og:image']", count: 1
+    assert_select "meta[name='twitter:card'][content=?]", "summary"
+    assert_select "meta[name='twitter:card'][content='summary_large_image']", count: 0
+  end
+
   test "no site emits a large card" do
     %w[dev-new.thegreatestbooks.org dev.thegreatestmusic.org dev.thegreatest.games].each do |h|
       host! h

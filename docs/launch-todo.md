@@ -778,6 +778,10 @@ dimensions are known and at least 200, so these books get no thumbnail until the
 2. **Production only. Do not run it in development.** The development database is a production restore, so
    its book blob keys point at files in the production bucket, not the development one. In development every
    download fails, and each failure is logged.
-3. **Check.** Paste a ranked book link and a ranked game link into Discord. Both should show a small cover
+3. **Check the edge cache first.** Book and game show pages are edge-cached for up to 24 hours (plus 1 hour
+   stale-while-revalidate), so right after deploy, and again after the backfill drains, Cloudflare may still
+   serve HTML without `og:image`. Run `curl -s <url> | grep og:image` on the page first. If the tag is
+   missing, wait a day or purge that single URL before testing in Discord. Do not purge the whole zone.
+4. **Check.** Paste a ranked book link and a ranked game link into Discord. Both should show a small cover
    thumbnail. Discord cannot reach dev hostnames, so this can only be checked in production. Discord caches
    unfurls per URL, so test with a link you have not shared before.

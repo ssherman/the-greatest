@@ -24,7 +24,8 @@ module Books
       get "/book/#{@book.slug}"
 
       assert_response :success
-      assert_match %r{\Ahttps://[^/]+/#{image.file.key}\z}, css_select("meta[property='og:image']").first["content"]
+      cdn = Rails.application.config.domain_settings[:books][:images_cdn][:default]
+      assert_equal "#{cdn}/#{image.file.key}", css_select("meta[property='og:image']").first["content"]
       assert_select "meta[property='og:image:alt'][content=?]", @book.title
       assert_select "meta[name='twitter:card'][content=summary]"
     end
@@ -36,6 +37,15 @@ module Books
       get "/book/#{@book.slug}"
 
       assert_select "meta[property='og:title'][content=?]", "#{@book.title} by #{names}"
+    end
+
+    test "og:title is the bare title for a book with no authors" do
+      @book.book_authors.destroy_all
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_select "meta[property='og:title'][content=?]", @book.title
     end
 
     test "a book without a cover has no og:image" do
