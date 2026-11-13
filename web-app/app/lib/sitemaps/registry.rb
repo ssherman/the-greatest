@@ -5,10 +5,10 @@ module Sitemaps
     PAGE_SIZE = 50_000
 
     STATIC_PATHS = {
-      books: %w[/ /authors /lists /categories /countries /news],
+      books: %w[/ /authors /lists /categories /countries],
       # Books /rankings is deliberately absent: it renders noindex.
-      music: %w[/ /albums /songs /artists /lists /albums/lists /songs/lists /rankings /news],
-      games: %w[/ /lists /rankings /news]
+      music: %w[/ /albums /songs /artists /lists /albums/lists /songs/lists /rankings],
+      games: %w[/ /lists /rankings]
     }.freeze
 
     def self.page_size = PAGE_SIZE
@@ -23,10 +23,10 @@ module Sitemaps
       return [] unless STATIC_PATHS.key?(domain)
       return [] if domain == :books && !::Books::PublicIndexing.enabled?
 
-      sources = [
-        StaticPages.new(paths: STATIC_PATHS.fetch(domain)),
-        NewsPosts.new(domain: domain)
-      ]
+      sources = [StaticPages.new(paths: STATIC_PATHS.fetch(domain))]
+      # /news renders noindex without a published post, so a site with none lists nothing.
+      news = NewsPosts.new(domain: domain)
+      sources << news if news.count > 0
       sources.concat(books_sources) if domain == :books
       sources.concat(music_sources) if domain == :music
       sources.concat(games_sources) if domain == :games

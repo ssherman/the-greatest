@@ -21,7 +21,8 @@ sitemap. URLs are the canonical ones, never `/rc/:id`.
 
 - **pages**: fixed hub pages that are already indexable (`Sitemaps::Registry::STATIC_PATHS`).
   Books' `/rankings` is left out because it renders `noindex`.
-- **news**: published news posts for that site.
+- **news**: the `/news` hub followed by the published news posts for that site. A site with no
+  published post has no `news` file and no `/news` entry, because `/news` renders `noindex` then.
 - **Items**: books and authors read through the `catalog` scope, so a provisional record is never
   listed (`docs/features/books-provisional-records.md`).
 - **Lists**: `active` lists with a `ranked_lists` row in the primary configuration. Music lists
@@ -54,7 +55,7 @@ are not affected by the switch.
 `SitemapsController` and `RobotsController` use `Cacheable#cache_for_show_page`: public, 24-hour
 `Cache-Control`, and no session cookie (a `Set-Cookie` header would make the edge skip the cache).
 No edge rule change was needed, because the cache rule for the app hosts honours the origin's
-`Cache-Control`. The database sees roughly one query per file per day, however often crawlers fetch.
+`Cache-Control`. The database sees roughly once per file per day at each edge location, however often crawlers fetch.
 
 `robots.txt` is a Rails route on every host (movies included), rendered from
 `app/views/robots/show.text.erb`. Its rules are pinned byte for byte by

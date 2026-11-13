@@ -285,6 +285,9 @@ the sync never undoes them.
   (`docs/features/sitemaps.md`, "The books gate"). After the switch is on, check that
   `https://thegreatestbooks.org/sitemap.xml` returns 200 and that `/robots.txt` ends with its
   `Sitemap:` line, then submit `/sitemap.xml` in Google Search Console for the books site.
+  `robots.txt` is edge-cached for 24h: purge `/robots.txt` (and `/sitemap.xml`) after flipping, or
+  wait up to 24h. Sitemap URLs use the FIRST host in `BOOKS_DOMAIN`, so it must be the apex at
+  cutover (see the "Confirm the production books hostname is admitted" step below).
 
 ## 8. After launch
 

@@ -57,6 +57,7 @@ module Sitemaps
       assert_equal all.size, source.count
       assert_equal 2, all.size
       assert_equal [all[1]], source.entries(offset: 1, limit: 1)
+      assert_equal [@book, @other].sort_by(&:id).map { |b| "/book/#{b.slug}" }, all.map(&:path)
     end
 
     test "lastmod is the max updated_at" do

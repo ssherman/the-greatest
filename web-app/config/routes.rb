@@ -473,7 +473,7 @@ Rails.application.routes.draw do
   ) do
     get "sitemap.xml", to: "sitemaps#index", as: :sitemap, format: false, defaults: {format: :xml}
     get "sitemaps/:source-:page.xml", to: "sitemaps#show", as: :sitemap_file, format: false,
-      defaults: {format: :xml}, constraints: {source: /[a-z_]+/, page: /\d+/}
+      defaults: {format: :xml}, constraints: {source: /[a-z_]+/, page: /[1-9]\d*/}
   end
 
   # Privacy and deletion policies. One company, one policy, so like /news these

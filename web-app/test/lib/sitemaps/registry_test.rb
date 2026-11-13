@@ -30,6 +30,15 @@ module Sitemaps
       assert_equal "news", Sitemaps::Registry.find(:music, "news").key
     end
 
+    test "a domain with no published posts has no news source and no /news path" do
+      NewsPost.where(domain: :music).update_all(published_at: 1.day.from_now)
+      keys = Sitemaps::Registry.sources(:music).map(&:key)
+      assert_not_includes keys, "news"
+      assert_includes keys, "pages"
+      assert_not_includes Sitemaps::Registry.find(:music, "pages").entries(offset: 0, limit: 100).map(&:path), "/news"
+      assert_nil Sitemaps::Registry.find(:music, "news")
+    end
+
     test "find returns nil for another domain's key" do
       assert_nil Sitemaps::Registry.find(:games, "songs")
     end
@@ -95,8 +104,8 @@ module Sitemaps
       assert_not_includes paths, "/albums/categories/#{category.slug}"
     end
 
-    test "games keys are exactly the games sources, in order" do
-      assert_equal %w[pages news games lists categories], Sitemaps::Registry.sources(:games).map(&:key)
+    test "games keys are exactly the games sources, in order (no news: no games posts)" do
+      assert_equal %w[pages games lists categories], Sitemaps::Registry.sources(:games).map(&:key)
     end
 
     test "games lists a ranked game and omits an unranked one" do

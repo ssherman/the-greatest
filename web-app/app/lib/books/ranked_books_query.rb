@@ -39,8 +39,8 @@ module Books
     end
 
     # {country_id => distinct ranked books of that country}: the same count
-    # `call(countries: [country])` gives. DISTINCT because a book can carry
-    # several country rows.
+    # `call(countries: [country])` gives. Counts are per country group, and
+    # (book, country) is unique, so DISTINCT is only a safeguard.
     def self.counts_by_country(ranking_configuration:)
       ranked_books(ranking_configuration)
         .joins("INNER JOIN books_book_countries ON books_book_countries.book_id = ranked_items.item_id")

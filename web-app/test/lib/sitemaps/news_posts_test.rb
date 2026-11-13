@@ -24,7 +24,25 @@ module Sitemaps
       source = Sitemaps::NewsPosts.new(domain: :books)
       entries = source.entries(offset: 0, limit: 100)
       assert_equal entries.size, source.count
-      assert_equal entries.map(&:lastmod).max, source.lastmod
+      assert_equal entries.filter_map(&:lastmod).max, source.lastmod
+    end
+
+    test "the /news hub comes first, without lastmod, and pages carry on with the posts" do
+      source = Sitemaps::NewsPosts.new(domain: :books)
+      all = source.entries(offset: 0, limit: 100)
+      assert_equal "/news", all.first.path
+      assert_nil all.first.lastmod
+      assert_equal all.drop(1), source.entries(offset: 1, limit: 100)
+      assert_equal [all[1]], source.entries(offset: 1, limit: 1)
+      assert_equal [all.first], source.entries(offset: 0, limit: 1)
+    end
+
+    test "a domain with no published posts contributes nothing" do
+      NewsPost.where(domain: :music).update_all(published_at: 1.day.from_now)
+      source = Sitemaps::NewsPosts.new(domain: :music)
+      assert_equal 0, source.count
+      assert_equal [], source.entries(offset: 0, limit: 100)
+      assert_nil source.lastmod
     end
   end
 end
