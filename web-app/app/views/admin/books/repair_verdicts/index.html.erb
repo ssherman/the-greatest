@@ -10,9 +10,9 @@
 
   <%= form_with url: admin_books_repair_verdicts_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "verdict-filters"} do |form| %>
     <%= hidden_field_tag :status, @status %>
-    <% [["kind", "Kind", Admin::Books::RepairVerdictsController::KINDS],
-        ["decided_by", "Decided by", Admin::Books::RepairVerdictsController::DECIDED_BY],
-        ["confidence", "Confidence", Admin::Books::RepairVerdictsController::CONFIDENCES]].each do |key, label, values| %>
+    <% [["kind", "Kind", Services::Books::RepairVerdicts::Filter::KINDS],
+        ["decided_by", "Decided by", Services::Books::RepairVerdicts::Filter::DECIDED_BY],
+        ["confidence", "Confidence", Services::Books::RepairVerdicts::Filter::CONFIDENCES]].each do |key, label, values| %>
       <div>
         <%= form.label key, label, class: "label text-xs" %>
         <%= form.select key, options_for_select([["All", ""]] + values.map { |value| [value.humanize, value] }, params[key]), {}, class: "select select-sm" %>
@@ -23,7 +23,7 @@
   <% end %>
 
   <div role="tablist" class="tabs tabs-border">
-    <% Admin::Books::RepairVerdictsController::STATUSES.each do |status| %>
+    <% Services::Books::RepairVerdicts::Filter::STATUSES.each do |status| %>
       <%= link_to admin_books_repair_verdicts_path(filter_params(status: status)), role: "tab",
             class: "tab #{"tab-active" if @status == status}", data: {testid: "status-tab-#{status}"} do %>
         <%= status.humanize %>
