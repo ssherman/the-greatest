@@ -185,6 +185,30 @@ module Api
         ["GET", "/api/v1/admin/repair_verdicts/{id}", "403"] => -> { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}", headers: bearer(MEMBER) },
         ["GET", "/api/v1/admin/repair_verdicts/{id}", "404"] => -> { get "/api/v1/admin/repair_verdicts/999999999", headers: bearer(READ) },
         ["GET", "/api/v1/admin/repair_verdicts/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "200"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/approve", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "401"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/approve", as: :json },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "403"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/approve", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "404"] => -> { post "/api/v1/admin/repair_verdicts/999999999/approve", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "422"] => -> { post "/api/v1/admin/repair_verdicts/#{superseded_verdict.id}/approve", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/approve", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/approve", as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "200"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/reject", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "401"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/reject", as: :json },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "403"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/reject", as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "404"] => -> { post "/api/v1/admin/repair_verdicts/999999999/reject", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "422"] => -> { post "/api/v1/admin/repair_verdicts/#{superseded_verdict.id}/reject", as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/reject", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/reject", as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "200"] => -> { post "/api/v1/admin/repair_verdicts/#{match_verdict.id}/correct", params: {create: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "400"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/correct", params: {book_id: "x"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "401"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/correct", as: :json },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "403"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/correct", params: {create: true}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "404"] => -> { post "/api/v1/admin/repair_verdicts/999999999/correct", params: {create: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "422"] => -> { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/correct", params: {create: true}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/{id}/correct", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/repair_verdicts/#{repair_verdict.id}/correct", params: {create: true}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/repair_verdicts/bulk_approve", "200"] => -> { post "/api/v1/admin/repair_verdicts/bulk_approve", params: {ids: [repair_verdict.id]}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/bulk_approve", "400"] => -> { post "/api/v1/admin/repair_verdicts/bulk_approve", params: {ids: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/repair_verdicts/bulk_approve", "401"] => -> { post "/api/v1/admin/repair_verdicts/bulk_approve", params: {ids: [1]}, as: :json },
+        ["POST", "/api/v1/admin/repair_verdicts/bulk_approve", "403"] => -> { post "/api/v1/admin/repair_verdicts/bulk_approve", params: {ids: [1]}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/repair_verdicts/bulk_approve", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/repair_verdicts/bulk_approve", params: {ids: [1]}, as: :json, headers: bearer(MERGE) } },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "200"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {verdict: "confirmed", note: "Same book."}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "400"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "401"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json },
@@ -289,6 +313,20 @@ module Api
       def tag_path(segment, id = tag_item(segment).id) = "/api/v1/admin/#{segment}/#{id}/categories"
 
       def politics_id = categories(:books_politics_subject).id
+
+      def superseded_verdict
+        ::Books::RepairVerdict.find_or_create_by!(kind: :relink, subject_key: "coverage:superseded") do |verdict|
+          verdict.decided_by = :rule
+          verdict.superseded_at = Time.current
+        end
+      end
+
+      def match_verdict
+        ::Books::RepairVerdict.find_or_create_by!(kind: :reimport_match, subject_key: "coverage:match") do |verdict|
+          verdict.decided_by = :ai
+          verdict.payload = {"outcome" => "matched", "book_id" => books_books(:war_and_peace).id}
+        end
+      end
 
       def repair_verdict
         ::Books::RepairVerdict.find_or_create_by!(kind: :merge_books, subject_key: "coverage:merge") do |verdict|

@@ -134,6 +134,150 @@ module Api
             assert_equal [nil, nil], [data[:source_rows].last[:isbn13], data[:source_rows].last[:goodreads_book_id]]
           end
 
+          def write(path, params = {}, token: ApiTokenSecrets::ADMIN)
+            post "/api/v1/admin/repair_verdicts/#{path}", params: params, as: :json, headers: bearer(token)
+          end
+
+          def match_verdict(**attrs)
+            verdict("t:match:#{SecureRandom.hex(3)}", kind: :reimport_match, decided_by: :ai,
+              payload: {"outcome" => "matched", "book_id" => @war.id}, **attrs)
+          end
+
+          test "approve stamps the reviewer and api, returns the detail and conforms" do
+            write("#{@merge.id}/approve")
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal "approved", json[:data][:status]
+            assert_equal "api", json[:data][:reviewed_via]
+            assert_equal users(:admin_user).id, json[:data][:reviewed_by][:id]
+            assert_equal "ai", @merge.reload.decided_by
+            assert_nil @merge.applied_at
+          end
+
+          test "approve of an already reviewed verdict is a 422" do
+            write("#{@approved.id}/approve")
+            assert_response :unprocessable_entity
+          end
+
+          test "approve and reject of a superseded verdict are 422 and change nothing" do
+            write("#{@superseded.id}/approve")
+            assert_response :unprocessable_entity
+            write("#{@superseded.id}/reject")
+            assert_response :unprocessable_entity
+            assert_predicate @superseded.reload, :proposed?
+          end
+
+          test "approve and reject of an unknown verdict are 404" do
+            write("999999999/approve")
+            assert_response :not_found
+            write("999999999/reject")
+            assert_response :not_found
+            write("abc/approve")
+            assert_response :not_found
+          end
+
+          test "reject stamps api, and rejecting twice is a 422" do
+            write("#{@merge.id}/reject")
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["rejected", "api"], [json[:data][:status], json[:data][:reviewed_via]]
+
+            write("#{@merge.id}/reject")
+            assert_response :unprocessable_entity
+          end
+
+          test "rejecting an applied mark_provisional reverts the book" do
+            @war.update!(provisional: true)
+            applied = verdict("t:prov", kind: :mark_provisional, status: :approved, applied_at: Time.current,
+              payload: {"book_id" => @war.id})
+            ::Services::RankingConfigurations::RequestRefresh.stubs(:call_for_ids)
+
+            write("#{applied.id}/reject")
+
+            assert_response :success
+            assert_not @war.reload.provisional
+            assert_nil applied.reload.applied_at
+          end
+
+          test "approve needs the merge scope and reject the write scope" do
+            write("#{@merge.id}/approve", token: ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            write("#{@merge.id}/reject", token: ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            write("#{@merge.id}/correct", {create: true}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            write("bulk_approve", {ids: [@merge.id]}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            assert_predicate @merge.reload, :proposed?
+          end
+
+          test "correct with create answers a match, stamps api and conforms" do
+            match = match_verdict
+
+            write("#{match.id}/correct", {create: true})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal ["approved", "api"], [json[:data][:status], json[:data][:reviewed_via]]
+            assert_equal "create", match.reload.payload["outcome"]
+          end
+
+          test "correct with a book id points the match at that book" do
+            match = match_verdict
+
+            write("#{match.id}/correct", {book_id: @crime.id})
+
+            assert_response :success
+            assert_equal @crime.id, match.reload.payload["book_id"]
+          end
+
+          test "correct with both or neither of book_id and create is a 422" do
+            match = match_verdict
+            write("#{match.id}/correct", {book_id: @crime.id, create: true})
+            assert_response :unprocessable_entity
+            write("#{match.id}/correct", {})
+            assert_response :unprocessable_entity
+            assert_predicate match.reload, :proposed?
+          end
+
+          test "correct with wrong JSON types is a 400" do
+            match = match_verdict
+            write("#{match.id}/correct", {book_id: "12"})
+            assert_response :bad_request
+            write("#{match.id}/correct", {create: "yes"})
+            assert_response :bad_request
+            write("#{match.id}/correct", {book_id: [1]})
+            assert_response :bad_request
+          end
+
+          test "correct refuses a superseded match, a non-match and an unknown book" do
+            write("#{match_verdict(superseded_at: Time.current).id}/correct", {create: true})
+            assert_response :unprocessable_entity
+            write("#{@merge.id}/correct", {create: true})
+            assert_response :unprocessable_entity
+            write("#{match_verdict.id}/correct", {book_id: 999_999_999})
+            assert_response :unprocessable_entity
+            write("999999999/correct", {create: true})
+            assert_response :not_found
+          end
+
+          test "bulk approve approves the proposed and skips the rest" do
+            write("bulk_approve", {ids: [@merge.id, @guess.id, @approved.id, @superseded.id, 999_999_999]})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [@merge.id, @guess.id].sort, json[:data][:approved_ids].sort
+            assert_equal [@approved.id, @superseded.id, 999_999_999].sort, json[:data][:skipped_ids].sort
+            assert_equal "api", @merge.reload.reviewed_via
+            assert_predicate @superseded.reload, :proposed?
+          end
+
+          test "bulk approve refuses a bad ids list with a 400" do
+            [[], (1..101).to_a, ["1"], [0], [1.5], "1", nil].each do |ids|
+              write("bulk_approve", {ids: ids})
+              assert_response :bad_request, ids.inspect
+            end
+            write("bulk_approve", {ids: (1..100).to_a})
+            assert_response :success
+          end
+
           test "an unknown or non-numeric id is a 404" do
             fetch(999_999_999)
             assert_response :not_found
