@@ -116,8 +116,12 @@ is a trusted book (pre-import, new-app, or on a curated list). A "none" beside a
 one would duplicate a book readers know. When they disagree or the AI doubts it, the match is proposed. Review them in Admin, Repair verdicts, filtered to `reimport_match`:
 
 - Approve a match that is right; `apply` then writes it.
-- Reject one that is wrong. A rejected match stays rejected and its rows **wait**: they are not moved, and the
-  report lists them under "rejected matches". Fix the cause (or leave them for a later pass) and they stay put.
+- **Correct** one that is wrong: give the right book's id, or create a new book (the verdict page's "Correct this
+  match", `Services::Books::GoodreadsReimport::CorrectMatch`). The correction becomes the approved answer; the AI's pick
+  stays in `payload["ai"]` and what the verdict said before in `payload["corrected"]`. Any unapplied match can be
+  corrected, a rejected one included.
+- Reject only when no book should be matched. A rejected match is final: it is never matched again and its rows
+  **wait**: they are not moved, and the report lists them under "rejected matches". Correcting it is the way out.
   Rows the same reader had on the same legacy book wait with them (a row with no edition does the same), because
   copy versus move and the review's owner depend on every row of that book: nothing of the group moves until
   all of it can.

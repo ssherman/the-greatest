@@ -553,8 +553,10 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
    `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). The worker writes it
    into the shared storage volume, mounted in both web and worker, so read it from either container. The
    snapshot's `counts.json` lands in the same folder. Then in Admin, Repair
-   verdicts, review the proposed `reimport_match` ones: approve the right ones, reject the wrong ones. Rejected
-   matches leave their rows waiting; the report lists them.
+   verdicts, review the proposed `reimport_match` ones: approve the right ones, and **correct** the wrong ones
+   ("Correct this match": the right book's id, or create a new book). Do not reject a wrong pick: a rejected match
+   is never matched again and its readers stay put. The two rejected on 2026-11-13 (*Flowers for Algernon*, verdict
+   56769, should be book #4418; *One Hundred Years of Solitude*, verdict 56747, should be book #266) need correcting.
 6. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. This writes approved matches and creates
    the new books.
 7. **Decide.** `bin/rails "books:goodreads_reimport:decide[200]"`, then `decide[all]`. Run `decide[all]` a

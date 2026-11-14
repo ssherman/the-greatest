@@ -10,11 +10,11 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   FILTER_KEYS = %w[kind status decided_by confidence guess].freeze
   PER_PAGE = 50
 
-  before_action :set_verdict, only: [:show, :approve, :reject]
+  before_action :set_verdict, only: [:show, :approve, :reject, :correct]
   # An approved merge destroys a row on the next apply, so approving takes the
   # delete gate, as the match-decision reject does.
   before_action :require_domain_delete!, only: [:approve, :bulk_approve]
-  before_action :require_domain_write!, only: [:reject]
+  before_action :require_domain_write!, only: [:reject, :correct]
 
   helper_method :filter_params
 
@@ -62,6 +62,18 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
 
     review!(@verdict, :rejected)
     redirect_to admin_books_repair_verdict_path(@verdict), notice: notice
+  end
+
+  # A re-import match the AI got wrong: the right book, or create a new one (Services::Books::GoodreadsReimport::
+  # CorrectMatch). Rejecting alone strands the match's readers.
+  def correct
+    result = ::Services::Books::GoodreadsReimport::CorrectMatch.call(verdict: @verdict, user: current_user,
+      book_id: params[:book_id], create: params[:create])
+    if result.success?
+      redirect_to admin_books_repair_verdict_path(@verdict), notice: "Corrected and approved. The next books:goodreads_reimport:apply applies it."
+    else
+      redirect_to admin_books_repair_verdict_path(@verdict), alert: result.errors.join(", ")
+    end
   end
 
   def bulk_approve

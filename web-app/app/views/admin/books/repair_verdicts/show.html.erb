@@ -79,15 +79,40 @@
     <div class="collapse-content"><pre class="text-xs [overflow-wrap:anywhere] whitespace-pre-wrap"><%= JSON.pretty_generate(@verdict.payload) %></pre></div>
   </details>
 
+  <% if @verdict.reimport_match? && @verdict.applied_at.nil? && @verdict.payload["created_book_id"].blank? && @verdict.superseded_at.nil? && current_user_can_write? %>
+    <div class="card bg-base-100" data-testid="correct-form">
+      <div class="card-body gap-3">
+        <h2 class="card-title text-base">Correct this match</h2>
+        <p class="text-sm">If the pick is wrong, give the right book's id, or create a new book. The correction is approved and
+          the next apply writes it. Rejecting instead leaves this edition's readers where they are.</p>
+        <div class="flex flex-wrap items-end gap-2">
+          <%= form_with url: correct_admin_books_repair_verdict_path(@verdict), method: :post, class: "flex flex-wrap items-end gap-2" do |f| %>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Right book id</legend>
+              <%= f.number_field :book_id, id: "correct_book_id", min: 1, required: true, class: "input input-sm w-40", aria: {label: "Right book id"} %>
+            </fieldset>
+            <%= f.submit "Use this book", class: "btn btn-sm btn-primary" %>
+          <% end %>
+          <%= button_to "Create a new book instead", correct_admin_books_repair_verdict_path(@verdict), method: :post,
+                params: {create: "1"}, class: "btn btn-sm" %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
   <div class="flex flex-wrap gap-2">
     <% if @verdict.proposed? && current_user_can_delete? %>
       <%= button_to "Approve", approve_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-primary" %>
     <% end %>
     <% if !@verdict.rejected? && current_user_can_write? %>
       <% undo_free = @verdict.applied_at.nil? || @verdict.mark_provisional? %>
+      <% confirm = if !undo_free
+           "This was already applied. Rejecting does not undo it; it only stops it being applied again after a books re-migration."
+         elsif @verdict.reimport_match?
+           "A rejected match is never matched again, and its readers stay where they are. To fix a wrong pick, use Correct this match instead. Reject anyway?"
+         end %>
       <%= button_to "Reject", reject_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-error",
-            form: {data: {testid: "reject-form",
-                          turbo_confirm: (undo_free ? nil : "This was already applied. Rejecting does not undo it; it only stops it being applied again after a books re-migration.")}.compact} %>
+            form: {data: {testid: "reject-form", turbo_confirm: confirm}.compact} %>
     <% end %>
   </div>
 </div>
