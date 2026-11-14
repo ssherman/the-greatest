@@ -7,7 +7,15 @@ For each verdict:
 1. Call get_repair_verdict. It returns the CSV facts for the row (title, author, ISBN and so on), the AI's answer, and the candidate books.
 2. Compare the facts with each candidate book. Use your own web search when the records don't settle it.
 3. If the AI's answer is right, call approve_repair_verdict.
-4. If the AI's answer is wrong, call correct_repair_verdict with the id of the right book. If none of the candidate books is the work, call it with create: true to make a new book.
+4. If the AI's answer is wrong, call correct_repair_verdict with the id of the right book.
+5. The candidates are only what the finder returned. Before you use create: true, search for the book yourself with search_admin_books (use the English title for a translation) and find_by_identifier (use the ISBN). If a book turns up, correct to it. Use create: true only when nothing does.
+
+What the row's book is, the same rules the AI followed:
+
+- A translation of the work is the same work as the original. When several books are the same work, the English book is the one to match. A German-edition row belongs on the English book, not on a new German one.
+- A combo, omnibus or collection is only itself. It is not the same work as any single book it contains, and a single book is not the combo that contains it.
+- A different volume or part of a series, an adaptation, a study guide, a summary or a box set is a different book, even when the title and author are nearly identical.
+- The first name under the authors is the credited author. Further names may be co-authors, translators or illustrators.
 
 Never call reject_repair_verdict on a reimport_match. A rejected match is final and its rows wait. Correct it instead.
 

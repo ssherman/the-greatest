@@ -65,6 +65,7 @@ module Services
       ::Books::RepairVerdict.create!(**attrs, subject_key: "t:approved", status: :approved)
       ::Books::RepairVerdict.create!(**attrs, subject_key: "t:rejected", status: :rejected)
       ::Books::RepairVerdict.create!(**attrs, subject_key: "t:other", status: :proposed, kind: :relink)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:superseded", status: :proposed, superseded_at: Time.current)
       assert_equal before, count.call
 
       ::Books::RepairVerdict.create!(**attrs, subject_key: "t:proposed", status: :proposed)

@@ -53,7 +53,7 @@ module Services
     # The proposed re-import matches by confidence, as the page's default view
     # shows them with kind=reimport_match.
     def repair_verdict_counts
-      pending = ::Books::RepairVerdict.reimport_match.proposed.group(:confidence).count
+      pending = ::Books::RepairVerdict.current.reimport_match.proposed.group(:confidence).count
       %w[high medium low].to_h { |level| [:"pending_#{level}", pending[level].to_i] }
     end
 
