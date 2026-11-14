@@ -7,7 +7,7 @@ module Services
     module GoodreadsRebuild
       class ResetBookTest < ActiveSupport::TestCase
         ASSOCIATIONS = %i[book_authors credits descriptions category_items images editions identifiers
-          alternate_title_records series_books book_countries external_links].freeze
+          alternate_title_records series_books book_countries external_links cleared_fields].freeze
 
         setup do
           @book = ::Books::Book.create!(id: Cohort.post_import_range.first + 5_000, title: "Wrong Title")
@@ -26,6 +26,15 @@ module Services
             page_range word_count amazon_enriched_at].each { |column| assert_nil book[column], column.to_s }
           assert_equal [], book.alternate_titles
           assert_equal 0, Identifier.where(identifiable_type: "Books::Edition", identifiable_id: @edition_id).count
+        end
+
+        test "drops the book's cleared_fields rows so the new identity can be filled" do
+          fill(@book)
+          ClearedField.create!(clearable: @book, field_name: "original_language_id", cleared_via: :api)
+
+          ResetBook.call(book: @book)
+
+          assert_equal 0, ClearedField.where(clearable: @book).count
         end
 
         test "keeps the book's id, slug, user list items, reviews and goodreads editions" do

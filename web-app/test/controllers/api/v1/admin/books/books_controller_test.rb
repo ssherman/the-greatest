@@ -178,6 +178,15 @@ module Api
             assert_equal "collection", json[:data][:book_kind]
           end
 
+          test "a blank sort_title stores nil, like null" do
+            @war.update_columns(sort_title: "War")
+
+            patch_book({sort_title: ""})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_nil @war.reload.sort_title
+          end
+
           test "null on a year clears it, writes an api row and enrichment then leaves it blank" do
             assert_difference -> { ClearedField.where(clearable: @war).count }, 1 do
               patch_book({first_published_year: nil})

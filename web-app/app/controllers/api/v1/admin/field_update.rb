@@ -78,6 +78,7 @@ module Api
             return nil if value.nil?
             raise ::Api::Page::InvalidParameter, "#{key} must be a string" unless value.is_a?(String)
             no_nul!(key, value)
+            ::ClearedField.blank_value?(value) ? nil : value
           when :year
             unless value.is_a?(Integer) && YEAR_RANGE.cover?(value)
               raise ::Api::Page::InvalidParameter, "#{key} must be an integer from #{YEAR_RANGE.min} to #{YEAR_RANGE.max}"

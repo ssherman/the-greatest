@@ -17,6 +17,7 @@ module DataImporters
           # Authors are not a diff fill: on accept, a book with no authors gets
           # the accepted work's authors through the author importer
           # (link_open_library_authors). Subjects stay the categories spec's.
+          # These fills do not check Services::Books::HumanClearedFields: safe only because the provider runs on new books; forcing it on an existing book would undo human clears.
           FILLABLE_FIELDS = %w[title subtitle description first_published_year].freeze
 
           IDENTIFIER_TYPE_BY_QUERY_FIELD = {

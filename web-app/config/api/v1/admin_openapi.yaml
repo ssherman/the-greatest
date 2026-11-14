@@ -2493,7 +2493,7 @@ components:
               description: Sorted names of the fields an admin cleared on purpose.
     AdminBookUpdateRequest:
       type: object
-      description: Any subset of the fields; fields not sent are untouched. `null` (or an empty string) on subtitle, first_published_year or original_language_id blanks it on purpose.
+      description: Any subset of the fields; fields not sent are untouched. `null` blanks a field on purpose; `""` also blanks `subtitle`.
       additionalProperties: false
       minProperties: 1
       properties:
@@ -2510,7 +2510,7 @@ components:
           items: {type: string}
     AdminAuthorUpdateRequest:
       type: object
-      description: Any subset of the fields; fields not sent are untouched. `null` (or an empty string) on birth_year or death_year blanks it on purpose.
+      description: Any subset of the fields; fields not sent are untouched. `null` blanks a field on purpose.
       additionalProperties: false
       minProperties: 1
       properties:
