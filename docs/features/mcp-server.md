@@ -198,7 +198,7 @@ Identifier tools:
 - `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
 - `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
 
-Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 36 tools (the description tools below included).
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 40 tools (the description tools below and the book and author field tools in "Book and author field edits" included).
 
 The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
 
@@ -221,6 +221,20 @@ Rulings:
 - Setting `source` to something other than `other` without sending `source_name` drops the old name, as the page does.
 - Policies: `update?` on the book or author for add, update and prefer; `destroy?` for delete. Each write logs `event=api_admin_description` with field names only, never the text.
 - Cache: the admin page's writes trigger no cache refresh of the public page, so these do not either.
+
+## Book and author field edits
+
+An agent can read and edit a book's or author's own fields. `Api::V1::Admin::Books::BooksController` and `AuthorsController` map them onto `Services::Books::AdminUpdate` and `Services::Books::Authors::AdminUpdate`, the same save the admin edit pages run (the body checks live in `Api::V1::Admin::FieldUpdate`).
+
+- `get_admin_book` and `get_admin_author` (`books:admin:read`): the record with exactly the editable fields plus `cleared_fields`. Book: `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language`, `alternate_titles`. Author: `name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings`, `alternate_names`.
+- `update_book` and `update_author` (`books:admin:write`, plus the policy's `update?`): `PATCH` with any subset of those fields (the language is sent as `original_language_id`). Returns 200 with the detail shape under `data` and `changed`, the field names whose value changed.
+
+Rulings:
+
+- A partial PATCH changes only what it sends. An empty body, or a value of the wrong JSON type, is 400; years are integers from -3000 to 3000. An unknown key, an unknown enum name (`book_kind`, `kind`) or an `original_language_id` with no Language row is 422, as is a failed validation (for example a blank title). Nothing is written on a refusal.
+- Alternate lists are arrays of strings, stripped with blanks dropped, and replace the old list when sent.
+- Clearable fields are `subtitle`, `first_published_year` and `original_language_id` on a book and `birth_year` and `death_year` on an author. `null` or `""` blanks one and writes a `cleared_fields` row (`cleared_via: api`, `cleared_by` the token's owner), even when the field was already blank. Enrichment (`ApplyBookFacts`, the Goodreads apply, the author fact sheet) leaves a field with a row blank and records `human_cleared`; setting a value deletes the row. See `docs/features/books_enrichment.md`.
+- Each write logs `event=api_admin_field_update` with field names only, never the values.
 
 ## Logging
 

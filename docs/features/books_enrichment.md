@@ -89,8 +89,11 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 `already_set`, `null`, `invalid`, `no_match`, `not_applied_yet`, `human_cleared`, `unrecognized`,
 `rejected`, `review_failed`, `deferred`, `superseded`. `deferred` means a low-confidence knowledge answer was
 recorded but left for the research run to verify. `human_cleared` means the field was deliberately blanked by an
-applied correction (the corrections flow accepts blanks on purpose) and the AI value is never
-used to refill it. Useful queries:
+applied correction (the corrections flow accepts blanks on purpose) or by a `cleared_fields` row
+(written when an admin blanks a subtitle, first published year, original language, birth year or death
+year on the edit page or through `update_book` / `update_author`; setting a value again deletes the row)
+and the AI value is never used to refill it. Merges carry a source's row to the target only when the
+target's field is blank. Useful queries:
 
 ```ruby
 Enrichment.for_kind("books.book_facts").low_confidence_on(:word_count)

@@ -7,7 +7,7 @@ module Api
     include McpRpcHelpers
 
     READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision get_book_identifiers get_author_identifiers find_by_identifier get_book_descriptions get_author_descriptions get_admin_book get_admin_author].freeze
-    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description].freeze
+    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author].freeze
     MERGE_TOOLS = %w[delete_admin_category merge_categories merge_book merge_author merge_duplicate_candidate reject_match_decision_link remove_book_identifier remove_author_identifier delete_description].freeze
     DESTRUCTIVE_TOOLS = %w[merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description].freeze
 
@@ -55,10 +55,10 @@ module Api
       assert_equal %w[untag_author untag_book], destructive_names(tools).sort
     end
 
-    test "a merge token lists all thirty-eight tools" do
+    test "a merge token lists all forty tools" do
       tools = listed_tools(ApiTokenSecrets::ADMIN)
 
-      assert_equal 38, tools.size
+      assert_equal 40, tools.size
       assert_equal (READ_TOOLS + WRITE_TOOLS + MERGE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
       assert_equal DESTRUCTIVE_TOOLS.sort, destructive_names(tools).sort
     end

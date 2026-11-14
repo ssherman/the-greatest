@@ -114,6 +114,87 @@ module Api
             get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}", headers: bearer(ApiTokenSecrets::MEMBER)
             assert_api_response_conform(status: 403, api: :admin)
           end
+
+          # -- update ------------------------------------------------------
+
+          def patch_author(body, author: @tolstoy, token: ApiTokenSecrets::ADMIN)
+            patch "/api/v1/admin/authors/#{author.id}", params: body, as: :json, headers: bearer(token)
+          end
+
+          test "update changes only the fields sent and lists them in changed" do
+            before = @tolstoy.slice(:name, :kind, :alternate_names)
+
+            patch_author({sort_name: "Tolstoy, Leo"})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal "Tolstoy, Leo", @tolstoy.reload.sort_name
+            assert_equal before, @tolstoy.slice(:name, :kind, :alternate_names)
+            assert_equal ["sort_name"], json[:changed]
+          end
+
+          test "null on birth_year clears it and writes an api row" do
+            @tolstoy.update!(birth_year: 1828)
+
+            patch_author({birth_year: nil})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_nil @tolstoy.reload.birth_year
+            row = ClearedField.find_by!(clearable: @tolstoy, field_name: "birth_year")
+            assert_equal "api", row.cleared_via
+            assert_includes json[:data][:cleared_fields], "birth_year"
+          end
+
+          test "alternate_names are replaced, stripped and blanks dropped" do
+            patch_author({alternate_names: [" Lev Tolstoy ", "", "Tolstoi"]})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal ["Lev Tolstoy", "Tolstoi"], @tolstoy.reload.alternate_names
+          end
+
+          test "kind and exclude_from_rankings are written" do
+            patch_author({kind: "pseudonym", exclude_from_rankings: true, death_year: 1910})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            @tolstoy.reload
+            assert_equal ["pseudonym", true, 1910], [@tolstoy.kind, @tolstoy.exclude_from_rankings, @tolstoy.death_year]
+          end
+
+          test "an unknown kind is a 422, an unknown key is a 422" do
+            patch_author({kind: "bogus"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            patch_author({gender: "male"})
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], "gender"
+          end
+
+          test "wrong types and an empty body are a 400" do
+            [{}, {birth_year: "abc"}, {birth_year: 4000}, {exclude_from_rankings: "yes"}, {name: nil}, {alternate_names: "x"}].each do |body|
+              patch_author(body)
+              assert_response :bad_request, body.inspect
+            end
+          end
+
+          test "a blank name is a 422 and writes nothing" do
+            @tolstoy.update!(birth_year: 1828)
+
+            assert_no_difference "ClearedField.count" do
+              patch_author({name: "", birth_year: nil})
+            end
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_equal 1828, @tolstoy.reload.birth_year
+          end
+
+          test "update refuses a non-admin token and a read-only token, and 404s an unknown author" do
+            patch_author({sort_name: "x"}, token: ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 403, api: :admin)
+
+            patch_author({sort_name: "x"}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 403, api: :admin)
+
+            patch "/api/v1/admin/authors/999999999", params: {sort_name: "x"}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
+            assert_api_response_conform(status: 404, api: :admin)
+          end
         end
       end
     end

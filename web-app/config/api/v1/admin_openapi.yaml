@@ -189,6 +189,55 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateBook
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a book's fields
+      description: |
+        Changes any subset of `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language_id` and `alternate_titles`; fields not sent are untouched. `subtitle`, `first_published_year` and `original_language_id` can be cleared by sending `null` (or `""`): that blanks the field and records that a person did so on purpose, so enrichment will not refill it. Setting a value again lifts that. Years are integers from -3000 to 3000. Enum fields take their string names, and the alternate list is replaced as a whole (strings are stripped and blanks dropped). A body with no fields is 400, as is a value of the wrong JSON type. An unknown field, an unknown enum name or an `original_language_id` that is not a language is 422, as is a failed validation (for example a blank name); nothing is written then. The response is the same book as the read operation, with `changed`: the names of the fields whose value changed. Requires `books:admin:write`, and the token's owner must be allowed to edit the book.
+      x-mcp:
+        description: >-
+          Edits book `id` (from search_admin_books): send only the fields to change among `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind` (standalone or collection), `original_language_id` and `alternate_titles` (the whole list, replacing the old one). Read the book with get_admin_book first. Send `null` to blank `subtitle`, `first_published_year` or `original_language_id`: that is recorded as deliberate, so enrichment will not refill it, and it is listed in `cleared_fields`. Setting a value again lifts that. Years are integers from -3000 to 3000. A 422 names the problem and writes nothing. Returns the book and `changed`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBookUpdateRequest"
+      responses:
+        "200":
+          description: The book as it now stands, and which fields changed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookUpdated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/authors/{id}:
     x-domain: books
     get:
@@ -196,7 +245,7 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: One author, with every editable field
       description: |
-        The author with exactly the fields that update_author takes (`name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`), plus `cleared_fields`: the sorted names of the fields an admin cleared on purpose, which enrichment will not refill. Authors that are provisional are included. A author that does not exist is 404. Requires `books:admin:read`.
+        The author with exactly the fields that update_author takes (`name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`), plus `cleared_fields`: the sorted names of the fields an admin cleared on purpose, which enrichment will not refill. Authors that are provisional are included. An author that does not exist is 404. Requires `books:admin:read`.
       x-mcp:
         description: >-
           Returns the author `id` (from search_admin_authors) with exactly the fields update_author takes: `name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`.
@@ -230,6 +279,55 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a author's fields
+      description: |
+        Changes any subset of `name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`; fields not sent are untouched. `birth_year` and `death_year` can be cleared by sending `null` (or `""`): that blanks the field and records that a person did so on purpose, so enrichment will not refill it. Setting a value again lifts that. Years are integers from -3000 to 3000. Enum fields take their string names, and the alternate list is replaced as a whole (strings are stripped and blanks dropped). A body with no fields is 400, as is a value of the wrong JSON type. An unknown field, an unknown enum name or an `original_language_id` that is not a language is 422, as is a failed validation (for example a blank name); nothing is written then. The response is the same author as the read operation, with `changed`: the names of the fields whose value changed. Requires `books:admin:write`, and the token's owner must be allowed to edit the author.
+      x-mcp:
+        description: >-
+          Edits author `id` (from search_admin_authors): send only the fields to change among `name`, `sort_name`, `kind` (person, organization, pseudonym or collective), `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names` (the whole list, replacing the old one). Read the author with get_admin_author first. Send `null` to blank `birth_year` or `death_year`: that is recorded as deliberate, so enrichment will not refill it, and it is listed in `cleared_fields`. Setting a value again lifts that. Years are integers from -3000 to 3000. A 422 names the problem and writes nothing. Returns the author and `changed`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminAuthorUpdateRequest"
+      responses:
+        "200":
+          description: The author as it now stands, and which fields changed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorUpdated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/duplicate_candidates:
@@ -2393,6 +2491,60 @@ components:
               type: array
               items: {type: string}
               description: Sorted names of the fields an admin cleared on purpose.
+    AdminBookUpdateRequest:
+      type: object
+      description: Any subset of the fields; fields not sent are untouched. `null` (or an empty string) on subtitle, first_published_year or original_language_id blanks it on purpose.
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: {type: string}
+        subtitle: {type: [string, "null"]}
+        sort_title: {type: [string, "null"]}
+        first_published_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        book_kind:
+          type: string
+          enum: [standalone, collection]
+        original_language_id: {type: [integer, "null"]}
+        alternate_titles:
+          type: array
+          items: {type: string}
+    AdminAuthorUpdateRequest:
+      type: object
+      description: Any subset of the fields; fields not sent are untouched. `null` (or an empty string) on birth_year or death_year blanks it on purpose.
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string}
+        sort_name: {type: [string, "null"]}
+        kind:
+          type: string
+          enum: [person, organization, pseudonym, collective]
+        birth_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        death_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        exclude_from_rankings: {type: boolean}
+        alternate_names:
+          type: array
+          items: {type: string}
+    AdminBookUpdated:
+      type: object
+      required: [data, changed]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminBookDetail/properties/data"
+        changed:
+          type: array
+          items: {type: string}
+          description: Names of the fields whose value changed.
+    AdminAuthorUpdated:
+      type: object
+      required: [data, changed]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminAuthorDetail/properties/data"
+        changed:
+          type: array
+          items: {type: string}
+          description: Names of the fields whose value changed.
     AdminAuthorDetail:
       type: object
       required: [data]
