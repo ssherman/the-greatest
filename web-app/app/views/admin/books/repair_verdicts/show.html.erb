@@ -79,7 +79,7 @@
     <div class="collapse-content"><pre class="text-xs [overflow-wrap:anywhere] whitespace-pre-wrap"><%= JSON.pretty_generate(@verdict.payload) %></pre></div>
   </details>
 
-  <% if @verdict.reimport_match? && @verdict.applied_at.nil? && @verdict.payload["created_book_id"].blank? && @verdict.superseded_at.nil? && current_user_can_write? %>
+  <% if @verdict.reimport_match? && @verdict.applied_at.nil? && @verdict.payload["created_book_id"].blank? && !@verdict.payload.key?("edition_before") && @verdict.superseded_at.nil? && current_user_can_write? %>
     <div class="card bg-base-100" data-testid="correct-form">
       <div class="card-body gap-3">
         <h2 class="card-title text-base">Correct this match</h2>

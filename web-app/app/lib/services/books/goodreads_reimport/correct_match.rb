@@ -55,6 +55,8 @@ module Services
           return "Only a re-import match can be corrected" unless @verdict.reimport_match?
           return "This match was replaced by a newer one" if @verdict.superseded_at.present?
           return "This match was already applied" if @verdict.applied_at.present? || @verdict.payload["created_book_id"].present?
+          # Apply::Match writes edition_before under the same lock as it starts: from then on it is applying the old answer.
+          return "This match is being applied; it cannot be corrected now" if @verdict.payload.key?("edition_before")
 
           nil
         end

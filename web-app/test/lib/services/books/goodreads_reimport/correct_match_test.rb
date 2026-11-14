@@ -78,6 +78,7 @@ module Services
             "applied" => -> { match_verdict(applied_at: Time.current) },
             "book created" => -> { match_verdict(outcome: "create", book_id: nil, payload: {"created_book_id" => @right.id}) },
             "superseded" => -> { match_verdict(superseded_at: Time.current) },
+            "apply started" => -> { match_verdict(status: :approved, payload: {"edition_before" => {"book_id" => nil}}) },
             "not a match" => -> { ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:mixed:1", payload: {"book_id" => 1}, decided_by: :rule, status: :approved) }
           }
           cases.each do |label, build|
