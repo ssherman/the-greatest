@@ -89,6 +89,31 @@ module Api
 
             assert_response :not_found
           end
+
+          test "show returns every editable field and the cleared field names" do
+            author = books_authors(:tolstoy)
+            ClearedField.create!(clearable: author, field_name: "death_year", cleared_via: :api)
+            ClearedField.create!(clearable: author, field_name: "birth_year", cleared_via: :api)
+
+            get "/api/v1/admin/authors/#{author.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            data = response.parsed_body.deep_symbolize_keys[:data]
+            assert_equal %i[id slug name sort_name kind birth_year death_year exclude_from_rankings alternate_names provisional cleared_fields], data.keys
+            assert_equal [author.id, "Leo Tolstoy", "person", 1828, 1910, false, ["Lev Tolstoy", "Lev Nikolayevich Tolstoy"]],
+              [data[:id], data[:name], data[:kind], data[:birth_year], data[:death_year], data[:exclude_from_rankings], data[:alternate_names]]
+            assert_equal %w[birth_year death_year], data[:cleared_fields]
+          end
+
+          test "show of an unknown author is a 404" do
+            get "/api/v1/admin/authors/999999999", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 404, api: :admin)
+          end
+
+          test "show refuses a non-admin token" do
+            get "/api/v1/admin/authors/#{books_authors(:tolstoy).id}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 403, api: :admin)
+          end
         end
       end
     end

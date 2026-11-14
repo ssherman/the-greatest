@@ -146,6 +146,92 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminBook
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One book, with every editable field
+      description: |
+        The book with exactly the fields that update_book takes (`title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language` and `alternate_titles`), plus `cleared_fields`: the sorted names of the fields an admin cleared on purpose, which enrichment will not refill. Books that are provisional are included. A book that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns the book `id` (from search_admin_books) with exactly the fields update_book takes: `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language` and `alternate_titles`.
+          `cleared_fields` lists the fields an admin cleared on purpose. Read it before editing so a PATCH sends only what
+          changes. A 404 means no such book.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The book.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/authors/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminAuthor
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One author, with every editable field
+      description: |
+        The author with exactly the fields that update_author takes (`name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`), plus `cleared_fields`: the sorted names of the fields an admin cleared on purpose, which enrichment will not refill. Authors that are provisional are included. A author that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns the author `id` (from search_admin_authors) with exactly the fields update_author takes: `name`, `sort_name`, `kind`, `birth_year`, `death_year`, `exclude_from_rankings` and `alternate_names`.
+          `cleared_fields` lists the fields an admin cleared on purpose. Read it before editing so a PATCH sends only what
+          changes. A 404 means no such author.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The author.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/duplicate_candidates:
     x-domain: books
     get:
@@ -2270,6 +2356,69 @@ components:
         id: {type: integer}
         slug: {type: string}
         name: {type: string}
+    AdminBookDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, slug, title, subtitle, sort_title, first_published_year, book_kind, original_language, alternate_titles, provisional, authors, cleared_fields]
+          properties:
+            id: {type: integer}
+            slug: {type: string}
+            title: {type: string}
+            subtitle: {type: [string, "null"]}
+            sort_title: {type: [string, "null"]}
+            first_published_year: {type: [integer, "null"]}
+            book_kind:
+              type: string
+              enum: [standalone, collection]
+            original_language:
+              oneOf:
+                - type: "null"
+                - type: object
+                  required: [id, name]
+                  properties:
+                    id: {type: integer}
+                    name: {type: string}
+            alternate_titles:
+              type: array
+              items: {type: string}
+            provisional: {type: boolean}
+            authors:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuthorSummary"
+            cleared_fields:
+              type: array
+              items: {type: string}
+              description: Sorted names of the fields an admin cleared on purpose.
+    AdminAuthorDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, slug, name, sort_name, kind, birth_year, death_year, exclude_from_rankings, alternate_names, provisional, cleared_fields]
+          properties:
+            id: {type: integer}
+            slug: {type: string}
+            name: {type: string}
+            sort_name: {type: [string, "null"]}
+            kind:
+              type: string
+              enum: [person, organization, pseudonym, collective]
+            birth_year: {type: [integer, "null"]}
+            death_year: {type: [integer, "null"]}
+            exclude_from_rankings: {type: boolean}
+            alternate_names:
+              type: array
+              items: {type: string}
+            provisional: {type: boolean}
+            cleared_fields:
+              type: array
+              items: {type: string}
+              description: Sorted names of the fields an admin cleared on purpose.
     AdminBook:
       type: object
       required: [id, slug, title, subtitle, book_kind, provisional, first_published_year, rank, authors]

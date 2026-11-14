@@ -6,6 +6,16 @@ module Api
       module Books
         # GET /api/v1/admin/authors?q= -- search, provisional authors included
         class AuthorsController < BaseController
+          include ::Api::V1::Admin::StrictIds
+
+          # GET /api/v1/admin/authors/:id -- the fields update_author takes
+          def show
+            author = ::Books::Author.includes(:cleared_fields).find_by(id: parse_id(params[:id]))
+            return render_problem(::Api::Problem.new(:not_found, detail: "No author #{params[:id]}.")) unless author
+
+            render json: {data: AuthorDetailResource.new(author).to_h}
+          end
+
           def index
             query = required_query or return
 

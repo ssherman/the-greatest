@@ -6,6 +6,16 @@ module Api
       module Books
         # GET /api/v1/admin/books?q= -- search, provisional books and every kind included
         class BooksController < BaseController
+          include ::Api::V1::Admin::StrictIds
+
+          # GET /api/v1/admin/books/:id -- the fields update_book takes
+          def show
+            book = ::Books::Book.includes(:authors, :original_language, :cleared_fields).find_by(id: parse_id(params[:id]))
+            return render_problem(::Api::Problem.new(:not_found, detail: "No book #{params[:id]}.")) unless book
+
+            render json: {data: BookDetailResource.new(book).to_h}
+          end
+
           def index
             query = required_query or return
 

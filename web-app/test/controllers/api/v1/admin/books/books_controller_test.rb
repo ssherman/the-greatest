@@ -109,6 +109,41 @@ module Api
 
             assert_response :not_found
           end
+
+          test "show returns every editable field, the authors and the cleared field names" do
+            ClearedField.create!(clearable: @war, field_name: "subtitle", cleared_via: :api)
+            ClearedField.create!(clearable: @war, field_name: "first_published_year", cleared_via: :api)
+
+            get "/api/v1/admin/books/#{@war.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            data = json[:data]
+            assert_equal %i[id slug title subtitle sort_title first_published_year book_kind original_language alternate_titles provisional authors cleared_fields], data.keys
+            assert_equal [@war.id, "War and Peace", 1869, "standalone", ["Voyna i mir"], false],
+              [data[:id], data[:title], data[:first_published_year], data[:book_kind], data[:alternate_titles], data[:provisional]]
+            assert_equal({id: @war.original_language_id, name: @war.original_language.name}, data[:original_language])
+            assert_equal @war.authors.map(&:id).sort, data[:authors].map { |a| a[:id] }.sort
+            assert_equal %w[first_published_year subtitle], data[:cleared_fields]
+          end
+
+          test "show gives a null original_language and no cleared fields when there are none" do
+            @war.update!(original_language: nil)
+
+            get "/api/v1/admin/books/#{@war.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+
+            assert_nil json[:data][:original_language]
+            assert_equal [], json[:data][:cleared_fields]
+          end
+
+          test "show of an unknown book is a 404" do
+            get "/api/v1/admin/books/999999999", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 404, api: :admin)
+          end
+
+          test "show refuses a non-admin token" do
+            get "/api/v1/admin/books/#{@war.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 403, api: :admin)
+          end
         end
       end
     end
