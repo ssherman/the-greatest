@@ -11,6 +11,7 @@
 #  payload            :jsonb            not null
 #  reason             :text
 #  reviewed_at        :datetime
+#  reviewed_via       :integer
 #  status             :integer          default("proposed"), not null
 #  subject_key        :string           not null
 #  superseded_at      :datetime
@@ -43,6 +44,8 @@ module Books
     enum :decided_by, {rule: 0, ai: 1, admin: 2}, prefix: true
     enum :status, {proposed: 0, approved: 1, rejected: 2}
     enum :confidence, {certain: 0, high: 1, medium: 2, low: 3}, prefix: true
+    # Which surface an admin reviewed through; nil on verdicts reviewed before this was recorded.
+    enum :reviewed_via, {admin_ui: 0, api: 1}, prefix: true
 
     validates :subject_key, presence: true, uniqueness: {scope: :kind}
 

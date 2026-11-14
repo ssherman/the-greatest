@@ -799,6 +799,331 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts:
+    x-domain: books
+    get:
+      operationId: listRepairVerdicts
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: List repair verdicts
+      description: |
+        The Goodreads repair-verdict review queue for books: the findings the legacy replay and the re-import recorded, newest first. By default only `status=proposed` verdicts; superseded verdicts (proposals a later rebuild retired) never appear. Filter by `kind`, `status`, `decided_by`, `confidence` and `guess` (`true` keeps only guessed moves). Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists repair verdicts from the books review queue, newest first. By default only proposed verdicts;
+          `status` also accepts approved or rejected. `kind` is one of relink, merge_books, merge_authors,
+          strip_identifier, mark_provisional, fix_identity, reimport_mixed, reimport_match, reimport_row,
+          reimport_guess, reimport_strip or reimport_author. `decided_by` is rule, ai or admin; `confidence` is
+          certain, high, medium or low; `guess=true` keeps only guessed moves. Each row has an integer `id`, a
+          one-line `summary` of what applying it would do, the finder's `reason`, and `reviewed_at` and
+          `applied_at`. Reviewing shrinks the proposed queue, so after reviewing verdicts list again from page 1
+          rather than continuing to a later page. get_repair_verdict adds the payload, the books and the source
+          rows for one verdict.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [relink, merge_books, merge_authors, strip_identifier, mark_provisional, fix_identity, reimport_mixed, reimport_match, reimport_row, reimport_guess, reimport_strip, reimport_author]
+        - name: status
+          in: query
+          required: false
+          description: "`proposed` (default) is the open queue."
+          schema:
+            type: string
+            enum: [proposed, approved, rejected]
+            default: proposed
+        - name: decided_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rule, ai, admin]
+        - name: confidence
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [certain, high, medium, low]
+        - name: guess
+          in: query
+          required: false
+          description: "`true` keeps only verdicts whose move is a guess."
+          schema:
+            type: string
+            enum: ["true"]
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of repair verdicts.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts/{id}:
+    x-domain: books
+    get:
+      operationId: getRepairVerdict
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One repair verdict
+      description: |
+        One repair verdict by id, in any status (a superseded one shows its `superseded_at`), with its payload, the books and authors it names, a re-import match's candidate books, the linked match decision, who reviewed it and how, and up to 20 of the import rows it came from (`source_row_count` is the full number). A verdict that does not exist is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one repair verdict by integer id: the row fields of list_repair_verdicts plus the stored
+          `payload`, `ai_chat_id`, `reviewed_by` ({id, name} or null), `reviewed_via` (admin_ui, api or null) and
+          `superseded_at`. `books` and `authors` are the records the verdict names; `candidate_books` are the
+          books a re-import match chose between; `match_decision` is the linked decision ({id, outcome}) or null.
+          `source_rows` is up to 20 of the Goodreads import rows the finding came from, each with title, author,
+          isbn13 and goodreads_book_id, and `source_row_count` is the full number. A 404 means no such verdict;
+          call list_repair_verdicts again. Ids come from list_repair_verdicts.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The repair verdict.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts/{id}/approve:
+    x-domain: books
+    post:
+      operationId: approveRepairVerdict
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Approve a repair verdict
+      description: |
+        Approves a proposed repair verdict as the token's owner, via the API. Approving does not apply it: the matching apply task does, later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds), and applying a merge or relink changes the catalog. Refused (422) when the verdict is not proposed or was superseded by a newer proposal. Requires `books:admin:merge`, and the token's owner must be allowed to change books.
+      x-mcp:
+        destructive: true
+        description: >-
+          Approves one proposed repair verdict. This does not change any book yet: the matching apply task
+          (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds)
+          does that later, so an approved merge or relink will be carried out. A 422 means the verdict is not
+          proposed (already approved or rejected) or was superseded. Returns the verdict with its detail.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The verdict, now approved.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts/{id}/reject:
+    x-domain: books
+    post:
+      operationId: rejectRepairVerdict
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Reject a repair verdict
+      description: |
+        Rejects a repair verdict as the token's owner, via the API. A rejected verdict is never applied again. Rejecting an applied `mark_provisional` verdict takes it back (the book is no longer provisional); an applied merge or relink is not undone. Rejecting a `reimport_match` is final and strands the readers waiting on it: use the correct operation to give the right answer instead. Refused (422) when already rejected or superseded. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Rejects one repair verdict so it is never applied. An applied mark_provisional is reverted (the book stops
+          being provisional); an applied merge or relink stays as it is. Do not reject a reimport_match that is wrong:
+          that strands its readers, so use correct_repair_verdict with the right book or create:true. A 422 means the
+          verdict is already rejected or was superseded. Returns the verdict with its detail.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The verdict, now rejected.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts/{id}/correct:
+    x-domain: books
+    post:
+      operationId: correctRepairVerdict
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Correct a reimport_match verdict
+      description: |
+        Gives the right answer to a `reimport_match` verdict the AI got wrong: send exactly one of `book_id` (the book it is) or `create: true` (it is a new book). The verdict becomes that answer, approved by the token's owner; the AI's own answer is kept in the payload. Works on a proposed, approved or rejected match that has not been applied. Refused (422) for any other kind, for a superseded or already applied match, one being applied right now, an unknown book, and when both or neither of `book_id` and `create` are sent. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Corrects a reimport_match verdict: send exactly one of book_id (an existing book's integer id) or
+          create:true (make a new book). The verdict becomes that answer, approved. Use this instead of rejecting a
+          wrong match. A 422 means the verdict is not a reimport_match, was superseded or already applied, the book
+          does not exist, or both or neither of book_id and create were sent. Returns the verdict with its detail.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepairVerdictCorrectRequest"
+      responses:
+        "200":
+          description: The verdict, now carrying the correction.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/repair_verdicts/bulk_approve:
+    x-domain: books
+    post:
+      operationId: bulkApproveRepairVerdicts
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Approve many repair verdicts
+      description: |
+        Approves every proposed, current verdict among `ids` (1 to 100 integers) as the token's owner. Ids that are already reviewed, superseded or unknown are skipped, not errors. Returns the approved and the skipped ids. Approving does not apply. Requires `books:admin:merge`, and the token's owner must be allowed to change books.
+      x-mcp:
+        destructive: true
+        description: >-
+          Approves the proposed verdicts among ids (1 to 100 integer ids) in one call. Verdicts that are already
+          reviewed, superseded or unknown are skipped and listed in skipped_ids. This does not change any book yet:
+          the matching apply task (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds) does that later. Returns approved_ids and skipped_ids.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepairVerdictBulkApproveRequest"
+      responses:
+        "200":
+          description: The ids approved and the ids skipped.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRepairVerdictBulkApprove"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/identifiers:
     x-domain: books
     get:
@@ -2928,6 +3253,137 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminMatchDecisionFull"
+    AdminRepairVerdict:
+      type: object
+      required: [id, kind, status, decided_by, confidence, summary, reason, guess, reviewed_at, applied_at, created_at]
+      properties:
+        id: {type: integer}
+        kind:
+          type: string
+          enum: [relink, merge_books, merge_authors, strip_identifier, mark_provisional, fix_identity, reimport_mixed, reimport_match, reimport_row, reimport_guess, reimport_strip, reimport_author]
+        status: {type: string, enum: [proposed, approved, rejected]}
+        decided_by: {type: string, enum: [rule, ai, admin]}
+        confidence: {type: [string, "null"], enum: [certain, high, medium, low, null]}
+        summary: {type: [string, "null"], description: One line saying what applying the verdict does.}
+        reason: {type: [string, "null"]}
+        guess: {type: boolean, description: True when the move is a guess.}
+        reviewed_at: {type: [string, "null"], format: date-time}
+        applied_at: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+    AdminRepairVerdictBook:
+      type: object
+      required: [id, slug, title, first_published_year, authors]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        first_published_year: {type: [integer, "null"]}
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorSummary"
+    AdminRepairVerdictFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminRepairVerdict"
+        - type: object
+          required: [payload, ai_chat_id, reviewed_by, reviewed_via, superseded_at, books, authors, candidate_books, match_decision, source_rows, source_row_count]
+          properties:
+            payload:
+              type: object
+              description: The finding's stored data; its shape depends on `kind`.
+            ai_chat_id: {type: [integer, "null"]}
+            reviewed_by:
+              oneOf:
+                - {type: "null"}
+                - type: object
+                  required: [id, name]
+                  properties:
+                    id: {type: integer}
+                    name: {type: [string, "null"]}
+            reviewed_via: {type: [string, "null"], enum: [admin_ui, api, null]}
+            superseded_at: {type: [string, "null"], format: date-time}
+            books:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminRepairVerdictBook"
+            authors:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuthorSummary"
+            candidate_books:
+              type: array
+              description: The books a re-import match chose between; empty for other kinds.
+              items:
+                $ref: "#/components/schemas/AdminRepairVerdictBook"
+            match_decision:
+              oneOf:
+                - {type: "null"}
+                - type: object
+                  required: [id, outcome]
+                  properties:
+                    id: {type: integer}
+                    outcome: {type: string}
+            source_rows:
+              type: array
+              description: Up to 20 of the Goodreads import rows the finding came from.
+              items:
+                type: object
+                required: [import_id, row_number, title, author, isbn13, goodreads_book_id]
+                properties:
+                  import_id: {type: [integer, "null"]}
+                  row_number: {type: integer}
+                  title: {type: [string, "null"]}
+                  author: {type: [string, "null"]}
+                  isbn13: {type: [string, "null"]}
+                  goodreads_book_id: {type: [integer, "null"]}
+            source_row_count: {type: integer, description: The full number of source rows.}
+    AdminRepairVerdictCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRepairVerdict"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminRepairVerdictDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminRepairVerdictFull"
+    RepairVerdictCorrectRequest:
+      type: object
+      description: Exactly one of `book_id` or `create`.
+      properties:
+        book_id: {type: integer, minimum: 1, description: The book this match is.}
+        create: {type: boolean, description: "`true` when the match is a book that does not exist yet."}
+    RepairVerdictBulkApproveRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {type: integer, minimum: 1}
+    AdminRepairVerdictBulkApprove:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [approved_ids, skipped_ids]
+          properties:
+            approved_ids:
+              type: array
+              items: {type: integer}
+            skipped_ids:
+              type: array
+              items: {type: integer}
     AdminDescription:
       type: object
       required: [id, kind, locale, rank, source, source_name, source_url, license, content, retrieved_at, created_at, updated_at]

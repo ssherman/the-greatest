@@ -2,7 +2,16 @@
 <% content_for :title, "Repair Verdicts" %>
 
 <div class="space-y-4">
-  <h1 class="text-2xl font-bold">Repair Verdicts</h1>
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-2xl font-bold">Repair Verdicts</h1>
+    <% if @agent_prompt %>
+      <div data-controller="clipboard-copy">
+        <textarea hidden readonly data-clipboard-copy-target="source"><%= @agent_prompt %></textarea>
+        <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+                data-clipboard-copy-target="button" data-testid="copy-agent-prompt">Copy prompt</button>
+      </div>
+    <% end %>
+  </div>
   <p class="text-sm text-base-content/70">
     Findings from the legacy Goodreads replay. Approving queues a verdict for the next
     <code>books:goodreads_replay:apply</code>; nothing changes until then.
@@ -10,9 +19,9 @@
 
   <%= form_with url: admin_books_repair_verdicts_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "verdict-filters"} do |form| %>
     <%= hidden_field_tag :status, @status %>
-    <% [["kind", "Kind", Admin::Books::RepairVerdictsController::KINDS],
-        ["decided_by", "Decided by", Admin::Books::RepairVerdictsController::DECIDED_BY],
-        ["confidence", "Confidence", Admin::Books::RepairVerdictsController::CONFIDENCES]].each do |key, label, values| %>
+    <% [["kind", "Kind", Services::Books::RepairVerdicts::Filter::KINDS],
+        ["decided_by", "Decided by", Services::Books::RepairVerdicts::Filter::DECIDED_BY],
+        ["confidence", "Confidence", Services::Books::RepairVerdicts::Filter::CONFIDENCES]].each do |key, label, values| %>
       <div>
         <%= form.label key, label, class: "label text-xs" %>
         <%= form.select key, options_for_select([["All", ""]] + values.map { |value| [value.humanize, value] }, params[key]), {}, class: "select select-sm" %>
@@ -23,7 +32,7 @@
   <% end %>
 
   <div role="tablist" class="tabs tabs-border">
-    <% Admin::Books::RepairVerdictsController::STATUSES.each do |status| %>
+    <% Services::Books::RepairVerdicts::Filter::STATUSES.each do |status| %>
       <%= link_to admin_books_repair_verdicts_path(filter_params(status: status)), role: "tab",
             class: "tab #{"tab-active" if @status == status}", data: {testid: "status-tab-#{status}"} do %>
         <%= status.humanize %>

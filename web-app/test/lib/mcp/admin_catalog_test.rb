@@ -2,7 +2,7 @@ require "test_helper"
 
 module Mcp
   class AdminCatalogTest < ActiveSupport::TestCase
-    DESTRUCTIVE = %w[mergeCategories mergeBook mergeAuthor mergeDuplicateCandidate deleteAdminCategory untagBook untagAuthor rejectMatchDecisionLink removeBookIdentifier removeAuthorIdentifier deleteDescription].freeze
+    DESTRUCTIVE = %w[mergeCategories mergeBook mergeAuthor mergeDuplicateCandidate deleteAdminCategory untagBook untagAuthor rejectMatchDecisionLink removeBookIdentifier removeAuthorIdentifier deleteDescription approveRepairVerdict bulkApproveRepairVerdicts].freeze
 
     def catalog = Mcp::Catalog.for(document: :admin, domain: :books)
 
@@ -11,14 +11,14 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 40, expected.size
+      assert_equal 46, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
     test "the admin tools have the expected names" do
       expected = %w[search_admin_books search_admin_authors search_admin_categories create_admin_category
         get_admin_category update_admin_category delete_admin_category merge_categories merge_book
-        merge_author tag_book untag_book tag_author untag_author list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision get_book_identifiers get_author_identifiers get_book_descriptions get_author_descriptions get_admin_book get_admin_author update_book update_author add_book_description add_author_description update_description set_preferred_description delete_description find_by_identifier add_book_identifier add_author_identifier remove_book_identifier remove_author_identifier review_match_decision reject_match_decision_link
+        merge_author tag_book untag_book tag_author untag_author list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict approve_repair_verdict reject_repair_verdict correct_repair_verdict bulk_approve_repair_verdicts get_book_identifiers get_author_identifiers get_book_descriptions get_author_descriptions get_admin_book get_admin_author update_book update_author add_book_description add_author_description update_description set_preferred_description delete_description find_by_identifier add_book_identifier add_author_identifier remove_book_identifier remove_author_identifier review_match_decision reject_match_decision_link
         merge_duplicate_candidate dismiss_duplicate_candidate]
 
       assert_equal expected.sort, catalog.operations.map(&:tool_name).sort

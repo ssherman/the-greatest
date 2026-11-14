@@ -3,12 +3,10 @@
 # config.x.goodreads_replay.auto_apply is on. decided_by stays the finder's
 # (rule or ai); the reviewer is decided_by_user_id and reviewed_at.
 class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
-  KINDS = ::Books::RepairVerdict.kinds.keys.freeze
-  STATUSES = ::Books::RepairVerdict.statuses.keys.freeze
-  DECIDED_BY = ::Books::RepairVerdict.decided_bies.keys.freeze
-  CONFIDENCES = ::Books::RepairVerdict.confidences.keys.freeze
   FILTER_KEYS = %w[kind status decided_by confidence guess].freeze
   PER_PAGE = 50
+  BULK_BATCH = 1000
+  VIA = "admin_ui"
 
   before_action :set_verdict, only: [:show, :approve, :reject, :correct]
   # An approved merge destroys a row on the next apply, so approving takes the
@@ -19,11 +17,12 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   helper_method :filter_params
 
   def index
-    @status = STATUSES.include?(params[:status]) ? params[:status] : "proposed"
+    @status = ::Services::Books::RepairVerdicts::Filter::STATUSES.include?(params[:status]) ? params[:status] : "proposed"
     scope = filtered_scope
     @counts = scope.group(:status).count
     @pagy, @verdicts = pagy(scope.where(status: @status).newest_first, limit: PER_PAGE)
     load_row_context
+    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :repair_verdicts)
   end
 
   def show
@@ -34,33 +33,25 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   def approve
-    unless @verdict.proposed?
-      redirect_to admin_books_repair_verdict_path(@verdict), alert: "This verdict is already #{@verdict.status}."
-      return
+    result = ::Services::Books::RepairVerdicts::Review.approve(verdict: @verdict, user: current_user, via: VIA)
+    if result.success?
+      redirect_to admin_books_repair_verdict_path(@verdict), notice: "Approved. The next #{@verdict.kind.start_with?("reimport_") ? "books:goodreads_reimport:apply" : "books:goodreads_replay:apply"} applies it."
+    else
+      redirect_to admin_books_repair_verdict_path(@verdict), alert: result.errors.join(", ")
     end
-
-    review!(@verdict, :approved)
-    redirect_to admin_books_repair_verdict_path(@verdict), notice: "Approved. The next books:goodreads_replay:apply applies it."
   end
 
   def reject
-    if @verdict.rejected?
-      redirect_to admin_books_repair_verdict_path(@verdict), alert: "This verdict is already rejected."
+    result = ::Services::Books::RepairVerdicts::Review.reject(verdict: @verdict, user: current_user, via: VIA)
+    unless result.success?
+      redirect_to admin_books_repair_verdict_path(@verdict), alert: result.errors.join(", ")
       return
     end
-    # An applied merge or relink cannot be taken back here, but rejecting it
-    # still matters: every replay pass re-applies approved verdicts after a
-    # books re-migration, and a rejected one is never applied again.
-    notice = "Rejected."
-    if @verdict.applied_at.present?
-      if @verdict.mark_provisional?
-        revert_provisional
-      else
-        notice = "Rejected. What it already changed is not undone; it will not be applied again after a books re-migration."
-      end
-    end
 
-    review!(@verdict, :rejected)
+    notice = "Rejected."
+    if result.data[:applied] && !result.data[:reverted]
+      notice = "Rejected. What it already changed is not undone; it will not be applied again after a books re-migration."
+    end
     redirect_to admin_books_repair_verdict_path(@verdict), notice: notice
   end
 
@@ -68,7 +59,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   # CorrectMatch). Rejecting alone strands the match's readers.
   def correct
     result = ::Services::Books::GoodreadsReimport::CorrectMatch.call(verdict: @verdict, user: current_user,
-      book_id: params[:book_id], create: params[:create])
+      book_id: params[:book_id], create: params[:create], via: VIA)
     if result.success?
       redirect_to admin_books_repair_verdict_path(@verdict), notice: "Corrected and approved. The next books:goodreads_reimport:apply applies it."
     else
@@ -77,10 +68,10 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   def bulk_approve
-    scope = (params[:all_matching] == "1") ? filtered_scope : ::Books::RepairVerdict.where(id: Array(params[:ids]).map(&:to_i))
-    now = Time.current
-    count = scope.proposed.update_all(status: ::Books::RepairVerdict.statuses[:approved], decided_by_user_id: current_user.id,
-      reviewed_at: now, updated_at: now)
+    scope = (params[:all_matching] == "1") ? filtered_scope.proposed : ::Books::RepairVerdict.where(id: Array(params[:ids]).map(&:to_i))
+    count = scope.pluck(:id).each_slice(BULK_BATCH).sum do |ids|
+      ::Services::Books::RepairVerdicts::Review.bulk_approve(ids: ids, user: current_user, via: VIA).data[:approved_ids].size
+    end
     redirect_to admin_books_repair_verdicts_path(filter_params), notice: "Approved #{count}."
   end
 
@@ -102,33 +93,12 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   def filtered_scope
-    # Superseded verdicts are replay proposals the Goodreads rebuild retired.
-    scope = ::Books::RepairVerdict.current
-    scope = scope.where(kind: params[:kind]) if KINDS.include?(params[:kind])
-    scope = scope.where(decided_by: params[:decided_by]) if DECIDED_BY.include?(params[:decided_by])
-    scope = scope.where(confidence: params[:confidence]) if CONFIDENCES.include?(params[:confidence])
-    scope = scope.where("payload->>'guess' = 'true'") if params[:guess] == "true"
-    scope
-  end
-
-  def review!(verdict, status)
-    verdict.update!(status: status, decided_by_user_id: current_user.id, reviewed_at: Time.current)
-  end
-
-  def revert_provisional
-    result = ::Services::Books::GoodreadsReplay::Apply::MarkProvisional.revert(verdict: @verdict)
-    ::Services::RankingConfigurations::RequestRefresh.call_for_ids(result.data[:ranking_configuration_ids], delay: 5.minutes)
-    @verdict.update!(applied_at: nil)
+    ::Services::Books::RepairVerdicts::Filter.call(kind: params[:kind], decided_by: params[:decided_by],
+      confidence: params[:confidence], guess: params[:guess])
   end
 
   # The import rows the finding came from: [legacy import id, row number] pairs.
-  def source_rows
-    pairs = Array(@verdict.payload["rows"])
-    return [] if pairs.empty?
-
-    imports = ::Books::GoodreadsImport.where(legacy_import_id: pairs.map(&:first)).index_by(&:legacy_import_id)
-    pairs.filter_map { |legacy_id, row_number| imports[legacy_id]&.rows&.find_by(row_number: row_number) }
-  end
+  def source_rows = ::Services::Books::RepairVerdicts::SourceRows.call(@verdict)
 
   def filter_params(overrides = {})
     request.query_parameters.slice(*FILTER_KEYS).merge(overrides.stringify_keys).compact
