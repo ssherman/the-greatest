@@ -97,13 +97,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   end
 
   # The import rows the finding came from: [legacy import id, row number] pairs.
-  def source_rows
-    pairs = Array(@verdict.payload["rows"])
-    return [] if pairs.empty?
-
-    imports = ::Books::GoodreadsImport.where(legacy_import_id: pairs.map(&:first)).index_by(&:legacy_import_id)
-    pairs.filter_map { |legacy_id, row_number| imports[legacy_id]&.rows&.find_by(row_number: row_number) }
-  end
+  def source_rows = ::Services::Books::RepairVerdicts::SourceRows.call(@verdict)
 
   def filter_params(overrides = {})
     request.query_parameters.slice(*FILTER_KEYS).merge(overrides.stringify_keys).compact

@@ -175,6 +175,16 @@ module Api
         ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "403"] => -> { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/1", headers: bearer(READ) },
         ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "404"] => -> { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/999999999", headers: bearer(MERGE) },
         ["DELETE", "/api/v1/admin/authors/{id}/identifiers/{identifier_id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/authors/#{books_authors(:tolstoy).id}/identifiers/1", headers: bearer(MERGE) } },
+        ["GET", "/api/v1/admin/repair_verdicts", "200"] => -> { get "/api/v1/admin/repair_verdicts", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/repair_verdicts", "400"] => -> { get "/api/v1/admin/repair_verdicts?kind=bogus", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/repair_verdicts", "401"] => -> { get "/api/v1/admin/repair_verdicts" },
+        ["GET", "/api/v1/admin/repair_verdicts", "403"] => -> { get "/api/v1/admin/repair_verdicts", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/repair_verdicts", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/repair_verdicts", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/repair_verdicts/{id}", "200"] => -> { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/repair_verdicts/{id}", "401"] => -> { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}" },
+        ["GET", "/api/v1/admin/repair_verdicts/{id}", "403"] => -> { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/repair_verdicts/{id}", "404"] => -> { get "/api/v1/admin/repair_verdicts/999999999", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/repair_verdicts/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/repair_verdicts/#{repair_verdict.id}", headers: bearer(READ) } },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "200"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {verdict: "confirmed", note: "Same book."}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "400"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", params: {note: ["x"]}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/match_decisions/{id}/review", "401"] => -> { post "/api/v1/admin/match_decisions/#{match_decisions(:low_confidence_book_match).id}/review", as: :json },
@@ -279,6 +289,13 @@ module Api
       def tag_path(segment, id = tag_item(segment).id) = "/api/v1/admin/#{segment}/#{id}/categories"
 
       def politics_id = categories(:books_politics_subject).id
+
+      def repair_verdict
+        ::Books::RepairVerdict.find_or_create_by!(kind: :merge_books, subject_key: "coverage:merge") do |verdict|
+          verdict.decided_by = :rule
+          verdict.payload = {"source_id" => books_books(:crime_and_punishment).id, "target_id" => books_books(:war_and_peace).id}
+        end
+      end
 
       def link_decision(outcome: :matched)
         MatchDecision.create!(
