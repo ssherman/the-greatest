@@ -134,6 +134,69 @@ module Admin
         assert_predicate @relink.reload, :proposed?
       end
 
+      def reimport_match(status: :proposed, **attrs)
+        verdict(:reimport_match, "reimport:edition:77", status: status, decided_by: :ai, confidence: :medium,
+          payload: {"goodreads_edition_id" => 77, "outcome" => "matched", "book_id" => books_books(:got).id}).tap { |v| v.update!(attrs) if attrs.any? }
+      end
+
+      test "correct sets the right book on a re-import match and approves it" do
+        match = reimport_match(status: :rejected)
+        sign_in_as(@admin, stub_auth: true)
+
+        post correct_admin_books_repair_verdict_path(match), params: {book_id: @book.id}
+
+        assert_redirected_to admin_books_repair_verdict_path(match)
+        match.reload
+        assert_predicate match, :approved?
+        assert_equal ["matched", @book.id, @admin.id], [match.payload["outcome"], match.payload["book_id"], match.decided_by_user_id]
+      end
+
+      test "correct can make a re-import match create a new book" do
+        match = reimport_match
+        sign_in_as(@admin, stub_auth: true)
+
+        post correct_admin_books_repair_verdict_path(match), params: {create: "1"}
+
+        assert_equal "create", match.reload.payload["outcome"]
+        assert_predicate match, :approved?
+      end
+
+      test "a refused correction leaves the match alone and says why" do
+        match = reimport_match
+        sign_in_as(@admin, stub_auth: true)
+
+        post correct_admin_books_repair_verdict_path(match), params: {book_id: 999_999_999}
+
+        assert_redirected_to admin_books_repair_verdict_path(match)
+        assert_match(/no book/i, flash[:alert])
+        assert_predicate match.reload, :proposed?
+      end
+
+      test "a books viewer cannot correct" do
+        match = reimport_match
+        sign_in_as(@viewer, stub_auth: true)
+
+        post correct_admin_books_repair_verdict_path(match), params: {book_id: @book.id}
+
+        assert_redirected_to books_root_path
+        assert_predicate match.reload, :proposed?
+      end
+
+      test "show offers the correction only on an unapplied re-import match" do
+        match = reimport_match(status: :rejected)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_repair_verdict_path(match)
+        assert_select "[data-testid=correct-form]", 1
+
+        match.update!(applied_at: Time.current)
+        get admin_books_repair_verdict_path(match)
+        assert_select "[data-testid=correct-form]", 0
+
+        get admin_books_repair_verdict_path(@relink)
+        assert_select "[data-testid=correct-form]", 0
+      end
+
       test "reject marks a verdict rejected" do
         sign_in_as(@admin, stub_auth: true)
 

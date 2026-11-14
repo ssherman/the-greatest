@@ -36,6 +36,29 @@ module Services
             assert @edition.resolved_at.present?
           end
 
+          test "a match corrected after the apply run loaded it applies the corrected book" do
+            stale = verdict(outcome: "matched", book_id: books_books(:crime_and_punishment).id)
+            ::Books::RepairVerdict.find(stale.id).update!(payload: stale.payload.merge("book_id" => books_books(:war_and_peace).id))
+
+            assert_equal :applied, Match.call(verdict: stale).data[:outcome]
+            assert_equal books_books(:war_and_peace).id, @edition.reload.book_id
+            assert_equal books_books(:war_and_peace).id, stale.reload.payload["book_id"]
+          end
+
+          test "a match rejected or superseded after the apply run loaded it is left alone" do
+            [{status: :rejected}, {superseded_at: Time.current}].each do |change|
+              ::Books::RepairVerdict.where(subject_key: "reimport:edition:#{@edition.id}").delete_all
+              stale = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)
+              ::Books::RepairVerdict.find(stale.id).update!(change)
+
+              result = Match.call(verdict: stale)
+
+              assert_equal :noop, result.data[:outcome], change.keys.inspect
+              refute result.data[:final], change.keys.inspect
+              assert_nil @edition.reload.book_id, change.keys.inspect
+            end
+          end
+
           test "matched is applied, changing nothing, when the edition already caches that book" do
             cached = @edition.tap { |edition| edition.update!(book: books_books(:war_and_peace), resolution: :matched, resolved_at: Time.current) }
             verdict = verdict(outcome: "matched", book_id: books_books(:war_and_peace).id)

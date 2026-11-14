@@ -959,6 +959,7 @@ Rails.application.routes.draw do
         member do
           post :approve
           post :reject
+          post :correct
         end
         collection do
           post :bulk_approve

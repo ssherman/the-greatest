@@ -130,10 +130,16 @@ namespace :e2e do
     verdict.update!(status: :proposed, decided_by: :ai, confidence: :high, reason: "E2E repair verdicts spec",
       decided_by_user_id: nil, reviewed_at: nil, applied_at: nil, error: nil,
       payload: {user_id: 0, from_book_id: from.id, to_book_id: to.id, goodreads_book_id: 0, rows: []})
-    puts({verdict_id: verdict.id}.to_json)
+    # A re-import match for the correction step. Its edition id names no edition, so an apply run reports it as
+    # gone and changes nothing.
+    match = Books::RepairVerdict.find_or_initialize_by(kind: :reimport_match, subject_key: "e2e:reimport_match")
+    match.update!(status: :proposed, decided_by: :ai, confidence: :medium, reason: "E2E repair verdicts spec",
+      decided_by_user_id: nil, reviewed_at: nil, applied_at: nil, error: nil,
+      payload: {goodreads_edition_id: 0, outcome: "matched", book_id: from.id, candidate_book_ids: [from.id, to.id]})
+    puts({verdict_id: verdict.id, match_verdict_id: match.id, right_book_id: to.id}.to_json)
   end
 
-  desc "Remove the verdict e2e:repair_verdicts_seed created"
+  desc "Remove the verdicts e2e:repair_verdicts_seed created"
   task repair_verdicts_cleanup: :environment do
     puts "removed #{Books::RepairVerdict.where("subject_key LIKE 'e2e:%'").delete_all} verdict(s)"
   end

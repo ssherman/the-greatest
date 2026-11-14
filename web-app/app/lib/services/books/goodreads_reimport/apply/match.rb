@@ -15,9 +15,19 @@ module Services
         # legacy-replay editions are settled, often on the very mixed book being emptied, and CreateBook returns
         # a settled edition's book as it is. The clear, the create and the payload write share one transaction
         # (and CreateBook's advisory lock), so a failure leaves the old cache in place.
+        #
+        # The run loads its verdicts before applying them, so a reviewer may correct (CorrectMatch) or reject one in
+        # between. The verdict is locked and reloaded first, and the payload write that marks this apply as started
+        # (`edition_before`) happens under that lock: a correction lands either before it, and is what gets applied,
+        # or after it, where CorrectMatch refuses.
         class Match
           def self.call(verdict:)
+            verdict.with_lock { call_locked(verdict) }
+          end
+
+          def self.call_locked(verdict)
             return Entries.noop("already applied") if verdict.applied_at.present?
+            return Entries.noop("no longer approved and current") unless verdict.approved? && verdict.superseded_at.nil?
 
             edition = ::Books::GoodreadsEdition.find_by(id: verdict.payload["goodreads_edition_id"])
             return Entries.noop("edition #{verdict.payload["goodreads_edition_id"]} no longer exists") unless edition
@@ -35,7 +45,7 @@ module Services
               return applied(edition, book)
             end
 
-            ::ApplicationRecord.transaction do
+            ::ApplicationRecord.transaction(requires_new: true) do
               remember(verdict, edition)
               edition.update!(book: book, resolution: :matched, resolved_at: edition.resolved_at || Time.current)
             end
@@ -54,7 +64,8 @@ module Services
             return Entries.noop("no in-scope row for edition #{edition.id}") unless import
 
             reason = nil
-            ::ApplicationRecord.transaction do
+            # Its own savepoint: Rollback inside the verdict lock's transaction would otherwise be swallowed.
+            ::ApplicationRecord.transaction(requires_new: true) do
               GoodreadsImports::CreateBook.lock(edition)
               edition.reload
               before = remember(verdict, edition)
@@ -128,7 +139,7 @@ module Services
               reason: verdict.reason.presence || "re-import: no book matched edition #{edition.id}", decision: decision)
           end
 
-          private_class_method :cache_match, :create, :applied, :record_strips, :refusal, :remember, :import_for, :unmatched
+          private_class_method :call_locked, :cache_match, :create, :applied, :record_strips, :refusal, :remember, :import_for, :unmatched
         end
       end
     end
