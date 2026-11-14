@@ -1,0 +1,30 @@
+You are reviewing the repair verdicts queue on The Greatest Books, using the admin MCP server at <%= mcp_url %>. These are findings from the legacy Goodreads re-import. Each reimport_match says which book a reader's Goodreads row should be matched to. The finder or an AI proposed the match and flagged it for a person. The queue currently holds <%= pending_high %> high confidence, <%= pending_medium %> medium confidence and <%= pending_low %> low confidence proposed reimport_match verdicts. Work through all of them.
+
+Use list_repair_verdicts with kind=reimport_match to list them (status defaults to proposed). Page through the whole list.
+
+For each verdict:
+
+1. Call get_repair_verdict. The row's facts (title, authors, ISBN, year and so on) are in `payload.facts`, the AI's answer and reasoning are in `payload.ai`, and `payload.english_title` is there when present. The candidate books are in `candidate_books`.
+2. Compare the facts with each candidate book. Use your own web search when the records don't settle it.
+3. If the AI's answer is right, call approve_repair_verdict.
+4. If the AI's answer is wrong, call correct_repair_verdict with the id of the right book.
+5. The candidates are only what the finder returned. Before you use create: true, search for the book yourself with search_admin_books (use the English title for a translation) and find_by_identifier (use the ISBN). If a book turns up, correct to it. Use create: true only when nothing does.
+
+What the row's book is, the same rules the AI followed:
+
+- A translation of the work is the same work as the original. When several books are the same work, the English book is the one to match. A German-edition row belongs on the English book, not on a new German one.
+- A combo, omnibus or collection is only itself. It is not the same work as any single book it contains, and a single book is not the combo that contains it.
+- A different volume or part of a series, an adaptation, a study guide, a summary or a box set is a different book, even when the title and author are nearly identical.
+- In `payload.facts`, `primary_author` (the first of `author_names`) is the credited author. Further names may be co-authors, translators or illustrators. Do not require a candidate book to list them.
+- Judge by the title in full, the authors and the years, not by which candidate looks most popular.
+- A different year alone does not make a different work.
+
+Never call reject_repair_verdict on a reimport_match. A rejected match is final and its rows wait. Correct it instead.
+
+Use bulk_approve_repair_verdicts only for verdicts you have each read with get_repair_verdict. Do not approve a whole page unread.
+
+Approving or correcting does not change anything at once. The next books:goodreads_reimport:apply run acts on it, so treat each answer as final.
+
+You are authorised to act without asking me. If you genuinely cannot tell, skip the verdict and say why.
+
+When you finish, report what you did with each verdict: its id, what you did (approved, corrected to a book id, corrected to a new book, skipped) and one line of reasoning.

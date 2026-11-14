@@ -46,7 +46,34 @@ module Services
       assert_equal before + 1, count.call
     end
 
+    test "repair verdicts renders the admin MCP url and the proposed reimport match counts by confidence" do
+      prompt = AgentPrompts.call(domain: :books, queue: :repair_verdicts)
+
+      pending = ::Books::RepairVerdict.reimport_match.proposed.current.group(:confidence).count
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "#{pending["high"].to_i} high confidence"
+      assert_includes prompt, "#{pending["medium"].to_i} medium confidence"
+      assert_includes prompt, "#{pending["low"].to_i} low confidence"
+      assert_includes prompt, "correct_repair_verdict"
+    end
+
+    test "repair verdicts counts only proposed reimport matches" do
+      count = -> { AgentPrompts.call(domain: :books, queue: :repair_verdicts)[/(\d+) high confidence/, 1].to_i }
+      before = count.call
+      attrs = {kind: :reimport_match, decided_by: :ai, confidence: :high, payload: {}, reason: "t"}
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:approved", status: :approved)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:rejected", status: :rejected)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:other", status: :proposed, kind: :relink)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:superseded", status: :proposed, superseded_at: Time.current)
+      assert_equal before, count.call
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "t:proposed", status: :proposed)
+      assert_equal before + 1, count.call
+    end
+
     test "is nil for a domain with no prompt file" do
+      assert_nil AgentPrompts.call(domain: :games, queue: :repair_verdicts)
       assert_nil AgentPrompts.call(domain: :games, queue: :duplicates)
       assert_nil AgentPrompts.call(domain: :games, queue: :match_decisions)
     end

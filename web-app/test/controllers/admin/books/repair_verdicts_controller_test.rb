@@ -44,6 +44,15 @@ module Admin
         assert_equal [@relink.id], verdict_ids
       end
 
+      test "index assigns the agent prompt" do
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_repair_verdicts_path
+
+        assert_response :success
+        assert_equal Services::AgentPrompts.call(domain: :books, queue: :repair_verdicts), @controller.view_assigns["agent_prompt"]
+      end
+
       test "guess filter shows only guesses" do
         sign_in_as(@admin, stub_auth: true)
         guess = verdict(:reimport_guess, "reimport:guess:Review:1", payload: {"item_type" => "Review", "item_id" => 1, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => true})
@@ -121,6 +130,7 @@ module Admin
         assert_predicate @relink, :decided_by_ai?
         assert_equal @admin.id, @relink.decided_by_user_id
         refute_nil @relink.reviewed_at
+        assert_equal "admin_ui", @relink.reviewed_via
         assert_nil @relink.applied_at
       end
 
@@ -229,6 +239,7 @@ module Admin
         post reject_admin_books_repair_verdict_path(flagged)
 
         assert_predicate flagged.reload, :rejected?
+        assert_nil flagged.applied_at
         refute @book.reload.provisional
       end
 

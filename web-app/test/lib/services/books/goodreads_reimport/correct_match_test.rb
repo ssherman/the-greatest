@@ -22,6 +22,15 @@ module Services
 
         def correct(verdict, **args) = CorrectMatch.call(verdict: verdict, user: @admin, **args)
 
+        test "the surface is recorded: admin_ui by default, api when the caller says so" do
+          default = match_verdict
+          correct(default, book_id: @right.id)
+          assert_equal "admin_ui", default.reload.reviewed_via
+
+          correct(default, book_id: @right.id, via: "api")
+          assert_equal "api", default.reload.reviewed_via
+        end
+
         test "correcting to a book approves the match on that book and keeps the AI's pick on record" do
           verdict = match_verdict
           freeze_time do

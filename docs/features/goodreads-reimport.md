@@ -126,6 +126,10 @@ one would duplicate a book readers know. When they disagree or the AI doubts it,
   copy versus move and the review's owner depend on every row of that book: nothing of the group moves until
   all of it can.
 
+An admin agent can do the same review over the admin MCP server: `list_repair_verdicts`, `get_repair_verdict`,
+`approve_repair_verdict`, `correct_repair_verdict`, `reject_repair_verdict` and `bulk_approve_repair_verdicts`
+(see "Repair verdicts" in `docs/features/mcp-server.md`). The page's Copy prompt button gives the agent a starting prompt.
+
 The report's "AI agreement" line shows how many matches were approved without anyone looking. A low rate means
 the AI and the finder disagree a lot and most of the review falls to Shane.
 

@@ -13,6 +13,7 @@ require "test_helper"
 #  payload            :jsonb            not null
 #  reason             :text
 #  reviewed_at        :datetime
+#  reviewed_via       :integer
 #  status             :integer          default("proposed"), not null
 #  subject_key        :string           not null
 #  superseded_at      :datetime

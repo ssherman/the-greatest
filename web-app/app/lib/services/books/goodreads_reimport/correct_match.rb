@@ -15,12 +15,13 @@ module Services
       class CorrectMatch
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        def self.call(verdict:, user:, book_id: nil, create: false)
-          new(verdict: verdict, user: user, book_id: book_id, create: create).call
+        def self.call(verdict:, user:, book_id: nil, create: false, via: "admin_ui")
+          new(verdict: verdict, user: user, book_id: book_id, create: create, via: via).call
         end
 
-        def initialize(verdict:, user:, book_id:, create:)
+        def initialize(verdict:, user:, book_id:, create:, via:)
           @verdict = verdict
+          @via = via
           @user = user
           @book_id = book_id.presence&.to_i
           @create = ActiveModel::Type::Boolean.new.cast(create) || false
@@ -44,7 +45,8 @@ module Services
               "corrected" => {"outcome" => @verdict.payload["outcome"], "book_id" => @verdict.payload["book_id"], "status" => @verdict.status,
                               "by_user_id" => @user.id, "at" => Time.current.iso8601}
             )
-            @verdict.update!(payload: payload, status: :approved, reviewed_at: Time.current, decided_by_user_id: @user.id)
+            @verdict.update!(payload: payload, status: :approved, reviewed_at: Time.current, decided_by_user_id: @user.id,
+              reviewed_via: @via)
             Result.new(success?: true, data: {verdict: @verdict}, errors: [])
           end
         end
