@@ -45,9 +45,12 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   end
 
   def update
-    assign_book_attributes(@book)
+    @submitted_titles = submitted_alternate_titles
+    attrs = book_params.to_h
+    attrs["alternate_titles"] = @submitted_titles if @submitted_titles
+    result = Services::Books::AdminUpdate.call(book: @book, attrs: attrs, user: current_user, via: "admin_ui", explicit_nulls: [])
 
-    if save_with_titles(@book)
+    if result.success?
       redirect_to admin_books_book_path(@book), notice: "Book updated."
     else
       render :edit, status: :unprocessable_entity

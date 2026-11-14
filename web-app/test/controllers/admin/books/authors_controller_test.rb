@@ -176,6 +176,20 @@ module Admin
         assert_equal "Lev Tolstoy (Revised)", @author.reload.name
       end
 
+      test "update blanking a year writes an admin_ui cleared row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_author_path(@author), params: {books_author: {name: @author.name, death_year: ""}}
+        row = @author.cleared_fields.find_by!(field_name: "death_year")
+        assert_equal "admin_ui", row.cleared_via
+      end
+
+      test "update leaving an already-blank year blank writes no cleared row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        @author.update!(death_year: nil)
+        patch admin_books_author_path(@author), params: {books_author: {name: @author.name, death_year: ""}}
+        assert_equal 0, @author.cleared_fields.count
+      end
+
       test "update leaves alternate_names untouched when the field is absent" do
         @author.update!(alternate_names: ["Lev Tolstoy"])
         sign_in_as(@admin_user, stub_auth: true)

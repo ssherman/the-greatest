@@ -715,6 +715,10 @@ Rails.application.routes.draw do
           scope module: :books do
             get "books", to: "books#index"
             get "authors", to: "authors#index"
+            get "books/:id", to: "books#show", constraints: {id: /\d+/}
+            get "authors/:id", to: "authors#show", constraints: {id: /\d+/}
+            patch "books/:id", to: "books#update", constraints: {id: /\d+/}
+            patch "authors/:id", to: "authors#update", constraints: {id: /\d+/}
             get "duplicate_candidates", to: "duplicate_candidates#index"
             get "duplicate_candidates/:id", to: "duplicate_candidates#show", constraints: {id: /\d+/}
             post "duplicate_candidates/:id/merge", to: "duplicate_candidates#merge", constraints: {id: /\d+/}

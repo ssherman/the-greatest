@@ -769,6 +769,66 @@ module Books
         @target.update_columns(alternate_names: [@source.name])
         @target.reload
       end
+
+      test "a source's cleared row moves to a target whose field is blank" do
+        @target.update_columns(death_year: nil)
+        @source.update_columns(death_year: nil)
+        ClearedField.create!(clearable: @source, field_name: "death_year", cleared_via: :api)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal ["death_year"], @target.reload.cleared_fields.pluck(:field_name)
+        assert_equal 0, ClearedField.where(clearable_type: "Books::Author", clearable_id: @source.id).count
+      end
+
+      test "a source's cleared row is dropped when the target's field has a value" do
+        @source.update_columns(birth_year: nil)
+        ClearedField.create!(clearable: @source, field_name: "birth_year", cleared_via: :api)
+        assert_not_nil @target.birth_year
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_empty @target.reload.cleared_fields
+        assert_equal 0, ClearedField.where(clearable_type: "Books::Author", clearable_id: @source.id).count
+      end
+
+      test "the target keeps its own cleared row and the source's duplicate is dropped" do
+        @target.update_columns(death_year: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "death_year", cleared_via: :admin_ui)
+        ClearedField.create!(clearable: @source, field_name: "death_year", cleared_via: :api)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal [mine.id], @target.reload.cleared_fields.pluck(:id)
+        assert_equal 0, ClearedField.where(clearable_type: "Books::Author", clearable_id: @source.id).count
+      end
+
+      test "the target's own cleared death_year is not filled from the source" do
+        @source.update_columns(death_year: 2001)
+        @target.update_columns(death_year: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "death_year", cleared_via: :admin_ui)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_nil @target.reload.death_year
+        assert_equal [mine.id], @target.cleared_fields.pluck(:id)
+      end
+
+      test "a source's cleared row is dropped when the merge fills the target's blank from the source" do
+        @source.update_columns(death_year: 2001)
+        @target.update_columns(death_year: nil)
+        ClearedField.create!(clearable: @source, field_name: "death_year", cleared_via: :api)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal 2001, @target.reload.death_year
+        assert_empty @target.cleared_fields
+      end
     end
   end
 end

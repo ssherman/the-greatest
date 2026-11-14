@@ -114,6 +114,7 @@ module Services
         value = f[:value].to_s.strip
         return record(:original_language, f, applied: false, reason: "null") if value.blank?
         return record(:original_language, f, applied: false, reason: "already_set") if book.original_language_id.present?
+        return record(:original_language, f, applied: false, reason: "human_cleared") if human_cleared?(:original_language_id)
 
         language = find_language(value)
         return record(:original_language, f, applied: false, reason: "no_match") if language.nil?

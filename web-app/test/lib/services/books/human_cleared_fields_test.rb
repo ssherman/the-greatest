@@ -29,6 +29,25 @@ module Services
         assert_empty HumanClearedFields.for(@book)
       end
 
+      test "includes fields recorded in cleared_fields" do
+        ClearedField.create!(clearable: @book, field_name: "first_published_year", cleared_via: :api)
+
+        assert_equal Set["first_published_year"], HumanClearedFields.for(@book)
+      end
+
+      test "unions cleared_fields rows with correction clears" do
+        correct!("subtitle", "")
+        ClearedField.create!(clearable: @book, field_name: "original_language_id", cleared_via: :admin_ui)
+
+        assert_equal Set["subtitle", "original_language_id"], HumanClearedFields.for(@book)
+      end
+
+      test "ignores another book's cleared_fields rows" do
+        ClearedField.create!(clearable: books_books(:crime_and_punishment), field_name: "subtitle", cleared_via: :api)
+
+        assert_empty HumanClearedFields.for(@book)
+      end
+
       test "ignores another book's corrections" do
         other = books_books(:crime_and_punishment)
         correction = ::Correction.create!(correctable: other, status: :resolved, notes: "x")

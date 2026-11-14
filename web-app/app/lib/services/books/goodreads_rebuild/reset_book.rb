@@ -19,7 +19,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         ASSOCIATIONS = %i[book_authors credits descriptions category_items images editions identifiers
-          alternate_title_records series_books book_countries external_links].freeze
+          alternate_title_records series_books book_countries external_links cleared_fields].freeze
 
         COLUMNS = {
           description: nil, subtitle: nil, sort_title: nil, first_published_year: nil, original_language_id: nil,

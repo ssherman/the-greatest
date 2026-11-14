@@ -80,6 +80,16 @@ module Services
           refute_includes result.data[:applied], "first_published_year"
         end
 
+        test "a cleared first_published_year stays blank" do
+          ClearedField.create!(clearable: @book, field_name: "first_published_year", cleared_via: :api)
+
+          result = apply
+
+          assert_nil @book.reload.first_published_year
+          assert_equal "human_cleared", result.data[:enrichment].facts["first_published_year"]["reason"]
+          refute_includes result.data[:applied], "first_published_year"
+        end
+
         test "a human-cleared page_range stays blank" do
           human_clear!("page_range")
 

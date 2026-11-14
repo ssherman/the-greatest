@@ -25,6 +25,27 @@ module Services
           assert_raises(ArgumentError) { FactSheet.new(@author).stamp("books_author_viaf", "123456789") }
         end
 
+        test "a cleared birth_year is never filled" do
+          ClearedField.create!(clearable: @author, field_name: "birth_year", cleared_via: :api)
+
+          @sheet.year("birth_year", 1950)
+
+          assert_nil @author.birth_year
+          assert_equal [false, "human_cleared"], @sheet.facts["birth_year"].values_at("applied", "reason")
+          refute_includes @sheet.applied, "birth_year"
+        end
+
+        test "a cleared death_year blocks the posthumous-checked path too, and other years still fill" do
+          ClearedField.create!(clearable: @author, field_name: "death_year", cleared_via: :admin_ui)
+
+          @sheet.death_year(2010)
+          @sheet.year("birth_year", 1950)
+
+          assert_nil @author.death_year
+          assert_equal "human_cleared", @sheet.facts["death_year"]["reason"]
+          assert_equal [1950, "filled"], [@author.birth_year, @sheet.facts["birth_year"]["reason"]]
+        end
+
         test "a death year more than two years before one of the author's own books is recorded, not applied" do
           @author.book_authors.create!(book: ::Books::Book.create!(title: "Later Book", first_published_year: 2021), position: 1)
 

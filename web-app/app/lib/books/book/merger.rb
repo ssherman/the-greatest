@@ -502,6 +502,16 @@ module Books
         reconcile_first_published_year
         absorb_alternate_titles
         reconcile_provisional
+        merge_cleared_fields
+      end
+
+      # A human's clear is a promise that the field stays blank. The source's row
+      # follows it to the survivor only when the survivor's field is still blank
+      # (after the blank-fill above, so a value the merge just filled wins); a
+      # survivor with a value, or with a row of its own, drops it. Runs before
+      # the source is destroyed, so no row outlives its record.
+      def merge_cleared_fields
+        @stats[:cleared_fields] = ::ClearedField.carry_over(source: source_book, target: target_book)
       end
 
       # The merged book is provisional only if both halves were. Folding a real book
@@ -519,8 +529,11 @@ module Books
         filled = []
 
         same_title = same_title?
+        cleared = target_book.cleared_fields.pluck(:field_name)
         BLANK_FILLABLE.each do |field|
           next if target_book.public_send(field).present?
+          # The survivor's own clear wins over a value the source holds.
+          next if cleared.include?(field.to_s)
           next if TITLE_BOUND.include?(field) && !same_title
 
           value = source_book.public_send(field)
@@ -541,6 +554,7 @@ module Books
       def reconcile_first_published_year
         source_year = source_book.first_published_year
         return if source_year.blank?
+        return if target_book.cleared_fields.exists?(field_name: "first_published_year")
 
         target_year = target_book.first_published_year
         return if target_year.present? && target_year <= source_year

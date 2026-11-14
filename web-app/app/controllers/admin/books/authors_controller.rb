@@ -45,9 +45,12 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   end
 
   def update
-    assign_author_attributes(@author)
+    attrs = author_params.to_h
+    raw = params.dig(:books_author, :alternate_names_string)
+    attrs["alternate_names"] = raw.to_s.split(",").map(&:strip).reject(&:blank?) unless raw.nil?
+    result = Services::Books::Authors::AdminUpdate.call(author: @author, attrs: attrs, user: current_user, via: "admin_ui", explicit_nulls: [])
 
-    if @author.save
+    if result.success?
       redirect_to admin_books_author_path(@author), notice: "Author updated."
     else
       render :edit, status: :unprocessable_entity

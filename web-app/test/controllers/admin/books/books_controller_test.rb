@@ -183,6 +183,21 @@ module Admin
         assert_equal "War and Peace (Revised)", @book.reload.title
       end
 
+      test "update blanking the year writes an admin_ui cleared row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, first_published_year: ""}}
+        assert_nil @book.reload.first_published_year
+        row = @book.cleared_fields.find_by!(field_name: "first_published_year")
+        assert_equal ["admin_ui", @admin_user], [row.cleared_via, row.cleared_by]
+      end
+
+      test "update leaving an already-blank year blank writes no cleared row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        @book.update!(first_published_year: nil)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, first_published_year: ""}}
+        assert_equal 0, @book.cleared_fields.count
+      end
+
       test "update keeps a comma title whole" do
         sign_in_as(@admin_user, stub_auth: true)
         patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles: ["", "Good Night, Mr. Tom"]}}
