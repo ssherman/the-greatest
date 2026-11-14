@@ -22,6 +22,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
     @counts = scope.group(:status).count
     @pagy, @verdicts = pagy(scope.where(status: @status).newest_first, limit: PER_PAGE)
     load_row_context
+    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :repair_verdicts)
   end
 
   def show

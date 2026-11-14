@@ -2,7 +2,16 @@
 <% content_for :title, "Repair Verdicts" %>
 
 <div class="space-y-4">
-  <h1 class="text-2xl font-bold">Repair Verdicts</h1>
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-2xl font-bold">Repair Verdicts</h1>
+    <% if @agent_prompt %>
+      <div data-controller="clipboard-copy">
+        <textarea hidden readonly data-clipboard-copy-target="source"><%= @agent_prompt %></textarea>
+        <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+                data-clipboard-copy-target="button" data-testid="copy-agent-prompt">Copy prompt</button>
+      </div>
+    <% end %>
+  </div>
   <p class="text-sm text-base-content/70">
     Findings from the legacy Goodreads replay. Approving queues a verdict for the next
     <code>books:goodreads_replay:apply</code>; nothing changes until then.

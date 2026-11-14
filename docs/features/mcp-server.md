@@ -198,9 +198,22 @@ Identifier tools:
 - `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
 - `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
 
-Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 40 tools (the description tools below and the book and author field tools in "Book and author field edits" included).
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 46 tools (the description tools below, the book and author field tools in "Book and author field edits" and the repair verdict tools in "Repair verdicts" included).
 
 The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
+
+## Repair verdicts
+
+The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads replay's findings, mostly `reimport_match` verdicts proposed for review (see `docs/features/goodreads-reimport.md`). Six admin tools work it. `Services::Books::RepairVerdicts::Filter` and `Review` are shared with the page, so both see the same queue and stamp `reviewed_via` (`admin_ui` or `api`).
+
+- `list_repair_verdicts` (`books:admin:read`). Filters: `kind`, `status` (`proposed` by default), `decided_by`, `confidence`, `guess`.
+- `get_repair_verdict` (`books:admin:read`). The payload with `facts`, `ai` and `candidate_book_ids`, plus `candidate_books`, `books` and `source_rows`.
+- `approve_repair_verdict` (`books:admin:merge`). An approved merge destroys a row on the next apply, so approving takes the merge scope, as the page takes the delete gate.
+- `reject_repair_verdict` (`books:admin:write`).
+- `correct_repair_verdict` (`books:admin:write`). Body `{book_id}` or `{create: true}`; it runs `Services::Books::GoodreadsReimport::CorrectMatch` and approves the corrected answer.
+- `bulk_approve_repair_verdicts` (`books:admin:merge`). Body `{ids: [...]}`, 1 to 100.
+
+Nothing applies on approval: the next `books:goodreads_reimport:apply` acts on approved verdicts. The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
 
 ## Description tools
 
