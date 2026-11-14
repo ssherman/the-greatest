@@ -79,7 +79,9 @@ module Services
 
         def year(name, value)
           current = author.public_send(name)
-          if current.nil?
+          if current.nil? && author.cleared_fields.any? { |row| row.field_name == name.to_s }
+            record(name, value, applied: false, reason: "human_cleared")
+          elsif current.nil?
             author.public_send(:"#{name}=", value)
             record(name, value, applied: true, reason: "filled")
           elsif current == value

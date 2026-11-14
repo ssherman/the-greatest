@@ -77,6 +77,26 @@ module Services
         refute result.data[:facts]["subtitle"]["applied"]
       end
 
+      test "a cleared original_language_id is never refilled" do
+        ClearedField.create!(clearable: @book, field_name: "original_language_id", cleared_via: :api)
+
+        result = apply(original_language: {value: "english", confidence: "high"})
+
+        assert_nil @book.reload.original_language_id
+        assert_equal "human_cleared", result.data[:facts]["original_language"]["reason"]
+        refute result.data[:facts]["original_language"]["applied"]
+      end
+
+      test "a cleared first_published_year is never refilled" do
+        ClearedField.create!(clearable: @book, field_name: "first_published_year", cleared_via: :admin_ui)
+
+        result = apply
+
+        assert_nil @book.reload.first_published_year
+        assert_equal "human_cleared", result.data[:facts]["first_published_year"]["reason"]
+        refute result.data[:facts]["first_published_year"]["applied"]
+      end
+
       test "a null value is recorded as null and not applied" do
         result = apply(first_published_year: {value: nil, confidence: "low"})
 

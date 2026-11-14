@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_11_053410) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_052942) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -643,6 +643,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_053410) do
     t.index ["category_id", "item_type", "item_id"], name: "index_category_items_on_category_id_and_item_type_and_item_id", unique: true
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "cleared_fields", force: :cascade do |t|
+    t.string "clearable_type", null: false
+    t.bigint "clearable_id", null: false
+    t.string "field_name", null: false
+    t.bigint "cleared_by_id"
+    t.integer "cleared_via", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["clearable_type", "clearable_id", "field_name"], name: "index_cleared_fields_on_clearable_and_field_name", unique: true
+    t.index ["cleared_by_id"], name: "index_cleared_fields_on_cleared_by_id"
   end
 
   create_table "contact_messages", force: :cascade do |t|
@@ -1818,6 +1830,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_053410) do
   add_foreign_key "category_cleanup_decisions", "categories"
   add_foreign_key "category_cleanup_decisions", "categories", column: "target_category_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "cleared_fields", "users", column: "cleared_by_id", on_delete: :nullify
   add_foreign_key "contact_messages", "users"
   add_foreign_key "correction_fields", "corrections"
   add_foreign_key "corrections", "users"

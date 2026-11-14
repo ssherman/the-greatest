@@ -381,6 +381,27 @@ module Books
         fill_blank_fields
         absorb_alternate_names
         reconcile_provisional
+        merge_cleared_fields
+      end
+
+      # A human's clear is a promise that the field stays blank. The source's row
+      # follows it to the survivor only when the survivor's field is still blank
+      # (after the blank-fill above, so a value the merge just filled wins); a
+      # survivor with a value, or with a row of its own, drops it. Runs before
+      # the source is destroyed, so no row outlives its record.
+      def merge_cleared_fields
+        taken = target_author.cleared_fields.pluck(:field_name)
+        moved = 0
+        source_author.cleared_fields.each do |row|
+          value = target_author.public_send(row.field_name)
+          blank = value.nil? || (value.respond_to?(:strip) && value.strip.empty?)
+          next if !blank || taken.include?(row.field_name)
+
+          row.update!(clearable: target_author)
+          taken << row.field_name
+          moved += 1
+        end
+        @stats[:cleared_fields] = moved
       end
 
       # The merged author is provisional only if both halves were. Folding a real
