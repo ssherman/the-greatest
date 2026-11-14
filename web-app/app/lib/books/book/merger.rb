@@ -511,18 +511,7 @@ module Books
       # survivor with a value, or with a row of its own, drops it. Runs before
       # the source is destroyed, so no row outlives its record.
       def merge_cleared_fields
-        taken = target_book.cleared_fields.pluck(:field_name)
-        moved = 0
-        source_book.cleared_fields.each do |row|
-          value = target_book.public_send(row.field_name)
-          blank = value.nil? || (value.respond_to?(:strip) && value.strip.empty?)
-          next if !blank || taken.include?(row.field_name)
-
-          row.update!(clearable: target_book)
-          taken << row.field_name
-          moved += 1
-        end
-        @stats[:cleared_fields] = moved
+        @stats[:cleared_fields] = ::ClearedField.carry_over(source: source_book, target: target_book)
       end
 
       # The merged book is provisional only if both halves were. Folding a real book
@@ -540,8 +529,11 @@ module Books
         filled = []
 
         same_title = same_title?
+        cleared = target_book.cleared_fields.pluck(:field_name)
         BLANK_FILLABLE.each do |field|
           next if target_book.public_send(field).present?
+          # The survivor's own clear wins over a value the source holds.
+          next if cleared.include?(field.to_s)
           next if TITLE_BOUND.include?(field) && !same_title
 
           value = source_book.public_send(field)
@@ -562,6 +554,7 @@ module Books
       def reconcile_first_published_year
         source_year = source_book.first_published_year
         return if source_year.blank?
+        return if target_book.cleared_fields.exists?(field_name: "first_published_year")
 
         target_year = target_book.first_published_year
         return if target_year.present? && target_year <= source_year

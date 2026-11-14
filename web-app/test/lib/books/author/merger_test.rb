@@ -805,6 +805,30 @@ module Books
         assert_equal [mine.id], @target.reload.cleared_fields.pluck(:id)
         assert_equal 0, ClearedField.where(clearable_type: "Books::Author", clearable_id: @source.id).count
       end
+
+      test "the target's own cleared death_year is not filled from the source" do
+        @source.update_columns(death_year: 2001)
+        @target.update_columns(death_year: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "death_year", cleared_via: :admin_ui)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_nil @target.reload.death_year
+        assert_equal [mine.id], @target.cleared_fields.pluck(:id)
+      end
+
+      test "a source's cleared row is dropped when the merge fills the target's blank from the source" do
+        @source.update_columns(death_year: 2001)
+        @target.update_columns(death_year: nil)
+        ClearedField.create!(clearable: @source, field_name: "death_year", cleared_via: :api)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal 2001, @target.reload.death_year
+        assert_empty @target.cleared_fields
+      end
     end
   end
 end

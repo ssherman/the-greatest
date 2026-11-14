@@ -37,4 +37,25 @@ class ClearedField < ApplicationRecord
 
   validates :field_name, presence: true, uniqueness: {scope: [:clearable_type, :clearable_id]}
   validates :cleared_via, presence: true
+
+  # Blank means nil, or a string that is empty after strip. 0 is a value.
+  def self.blank_value?(value)
+    value.nil? || (value.respond_to?(:strip) && value.strip.empty?)
+  end
+
+  # Moves source's cleared rows to target for a merge: a row follows only when
+  # target's field is still blank and target has no row for it; any other row is
+  # left behind for the source's dependent: :delete_all. Returns the count moved.
+  def self.carry_over(source:, target:)
+    taken = target.cleared_fields.pluck(:field_name)
+    moved = 0
+    source.cleared_fields.each do |row|
+      next if taken.include?(row.field_name) || !blank_value?(target.public_send(row.field_name))
+
+      row.update!(clearable: target)
+      taken << row.field_name
+      moved += 1
+    end
+    moved
+  end
 end

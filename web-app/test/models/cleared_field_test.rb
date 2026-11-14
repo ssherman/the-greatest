@@ -39,6 +39,15 @@ class ClearedFieldTest < ActiveSupport::TestCase
     assert_nil row.reload.cleared_by_id
   end
 
+  test "blank_value? is true for nil and empty-after-strip strings, false for 0" do
+    assert ClearedField.blank_value?(nil)
+    assert ClearedField.blank_value?("")
+    assert ClearedField.blank_value?("  ")
+    refute ClearedField.blank_value?(0)
+    refute ClearedField.blank_value?("x")
+    refute ClearedField.blank_value?(1869)
+  end
+
   test "destroying a book deletes its rows" do
     book = ::Books::Book.create!(title: "Short Lived")
     ClearedField.create!(clearable: book, field_name: "subtitle", cleared_via: :api)

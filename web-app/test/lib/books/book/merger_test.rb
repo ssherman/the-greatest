@@ -1062,8 +1062,6 @@ module Books
         assert_equal ["admin"], CategoryItem.where(category: us, item: @target).map(&:source)
       end
 
-      private
-
       test "a source's cleared row moves to a target whose field is blank" do
         @target.update_columns(subtitle: nil)
         @source.update_columns(subtitle: nil)
@@ -1113,6 +1111,44 @@ module Books
         assert_equal [mine.id], @target.reload.cleared_fields.pluck(:id)
         assert_equal 0, ClearedField.where(clearable_type: "Books::Book", clearable_id: @source.id).count
       end
+
+      test "the target's own cleared field is not filled from the source" do
+        @source.update_columns(subtitle: "Source Subtitle", title: @target.title)
+        @target.update_columns(subtitle: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "subtitle", cleared_via: :admin_ui)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_nil @target.reload.subtitle
+        assert_equal [mine.id], @target.cleared_fields.pluck(:id)
+      end
+
+      test "the target's own cleared first_published_year is not reconciled from the source" do
+        @target.update_columns(first_published_year: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "first_published_year", cleared_via: :api)
+        assert_not_nil @source.first_published_year
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_nil @target.reload.first_published_year
+        assert_equal [mine.id], @target.cleared_fields.pluck(:id)
+      end
+
+      test "the target's own cleared original_language_id is not filled from the source" do
+        @target.update_columns(original_language_id: nil)
+        mine = ClearedField.create!(clearable: @target, field_name: "original_language_id", cleared_via: :api)
+        assert_not_nil @source.original_language_id
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_nil @target.reload.original_language_id
+        assert_equal [mine.id], @target.cleared_fields.pluck(:id)
+      end
+
+      private
 
       def create_reading_goal(completed_on:, **attributes)
         ::Books::ReadingGoal.create!({

@@ -390,18 +390,7 @@ module Books
       # survivor with a value, or with a row of its own, drops it. Runs before
       # the source is destroyed, so no row outlives its record.
       def merge_cleared_fields
-        taken = target_author.cleared_fields.pluck(:field_name)
-        moved = 0
-        source_author.cleared_fields.each do |row|
-          value = target_author.public_send(row.field_name)
-          blank = value.nil? || (value.respond_to?(:strip) && value.strip.empty?)
-          next if !blank || taken.include?(row.field_name)
-
-          row.update!(clearable: target_author)
-          taken << row.field_name
-          moved += 1
-        end
-        @stats[:cleared_fields] = moved
+        @stats[:cleared_fields] = ::ClearedField.carry_over(source: source_author, target: target_author)
       end
 
       # The merged author is provisional only if both halves were. Folding a real
@@ -413,8 +402,11 @@ module Books
       def fill_blank_fields
         filled = []
 
+        cleared = target_author.cleared_fields.pluck(:field_name)
         BLANK_FILLABLE.each do |field|
           next if target_author.public_send(field).present?
+          # The survivor's own clear wins over a value the source holds.
+          next if cleared.include?(field.to_s)
 
           value = source_author.public_send(field)
           next if value.blank?
