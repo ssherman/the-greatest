@@ -1088,7 +1088,7 @@ paths:
         destructive: true
         description: >-
           Approves the proposed verdicts among ids (1 to 100 integer ids) in one call. Verdicts that are already
-          reviewed, superseded or unknown are skipped and listed in skipped_ids. This does not change any book yet: the
+          reviewed, superseded or unknown are skipped and listed in skipped_ids. This does not change any book yet:
           the matching apply task (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds) does that later. Returns approved_ids and skipped_ids.
       requestBody:
         required: true
