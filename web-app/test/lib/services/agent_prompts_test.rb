@@ -49,7 +49,7 @@ module Services
     test "repair verdicts renders the admin MCP url and the proposed reimport match counts by confidence" do
       prompt = AgentPrompts.call(domain: :books, queue: :repair_verdicts)
 
-      pending = ::Books::RepairVerdict.reimport_match.proposed.group(:confidence).count
+      pending = ::Books::RepairVerdict.reimport_match.proposed.current.group(:confidence).count
       assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
       assert_includes prompt, "#{pending["high"].to_i} high confidence"
       assert_includes prompt, "#{pending["medium"].to_i} medium confidence"

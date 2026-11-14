@@ -936,12 +936,13 @@ paths:
       security: [{bearerAuth: ["books:admin:merge"]}]
       summary: Approve a repair verdict
       description: |
-        Approves a proposed repair verdict as the token's owner, via the API. Approving does not apply it: the replay's apply step does, later, and applying a merge or relink changes the catalog. Refused (422) when the verdict is not proposed or was superseded by a newer proposal. Requires `books:admin:merge`, and the token's owner must be allowed to change books.
+        Approves a proposed repair verdict as the token's owner, via the API. Approving does not apply it: the matching apply task does, later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds), and applying a merge or relink changes the catalog. Refused (422) when the verdict is not proposed or was superseded by a newer proposal. Requires `books:admin:merge`, and the token's owner must be allowed to change books.
       x-mcp:
         destructive: true
         description: >-
-          Approves one proposed repair verdict. This does not change any book yet: the Goodreads replay's apply
-          step does that later, so an approved merge or relink will be carried out. A 422 means the verdict is not
+          Approves one proposed repair verdict. This does not change any book yet: the matching apply task
+          (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds)
+          does that later, so an approved merge or relink will be carried out. A 422 means the verdict is not
           proposed (already approved or rejected) or was superseded. Returns the verdict with its detail.
       parameters:
         - $ref: "#/components/parameters/id"
@@ -1088,7 +1089,7 @@ paths:
         description: >-
           Approves the proposed verdicts among ids (1 to 100 integer ids) in one call. Verdicts that are already
           reviewed, superseded or unknown are skipped and listed in skipped_ids. This does not change any book yet: the
-          replay's apply step does that later. Returns approved_ids and skipped_ids.
+          the matching apply task (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds) does that later. Returns approved_ids and skipped_ids.
       requestBody:
         required: true
         content:

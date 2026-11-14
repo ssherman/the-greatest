@@ -213,7 +213,7 @@ The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads re
 - `correct_repair_verdict` (`books:admin:write`). Body `{book_id}` or `{create: true}`; it runs `Services::Books::GoodreadsReimport::CorrectMatch` and approves the corrected answer.
 - `bulk_approve_repair_verdicts` (`books:admin:merge`). Body `{ids: [...]}`, 1 to 100.
 
-Nothing applies on approval: the next `books:goodreads_reimport:apply` acts on approved verdicts. The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
+Nothing applies on approval: the matching apply task acts on approved verdicts later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds). The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
 
 ## Description tools
 

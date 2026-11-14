@@ -35,7 +35,7 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
   def approve
     result = ::Services::Books::RepairVerdicts::Review.approve(verdict: @verdict, user: current_user, via: VIA)
     if result.success?
-      redirect_to admin_books_repair_verdict_path(@verdict), notice: "Approved. The next books:goodreads_replay:apply applies it."
+      redirect_to admin_books_repair_verdict_path(@verdict), notice: "Approved. The next #{@verdict.kind.start_with?("reimport_") ? "books:goodreads_reimport:apply" : "books:goodreads_replay:apply"} applies it."
     else
       redirect_to admin_books_repair_verdict_path(@verdict), alert: result.errors.join(", ")
     end
