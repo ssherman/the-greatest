@@ -38,7 +38,7 @@ module Api
           attrs = {}
           explicit_nulls = []
           body.each do |key, value|
-            if clearable.include?(key) && (value.nil? || value == "")
+            if clearable.include?(key) && ::ClearedField.blank_value?(value)
               attrs[key] = nil
               explicit_nulls << key
             else
@@ -63,7 +63,7 @@ module Api
         # The JSON object as sent. Not request.request_parameters: ParamsWrapper
         # merges a copy of the body under a "book"/"author" key into it.
         def json_body
-          parsed = JSON.parse(request.raw_post)
+          parsed = JSON.parse(request.raw_post.to_s)
           parsed.is_a?(Hash) ? parsed : nil
         rescue JSON::ParserError
           nil

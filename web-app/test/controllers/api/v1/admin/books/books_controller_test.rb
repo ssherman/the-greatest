@@ -204,6 +204,16 @@ module Api
             assert ClearedField.exists?(clearable: @war, field_name: "subtitle")
           end
 
+          test "whitespace only on an already blank subtitle writes a row" do
+            @war.update!(subtitle: nil)
+
+            assert_difference -> { ClearedField.where(clearable: @war).count }, 1 do
+              patch_book({subtitle: "   "})
+            end
+            assert_response :ok
+            assert_nil @war.reload.subtitle
+          end
+
           test "null on an already blank year writes a row" do
             @war.update!(first_published_year: nil)
 

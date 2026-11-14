@@ -132,6 +132,23 @@ module Api
       assert_equal "not_found", tool_text["code"]
     end
 
+    test "update_book with a null year clears it through MCP and records the api row" do
+      book = books_books(:war_and_peace)
+
+      call_tool("update_book", {id: book.id, first_published_year: nil}, token: ApiTokenSecrets::ADMIN)
+
+      assert_not_equal true, json.dig("result", "isError")
+      assert_nil book.reload.first_published_year
+      assert_equal "api", ClearedField.find_by!(clearable: book, field_name: "first_published_year").cleared_via
+    end
+
+    test "update_book with only an id is a 400 problem, not an internal error" do
+      call_tool("update_book", {id: books_books(:war_and_peace).id}, token: ApiTokenSecrets::ADMIN)
+
+      assert_equal true, json.dig("result", "isError")
+      assert_equal "invalid_parameter", tool_text["code"]
+    end
+
     test "a merge that fails part way reports merged, failed and not_attempted" do
       target = new_genre("Target Genre")
       sources = %w[Alpha Beta Gamma].map { |name| new_genre("#{name} Source") }
