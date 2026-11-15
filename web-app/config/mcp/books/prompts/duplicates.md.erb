@@ -10,6 +10,13 @@ House rules, from past decisions:
 - Translations of the same work are one book. A translator credited as author is a data problem, not a reason to keep two books.
 - Prefer the survivor with the better rank, more lists and better identifiers, unless the rules above say otherwise.
 
-Notes: one or two sentences per pair, with the evidence, for example a URL or an identifier.
+Rules for author pairs, from past decisions (find an author's id with search_admin_authors and read it with get_admin_author):
+
+- Pen name of one person: merge into the person's record, named for the name they are best known by (update_author changes the name and alternate_names). Keep the pen name in alternate_names. On every book printed under the pen name, set credited_as to the pen name with update_book_author.
+- Shared pen name (several writers behind one name): never merge. Dismiss it with the note "shared pseudonym".
+- Same name, different people: never merge. If the other person has no record yet, create one with create_admin_author, passing their wikidata_qid when you know it. Then on each wrong book add the right author with add_book_author, remove the wrong one with remove_book_author, and remove any alternate name that belongs to the other person with update_author. The new author's first book link starts its enrichment. After the books are linked, check the new author's match decisions (list_match_decisions, get_match_decision); if the enrichment linked the namesake, undo it with reject_match_decision_link.
+- Identifiers: delete a book or author identifier (remove_book_identifier, remove_author_identifier) only when its source is legacy and you have proved it belongs to a different work or person. Flag an identifier from any other source in the note instead.
+
+Notes: one or two sentences per pair, with the evidence: the sources you checked, for example a URL or an identifier. Write the evidence in every note, for a dismissal as well as a merge.
 
 When you finish, report what you merged, dismissed and skipped, each with the pair id and one line of reasoning. Include any merge warnings verbatim.
