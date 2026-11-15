@@ -31,6 +31,8 @@ module Services
           return fact(entry, label, false, "invalid") if id.blank?
 
           series, created = find_or_create_series(id, entry["title"])
+          return fact(entry, label, false, "deleted_series") if series.nil?
+
           link = ::Books::SeriesBook.find_or_initialize_by(series: series, book: @book)
           return fact(entry, label, false, "already_set") if link.persisted?
 
@@ -50,7 +52,9 @@ module Services
           identifier = ::Identifier.find_by(
             identifier_type: :books_series_goodreads_id, value: goodreads_id.to_s
           )
-          return [identifier.identifiable, false] if identifier
+          # A merged series resolves to its target; a deleted one (or one merged into a
+          # deleted target) resolves to nil, so the caller skips it.
+          return [identifier.identifiable.canonical, false] if identifier
 
           ::Books::Series.transaction do
             series = ::Books::Series.create!(title: title)

@@ -83,6 +83,36 @@ module Services
           refute_equal series_for(@gr_id), series_for(@gr_id + 1)
         end
 
+        test "apply links to the merge target" do
+          target = books_series(:live_target)
+          ::Identifier.create!(identifiable: books_series(:merged_into_live), identifier_type: :books_series_goodreads_id, value: "987100", source: :goodreads)
+
+          facts = ApplySeries.call(book: @book, entries: [entry(id: 987_100, position: "2")])
+
+          assert_equal [@book], target.reload.books.to_a
+          assert_equal 0, books_series(:merged_into_live).series_books.count
+          assert_equal "linked", facts.first["reason"]
+        end
+
+        test "apply skips a junk-deleted series" do
+          ::Identifier.create!(identifiable: books_series(:junk_deleted), identifier_type: :books_series_goodreads_id, value: "987101", source: :goodreads)
+
+          assert_no_difference ["::Books::Series.count", "::Books::SeriesBook.count"] do
+            facts = ApplySeries.call(book: @book, entries: [entry(id: 987_101)])
+            assert_equal "deleted_series", facts.first["reason"]
+            assert_not facts.first["applied"]
+          end
+        end
+
+        test "apply skips a series merged into a deleted target" do
+          ::Identifier.create!(identifiable: books_series(:merged_into_dead), identifier_type: :books_series_goodreads_id, value: "987102", source: :goodreads)
+
+          assert_no_difference ["::Books::Series.count", "::Books::SeriesBook.count"] do
+            facts = ApplySeries.call(book: @book, entries: [entry(id: 987_102)])
+            assert_equal "deleted_series", facts.first["reason"]
+          end
+        end
+
         test "an entry with no series id is invalid" do
           facts = ApplySeries.call(book: @book, entries: [entry(id: nil)])
           assert_equal "invalid", facts.first["reason"]
