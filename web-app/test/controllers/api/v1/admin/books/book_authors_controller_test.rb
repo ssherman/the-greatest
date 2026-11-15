@@ -39,6 +39,19 @@ module Api
             assert_equal ["author", 2, nil], [entry[:role], entry[:position], entry[:credited_as]]
           end
 
+          test "add without position on a book whose rows have no position goes last" do
+            @book.book_authors.update_all(position: nil)
+            add({author_id: @king.id})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal @king.id, json[:data].last[:id]
+          end
+
+          test "add with an unknown key is 422" do
+            add({author_id: @king.id, bogus: 1})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
           test "add keeps a given role and credited_as" do
             add({author_id: @king.id, role: "editor", credited_as: "X"})
             assert_api_response_conform(status: 200, api: :admin)

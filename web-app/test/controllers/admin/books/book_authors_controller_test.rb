@@ -54,6 +54,14 @@ module Admin
         assert_equal 3, ba.position
       end
 
+      test "update with a blank position clears it" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ba = @book.book_authors.create!(author: ::Books::Author.create!(name: "Clr Author", kind: :person), role: :author, position: 4)
+        patch admin_books_book_author_path(ba), params: {books_book_author: {position: ""}}
+        assert_redirected_to admin_books_book_path(@book)
+        assert_nil ba.reload.position
+      end
+
       test "destroy removes the association" do
         sign_in_as(@admin_user, stub_auth: true)
         ba = @book.book_authors.create!(author: ::Books::Author.create!(name: "Del Author", kind: :person), role: :author)

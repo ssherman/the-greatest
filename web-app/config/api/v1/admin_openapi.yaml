@@ -2548,10 +2548,9 @@ paths:
       x-mcp:
         description: >-
           Adds author `author_id` to the book `id` and returns the book's authors in order. Optional `role`
-          (`author` or `editor`), `position` (positive integer; defaults to the end) and `credited_as` (the
+          (`author` or `editor`), `position` (positive integer; defaults to the end of the list) and `credited_as` (the
           name as printed on this book). Ids come from get_admin_book and search_admin_authors. A 422 saying
-          the author is already on the book means use update_book_author instead. remove_book_author is the
-          only way to drop a wrong author, and adding the same author again later restores it.
+          the author is already on the book means use update_book_author instead.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:
@@ -2606,7 +2605,8 @@ paths:
           Changes the role, position or credited_as of author `author_id` on book `id` and returns the book's
           authors in order. Send only the keys to change; null clears `position` or `credited_as`. Ids come
           from get_admin_book and search_admin_authors. An author the book does not have is a 404: use
-          add_book_author for that.
+          add_book_author for that. Setting a position on one row while the
+          others have none moves that row ahead of them.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/author_id"

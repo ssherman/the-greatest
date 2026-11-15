@@ -53,6 +53,10 @@ module Services
         private_class_method :normalize
 
         def self.next_position(book)
+          # Most books hold only NULL positions, which sort last. Numbering the new
+          # row 1 would put it ahead of every one of them, so it stays NULL (last by id).
+          return nil if book.book_authors.where(position: nil).exists?
+
           (book.book_authors.maximum(:position) || 0) + 1
         end
         private_class_method :next_position
@@ -78,7 +82,7 @@ module Services
         private_class_method :bad_role
 
         def self.duplicate(author_id)
-          failure("Author #{author_id} is already on this book. Use update_book_author to change the role, position or credited_as.", :unprocessable)
+          failure("Author #{author_id} is already on this book; edit that entry instead.", :unprocessable)
         end
         private_class_method :duplicate
 

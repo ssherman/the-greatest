@@ -82,7 +82,11 @@ module Api
           def finish(book, action, author_id, result)
             unless result.success?
               code = (result.code == :not_found) ? :not_found : :unprocessable
-              return render_problem(::Api::Problem.new(code, detail: result.errors.join(", ")))
+              detail = result.errors.join(", ")
+              if action == :add && detail.include?("already on this book")
+                detail = "Author #{author_id} is already on this book. Use update_book_author to change the role, position or credited_as."
+              end
+              return render_problem(::Api::Problem.new(code, detail: detail))
             end
 
             Rails.logger.info("event=api_admin_book_author action=#{action} token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} " \

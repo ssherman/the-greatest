@@ -13,12 +13,20 @@ module Services
         test "add appends at the end by default" do
           result = Edit.add(book: @book, author_id: @other.id)
           assert result.success?
-          assert_equal 2, result.data.position
+          assert_equal @book.book_authors.where.not(id: result.data.id).maximum(:position) + 1, result.data.position
           assert_equal "author", result.data.role
         end
 
-        test "add defaults position to 1 when existing rows have none" do
+        test "add appends after rows with no position" do
           @book.book_authors.update_all(position: nil)
+          result = Edit.add(book: @book, author_id: @other.id)
+          assert result.success?
+          assert_nil result.data.position
+          assert_equal @other.id, @book.book_authors.reload.last.author_id
+        end
+
+        test "add gives position 1 to a book with no rows" do
+          @book.book_authors.destroy_all
           result = Edit.add(book: @book, author_id: @other.id)
           assert_equal 1, result.data.position
         end
@@ -34,7 +42,7 @@ module Services
             result = Edit.add(book: @book, author_id: @tolstoy.id)
             refute result.success?
             assert_equal :unprocessable, result.code
-            assert_equal ["Author #{@tolstoy.id} is already on this book. Use update_book_author to change the role, position or credited_as."], result.errors
+            assert_equal ["Author #{@tolstoy.id} is already on this book; edit that entry instead."], result.errors
           end
         end
 
