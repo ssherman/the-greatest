@@ -466,7 +466,10 @@ module Api
       end
 
       test "every documented response is reachable and conforms" do
-        EXERCISES.each do |(_method, _path, status), exercise|
+        EXERCISES.each_with_index do |((_method, _path, status), exercise), index|
+          # The admin tier allows 600 requests a minute per user and the map now
+          # sends more than that; start a fresh window every 100 exercises.
+          Rails.application.config.x.rate_limit_store.clear if (index % 100).zero?
           instance_exec(&exercise)
           assert_api_response_conform(status: Integer(status), api: :admin)
         end

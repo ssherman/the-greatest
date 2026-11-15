@@ -229,7 +229,7 @@ module Api
 
           test "create answers 400 for a missing name, wrong types and a malformed qid" do
             [{}, {birth_year: 1900}, {name: 5}, {name: "X", alternate_names: "x"}, {name: "X", birth_year: "abc"},
-              {name: "X", birth_year: 4000}, {name: "X", wikidata_qid: "7243"}, {name: "X", wikidata_qid: 42}].each do |body|
+              {name: "X", birth_year: 4000}, {name: "X", wikidata_qid: "7243"}, {name: "X", wikidata_qid: 42}, {name: "X", wikidata_qid: nil}].each do |body|
               assert_no_difference "::Books::Author.count" do
                 post_author(body)
               end

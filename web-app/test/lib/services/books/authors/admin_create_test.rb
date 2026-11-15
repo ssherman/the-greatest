@@ -60,6 +60,32 @@ module Services
           assert_equal [:conflict, holder], [result.code, result.data[:holder]]
         end
 
+        test "the id is locked before the holder check and a holder that appears under the lock is refused" do
+          rival = books_authors(:king)
+          AdminCreate.expects(:lock_qid).with(QID).once.with do
+            rival.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: QID, source: :admin)
+          end
+
+          result = nil
+          assert_no_difference("::Books::Author.count") do
+            result = AdminCreate.call(attrs: {"name" => "Late Twin"}, wikidata_qid: QID)
+          end
+
+          assert_equal [:conflict, rival], [result.code, result.data[:holder]]
+        end
+
+        test "no lock is taken without a qid" do
+          AdminCreate.expects(:lock_qid).never
+
+          assert AdminCreate.call(attrs: {"name" => "No Qid"}).success?
+        end
+
+        test "an unknown kind is unprocessable" do
+          result = AdminCreate.call(attrs: {"name" => "Odd", "kind" => "bogus"})
+
+          assert_equal :unprocessable, result.code
+        end
+
         test "a blank name is unprocessable" do
           result = nil
           assert_no_difference("::Books::Author.count") do
