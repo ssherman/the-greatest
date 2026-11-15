@@ -2482,7 +2482,7 @@ paths:
         Folds each series in `source_ids` (1 to 50, no repeats, never the target) into the series in the path, one at a time in the order given. A source's books move to the target; a book already in the target keeps the target's link and the source's link is dropped. Each source ends deleted with `merged_into_id` pointing at the target, and its Goodreads id now resolves to the target, so the merge sticks against the Goodreads enrichment. There is no undo.
         Everything is checked before any merge runs: each id must exist (404), the token's owner must be allowed to delete the target and every source (403), and no pair may be refused (422 lists each refused source as `id: reason`): a series cannot merge into itself, deleted series cannot be merged, and a merged series cannot be a target.
         If a merge still fails part way, the request stops and answers 422 with `merged`, `failed` and `not_attempted`; the sources already merged stay merged.
-        Send `dry_run: true` to run every check and see how many books each source would move and drop, each counted against the target as it is now, without changing anything. Requires `books:admin:merge`.
+        Send `dry_run: true` to run every check and see how many books each source would move and drop, exactly as a real merge would (sources sharing books with each other included), without changing anything. Requires `books:admin:merge`.
       x-mcp:
         description: >-
           Folds each series in `source_ids` (1 to 50 ids, never the target) into the target series `id`, which is the
@@ -2652,7 +2652,7 @@ paths:
           Removes book `book_id` from series `id` and returns the series with its remaining books. The book record is
           kept, but its position, numbered flag and label in this series are lost, and a representative book is cleared.
           Removing one book from a live series may be undone by the next Goodreads enrichment if Goodreads still lists the book there,
-          so to keep a book out for good, fix the Goodreads id or delete the series instead.
+          so if Goodreads wrongly lists the book in a junk series, delete or merge that series instead (that sticks).
         destructive: true
       parameters:
         - $ref: "#/components/parameters/id"

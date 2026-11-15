@@ -207,10 +207,26 @@ module Api
 
           # One source at a time, in order. A refusal that slips past the pre-checks (a
           # concurrent change) stops the batch; the sources already merged stay merged.
+          # A dry run runs the real merges inside a transaction and rolls it back, so its
+          # counts are exactly what a real merge would report, sources that share books
+          # with each other included. Merge has no callbacks or enqueues to undo.
           def run_merges(target, sources, dry_run)
+            outcome = nil
+            ::Books::Series.transaction do
+              outcome = merge_in_order(target, sources, dry_run)
+              raise ActiveRecord::Rollback if dry_run
+            end
+            return render(json: outcome[:failure], status: :unprocessable_entity, content_type: ::Api::Problem::CONTENT_TYPE) if outcome[:failure]
+
+            body = {data: {target: outcome[:target], sources: outcome[:rows]}}
+            body[:meta] = {dry_run: true} if dry_run
+            render json: body
+          end
+
+          def merge_in_order(target, sources, dry_run)
             rows = []
             sources.each_with_index do |source, index|
-              result = ::Services::Books::SeriesEdits::Merge.call(target: target, source: source, dry_run: dry_run)
+              result = ::Services::Books::SeriesEdits::Merge.call(target: target, source: source)
 
               unless result.success?
                 Rails.logger.info("event=api_admin_series_merge outcome=failed token_id=#{current_principal.token.id} " \
@@ -219,7 +235,7 @@ module Api
                 body = ::Api::Problem.new(:unprocessable, detail: "Merged #{rows.size} of #{sources.size}; #{source.id} failed: #{message}").to_h
                 body.merge!(merged: rows.map { |row| row[:id] }, failed: {id: source.id, message: message},
                   not_attempted: sources[(index + 1)..].map(&:id))
-                return render(json: body, status: :unprocessable_entity, content_type: ::Api::Problem::CONTENT_TYPE)
+                return {failure: body}
               end
 
               moved, dropped = result.data.values_at(:moved, :dropped)
@@ -227,9 +243,7 @@ module Api
               rows << {id: source.id, title: source.title, moved: moved, dropped: dropped}
             end
 
-            body = {data: {target: SeriesDetailResource.new(::Books::Series.find(target.id)).to_h, sources: rows}}
-            body[:meta] = {dry_run: true} if dry_run
-            render json: body
+            {rows: rows, target: SeriesDetailResource.new(::Books::Series.find(target.id)).to_h}
           end
 
           def param_in(name, allowed)

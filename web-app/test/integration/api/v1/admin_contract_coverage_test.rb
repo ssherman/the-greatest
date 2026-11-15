@@ -345,7 +345,10 @@ module Api
           ["POST", "/api/v1/admin/series", "400"] => -> { post "/api/v1/admin/series", params: {title: 5}, as: :json, headers: bearer(MERGE) },
           ["POST", "/api/v1/admin/series", "401"] => -> { post "/api/v1/admin/series", params: {title: "X"}, as: :json },
           ["POST", "/api/v1/admin/series", "403"] => -> { post "/api/v1/admin/series", params: {title: "X"}, as: :json, headers: bearer(READ) },
-          ["POST", "/api/v1/admin/series", "422"] => -> { post "/api/v1/admin/series", params: {title: " "}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series", "422"] => -> {
+            Identifier.create!(identifiable: books_series(:junk_deleted), identifier_type: :books_series_goodreads_id, value: "9000002", source: :admin)
+            post "/api/v1/admin/series", params: {title: "Claims A Deleted Id", goodreads_series_id: "9000002"}, as: :json, headers: bearer(MERGE)
+          },
           ["POST", "/api/v1/admin/series", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/series", params: {title: "X"}, as: :json, headers: bearer(MERGE) } },
           ["PATCH", "/api/v1/admin/series/{id}", "200"] => -> { patch series_path, params: {title: "Renamed Saga"}, as: :json, headers: bearer(MERGE) },
           ["PATCH", "/api/v1/admin/series/{id}", "400"] => -> { patch series_path, params: {}, as: :json, headers: bearer(MERGE) },

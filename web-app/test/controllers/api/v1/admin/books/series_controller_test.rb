@@ -214,6 +214,38 @@ module Api
             assert_api_response_conform(status: 422, api: :admin)
           end
 
+          test "create refuses a Goodreads id held by a soft-deleted series and creates nothing" do
+            Identifier.create!(identifiable: books_series(:junk_deleted), identifier_type: :books_series_goodreads_id, value: "888", source: :admin)
+
+            assert_no_difference -> { ::Books::Series.count } do
+              create_series({title: "Another", goodreads_series_id: "888"})
+            end
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "merge dry run of sources that share books matches the real merge and changes nothing" do
+            target = books_series(:live_target)
+            first = ::Books::Series.create!(title: "Dupe One")
+            second = ::Books::Series.create!(title: "Dupe Two")
+            [books_books(:war_and_peace), books_books(:crime_and_punishment)].each do |book|
+              ::Books::SeriesBook.create!(series: first, book: book, position: 1)
+              ::Books::SeriesBook.create!(series: second, book: book, position: 2)
+            end
+            ::Books::SeriesBook.create!(series: second, book: books_books(:of_mice_and_men), position: 3)
+            body = {source_ids: [first.id, second.id]}
+
+            merge(target, body.merge(dry_run: true))
+            assert_api_response_conform(status: 200, api: :admin)
+            dry = json[:data][:sources]
+            assert_equal [[2, 0], [1, 2]], dry.map { |row| [row[:moved], row[:dropped]] }
+            assert_equal [0, false, false], [target.series_books.count, first.reload.deleted?, second.reload.deleted?]
+            assert_equal [2, 3], [first.series_books.count, second.series_books.count]
+
+            merge(target, body)
+            assert_equal dry, json[:data][:sources]
+            assert_equal 3, target.series_books.count
+          end
+
           test "create with a blank title is 422 and a non-string or missing title is 400" do
             create_series({title: "  "})
             assert_api_response_conform(status: 422, api: :admin)
