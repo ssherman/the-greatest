@@ -158,7 +158,7 @@ paths:
         description: >-
           Returns the book `id` (from search_admin_books) with exactly the fields update_book takes: `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language` and `alternate_titles`.
           `cleared_fields` lists the fields an admin cleared on purpose. Read it before editing so a PATCH sends only what
-          changes. A 404 means no such book.
+          changes. `series` lists the live series the book is in, with its position in each. A 404 means no such book.
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
@@ -2195,6 +2195,129 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series:
+    x-domain: books
+    get:
+      operationId: listAdminSeries
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: List book series
+      description: |
+        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`max_books=1` finds single-book series); `sort` is `title` (default) or `book_count` (most books first). Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists book series by title. A legitimate series is a run of books the author or publisher presents as one
+          sequence; a single-book series is almost always a mistake. Deleted and merged series are hidden unless
+          `include_deleted` is true. `q` is a title substring, `max_books: 1` finds the single-book series worth
+          checking, `sort: book_count` puts the biggest first. Use it to find the integer series `id` that
+          get_admin_series takes.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A case-insensitive substring of the title.
+          schema:
+            type: string
+        - name: include_deleted
+          in: query
+          required: false
+          description: Also list deleted and merged series.
+          schema:
+            type: boolean
+            default: false
+        - name: min_books
+          in: query
+          required: false
+          description: Only series with at least this many books.
+          schema:
+            type: integer
+            minimum: 0
+        - name: max_books
+          in: query
+          required: false
+          description: Only series with at most this many books; 1 finds single-book series.
+          schema:
+            type: integer
+            minimum: 0
+        - name: sort
+          in: query
+          required: false
+          description: "`title` (default) or `book_count` (most books first, then id)."
+          schema:
+            type: string
+            enum: [title, book_count]
+            default: title
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of series.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminSeries
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One series, any status
+      description: The series with its representative book and every book in it, ordered by position (unpositioned last). Deleted and merged series answer too; a merged one carries `merged_into_id`. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one series by integer id (from list_admin_series), deleted and merged ones included, with its
+          Goodreads series id, representative book and every book in it: position, whether it is numbered, its
+          position label and its authors. Read it before editing, merging or deleting a series.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The series.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/merge:
     x-domain: books
     post:
@@ -2953,7 +3076,7 @@ components:
       properties:
         data:
           type: object
-          required: [id, slug, title, subtitle, sort_title, first_published_year, book_kind, original_language, alternate_titles, provisional, authors, cleared_fields]
+          required: [id, slug, title, subtitle, sort_title, first_published_year, book_kind, original_language, alternate_titles, provisional, authors, series, cleared_fields]
           properties:
             id: {type: integer}
             slug: {type: string}
@@ -2980,6 +3103,18 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/AdminBookAuthor"
+            series:
+              type: array
+              description: The live series the book is in, by title.
+              items:
+                type: object
+                required: [id, title, position, numbered, position_label]
+                properties:
+                  id: {type: integer}
+                  title: {type: string}
+                  position: {type: [number, "null"]}
+                  numbered: {type: boolean}
+                  position_label: {type: [string, "null"]}
             cleared_fields:
               type: array
               items: {type: string}
@@ -3173,6 +3308,73 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminCategory"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminSeries:
+      type: object
+      required: [id, slug, title, book_count, goodreads_series_id, deleted, merged_into_id]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        book_count: {type: integer, minimum: 0, description: Books linked to the series.}
+        goodreads_series_id: {type: [string, "null"]}
+        deleted: {type: boolean, description: True for a soft-deleted series and for one merged into another.}
+        merged_into_id: {type: [integer, "null"]}
+    AdminSeriesBook:
+      type: object
+      required: [id, title, slug, first_published_year, authors, position, numbered, position_label]
+      properties:
+        id: {type: integer}
+        title: {type: string}
+        slug: {type: string}
+        first_published_year: {type: [integer, "null"]}
+        authors:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+        position: {type: [number, "null"], description: "Place in the series, at most 2 decimals."}
+        numbered: {type: boolean}
+        position_label: {type: [string, "null"]}
+    AdminSeriesFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminSeries"
+        - type: object
+          required: [representative_book, books]
+          properties:
+            representative_book:
+              oneOf:
+                - {type: "null"}
+                - type: object
+                  required: [id, title]
+                  properties:
+                    id: {type: integer}
+                    title: {type: string}
+            books:
+              type: array
+              description: Ordered by position, unpositioned last, then link id.
+              items:
+                $ref: "#/components/schemas/AdminSeriesBook"
+    AdminSeriesDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminSeriesFull"
+    AdminSeriesCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminSeries"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

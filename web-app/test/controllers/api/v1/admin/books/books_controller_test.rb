@@ -118,7 +118,7 @@ module Api
             assert_api_response_conform(status: 200, api: :admin)
 
             data = json[:data]
-            assert_equal %i[id slug title subtitle sort_title first_published_year book_kind original_language alternate_titles provisional authors cleared_fields], data.keys
+            assert_equal %i[id slug title subtitle sort_title first_published_year book_kind original_language alternate_titles provisional authors series cleared_fields], data.keys
             assert_equal [@war.id, "War and Peace", 1869, "standalone", ["Voyna i mir"], false],
               [data[:id], data[:title], data[:first_published_year], data[:book_kind], data[:alternate_titles], data[:provisional]]
             assert_equal({id: @war.original_language_id, name: @war.original_language.name}, data[:original_language])
@@ -142,6 +142,25 @@ module Api
 
             assert_nil json[:data][:original_language]
             assert_equal [], json[:data][:cleared_fields]
+          end
+
+          test "show lists the live series the book is in, by title, and skips deleted ones" do
+            ::Books::SeriesBook.create!(series: books_series(:live_target), book: books_books(:got), position: 3.25, numbered: false, position_label: "Prequel")
+            ::Books::SeriesBook.create!(series: books_series(:junk_deleted), book: books_books(:got))
+
+            get "/api/v1/admin/books/#{books_books(:got).id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [
+              {id: books_series(:asoiaf).id, title: "A Song of Ice and Fire", position: 1.0, numbered: true, position_label: nil},
+              {id: books_series(:live_target).id, title: "Live Merge Target", position: 3.25, numbered: false, position_label: "Prequel"}
+            ], json[:data][:series]
+          end
+
+          test "show gives an empty series list for a book in none" do
+            get "/api/v1/admin/books/#{@mice.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+
+            assert_equal [], json[:data][:series]
           end
 
           test "show of an unknown book is a 404" do

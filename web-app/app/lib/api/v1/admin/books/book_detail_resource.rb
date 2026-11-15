@@ -28,6 +28,14 @@ module Api
               .map { |row| BookAuthorEntryResource.new(row).to_h }
           end
 
+          # Live series only (a deleted or merged series is not one the book belongs to
+          # any more), by title.
+          attribute :series do |book|
+            book.series_books.reject { |row| row.series.deleted? }.sort_by { |row| [row.series.title, row.id] }.map do |row|
+              {id: row.series.id, title: row.series.title, position: row.position&.to_f, numbered: row.numbered, position_label: row.position_label}
+            end
+          end
+
           attribute :cleared_fields do |book|
             book.cleared_fields.map(&:field_name).sort
           end
