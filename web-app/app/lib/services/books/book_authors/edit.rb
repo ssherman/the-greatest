@@ -56,12 +56,15 @@ module Services
         end
         private_class_method :normalize
 
-        # An author made by hand (or by an agent) has never been enriched. Its first book is the evidence the
-        # enrichment needs, so the first link starts the run, once: the author row lock makes a second parallel
-        # link wait for the first commit and then see its run. Planned inside the transaction, dispatched after
-        # commit, so a rollback leaves nothing. An author created with a QID already has a run and is left alone.
+        # An author's first book link starts its enrichment, if it has never been enriched: an author made by hand
+        # has no run until it has a book to enrich from. An author that already has other books (the migrated
+        # catalogue) is left alone, as is one with an earlier run (for instance an author created with a QID).
+        # Planned inside the transaction, dispatched after commit, so a rollback leaves nothing. Parallel first links
+        # need no lock: the index_workflow_runs_one_active unique index makes Planner reuse the active run.
         def self.enrich_on_first_book(author_id)
-          author = ::Books::Author.lock.find_by(id: author_id)
+          return unless ::Books::BookAuthor.where(author_id: author_id).count == 1
+
+          author = ::Books::Author.find_by(id: author_id)
           return unless author
           return if WorkflowRun.exists?(workflow: ::Workflows::Books::AuthorEnrichment.workflow, enrichable: author)
 

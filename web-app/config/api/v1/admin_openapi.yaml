@@ -3090,9 +3090,11 @@ paths:
       description: |
         Adds the author in `author_id` to the book. `role` is `author` (default) or `editor`; `position` is a positive integer and defaults to one past the highest position on the book; `credited_as` is the name as printed on this book, and blank is stored as null.
         An author already on the book is refused (422, change it with the update operation); an unknown author id is 422.
+        An author's first book link starts its enrichment if it has never been enriched.
         Returns the book's full author list ordered by position (nulls last), then row id. Requires `books:admin:write`, and the token's owner must be allowed to change the book.
       x-mcp:
         description: >-
+          An author's first book link starts its enrichment if it has never been enriched.
           Adds author `author_id` to the book `id` and returns the book's authors in order. Optional `role`
           (`author` or `editor`), `position` (positive integer; defaults to the end of the list) and `credited_as` (the
           name as printed on this book). Ids come from get_admin_book and search_admin_authors. A 422 saying

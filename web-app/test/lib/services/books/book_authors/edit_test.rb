@@ -135,6 +135,14 @@ module Services
           assert_equal 1, WorkflowRun.where(workflow: "books.author_enrichment", enrichable: @other).count
         end
 
+        test "linking a book to an existing author with other books and no run starts nothing" do
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
+          book = books_books(:got)
+          book.book_authors.where(author_id: @tolstoy.id).destroy_all
+
+          assert Edit.add(book: book, author_id: @tolstoy.id).success?
+        end
+
         test "a refused add starts no run" do
           ::Workflows::Books::AuthorEnrichment.expects(:start).never
 
