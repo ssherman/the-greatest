@@ -21,6 +21,22 @@ module Admin
         assert_equal "F. Author", @book.book_authors.order(:created_at).last.credited_as
       end
 
+      test "create without position appends" do
+        sign_in_as(@admin_user, stub_auth: true)
+        author = ::Books::Author.create!(name: "Tail Author", kind: :person)
+        max = @book.book_authors.maximum(:position)
+        post admin_books_book_book_authors_path(@book), params: {books_book_author: {author_id: author.id, role: "author", position: ""}}
+        assert_equal max + 1, @book.book_authors.find_by(author_id: author.id).position
+      end
+
+      test "create of an author already on the book is unprocessable" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("::Books::BookAuthor.count") do
+          post admin_books_book_book_authors_path(@book, format: :turbo_stream), params: {books_book_author: {author_id: @author.id, role: "author"}}
+        end
+        assert_response :unprocessable_entity
+      end
+
       test "create is forbidden for a regular user" do
         sign_in_as(@regular_user, stub_auth: true)
         assert_no_difference("::Books::BookAuthor.count") do
