@@ -23,7 +23,7 @@ module Api
           CREATE_FIELDS = %w[title goodreads_series_id].freeze
           UPDATE_FIELDS = %w[title representative_book_id goodreads_series_id].freeze
 
-          SORTS = %w[title book_count].freeze
+          SORTS = %w[title book_count id].freeze
 
           BOOK_COUNT_SQL = "(SELECT COUNT(*) FROM books_series_books WHERE books_series_books.series_id = books_series.id)"
 
@@ -46,6 +46,8 @@ module Api
             relation = relation.where("#{BOOK_COUNT_SQL} <= ?", max_books) if max_books
             relation = if sort == "book_count"
               relation.order(Arel.sql("#{BOOK_COUNT_SQL} DESC"), :id)
+            elsif sort == "id"
+              relation.order(:id)
             else
               relation.order(:title, :id)
             end

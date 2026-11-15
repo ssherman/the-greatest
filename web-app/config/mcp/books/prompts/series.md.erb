@@ -16,7 +16,8 @@ Tools:
 
 - `list_admin_series` lists series. Filters: `q` (title substring), `min_books`, `max_books`, `include_deleted`; sort by `title`, `book_count` or `id`. Start with `max_books=1` and `min_books=1`, since single-book series are where most junk is. Also look for titles that read like publisher lines. Page through the whole list.
 - `get_admin_series` shows one series with its books, their authors and their positions. `get_admin_book` shows which series a book is in. Use both before you decide.
-- `create_admin_series` (optional `goodreads_series_id`), `update_admin_series` (`title`, `representative_book_id`), `add_series_book`, `update_series_book` and `remove_series_book` (keyed by book id) fix the contents.
+- `create_admin_series` (optional `goodreads_series_id`), `update_admin_series` (`title`, `representative_book_id`, and `goodreads_series_id` on a series that has none), `add_series_book`, `update_series_book` and `remove_series_book` (keyed by book id) fix the contents.
+- A book in several series: usually one of them is a publisher line or imprint. Check each with `get_admin_series` and delete the one that is not a real series.
 - `delete_admin_series` and `merge_admin_series` take `dry_run`. In `merge_admin_series`, `id` is the series that survives and `source_ids` lists 1 to 50 series folded into it. Check you have not swapped them.
 
 Workflow:

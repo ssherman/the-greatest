@@ -2202,13 +2202,14 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: List book series
       description: |
-        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`min_books=1` with `max_books=1` finds single-book series); `sort` is `title` (default) or `book_count` (most books first). Requires `books:admin:read`.
+        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`min_books=1` with `max_books=1` finds single-book series); `sort` is `title` (default), `book_count` (most books first) or `id` (ascending). Requires `books:admin:read`.
       x-mcp:
         description: >-
-          Lists book series by title. A legitimate series is a run of books the author or publisher presents as one
-          sequence; a single-book series is almost always a mistake. Deleted and merged series are hidden unless
+          Lists book series by title. A legitimate series is a set of books meant to be read as one sequence or one
+          story world (the same characters, story or setting); publisher lines, imprints, format or subject
+          collections are not series. A legitimate series with one book in our catalogue is fine. Deleted and merged series are hidden unless
           `include_deleted` is true. `q` is a title substring, `min_books: 1` with `max_books: 1` finds the single-book series worth
-          checking (`max_books: 1` alone also returns series with no books), `sort: book_count` puts the biggest first. Use it to find the integer series `id` that
+          checking (`max_books: 1` alone also returns series with no books), `sort: book_count` puts the biggest first, `sort: id` goes by id. Use it to find the integer series `id` that
           get_admin_series takes.
       parameters:
         - name: q
@@ -2241,10 +2242,10 @@ paths:
         - name: sort
           in: query
           required: false
-          description: "`title` (default) or `book_count` (most books first, then id)."
+          description: "`title` (default), `book_count` (most books first, then id) or `id` (ascending)."
           schema:
             type: string
-            enum: [title, book_count]
+            enum: [title, book_count, id]
             default: title
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -2429,8 +2430,8 @@ paths:
         description: >-
           Soft-deletes a series AND REMOVES EVERY BOOK LINK to it; there is no undelete. The series keeps its Goodreads
           id, so the Goodreads enrichment does not bring it back, and the delete sticks against that enrichment.
-          `dry_run` defaults to false, so call with `dry_run: true` first, show the user the `book_count` it reports,
-          and run it again with `dry_run: false` only after the user agrees. If the books should survive in another
+          `dry_run` defaults to false, so call with `dry_run: true` first, read the `book_count` it reports, and run
+          it again with `dry_run: false` if that is what you meant to remove. If the books should survive in another
           series, use merge_admin_series instead; ids come from list_admin_series.
         destructive: true
       parameters:
@@ -2488,8 +2489,8 @@ paths:
           Folds each series in `source_ids` (1 to 50 ids, never the target) into the target series `id`, which is the
           series that survives. Their books move to the target (a book already there keeps the target's link) and each
           source is soft-deleted, with no undo. The merge sticks against the Goodreads enrichment: a source's Goodreads
-          id now resolves to the target. `dry_run` defaults to false, so call with `dry_run: true` first, show the user
-          each source's `moved` and `dropped` counts, and run it again with `dry_run: false` only after the user agrees.
+          id now resolves to the target. `dry_run` defaults to false, so call with `dry_run: true` first, read
+          each source's `moved` and `dropped` counts, and run it again with `dry_run: false` if they are what you expect.
           A real merge that fails part way answers 422 with `merged`, `failed` and `not_attempted`: report all three
           and do not retry blindly, because the sources already merged stay merged. Ids come from list_admin_series.
         destructive: true

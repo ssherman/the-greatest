@@ -68,6 +68,18 @@ module Api
             assert_equal [3, 1, 0], json[:data].map { |row| row[:book_count] }
           end
 
+          test "sort=id orders by id ascending, unlike the title order" do
+            short = create_series_sorting_first
+
+            list(sort: "id")
+            ids = json[:data].map { |row| row[:id] }
+            assert_equal ::Books::Series.active.order(:id).pluck(:id), ids
+            assert_equal short.id, ids.last
+
+            list
+            assert_equal short.id, json[:data].first[:id]
+          end
+
           test "equal book counts fall back to id" do
             first = create_series_sorting_first
             second = ::Books::Series.create!(title: "ZZZ Short Run")
