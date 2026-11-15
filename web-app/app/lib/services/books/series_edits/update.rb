@@ -48,7 +48,9 @@ module Services
           @series.title = @attrs["title"] if @attrs.key?("title")
 
           if @attrs.key?("goodreads_series_id")
-            error = attach_goodreads_id(@attrs["goodreads_series_id"].to_s)
+            value = @attrs["goodreads_series_id"].presence&.to_s
+            return failure("goodreads_series_id must not be blank.") unless value
+            error = attach_goodreads_id(value)
             return failure(error) if error
           end
 
@@ -58,8 +60,10 @@ module Services
 
         def attach_goodreads_id(value)
           existing = @series.identifiers.find_by(identifier_type: :books_series_goodreads_id)
-          return "Series #{@series.id} already has Goodreads series id #{value}." if existing
-          if (other = Create.holder_of(value))
+          return "Series #{@series.id} already has Goodreads series id #{existing.value}." if existing
+
+          GoodreadsIdLock.acquire(value)
+          if (other = GoodreadsIdLock.holder_of(value))
             return "Goodreads series id #{value} already belongs to series #{other.identifiable_id}."
           end
 

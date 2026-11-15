@@ -42,7 +42,7 @@
         <div class="card-body">
           <div class="flex items-center justify-between">
             <h2 class="card-title text-base">Images</h2>
-            <% if current_user_can_write? %>
+            <% if current_user_can_write? && !@series.deleted? %>
               <button class="btn btn-sm btn-ghost" onclick="add_series_image_modal.showModal()">+ Add</button>
             <% end %>
           </div>
@@ -87,7 +87,7 @@
     </div>
   </div>
 
-  <% if current_user_can_write? %>
+  <% if current_user_can_write? && !@series.deleted? %>
     <dialog id="add_series_image_modal" class="modal">
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Image</h3>

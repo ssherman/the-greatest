@@ -56,14 +56,14 @@ module Services
         end
 
         def find_or_create_series(goodreads_id, title)
-          identifier = ::Identifier.find_by(
-            identifier_type: :books_series_goodreads_id, value: goodreads_id.to_s
-          )
-          # A merged series resolves to its target; a deleted one (or one merged into a
-          # deleted target) resolves to nil, so the caller skips it.
-          return [identifier.identifiable.canonical, false] if identifier
-
           ::Books::Series.transaction do
+            # Same lock the admin/API create takes, so the two can't both claim the id.
+            Services::Books::SeriesEdits::GoodreadsIdLock.acquire(goodreads_id)
+            identifier = Services::Books::SeriesEdits::GoodreadsIdLock.holder_of(goodreads_id)
+            # A merged series resolves to its target; a deleted one (or one merged into a
+            # deleted target) resolves to nil, so the caller skips it.
+            next [identifier.identifiable.canonical, false] if identifier
+
             series = ::Books::Series.create!(title: title)
             series.identifiers.create!(identifier_type: :books_series_goodreads_id, value: goodreads_id.to_s, source: :goodreads)
             [series, true]

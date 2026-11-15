@@ -56,8 +56,17 @@ module Services
 
           assert_not result.success?
           assert_equal :unprocessable, result.code
-          assert_equal ["Series #{@series.id} already has Goodreads series id 888003."], result.errors
+          assert_equal ["Series #{@series.id} already has Goodreads series id 888002."], result.errors
           assert_equal ["888002"], @series.identifiers.pluck(:value)
+        end
+
+        test "a nil or blank goodreads id is refused" do
+          [nil, " "].each do |value|
+            result = Update.call(series: @series, attrs: {"goodreads_series_id" => value})
+            assert_not result.success?
+            assert_equal :unprocessable, result.code
+            assert_equal ["goodreads_series_id must not be blank."], result.errors
+          end
         end
 
         test "goodreads id another series holds is refused" do
