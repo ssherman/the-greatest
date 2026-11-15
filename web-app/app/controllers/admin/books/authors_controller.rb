@@ -34,9 +34,15 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
     assign_author_attributes(@author)
     authorize @author
 
-    if @author.save
-      redirect_to admin_books_author_path(@author), notice: "Author created."
+    attrs = author_params.to_h
+    raw = params.dig(:books_author, :alternate_names_string)
+    attrs["alternate_names"] = raw.to_s.split(",").map(&:strip).reject(&:blank?) unless raw.nil?
+    result = Services::Books::Authors::AdminCreate.call(attrs: attrs)
+
+    if result.success?
+      redirect_to admin_books_author_path(result.data[:author]), notice: "Author created."
     else
+      @author = result.data[:author]
       render :new, status: :unprocessable_entity
     end
   end

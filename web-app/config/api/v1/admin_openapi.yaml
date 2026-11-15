@@ -146,6 +146,57 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createAdminAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Create an author
+      description: |
+        Creates an author from a required `name`, with optional `alternate_names` (an array of strings), `birth_year` and `death_year` (integers from -3000 to 3000, or null) and `wikidata_qid` (Q followed by digits). A `wikidata_qid` is stored as an admin-sourced identifier and starts the author's enrichment. Malformed JSON, a missing `name`, a value of the wrong JSON type or a `wikidata_qid` that is not Q and digits is 400. An unknown key, a blank name or a failed validation is 422. A `wikidata_qid` another author already holds (provisional authors included) is 409, and the detail names that author's id and name. Returns the new author in the shape of get_admin_author. Requires `books:admin:write`, and the token's owner must be allowed to create authors.
+      x-mcp:
+        description: >-
+          Creates an author from a required `name`. Search first with search_admin_authors so you do not create a
+          duplicate. Pass `wikidata_qid` when you know it: it pins the right person and starts enrichment at once;
+          without it the author is enriched once it gets its first book. Optional: `alternate_names`, `birth_year`,
+          `death_year`. A 409 names the author who already has that Wikidata id. That is probably the same
+          person, so link your books to them instead of creating another. The response carries the new author's integer `id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminAuthorCreateRequest"
+      responses:
+        "201":
+          description: The author was created.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}:
     x-domain: books
     get:
@@ -3349,6 +3400,25 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: The request names something another record already holds (`conflict`); `detail` says which.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     Unprocessable:
       description: The request was understood but is not allowed or failed (`unprocessable`), for example merging a record into itself, or giving a category a name another one already uses.
       headers:
@@ -3399,7 +3469,7 @@ components:
           type: integer
         code:
           type: string
-          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, forbidden, not_found, invalid_parameter, unprocessable, rate_limited]
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, forbidden, not_found, invalid_parameter, conflict, unprocessable, rate_limited]
         detail:
           type: string
         merged:
@@ -3543,6 +3613,18 @@ components:
           type: array
           items: {type: string}
           description: Names of the fields whose value changed.
+    AdminAuthorCreateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, description: The author's name. Blank is a 422.}
+        alternate_names:
+          type: array
+          items: {type: string}
+        birth_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        death_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        wikidata_qid: {type: string, pattern: "^Q[0-9]+$", description: "The author's Wikidata id, e.g. Q7243. Refused (409) when another author holds it."}
     AdminAuthorUpdated:
       type: object
       required: [data, changed]

@@ -195,6 +195,80 @@ module Api
             patch "/api/v1/admin/authors/999999999", params: {sort_name: "x"}, as: :json, headers: bearer(ApiTokenSecrets::ADMIN)
             assert_api_response_conform(status: 404, api: :admin)
           end
+
+          # POST /api/v1/admin/authors
+
+          def post_author(body, token: ApiTokenSecrets::ADMIN)
+            post "/api/v1/admin/authors", params: body, as: :json, headers: bearer(token)
+          end
+
+          test "create makes the author and answers 201 in the shape of show" do
+            ::Workflows::Books::AuthorEnrichment.stubs(:start)
+
+            assert_difference "::Books::Author.count", 1 do
+              post_author({name: "New Hand Made", alternate_names: [" Alt ", "", "Alt"], birth_year: 1900, death_year: nil})
+            end
+            assert_api_response_conform(status: 201, api: :admin)
+
+            created = json[:data]
+            author = ::Books::Author.find(created[:id])
+            assert_equal ["New Hand Made", ["Alt"], 1900, nil], [author.name, author.alternate_names, author.birth_year, author.death_year]
+            get "/api/v1/admin/authors/#{author.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_equal json[:data].keys, created.keys
+          end
+
+          test "create with a qid stores it and starts the enrichment" do
+            ::Workflows::Books::AuthorEnrichment.expects(:start).once
+
+            post_author({name: "With Qid", wikidata_qid: "Q42"})
+
+            assert_api_response_conform(status: 201, api: :admin)
+            row = ::Books::Author.find(json[:data][:id]).identifiers.find_by!(identifier_type: :books_author_wikidata_qid)
+            assert_equal ["Q42", "admin"], [row.value, row.source]
+          end
+
+          test "create answers 400 for a missing name, wrong types and a malformed qid" do
+            [{}, {birth_year: 1900}, {name: 5}, {name: "X", alternate_names: "x"}, {name: "X", birth_year: "abc"},
+              {name: "X", birth_year: 4000}, {name: "X", wikidata_qid: "7243"}, {name: "X", wikidata_qid: 42}].each do |body|
+              assert_no_difference "::Books::Author.count" do
+                post_author(body)
+              end
+              assert_api_response_conform(status: 400, api: :admin)
+            end
+
+            post "/api/v1/admin/authors", params: "{nope", headers: bearer(ApiTokenSecrets::ADMIN).merge("CONTENT_TYPE" => "application/json")
+            assert_api_response_conform(status: 400, api: :admin)
+          end
+
+          test "create answers 422 for an unknown key and a blank name" do
+            assert_no_difference "::Books::Author.count" do
+              post_author({name: "X", gender: "male"})
+              assert_api_response_conform(status: 422, api: :admin)
+              assert_includes json[:detail], "gender"
+
+              post_author({name: "   "})
+              assert_api_response_conform(status: 422, api: :admin)
+            end
+          end
+
+          test "create answers 409 naming the author who holds the qid" do
+            @tolstoy.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q7243", source: :admin)
+
+            assert_no_difference "::Books::Author.count" do
+              post_author({name: "Another Tolstoy", wikidata_qid: "Q7243"})
+            end
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_includes json[:detail], @tolstoy.id.to_s
+            assert_includes json[:detail], @tolstoy.name
+          end
+
+          test "create refuses a read-only token and a member token" do
+            post_author({name: "X"}, token: ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 403, api: :admin)
+
+            post_author({name: "X"}, token: ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 403, api: :admin)
+          end
         end
       end
     end
