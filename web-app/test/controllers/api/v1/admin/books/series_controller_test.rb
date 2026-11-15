@@ -168,6 +168,245 @@ module Api
 
             assert_response :not_found
           end
+
+          # --- writes ---
+
+          MERGE = ApiTokenSecrets::ADMIN
+
+          def write_secret
+            @write_secret ||= Services::Api::Tokens.generate(
+              user: users(:admin_user), name: "series-write", scopes: ["books:admin:write"], expires_at: 1.day.from_now
+            ).data[:secret]
+          end
+
+          def raw(verb, path, body, token: MERGE)
+            send(verb, path, params: body, headers: bearer(token).merge("CONTENT_TYPE" => "application/json"))
+          end
+
+          def create_series(body, token: MERGE) = raw(:post, "/api/v1/admin/series", body.is_a?(String) ? body : body.to_json, token: token)
+
+          def change(series, body, token: MERGE) = raw(:patch, "/api/v1/admin/series/#{series.id}", body.is_a?(String) ? body : body.to_json, token: token)
+
+          def merge(target, body, token: MERGE) = raw(:post, "/api/v1/admin/series/#{target.id}/merge", body.to_json, token: token)
+
+          test "create makes a series with no Goodreads id" do
+            assert_difference -> { ::Books::Series.count }, 1 do
+              create_series({title: "Brand New Saga"})
+            end
+            assert_api_response_conform(status: 201, api: :admin)
+
+            assert_equal ["Brand New Saga", nil, 0], [json[:data][:title], json[:data][:goodreads_series_id], json[:data][:book_count]]
+          end
+
+          test "create with a Goodreads id stores it" do
+            create_series({title: "Brand New Saga", goodreads_series_id: "55555"})
+            assert_api_response_conform(status: 201, api: :admin)
+
+            assert_equal "55555", json[:data][:goodreads_series_id]
+          end
+
+          test "create refuses a Goodreads id another series holds and creates nothing" do
+            Identifier.create!(identifiable: @asoiaf, identifier_type: :books_series_goodreads_id, value: "777", source: :admin)
+
+            assert_no_difference -> { ::Books::Series.count } do
+              create_series({title: "Another", goodreads_series_id: "777"})
+            end
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "create with a blank title is 422 and a non-string or missing title is 400" do
+            create_series({title: "  "})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            create_series({title: 5})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            create_series({})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            create_series("not json")
+            assert_api_response_conform(status: 400, api: :admin)
+          end
+
+          test "create with an unknown key is 422" do
+            create_series({title: "X", bogus: 1})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update renames the series" do
+            change(@asoiaf, {title: "ASOIAF"})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal "ASOIAF", @asoiaf.reload.title
+            assert_equal "ASOIAF", json[:data][:title]
+          end
+
+          test "update with an empty body is 400 and an unknown key is 422" do
+            change(@asoiaf, {})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            change(@asoiaf, {bogus: 1})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update with wrong JSON types is 400" do
+            change(@asoiaf, {title: 5})
+            assert_response :bad_request
+            change(@asoiaf, {representative_book_id: "x"})
+            assert_response :bad_request
+            change(@asoiaf, {goodreads_series_id: 12})
+            assert_response :bad_request
+          end
+
+          test "update sets and clears the representative book" do
+            change(@asoiaf, {representative_book_id: books_books(:got).id})
+            assert_equal books_books(:got).id, @asoiaf.reload.representative_book_id
+
+            change(@asoiaf, {representative_book_id: nil})
+            assert_response :success
+            assert_nil @asoiaf.reload.representative_book_id
+          end
+
+          test "update refuses a representative book that is not in the series" do
+            change(@asoiaf, {representative_book_id: books_books(:war_and_peace).id})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update of a merged or deleted series is 422" do
+            change(books_series(:merged_into_live), {title: "Nope"})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            change(books_series(:junk_deleted), {title: "Nope"})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update of an unknown series is 404" do
+            raw(:patch, "/api/v1/admin/series/999999999", {title: "x"}.to_json)
+            assert_api_response_conform(status: 404, api: :admin)
+          end
+
+          test "delete soft-deletes the series and reports the book count" do
+            delete "/api/v1/admin/series/#{@asoiaf.id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [@asoiaf.id, true, 3], [json[:data][:id], json[:data][:deleted], json[:data][:book_count]]
+            assert_nil json[:meta]
+            assert @asoiaf.reload.deleted?
+            assert_equal 0, @asoiaf.series_books.count
+          end
+
+          test "delete dry run changes nothing" do
+            delete "/api/v1/admin/series/#{@asoiaf.id}", params: {dry_run: "true"}, headers: bearer(MERGE)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [3, true], [json[:data][:book_count], json[:meta][:dry_run]]
+            assert_not @asoiaf.reload.deleted?
+            assert_equal 3, @asoiaf.series_books.count
+          end
+
+          test "delete with a bad dry_run is 400 and of a deleted series is 422" do
+            delete "/api/v1/admin/series/#{@asoiaf.id}", params: {dry_run: "maybe"}, headers: bearer(MERGE)
+            assert_api_response_conform(status: 400, api: :admin)
+
+            delete "/api/v1/admin/series/#{books_series(:junk_deleted).id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "merge dry run reports moved and dropped and changes nothing" do
+            target = books_series(:live_target)
+            merge(target, {source_ids: [@asoiaf.id], dry_run: true})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [{id: @asoiaf.id, title: @asoiaf.title, moved: 3, dropped: 0}], json[:data][:sources]
+            assert_equal true, json[:meta][:dry_run]
+            assert_not @asoiaf.reload.deleted?
+            assert_equal 0, target.series_books.count
+          end
+
+          test "merge moves the books and soft-deletes the source" do
+            target = books_series(:live_target)
+            merge(target, {source_ids: [@asoiaf.id]})
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal 3, json[:data][:target][:books].size
+            assert_nil json[:meta]
+            assert_equal [true, target.id], [@asoiaf.reload.deleted?, @asoiaf.merged_into_id]
+          end
+
+          test "merge with a source equal to the target or a bad source_ids is 400" do
+            merge(@asoiaf, {source_ids: [@asoiaf.id]})
+            assert_api_response_conform(status: 400, api: :admin)
+
+            [[], "x", [1, 1], ["a"], (1..51).to_a].each do |bad|
+              merge(@asoiaf, {source_ids: bad})
+              assert_response :bad_request
+            end
+            merge(@asoiaf, {source_ids: [books_series(:live_target).id], dry_run: "yes"})
+            assert_response :bad_request
+          end
+
+          test "merge refusal is 422 and unknown ids are 404" do
+            merge(books_series(:live_target), {source_ids: [books_series(:junk_deleted).id]})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            merge(books_series(:live_target), {source_ids: [999_999_999]})
+            assert_api_response_conform(status: 404, api: :admin)
+
+            merge(books_series(:merged_into_live), {source_ids: [@asoiaf.id]})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "a failure part way reports merged, failed and not_attempted" do
+            target = books_series(:live_target)
+            second = ::Books::Series.create!(title: "Second")
+            third = ::Books::Series.create!(title: "Third")
+            ::Services::Books::SeriesEdits::Merge.stubs(:call).returns(
+              ::Services::Books::SeriesEdits::Result.new(success?: true, data: {moved: 1, dropped: 0}, errors: []),
+              ::Services::Books::SeriesEdits::Result.new(success?: false, errors: ["boom"], code: :unprocessable)
+            )
+
+            merge(target, {source_ids: [@asoiaf.id, second.id, third.id]})
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_equal [@asoiaf.id], json[:merged]
+            assert_equal second.id, json[:failed][:id]
+            assert_equal [third.id], json[:not_attempted]
+          end
+
+          test "read and write tokens are refused on delete and merge, a read token on create and update" do
+            delete "/api/v1/admin/series/#{@asoiaf.id}", headers: bearer(write_secret)
+            assert_response :forbidden
+            merge(books_series(:live_target), {source_ids: [@asoiaf.id]}, token: write_secret)
+            assert_response :forbidden
+            merge(books_series(:live_target), {source_ids: [@asoiaf.id]}, token: READ)
+            assert_response :forbidden
+            create_series({title: "x"}, token: READ)
+            assert_response :forbidden
+            change(@asoiaf, {title: "x"}, token: READ)
+            assert_response :forbidden
+          end
+
+          test "a write token can create and update" do
+            create_series({title: "Written"}, token: write_secret)
+            assert_response :created
+            change(@asoiaf, {title: "Rewritten"}, token: write_secret)
+            assert_response :success
+          end
+
+          test "an account the policy refuses gets 403" do
+            ::Books::SeriesPolicy.any_instance.stubs(:create?).returns(false)
+            ::Books::SeriesPolicy.any_instance.stubs(:update?).returns(false)
+            ::Books::SeriesPolicy.any_instance.stubs(:destroy?).returns(false)
+
+            create_series({title: "x"})
+            assert_response :forbidden
+            change(@asoiaf, {title: "x"})
+            assert_response :forbidden
+            delete "/api/v1/admin/series/#{@asoiaf.id}", headers: bearer(MERGE)
+            assert_response :forbidden
+            merge(books_series(:live_target), {source_ids: [@asoiaf.id]})
+            assert_response :forbidden
+          end
         end
       end
     end

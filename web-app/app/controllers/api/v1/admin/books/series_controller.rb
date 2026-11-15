@@ -6,12 +6,22 @@ module Api
       module Books
         # GET /api/v1/admin/series     -- list; deleted series hidden unless include_deleted=true
         # GET /api/v1/admin/series/:id -- detail with books, any status
+        # POST /api/v1/admin/series -- create
+        # PATCH /api/v1/admin/series/:id -- rename, set the representative book or Goodreads id
+        # DELETE /api/v1/admin/series/:id -- soft delete (removes every book link)
+        # POST /api/v1/admin/series/:id/merge -- fold up to 50 sources into :id
         #
         # Root-anchor every ::Books:: reference in this namespace.
         class SeriesController < BaseController
-          include ::Api::V1::Admin::StrictIds
+          include SeriesWrites
 
-          require_scopes index: "books:admin:read", show: "books:admin:read"
+          require_scopes index: "books:admin:read", show: "books:admin:read",
+            create: "books:admin:write", update: "books:admin:write",
+            merge: "books:admin:merge", destroy: "books:admin:merge"
+
+          MAX_MERGE_SOURCES = 50
+          CREATE_FIELDS = %w[title goodreads_series_id].freeze
+          UPDATE_FIELDS = %w[title representative_book_id goodreads_series_id].freeze
 
           SORTS = %w[title book_count].freeze
 
@@ -60,7 +70,167 @@ module Api
             render json: {data: SeriesDetailResource.new(series).to_h}
           end
 
+          def create
+            return render_forbidden unless ::Books::SeriesPolicy.new(current_principal.user, ::Books::Series.new).create?
+
+            body = json_body
+            return bad_body("The body must be a JSON object with title.") if body.nil?
+
+            unknown = body.keys - CREATE_FIELDS
+            return unknown_fields(unknown, CREATE_FIELDS) if unknown.any?
+            return bad_body("title is required") unless body.key?("title")
+
+            result = ::Services::Books::SeriesEdits::Create.call(attrs: typed_attrs(body))
+            return refuse(result) unless result.success?
+
+            log_series("create", result.data.id)
+            render_series(result.data, status: :created)
+          end
+
+          def update
+            series = find_series or return
+            return render_forbidden unless ::Books::SeriesPolicy.new(current_principal.user, series).update?
+
+            body = json_body
+            return bad_body("The body must be a JSON object with the fields to change.") if body.blank?
+
+            unknown = body.keys - UPDATE_FIELDS
+            return unknown_fields(unknown, UPDATE_FIELDS) if unknown.any?
+
+            result = ::Services::Books::SeriesEdits::Update.call(series: series, attrs: typed_attrs(body))
+            return refuse(result) unless result.success?
+
+            log_series("update", series.id, " changed=#{body.keys.sort.join(",")}")
+            render_series(series)
+          end
+
+          def destroy
+            dry_run = strict_boolean(:dry_run)
+            return if performed?
+
+            series = find_series or return
+            unless ::Books::SeriesPolicy.new(current_principal.user, series).destroy?
+              return render_forbidden("Your account may not delete series #{series.id}.")
+            end
+
+            result = ::Services::Books::SeriesEdits::Delete.call(series: series, dry_run: dry_run)
+            return refuse(result) unless result.success?
+
+            book_count = result.data[:book_count]
+            log_series("delete", series.id, " book_count=#{book_count}") unless dry_run
+            body = {data: {id: series.id, deleted: true, book_count: book_count}}
+            body[:meta] = {dry_run: true} if dry_run
+            render json: body
+          end
+
+          # The target is the path series. Nothing merges until the body, every record,
+          # the policy and each pair's preconditions have passed; a merge cannot be undone.
+          def merge
+            body = json_body
+            return bad_body("The body must be a JSON object with source_ids.") if body.nil?
+
+            unknown = body.keys - %w[source_ids dry_run]
+            return unknown_fields(unknown, %w[source_ids dry_run]) if unknown.any?
+
+            source_ids = parse_source_ids(body["source_ids"])
+            return if performed?
+
+            dry_run = body_dry_run(body)
+            return if performed?
+
+            target = ::Books::Series.find_by(id: params[:id])
+            return render_problem(::Api::Problem.new(:not_found, detail: "No target series #{params[:id]}.")) unless target
+
+            sources = []
+            source_ids.each do |id|
+              source = ::Books::Series.find_by(id: id)
+              return render_problem(::Api::Problem.new(:not_found, detail: "No source series #{id}.")) unless source
+
+              sources << source
+            end
+
+            ([["target", target]] + sources.map { |source| ["source", source] }).each do |role, record|
+              next if ::Books::SeriesPolicy.new(current_principal.user, record).destroy?
+
+              return render_forbidden("Your account may not delete the #{role} series #{record.id}.")
+            end
+
+            refused = sources.filter_map do |source|
+              message = ::Services::Books::SeriesEdits::Merge.refusal(source: source, target: target)
+              "#{source.id}: #{message}" if message
+            end
+            return render_problem(::Api::Problem.new(:unprocessable, detail: refused.join("; "))) if refused.any?
+
+            run_merges(target, sources, dry_run)
+          end
+
           private
+
+          def typed_attrs(body)
+            body.each_with_object({}) do |(key, value), attrs|
+              attrs[key] = case key
+              when "title", "goodreads_series_id"
+                typed_string!(key, value)
+              when "representative_book_id"
+                if !value.nil? && !(value.is_a?(Integer) && value >= 1)
+                  raise ::Api::Page::InvalidParameter, "representative_book_id must be a positive integer or null"
+                end
+                value
+              end
+            end
+          end
+
+          # 1..50 distinct positive integers that do not include the target. Renders the 400
+          # itself and returns nil (callers check performed?).
+          def parse_source_ids(raw)
+            unless raw.is_a?(Array) && raw.size.between?(1, MAX_MERGE_SOURCES)
+              return bad_body("source_ids must be an array of 1 to #{MAX_MERGE_SOURCES} ids")
+            end
+
+            ids = raw.map { |value| parse_id(value) }
+            return bad_body("source_ids must be positive integers") if ids.any?(&:nil?)
+            return bad_body("source_ids must not repeat an id") if ids.uniq.size != ids.size
+            return bad_body("source_ids must not include the target series") if ids.include?(params[:id].to_i)
+
+            ids
+          end
+
+          def body_dry_run(body)
+            return false unless body.key?("dry_run")
+
+            case body["dry_run"]
+            when true, "true" then true
+            when false, "false" then false
+            else bad_body("dry_run must be true or false")
+            end
+          end
+
+          # One source at a time, in order. A refusal that slips past the pre-checks (a
+          # concurrent change) stops the batch; the sources already merged stay merged.
+          def run_merges(target, sources, dry_run)
+            rows = []
+            sources.each_with_index do |source, index|
+              result = ::Services::Books::SeriesEdits::Merge.call(target: target, source: source, dry_run: dry_run)
+
+              unless result.success?
+                Rails.logger.info("event=api_admin_series_merge outcome=failed token_id=#{current_principal.token.id} " \
+                  "user_id=#{current_principal.user.id} source_id=#{source.id} target_id=#{target.id}")
+                message = result.errors.join(", ")
+                body = ::Api::Problem.new(:unprocessable, detail: "Merged #{rows.size} of #{sources.size}; #{source.id} failed: #{message}").to_h
+                body.merge!(merged: rows.map { |row| row[:id] }, failed: {id: source.id, message: message},
+                  not_attempted: sources[(index + 1)..].map(&:id))
+                return render(json: body, status: :unprocessable_entity, content_type: ::Api::Problem::CONTENT_TYPE)
+              end
+
+              moved, dropped = result.data.values_at(:moved, :dropped)
+              log_series("merge", source.id, " target_id=#{target.id} moved=#{moved} dropped=#{dropped}") unless dry_run
+              rows << {id: source.id, title: source.title, moved: moved, dropped: dropped}
+            end
+
+            body = {data: {target: SeriesDetailResource.new(::Books::Series.find(target.id)).to_h, sources: rows}}
+            body[:meta] = {dry_run: true} if dry_run
+            render json: body
+          end
 
           def param_in(name, allowed)
             value = params[name]
