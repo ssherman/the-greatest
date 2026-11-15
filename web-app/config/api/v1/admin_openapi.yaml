@@ -158,7 +158,7 @@ paths:
         description: >-
           Returns the book `id` (from search_admin_books) with exactly the fields update_book takes: `title`, `subtitle`, `sort_title`, `first_published_year`, `book_kind`, `original_language` and `alternate_titles`.
           `cleared_fields` lists the fields an admin cleared on purpose. Read it before editing so a PATCH sends only what
-          changes. A 404 means no such book.
+          changes. `series` lists the live series the book is in, with its position in each. A 404 means no such book.
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
@@ -2195,6 +2195,501 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series:
+    x-domain: books
+    get:
+      operationId: listAdminSeries
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: List book series
+      description: |
+        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`min_books=1` with `max_books=1` finds single-book series); `sort` is `title` (default), `book_count` (most books first) or `id` (ascending). Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists book series by title. A legitimate series is a set of books meant to be read as one sequence or one
+          story world (the same characters, story or setting); publisher lines, imprints, format or subject
+          collections are not series. A legitimate series with one book in our catalogue is fine. Deleted and merged series are hidden unless
+          `include_deleted` is true. `q` is a title substring, `min_books: 1` with `max_books: 1` finds the single-book series worth
+          checking (`max_books: 1` alone also returns series with no books), `sort: book_count` puts the biggest first, `sort: id` goes by id. Use it to find the integer series `id` that
+          get_admin_series takes.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A case-insensitive substring of the title.
+          schema:
+            type: string
+        - name: include_deleted
+          in: query
+          required: false
+          description: Also list deleted and merged series.
+          schema:
+            type: boolean
+            default: false
+        - name: min_books
+          in: query
+          required: false
+          description: Only series with at least this many books.
+          schema:
+            type: integer
+            minimum: 0
+        - name: max_books
+          in: query
+          required: false
+          description: Only series with at most this many books; with `min_books=1`, 1 finds single-book series (alone it includes empty series).
+          schema:
+            type: integer
+            minimum: 0
+        - name: sort
+          in: query
+          required: false
+          description: "`title` (default), `book_count` (most books first, then id) or `id` (ascending)."
+          schema:
+            type: string
+            enum: [title, book_count, id]
+            default: title
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of series.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createAdminSeries
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Create a series
+      description: |
+        Creates a series from a required `title`. `goodreads_series_id` (a string of digits, the number in goodreads.com/series/<digits>-name) is optional and is stored as an admin-sourced identifier. Refused (422) when the title is blank, when the id is blank or not all digits (a slug or a URL is refused), or when another series, deleted ones included, already holds that Goodreads id: a deleted series keeps its Goodreads id, so it cannot be claimed twice. Returns the new series with its books. Requires `books:admin:write`, and the token's owner must be allowed to create series.
+      x-mcp:
+        description: >-
+          Creates a series from a required `title`, optionally with `goodreads_series_id` (only the digits from goodreads.com/series/<digits>-name; a slug or URL is refused). Search with
+          list_admin_series first so you do not create a duplicate, and pass the Goodreads series id when you know it:
+          it is what lets the Goodreads enrichment keep adding books to this series. It is refused (422) when another
+          series, a deleted one included, already holds that Goodreads id. The response carries the new series' integer `id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSeriesCreateRequest"
+      responses:
+        "201":
+          description: The series was created.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminSeries
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One series, any status
+      description: The series with its representative book and every book in it, ordered by position (unpositioned last). Deleted and merged series answer too; a merged one carries `merged_into_id`. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one series by integer id (from list_admin_series), deleted and merged ones included, with its
+          Goodreads series id, representative book and every book in it: position, whether it is numbered, its
+          position label and its authors. Read it before editing, merging or deleting a series.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The series.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateAdminSeries
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a series
+      description: |
+        Changes only the keys sent: `title`, `representative_book_id` (a book already in the series, or null to clear it) and `goodreads_series_id` (a string of digits from goodreads.com/series/<digits>-name, accepted only while the series has none; an existing id is never replaced). An empty body or a value of the wrong JSON type is 400; an unknown key, a blank title, a representative book that is not in the series, a blank or non-digit Goodreads id, a Goodreads id another series holds, or a deleted or merged series is 422. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+      x-mcp:
+        description: >-
+          Edits one series by integer id (from list_admin_series). Send only the keys to change: `title`,
+          `representative_book_id` (a book already in the series; null clears it) and `goodreads_series_id` (only the digits from
+          goodreads.com/series/<digits>-name, and only while the series has none). A deleted or merged series cannot be edited (422). To change which books are in the
+          series or their positions use add_series_book, update_series_book and remove_series_book.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSeriesUpdateRequest"
+      responses:
+        "200":
+          description: The series after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteAdminSeries
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Soft-delete a series
+      description: |
+        Marks the series deleted, REMOVES EVERY ONE OF ITS BOOK LINKS and clears its representative book. The row and its Goodreads id stay, so the Goodreads enrichment will not recreate the series or relink its books: a delete sticks. There is no undelete. A series that is already deleted is refused (422).
+        Send `dry_run=true` to see how many book links would be removed without changing anything. Requires `books:admin:merge`, and the token's owner must be allowed to delete series.
+      x-mcp:
+        description: >-
+          Soft-deletes a series AND REMOVES EVERY BOOK LINK to it; there is no undelete. The series keeps its Goodreads
+          id, so the Goodreads enrichment does not bring it back, and the delete sticks against that enrichment.
+          `dry_run` defaults to false, so call with `dry_run: true` first, read the `book_count` it reports, and run
+          it again with `dry_run: false` if that is what you meant to remove. If the books should survive in another
+          series, use merge_admin_series instead; ids come from list_admin_series.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: dry_run
+          in: query
+          required: false
+          description: "`true` reports what would be removed and changes nothing. Default `false`. Only `true` and `false` are accepted; anything else is a 400."
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          description: The series was deleted (or, for a dry run, would be).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDelete"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series/{id}/merge:
+    x-domain: books
+    post:
+      operationId: mergeAdminSeries
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Merge series into this one
+      description: |
+        Folds each series in `source_ids` (1 to 50, no repeats, never the target) into the series in the path, one at a time in the order given. A source's books move to the target; a book already in the target keeps the target's link and the source's link is dropped. Each source ends deleted with `merged_into_id` pointing at the target, and its Goodreads id now resolves to the target, so the merge sticks against the Goodreads enrichment. There is no undo.
+        Everything is checked before any merge runs: each id must exist (404), the token's owner must be allowed to delete the target and every source (403), and no pair may be refused (422 lists each refused source as `id: reason`): a series cannot merge into itself, deleted series cannot be merged, and a merged series cannot be a target.
+        If a merge still fails part way, the request stops and answers 422 with `merged`, `failed` and `not_attempted`; the sources already merged stay merged.
+        Send `dry_run: true` to run every check and see how many books each source would move and drop, exactly as a real merge would (sources sharing books with each other included), without changing anything. Requires `books:admin:merge`.
+      x-mcp:
+        description: >-
+          Folds each series in `source_ids` (1 to 50 ids, never the target) into the target series `id`, which is the
+          series that survives. Their books move to the target (a book already there keeps the target's link) and each
+          source is soft-deleted, with no undo. The merge sticks against the Goodreads enrichment: a source's Goodreads
+          id now resolves to the target. `dry_run` defaults to false, so call with `dry_run: true` first, read
+          each source's `moved` and `dropped` counts, and run it again with `dry_run: false` if they are what you expect.
+          A real merge that fails part way answers 422 with `merged`, `failed` and `not_attempted`: report all three
+          and do not retry blindly, because the sources already merged stay merged. Ids come from list_admin_series.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSeriesMergeRequest"
+      responses:
+        "200":
+          description: The sources were merged (or, for a dry run, would be).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesMerge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series/{id}/books:
+    x-domain: books
+    post:
+      operationId: addSeriesBook
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add a book to a series
+      description: |
+        Links the book in `book_id` to the series. Optional `position` (a number with at most 2 decimals, e.g. 1.5 for a novella between books 1 and 2; default none), `numbered` (default true) and `position_label` (free text such as "Book 2"; blank is stored as null). A book already in the series is refused (422, change it with the update operation), as is an unknown book id or a deleted or merged series. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+      x-mcp:
+        description: >-
+          Adds book `book_id` to series `id` and returns the series with all its books. Optional `position` (number,
+          at most 2 decimals), `numbered` (boolean, default true) and `position_label`. A 422 saying the book is already
+          in the series means use update_series_book. Ids come from list_admin_series, get_admin_series and
+          search_admin_books.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSeriesBookAddRequest"
+      responses:
+        "200":
+          description: The series after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/series/{id}/books/{book_id}:
+    x-domain: books
+    patch:
+      operationId: updateSeriesBook
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Change a book's place in a series
+      description: |
+        Changes only the keys sent: `position` (number with at most 2 decimals, or null to clear), `numbered` (boolean) and `position_label` (string, or null or blank to clear). An empty body or a value of the wrong JSON type is 400, an unknown key is 422, and a book the series does not contain is 404; a deleted or merged series is 422. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+      x-mcp:
+        description: >-
+          Changes the position, numbered flag or position_label of book `book_id` in series `id` and returns the series
+          with all its books. Send only the keys to change; null clears `position` or `position_label`. A book the series
+          does not contain is a 404: use add_series_book for that.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/book_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSeriesBookUpdateRequest"
+      responses:
+        "200":
+          description: The series after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: removeSeriesBook
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Remove a book from a series
+      description: |
+        Takes the book out of the series; the book record is kept, but the link's position, numbered flag and label are lost. If the book was the series' representative, that is cleared. A book the series does not contain is 404; a deleted or merged series is 422. Returns the series with its remaining books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+      x-mcp:
+        description: >-
+          Removes book `book_id` from series `id` and returns the series with its remaining books. The book record is
+          kept, but its position, numbered flag and label in this series are lost, and a representative book is cleared.
+          Removing one book from a live series may be undone by the next Goodreads enrichment if Goodreads still lists the book there,
+          so if Goodreads wrongly lists the book in a junk series, delete or merge that series instead (that sticks).
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/book_id"
+      responses:
+        "200":
+          description: The series after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSeriesDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/merge:
     x-domain: books
     post:
@@ -2757,6 +3252,14 @@ components:
       schema:
         type: integer
         minimum: 1
+    book_id:
+      name: book_id
+      in: path
+      required: true
+      description: The book's integer id.
+      schema:
+        type: integer
+        minimum: 1
   headers:
     X-RateLimit-Limit:
       description: Requests allowed per calendar minute.
@@ -2953,7 +3456,7 @@ components:
       properties:
         data:
           type: object
-          required: [id, slug, title, subtitle, sort_title, first_published_year, book_kind, original_language, alternate_titles, provisional, authors, cleared_fields]
+          required: [id, slug, title, subtitle, sort_title, first_published_year, book_kind, original_language, alternate_titles, provisional, authors, series, cleared_fields]
           properties:
             id: {type: integer}
             slug: {type: string}
@@ -2980,6 +3483,18 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/AdminBookAuthor"
+            series:
+              type: array
+              description: The live series the book is in, by title.
+              items:
+                type: object
+                required: [id, title, position, numbered, position_label]
+                properties:
+                  id: {type: integer}
+                  title: {type: string}
+                  position: {type: [number, "null"]}
+                  numbered: {type: boolean}
+                  position_label: {type: [string, "null"]}
             cleared_fields:
               type: array
               items: {type: string}
@@ -3173,6 +3688,177 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminCategory"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminSeries:
+      type: object
+      required: [id, slug, title, book_count, goodreads_series_id, deleted, merged_into_id]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        book_count: {type: integer, minimum: 0, description: Books linked to the series.}
+        goodreads_series_id: {type: [string, "null"]}
+        deleted: {type: boolean, description: True for a soft-deleted series and for one merged into another.}
+        merged_into_id: {type: [integer, "null"]}
+    AdminSeriesBook:
+      type: object
+      required: [id, title, slug, first_published_year, authors, position, numbered, position_label]
+      properties:
+        id: {type: integer}
+        title: {type: string}
+        slug: {type: string}
+        first_published_year: {type: [integer, "null"]}
+        authors:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+        position: {type: [number, "null"], description: "Place in the series, at most 2 decimals."}
+        numbered: {type: boolean}
+        position_label: {type: [string, "null"]}
+    AdminSeriesFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminSeries"
+        - type: object
+          required: [representative_book, books]
+          properties:
+            representative_book:
+              oneOf:
+                - {type: "null"}
+                - type: object
+                  required: [id, title]
+                  properties:
+                    id: {type: integer}
+                    title: {type: string}
+            books:
+              type: array
+              description: Ordered by position, unpositioned last, then link id.
+              items:
+                $ref: "#/components/schemas/AdminSeriesBook"
+    AdminSeriesDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminSeriesFull"
+    AdminSeriesPosition:
+      type: [number, "null"]
+      minimum: -999999.99
+      maximum: 999999.99
+      description: "Place in the series: a JSON number with at most 2 decimals (1.5 sits between 1 and 2), or null for none. Strings and booleans are a 400."
+    AdminSeriesCreateRequest:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title: {type: string, description: The series title. Blank is a 422.}
+        goodreads_series_id: {type: string, pattern: "^[0-9]+$", description: "The digits from the Goodreads series URL (goodreads.com/series/<digits>-name), as a string. Refused (422) when another series holds it."}
+    AdminSeriesUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: {type: string}
+        representative_book_id:
+          description: A book already in the series, or null to clear it. A JSON integer.
+          type: [integer, "null"]
+          minimum: 1
+        goodreads_series_id: {type: string, pattern: "^[0-9]+$", description: "The digits from goodreads.com/series/<digits>-name. Accepted only while the series has none."}
+    AdminSeriesMergeRequest:
+      type: object
+      required: [source_ids]
+      additionalProperties: false
+      properties:
+        source_ids:
+          description: The series to fold into the one in the path and soft-delete. 1 to 50 distinct ids, none the target. Each is a JSON integer, or a string of plain decimal digits.
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            oneOf:
+              - {type: integer, minimum: 1}
+              - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        dry_run: {type: boolean, default: false, description: Run every check and report without merging.}
+    AdminSeriesMerge:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [target, sources]
+          properties:
+            target:
+              description: The surviving series, as it is after the merges (as it is now, for a dry run).
+              $ref: "#/components/schemas/AdminSeriesFull"
+            sources:
+              description: One row per source, in order. On a dry run, counts are what would happen.
+              type: array
+              items:
+                type: object
+                required: [id, title, moved, dropped]
+                properties:
+                  id: {type: integer}
+                  title: {type: string}
+                  moved: {type: integer, minimum: 0, description: Books linked to the target by the merge.}
+                  dropped: {type: integer, minimum: 0, description: "Source links dropped because the book is already in the target."}
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+    AdminSeriesDelete:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, deleted, book_count]
+          properties:
+            id: {type: integer}
+            deleted: {type: boolean}
+            book_count: {type: integer, minimum: 0, description: Book links removed (or, on a dry run, that would be).}
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+    AdminSeriesBookAddRequest:
+      type: object
+      required: [book_id]
+      additionalProperties: false
+      properties:
+        book_id:
+          description: The book to add. A JSON integer, or a string of plain decimal digits.
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        position:
+          $ref: "#/components/schemas/AdminSeriesPosition"
+        numbered: {type: boolean, default: true}
+        position_label: {type: [string, "null"], description: "Free text such as \"Book 2\"; blank is stored as null."}
+    AdminSeriesBookUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        position:
+          $ref: "#/components/schemas/AdminSeriesPosition"
+        numbered: {type: boolean}
+        position_label: {type: [string, "null"]}
+    AdminSeriesCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminSeries"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

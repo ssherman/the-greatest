@@ -198,7 +198,7 @@ Identifier tools:
 - `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
 - `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
 
-Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 49 tools (the description tools below, the book and author field tools in "Book and author field edits", the repair verdict tools in "Repair verdicts" and the book author tools in "Book authors" included).
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 58 tools (the series tools in "Series" and the description tools below, the book and author field tools in "Book and author field edits", the repair verdict tools in "Repair verdicts" and the book author tools in "Book authors" included).
 
 The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
 
@@ -214,6 +214,20 @@ The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads re
 - `bulk_approve_repair_verdicts` (`books:admin:merge`). Body `{ids: [...]}`, 1 to 100.
 
 Nothing applies on approval: the matching apply task acts on approved verdicts later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds). The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
+
+## Series
+
+Nine admin tools clean up the book series that the Goodreads enrichment created (`Services::Books::GoodreadsEnrichment::ApplySeries`), so the public site can later show "Book 3 of ..." on a book's page. The admin series pages and the API call the same services under `Services::Books::SeriesEdits`, so the rules cannot drift. Spec: `docs/superpowers/specs/2026-11-14-admin-mcp-series-design.md`.
+
+- `list_admin_series` and `get_admin_series` (`books:admin:read`). The list filters on `q`, `min_books`, `max_books` (`max_books=1` finds single-book series) and `include_deleted`, and sorts by `title`, `book_count` or `id`. Get returns the series with its books (authors, `position`, `numbered`, `position_label`); a deleted or merged series is still returned, with `deleted` and `merged_into_id`. `get_admin_book` also shows the series a book is in.
+- `create_admin_series`, `update_admin_series`, `add_series_book`, `update_series_book` (`books:admin:write`, plus the series policy). Create takes an optional `goodreads_series_id` (digits only, as in goodreads.com/series/<digits>-name; a slug, URL or blank value is a 422), refused when another series holds it. Series books are keyed by book id.
+- `delete_admin_series`, `merge_admin_series` (`books:admin:merge`) and `remove_series_book` (`books:admin:write`) are destructive. Delete and merge take `dry_run`. In merge, `id` survives and `source_ids` is 1 to 50 series.
+
+Delete and merge are soft, modelled on categories: `books_series` has `deleted` and `merged_into_id`. Delete removes the series' book links and keeps the row and its identifiers. Merge moves the links onto the target (a book already in the target keeps the target's link) and marks each source deleted and merged. `ApplySeries` resolves a Goodreads id the way `Category#canonical` does, follows a merge, and skips a deleted series with reason `deleted_series`, so a cleanup sticks through the enrichment backfill.
+
+Known gaps: removing one book from a series that stays live does not stick, because the next enrichment of that book re-links it while Goodreads still lists it there (delete the whole series for junk). `GoodreadsRebuild::ResetBook` deletes a book's series links and the next enrichment re-links them with Goodreads' positions, so position fixes on a reset book are lost.
+
+The Copy prompt on the admin series page (`config/mcp/books/prompts/series.md.erb`, queue `:series` in `Services::AgentPrompts`, counts of live series, single-book series and books in several series) carries the cleanup rules: publisher lines, imprints and format or subject collections are deleted (a book in a sub-series and its wider world keeps both; reading-order variants are one series, merged into the publication-order one), duplicates merged, single-book series kept, titles in their usual English name, dry run before every delete or merge. E2E: `e2e/tests/books/admin/series-copy-prompt.spec.ts`.
 
 ## Description tools
 

@@ -233,6 +233,16 @@ module Api
         ["GET", "/api/v1/admin/categories/{id}", "403"] => -> { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", headers: bearer(MEMBER) },
         ["GET", "/api/v1/admin/categories/{id}", "404"] => -> { get "/api/v1/admin/categories/999999999", headers: bearer(READ) },
         ["GET", "/api/v1/admin/categories/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/categories/#{categories(:books_novels_genre).id}", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/series", "200"] => -> { get "/api/v1/admin/series?q=song", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/series", "400"] => -> { get "/api/v1/admin/series?sort=bogus", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/series", "401"] => -> { get "/api/v1/admin/series" },
+        ["GET", "/api/v1/admin/series", "403"] => -> { get "/api/v1/admin/series", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/series", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/series", headers: bearer(READ) } },
+        ["GET", "/api/v1/admin/series/{id}", "200"] => -> { get "/api/v1/admin/series/#{books_series(:asoiaf).id}", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/series/{id}", "401"] => -> { get "/api/v1/admin/series/#{books_series(:asoiaf).id}" },
+        ["GET", "/api/v1/admin/series/{id}", "403"] => -> { get "/api/v1/admin/series/#{books_series(:asoiaf).id}", headers: bearer(MEMBER) },
+        ["GET", "/api/v1/admin/series/{id}", "404"] => -> { get "/api/v1/admin/series/999999999", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/series/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/series/#{books_series(:asoiaf).id}", headers: bearer(READ) } },
         ["POST", "/api/v1/admin/categories", "201"] => -> { post "/api/v1/admin/categories", params: {name: "Coverage Genre", category_type: "genre"}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/categories", "400"] => -> { post "/api/v1/admin/categories", params: {name: "X", category_type: "bogus"}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/categories", "401"] => -> { post "/api/v1/admin/categories", params: {name: "X"}, as: :json },
@@ -329,7 +339,65 @@ module Api
           ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "404"] => -> { delete author_row_path(author_id: 999_999_999), headers: bearer(MERGE) },
           ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "429"] => -> { with_exhausted_limit { delete author_row_path, headers: bearer(MERGE) } }
         }
+      ).merge(
+        {
+          ["POST", "/api/v1/admin/series", "201"] => -> { post "/api/v1/admin/series", params: {title: "Coverage Saga", goodreads_series_id: "9000001"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series", "400"] => -> { post "/api/v1/admin/series", params: {title: 5}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series", "401"] => -> { post "/api/v1/admin/series", params: {title: "X"}, as: :json },
+          ["POST", "/api/v1/admin/series", "403"] => -> { post "/api/v1/admin/series", params: {title: "X"}, as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/series", "422"] => -> {
+            Identifier.create!(identifiable: books_series(:junk_deleted), identifier_type: :books_series_goodreads_id, value: "9000002", source: :admin)
+            post "/api/v1/admin/series", params: {title: "Claims A Deleted Id", goodreads_series_id: "9000002"}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/series", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/series", params: {title: "X"}, as: :json, headers: bearer(MERGE) } },
+          ["PATCH", "/api/v1/admin/series/{id}", "200"] => -> { patch series_path, params: {title: "Renamed Saga"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}", "400"] => -> { patch series_path, params: {}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}", "401"] => -> { patch series_path, params: {title: "X"}, as: :json },
+          ["PATCH", "/api/v1/admin/series/{id}", "403"] => -> { patch series_path, params: {title: "X"}, as: :json, headers: bearer(READ) },
+          ["PATCH", "/api/v1/admin/series/{id}", "404"] => -> { patch series_path(999_999_999), params: {title: "X"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}", "422"] => -> { patch series_path(books_series(:junk_deleted).id), params: {title: "X"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}", "429"] => -> { with_exhausted_limit { patch series_path, params: {title: "X"}, as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/series/{id}/merge", "200"] => -> { post "#{series_path}/merge", params: {source_ids: [books_series(:live_target).id], dry_run: true}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/merge", "400"] => -> { post "#{series_path}/merge", params: {source_ids: []}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/merge", "401"] => -> { post "#{series_path}/merge", params: {source_ids: [1]}, as: :json },
+          ["POST", "/api/v1/admin/series/{id}/merge", "403"] => -> { post "#{series_path}/merge", params: {source_ids: [1]}, as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/series/{id}/merge", "404"] => -> { post "#{series_path}/merge", params: {source_ids: [999_999_999]}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/merge", "422"] => -> { post "#{series_path}/merge", params: {source_ids: [books_series(:junk_deleted).id]}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/merge", "429"] => -> { with_exhausted_limit { post "#{series_path}/merge", params: {source_ids: [1]}, as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/series/{id}/books", "200"] => -> { post "#{series_path}/books", params: {book_id: books_books(:war_and_peace).id, position: 3.5}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/books", "400"] => -> { post "#{series_path}/books", params: {}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/books", "401"] => -> { post "#{series_path}/books", params: {book_id: 1}, as: :json },
+          ["POST", "/api/v1/admin/series/{id}/books", "403"] => -> { post "#{series_path}/books", params: {book_id: 1}, as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/series/{id}/books", "404"] => -> { post "#{series_path(999_999_999)}/books", params: {book_id: 1}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/books", "422"] => -> { post "#{series_path}/books", params: {book_id: books_books(:got).id}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/series/{id}/books", "429"] => -> { with_exhausted_limit { post "#{series_path}/books", params: {book_id: 1}, as: :json, headers: bearer(MERGE) } },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "200"] => -> { patch series_book_path, params: {position: 2, position_label: "Book Two"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "400"] => -> { patch series_book_path, params: {position: "2"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "401"] => -> { patch series_book_path, params: {position: 2}, as: :json },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "403"] => -> { patch series_book_path, params: {position: 2}, as: :json, headers: bearer(READ) },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "404"] => -> { patch series_book_path(book_id: books_books(:of_mice_and_men).id), params: {position: 2}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "422"] => -> { patch series_book_path(books_series(:junk_deleted).id), params: {position: 2}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/series/{id}/books/{book_id}", "429"] => -> { with_exhausted_limit { patch series_book_path, params: {position: 2}, as: :json, headers: bearer(MERGE) } },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "200"] => -> { delete series_book_path, headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "400"] => -> { delete series_book_path(book_id: 0), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "401"] => -> { delete series_book_path },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "403"] => -> { delete series_book_path, headers: bearer(READ) },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "404"] => -> { delete series_book_path(book_id: books_books(:of_mice_and_men).id), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "422"] => -> { delete series_book_path(books_series(:junk_deleted).id), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}/books/{book_id}", "429"] => -> { with_exhausted_limit { delete series_book_path, headers: bearer(MERGE) } },
+          ["DELETE", "/api/v1/admin/series/{id}", "200"] => -> { delete "#{series_path}?dry_run=true", headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}", "400"] => -> { delete "#{series_path}?dry_run=maybe", headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}", "401"] => -> { delete series_path },
+          ["DELETE", "/api/v1/admin/series/{id}", "403"] => -> { delete series_path, headers: bearer(READ) },
+          ["DELETE", "/api/v1/admin/series/{id}", "404"] => -> { delete series_path(999_999_999), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}", "422"] => -> { delete series_path(books_series(:junk_deleted).id), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/series/{id}", "429"] => -> { with_exhausted_limit { delete series_path, headers: bearer(MERGE) } }
+        }
       ).freeze
+
+      def series_path(id = books_series(:asoiaf).id) = "/api/v1/admin/series/#{id}"
+
+      def series_book_path(id = books_series(:asoiaf).id, book_id: books_books(:got).id) = "#{series_path(id)}/books/#{book_id}"
 
       def author_rows_path(id = books_books(:war_and_peace).id) = "/api/v1/admin/books/#{id}/authors"
 

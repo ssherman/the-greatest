@@ -753,6 +753,15 @@ Rails.application.routes.draw do
             patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
             post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
             delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
+            get "series", to: "series#index"
+            get "series/:id", to: "series#show", constraints: {id: /\d+/}
+            post "series", to: "series#create"
+            patch "series/:id", to: "series#update", constraints: {id: /\d+/}
+            delete "series/:id", to: "series#destroy", constraints: {id: /\d+/}
+            post "series/:id/merge", to: "series#merge", constraints: {id: /\d+/}
+            post "series/:id/books", to: "series_books#create", constraints: {id: /\d+/}
+            patch "series/:id/books/:book_id", to: "series_books#update", constraints: {id: /\d+/, book_id: /\d+/}
+            delete "series/:id/books/:book_id", to: "series_books#destroy", constraints: {id: /\d+/, book_id: /\d+/}
             post "books/:id/merge", to: "book_merges#create", constraints: {id: /\d+/}
             post "authors/:id/merge", to: "author_merges#create", constraints: {id: /\d+/}
             post "books/:id/categories", to: "book_categories#create", constraints: {id: /\d+/}

@@ -5,6 +5,7 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
   def index
     authorize ::Books::Series
     load_series_for_index
+    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :series)
   end
 
   def show
@@ -19,33 +20,42 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
     @series = ::Books::Series.new(series_params)
     authorize @series
 
-    if @series.save
-      redirect_to admin_books_series_path(@series), notice: "Series created."
+    result = Services::Books::SeriesEdits::Create.call(attrs: series_params.to_h)
+    if result.success?
+      redirect_to admin_books_series_path(result.data), notice: "Series created."
     else
+      result.errors.each { |message| @series.errors.add(:base, message) }
       render :new, status: :unprocessable_entity
     end
   end
 
   def edit
+    redirect_to admin_books_series_path(@series), alert: "This series can't be edited." if @series.deleted?
   end
 
   def update
-    if @series.update(series_params)
+    result = Services::Books::SeriesEdits::Update.call(series: @series, attrs: series_params.to_h)
+    if result.success?
       redirect_to admin_books_series_path(@series), notice: "Series updated."
     else
+      result.errors.each { |message| @series.errors.add(:base, message) }
       render :edit, status: :unprocessable_entity
     end
   end
 
   def destroy
-    @series.destroy!
-    redirect_to admin_books_series_index_path, notice: "Series deleted."
+    result = Services::Books::SeriesEdits::Delete.call(series: @series)
+    if result.success?
+      redirect_to admin_books_series_index_path, notice: "Series deleted."
+    else
+      redirect_to admin_books_series_path(@series), alert: result.errors.to_sentence
+    end
   end
 
   private
 
   def load_series_for_index
-    @series_collection = ::Books::Series.all
+    @series_collection = ::Books::Series.active
 
     if params[:q].present?
       sanitized = "%#{::Books::Series.sanitize_sql_like(params[:q])}%"

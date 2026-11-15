@@ -4,59 +4,35 @@ class Admin::Books::SeriesBooksController < Admin::Books::BaseController
   def create
     @series = ::Books::Series.find(params[:series_id])
     authorize @series, :update?, policy_class: ::Books::SeriesPolicy
-    @series_book = @series.series_books.build(series_book_params)
-
-    if @series_book.save
-      respond_to do |format|
-        format.turbo_stream { render_series_books("Book added to series.") }
-        format.html { redirect_to admin_books_series_path(@series), notice: "Book added to series." }
-      end
-    else
-      respond_to do |format|
-        format.turbo_stream { render_association_error(@series_book) }
-        format.html { redirect_to admin_books_series_path(@series), alert: @series_book.errors.full_messages.join(", ") }
-      end
-    end
+    result = Services::Books::SeriesEdits::Membership.add(
+      series: @series, book_id: series_book_params[:book_id], attrs: membership_attrs
+    )
+    respond_with_result(result, "Book added to series.")
   end
 
   def update
     @series = @series_book.series
     authorize @series, :update?, policy_class: ::Books::SeriesPolicy
-
-    if @series_book.update(series_book_params)
-      respond_to do |format|
-        format.turbo_stream { render_series_books("Series book updated.") }
-        format.html { redirect_to admin_books_series_path(@series), notice: "Series book updated." }
-      end
-    else
-      respond_to do |format|
-        format.turbo_stream { render_association_error(@series_book) }
-        format.html { redirect_to admin_books_series_path(@series), alert: @series_book.errors.full_messages.join(", ") }
-      end
-    end
+    result = Services::Books::SeriesEdits::Membership.update(
+      series: @series, book_id: @series_book.book_id, attrs: membership_attrs
+    )
+    respond_with_result(result, "Series book updated.")
   end
 
   def destroy
     @series = @series_book.series
     authorize @series, :update?, policy_class: ::Books::SeriesPolicy
-    @series.update!(representative_book_id: nil) if @series.representative_book_id == @series_book.book_id
-    @series_book.destroy!
-
-    respond_to do |format|
-      format.turbo_stream { render_series_books("Book removed from series.") }
-      format.html { redirect_to admin_books_series_path(@series), notice: "Book removed from series." }
-    end
+    result = Services::Books::SeriesEdits::Membership.remove(series: @series, book_id: @series_book.book_id)
+    respond_with_result(result, "Book removed from series.")
   end
 
   def make_representative
     @series = @series_book.series
     authorize @series, :update?, policy_class: ::Books::SeriesPolicy
-    @series.update!(representative_book_id: @series_book.book_id)
-
-    respond_to do |format|
-      format.turbo_stream { render_series_books("Representative book updated.") }
-      format.html { redirect_to admin_books_series_path(@series), notice: "Representative book updated." }
-    end
+    result = Services::Books::SeriesEdits::Update.call(
+      series: @series, attrs: {"representative_book_id" => @series_book.book_id}
+    )
+    respond_with_result(result, "Representative book updated.")
   end
 
   private
@@ -76,9 +52,35 @@ class Admin::Books::SeriesBooksController < Admin::Books::BaseController
     ]
   end
 
-  def render_association_error(record)
+  # Form params arrive as strings; the service takes typed values, and only the keys
+  # the form actually sent.
+  def membership_attrs
+    raw = series_book_params
+    attrs = {}
+    attrs["position"] = raw[:position].presence&.then { |value| BigDecimal(value, exception: false) } if raw.key?(:position)
+    attrs["numbered"] = ActiveModel::Type::Boolean.new.cast(raw[:numbered]) if raw.key?(:numbered)
+    attrs["position_label"] = raw[:position_label] if raw.key?(:position_label)
+    attrs
+  end
+
+  def respond_with_result(result, notice)
+    if result.success?
+      respond_to do |format|
+        format.turbo_stream { render_series_books(notice) }
+        format.html { redirect_to admin_books_series_path(@series), notice: notice }
+      end
+    else
+      message = result.errors.join(", ")
+      respond_to do |format|
+        format.turbo_stream { render_error(message) }
+        format.html { redirect_to admin_books_series_path(@series), alert: message }
+      end
+    end
+  end
+
+  def render_error(message)
     render turbo_stream: turbo_stream.replace(
-      "flash", partial: "admin/shared/flash", locals: {flash: {error: record.errors.full_messages.join(", ")}}
+      "flash", partial: "admin/shared/flash", locals: {flash: {error: message}}
     ), status: :unprocessable_entity
   end
 end

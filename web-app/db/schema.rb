@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_201504) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -503,6 +503,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_201504) do
     t.bigint "representative_book_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "deleted", default: false, null: false
+    t.bigint "merged_into_id"
+    t.index ["deleted"], name: "index_books_series_on_deleted"
+    t.index ["merged_into_id"], name: "index_books_series_on_merged_into_id"
     t.index ["representative_book_id"], name: "index_books_series_on_representative_book_id"
     t.index ["slug"], name: "index_books_series_on_slug", unique: true
     t.index ["title"], name: "index_books_series_on_title"
@@ -1818,6 +1822,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_201504) do
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_rebuild_book_surveys", "books_books", column: "book_id", on_delete: :cascade
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
+  add_foreign_key "books_series", "books_series", column: "merged_into_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "books_verification_findings", "books_books", column: "book_id", on_delete: :cascade

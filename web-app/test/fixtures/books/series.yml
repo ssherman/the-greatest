@@ -3,23 +3,54 @@
 # Table name: books_series
 #
 #  id                     :bigint           not null, primary key
+#  deleted                :boolean          default(FALSE), not null
 #  description            :text
 #  slug                   :string           not null
 #  title                  :string           not null
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
+#  merged_into_id         :bigint
 #  representative_book_id :bigint
 #
 # Indexes
 #
+#  index_books_series_on_deleted                 (deleted)
+#  index_books_series_on_merged_into_id          (merged_into_id)
 #  index_books_series_on_representative_book_id  (representative_book_id)
 #  index_books_series_on_slug                    (slug) UNIQUE
 #  index_books_series_on_title                   (title)
 #
 # Foreign Keys
 #
+#  fk_rails_...  (merged_into_id => books_series.id) ON DELETE => nullify
 #  fk_rails_...  (representative_book_id => books_books.id) ON DELETE => nullify
 #
 asoiaf:
   title: A Song of Ice and Fire
   slug: a-song-of-ice-and-fire
+
+junk_deleted:
+  title: Junk Deleted Series
+  slug: junk-deleted-series
+  deleted: true
+
+live_target:
+  title: Live Merge Target
+  slug: live-merge-target
+
+merged_into_live:
+  title: Merged Into Live
+  slug: merged-into-live
+  deleted: true
+  merged_into: live_target
+
+dead_target:
+  title: Dead Merge Target
+  slug: dead-merge-target
+  deleted: true
+
+merged_into_dead:
+  title: Merged Into Dead
+  slug: merged-into-dead
+  deleted: true
+  merged_into: dead_target

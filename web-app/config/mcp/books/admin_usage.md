@@ -26,6 +26,10 @@ In `merge_book` and `merge_author`, `id` is the book or author that survives and
 
 `list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link`, `list_repair_verdicts`, `get_repair_verdict`, `approve_repair_verdict`, `reject_repair_verdict`, `correct_repair_verdict`, `bulk_approve_repair_verdicts`, the identifier tools, the description tools (get, add, update, set_preferred, delete) and `get_admin_book`, `get_admin_author`, `update_book`, `update_author`, `add_book_author`, `update_book_author` and `remove_book_author` are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. A `merge_author` made while working the match decision queue is part of that queue's work: decide it yourself and do not ask (a dry run first is optional). `reject_match_decision_link`, `remove_book_identifier`, `remove_author_identifier`, `delete_description` and `remove_book_author` are permanent. Adding an author back after `remove_book_author` restores the link, but the old role, position and credited_as are lost.
 
+## Series
+
+`list_admin_series`, `get_admin_series`, `create_admin_series`, `update_admin_series`, `delete_admin_series`, `merge_admin_series`, `add_series_book`, `update_series_book` and `remove_series_book` are meant for an agent cleaning up the backlog itself: the ask-first rule does not apply to them, but still dry-run `delete_admin_series` and `merge_admin_series` and act on what the dry run shows. Deleting or merging a series sticks, because the Goodreads enrichment follows a merge and skips a deleted series. Removing a single book from a series that stays live may be undone by the next enrichment of that book, so delete a junk series whole instead.
+
 ## After a merge
 
 A real `merge_book` or `merge_author` can return `warnings`. They name follow-up work, such as search reindexing and ranking recalculation, that could not be scheduled and will need to be re-run, and for a book merge the source authors or credits that did not transfer. Report them to the user after the real merge; a dry run never has warnings.

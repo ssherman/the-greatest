@@ -88,6 +88,33 @@ module Admin
         delete admin_books_series_book_path(other)
         assert_equal rep.book_id, @series.reload.representative_book_id
       end
+
+      test "create of a duplicate book is unprocessable over turbo_stream" do
+        sign_in_as(@admin_user, stub_auth: true)
+        existing = @series.series_books.first.book
+        assert_no_difference("::Books::SeriesBook.count") do
+          post admin_books_series_series_books_path(@series), params: {books_series_book: {book_id: existing.id, position: "9"}}, as: :turbo_stream
+        end
+        assert_response :unprocessable_entity
+      end
+
+      test "create on a deleted series adds nothing" do
+        sign_in_as(@admin_user, stub_auth: true)
+        series = books_series(:junk_deleted)
+        assert_no_difference("::Books::SeriesBook.count") do
+          post admin_books_series_series_books_path(series), params: {books_series_book: {book_id: books_books(:war_and_peace).id}}
+        end
+        assert_redirected_to admin_books_series_path(series)
+      end
+
+      test "create with a blank position stores nil" do
+        sign_in_as(@admin_user, stub_auth: true)
+        book = books_books(:war_and_peace)
+        post admin_books_series_series_books_path(@series), params: {books_series_book: {book_id: book.id, position: "", position_label: ""}}
+        link = @series.series_books.find_by!(book_id: book.id)
+        assert_nil link.position
+        assert_nil link.position_label
+      end
     end
   end
 end
