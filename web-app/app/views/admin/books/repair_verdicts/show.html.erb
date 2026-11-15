@@ -104,12 +104,10 @@
     <% if @verdict.proposed? && current_user_can_delete? %>
       <%= button_to "Approve", approve_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-primary" %>
     <% end %>
-    <% if !@verdict.rejected? && current_user_can_write? %>
+    <% if !@verdict.rejected? && !@verdict.reimport_match? && current_user_can_write? %>
       <% undo_free = @verdict.applied_at.nil? || @verdict.mark_provisional? %>
       <% confirm = if !undo_free
            "This was already applied. Rejecting does not undo it; it only stops it being applied again after a books re-migration."
-         elsif @verdict.reimport_match?
-           "A rejected match is never matched again, and its readers stay where they are. To fix a wrong pick, use Correct this match instead. Reject anyway?"
          end %>
       <%= button_to "Reject", reject_admin_books_repair_verdict_path(@verdict), method: :post, class: "btn btn-sm btn-error",
             form: {data: {testid: "reject-form", turbo_confirm: confirm}.compact} %>

@@ -21,8 +21,15 @@ module Services
 
           attrs["position"] = next_position(book) if attrs["position"].nil?
           row = book.book_authors.build(attrs.merge("author_id" => author_id))
-          save(row)
-        rescue ActiveRecord::RecordNotUnique
+          ::Books::BookAuthor.transaction do
+            result = save(row)
+            enrich_on_first_book(author_id) if result.success?
+            result
+          end
+        rescue ActiveRecord::RecordNotUnique => e
+          # Only this table's own pair index means "already on the book"; a Planner unique violation is not that.
+          raise unless e.message.include?("index_books_book_authors_on_book_id_and_author_id")
+
           duplicate(author_id)
         end
 
@@ -51,6 +58,22 @@ module Services
           attrs
         end
         private_class_method :normalize
+
+        # An author's first book link starts its enrichment, if it has never been enriched: an author made by hand
+        # has no run until it has a book to enrich from. An author that already has other books (the migrated
+        # catalogue) is left alone, as is one with an earlier run (for instance an author created with a QID).
+        # Planned inside the transaction, dispatched after commit, so a rollback leaves nothing. Parallel first links
+        # need no lock: the index_workflow_runs_one_active unique index makes Planner reuse the active run.
+        def self.enrich_on_first_book(author_id)
+          return unless ::Books::BookAuthor.where(author_id: author_id).count == 1
+
+          author = ::Books::Author.find_by(id: author_id)
+          return unless author
+          return if WorkflowRun.exists?(workflow: ::Workflows::Books::AuthorEnrichment.workflow, enrichable: author)
+
+          ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "first_book_link")
+        end
+        private_class_method :enrich_on_first_book
 
         def self.next_position(book)
           # Most books hold only NULL positions, which sort last. Numbering the new

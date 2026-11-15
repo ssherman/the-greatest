@@ -20,6 +20,7 @@ module Api
       forbidden: [403, "Forbidden"],
       not_found: [404, "Not found"],
       invalid_parameter: [400, "Invalid parameter"],
+      conflict: [409, "Conflict"],
       unprocessable: [422, "Unprocessable"],
       rate_limited: [429, "Rate limit exceeded"],
       search_unavailable: [503, "Search unavailable"]

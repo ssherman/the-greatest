@@ -12,6 +12,14 @@ module Services
       assert_includes prompt, "list_duplicate_candidates"
     end
 
+    test "duplicates prompt carries the author pair rules and their tools" do
+      prompt = AgentPrompts.call(domain: :books, queue: :duplicates)
+
+      ["create_admin_author", "update_book_author", "reject_match_decision_link", "shared pseudonym", "409"].each do |text|
+        assert_includes prompt, text
+      end
+    end
+
     test "duplicates counts pending pairs only" do
       before = AgentPrompts.call(domain: "books", queue: :duplicates)
       a, b = [books_authors(:king).id, books_authors(:bachman).id].minmax

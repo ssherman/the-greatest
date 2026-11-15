@@ -8,6 +8,7 @@ module Services
           @book = books_books(:war_and_peace)
           @tolstoy = books_authors(:tolstoy)
           @other = books_authors(:garnett)
+          stub_workflow_dispatch
         end
 
         test "add appends at the end by default" do
@@ -117,6 +118,61 @@ module Services
           result = Edit.remove(book: @book, author_id: @other.id)
           refute result.success?
           assert_equal :not_found, result.code
+        end
+
+        test "the first book link starts an author enrichment after commit" do
+          ::Workflows::Books::AuthorEnrichment.expects(:start).with(@other, initiated_by: "first_book_link").once
+
+          assert Edit.add(book: @book, author_id: @other.id).success?
+        end
+
+        test "a unique violation on another index is not reported as a duplicate author" do
+          ::Books::BookAuthor.any_instance.stubs(:save).raises(ActiveRecord::RecordNotUnique, "index_workflow_runs_one_active")
+
+          assert_raises(ActiveRecord::RecordNotUnique) { Edit.add(book: @book, author_id: @other.id) }
+        end
+
+        test "a second first-book link does not start a second run" do
+          other_book = books_books(:got)
+
+          assert Edit.add(book: @book, author_id: @other.id).success?
+          assert Edit.add(book: other_book, author_id: @other.id).success?
+
+          assert_equal 1, WorkflowRun.where(workflow: "books.author_enrichment", enrichable: @other).count
+        end
+
+        test "linking a book to an existing author with other books and no run starts nothing" do
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
+          book = books_books(:got)
+          book.book_authors.where(author_id: @tolstoy.id).destroy_all
+
+          assert Edit.add(book: book, author_id: @tolstoy.id).success?
+        end
+
+        test "a refused add starts no run" do
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
+
+          refute Edit.add(book: @book, author_id: @tolstoy.id).success?
+          refute Edit.add(book: @book, author_id: 0).success?
+        end
+
+        test "an author with an earlier run is not re-enriched" do
+          ::Workflows::Books::AuthorEnrichment.expects(:start).never
+          WorkflowRun.create!(workflow: "books.author_enrichment", definition_version: 1, enrichable: @other,
+            initiated_by: "test", options: {}, started_at: 1.day.ago, status: :completed, finished_at: 1.day.ago)
+
+          assert Edit.add(book: @book, author_id: @other.id).success?
+        end
+
+        test "an author created with a qid is not re-enriched on its first book" do
+          created = ::Services::Books::Authors::AdminCreate.call(attrs: {name: "Nova Pen"}, wikidata_qid: "Q987654321")
+          assert created.success?, created.errors.inspect
+          author = created.data[:author]
+          assert_equal 1, WorkflowRun.where(workflow: "books.author_enrichment", enrichable: author).count
+
+          assert Edit.add(book: @book, author_id: author.id).success?
+
+          assert_equal 1, WorkflowRun.where(workflow: "books.author_enrichment", enrichable: author).count
         end
       end
     end

@@ -341,6 +341,16 @@ module Api
         }
       ).merge(
         {
+          ["POST", "/api/v1/admin/authors", "201"] => -> { post "/api/v1/admin/authors", params: {name: "Coverage Author"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/authors", "400"] => -> { post "/api/v1/admin/authors", params: {birth_year: 1900}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/authors", "401"] => -> { post "/api/v1/admin/authors", params: {name: "X"}, as: :json },
+          ["POST", "/api/v1/admin/authors", "403"] => -> { post "/api/v1/admin/authors", params: {name: "X"}, as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/authors", "409"] => -> {
+            books_authors(:tolstoy).identifiers.create!(identifier_type: :books_author_wikidata_qid, value: "Q9000001", source: :admin)
+            post "/api/v1/admin/authors", params: {name: "Coverage Twin", wikidata_qid: "Q9000001"}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/authors", "422"] => -> { post "/api/v1/admin/authors", params: {name: "   "}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/authors", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/authors", params: {name: "X"}, as: :json, headers: bearer(MERGE) } },
           ["POST", "/api/v1/admin/series", "201"] => -> { post "/api/v1/admin/series", params: {title: "Coverage Saga", goodreads_series_id: "9000001"}, as: :json, headers: bearer(MERGE) },
           ["POST", "/api/v1/admin/series", "400"] => -> { post "/api/v1/admin/series", params: {title: 5}, as: :json, headers: bearer(MERGE) },
           ["POST", "/api/v1/admin/series", "401"] => -> { post "/api/v1/admin/series", params: {title: "X"}, as: :json },
@@ -456,7 +466,10 @@ module Api
       end
 
       test "every documented response is reachable and conforms" do
-        EXERCISES.each do |(_method, _path, status), exercise|
+        EXERCISES.each_with_index do |((_method, _path, status), exercise), index|
+          # The admin tier allows 600 requests a minute per user and the map now
+          # sends more than that; start a fresh window every 100 exercises.
+          Rails.application.config.x.rate_limit_store.clear if (index % 100).zero?
           instance_exec(&exercise)
           assert_api_response_conform(status: Integer(status), api: :admin)
         end

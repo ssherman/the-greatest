@@ -50,8 +50,9 @@ what was already processed; `start_at: "viaf"` plans the Wikidata step as `not_r
 how the backfill retries a VIAF step that never finished; `skip_ai_if_ran` skips `author_facts` when
 the ledger shows the AI step already ran this era (the VIAF retry for an author whose chain was
 partly done). The entry points are the author importer's `Providers::Enrichment`,
-`Services::Books::Authors::Backfill` and `RejectExternalLink` (which supersedes any active run,
-inside its own transaction). `WikidataJob`, `ViafJob` and `EnrichJob` survive only as shims that plan
+`Services::Books::Authors::Backfill`, `Identifiers::AdminWrite`, `RejectExternalLink` (which supersedes any active run,
+inside its own transaction) and `BookAuthors::Edit.add`, whose first-book trigger (`initiated_by: "first_book_link"`) fires
+only for an author with no other books and no run. `WikidataJob`, `ViafJob` and `EnrichJob` survive only as shims that plan
 a run from a message already in Sidekiq (`EnrichJob` plans a run with only `author_facts`), and
 `EnrichJob.hand_off` is still called by `author_facts`' `on_terminal`.
 

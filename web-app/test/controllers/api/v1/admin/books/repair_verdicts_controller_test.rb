@@ -185,6 +185,13 @@ module Api
             assert_response :unprocessable_entity
           end
 
+          test "rejecting a reimport_match is a 422 and changes nothing" do
+            match = verdict("t:rm", kind: :reimport_match, payload: {"goodreads_edition_id" => 5, "outcome" => "matched", "book_id" => @war.id})
+            write("#{match.id}/reject")
+            assert_response :unprocessable_entity
+            assert_predicate match.reload, :proposed?
+          end
+
           test "rejecting an applied mark_provisional reverts the book" do
             @war.update!(provisional: true)
             applied = verdict("t:prov", kind: :mark_provisional, status: :approved, applied_at: Time.current,
