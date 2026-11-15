@@ -26,7 +26,10 @@ module Services
             enrich_on_first_book(author_id) if result.success?
             result
           end
-        rescue ActiveRecord::RecordNotUnique
+        rescue ActiveRecord::RecordNotUnique => e
+          # Only this table's own pair index means "already on the book"; a Planner unique violation is not that.
+          raise unless e.message.include?("index_books_book_authors_on_book_id_and_author_id")
+
           duplicate(author_id)
         end
 

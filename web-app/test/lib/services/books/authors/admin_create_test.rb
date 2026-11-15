@@ -62,8 +62,9 @@ module Services
 
         test "the id is locked before the holder check and a holder that appears under the lock is refused" do
           rival = books_authors(:king)
-          AdminCreate.expects(:lock_qid).with(QID).once.with do
+          AdminCreate.expects(:lock_qid).once.with do |v|
             rival.identifiers.create!(identifier_type: :books_author_wikidata_qid, value: QID, source: :admin)
+            v == QID
           end
 
           result = nil

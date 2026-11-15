@@ -3626,7 +3626,7 @@ components:
           items: {type: string}
         birth_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
         death_year: {type: [integer, "null"], minimum: -3000, maximum: 3000}
-        wikidata_qid: {type: string, pattern: "^Q[0-9]+$", description: "The author's Wikidata id, e.g. Q7243. Refused (409) when another author holds it."}
+        wikidata_qid: {type: string, pattern: "^[Qq][0-9]+$", description: "The author's Wikidata id, e.g. Q7243 (case-insensitive; stored upper-case). Refused (409) when another author holds it."}
     AdminAuthorUpdated:
       type: object
       required: [data, changed]

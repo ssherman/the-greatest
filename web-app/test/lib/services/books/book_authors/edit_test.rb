@@ -126,6 +126,12 @@ module Services
           assert Edit.add(book: @book, author_id: @other.id).success?
         end
 
+        test "a unique violation on another index is not reported as a duplicate author" do
+          ::Books::BookAuthor.any_instance.stubs(:save).raises(ActiveRecord::RecordNotUnique, "index_workflow_runs_one_active")
+
+          assert_raises(ActiveRecord::RecordNotUnique) { Edit.add(book: @book, author_id: @other.id) }
+        end
+
         test "a second first-book link does not start a second run" do
           other_book = books_books(:got)
 

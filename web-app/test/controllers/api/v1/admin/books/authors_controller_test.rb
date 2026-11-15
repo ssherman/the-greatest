@@ -227,6 +227,16 @@ module Api
             assert_equal ["Q42", "admin"], [row.value, row.source]
           end
 
+          test "create accepts a lower-case qid and stores it upper-case" do
+            ::Workflows::Books::AuthorEnrichment.expects(:start).once
+
+            post_author({name: "Lower Qid", wikidata_qid: "q42"})
+
+            assert_api_response_conform(status: 201, api: :admin)
+            row = ::Books::Author.find(json[:data][:id]).identifiers.find_by!(identifier_type: :books_author_wikidata_qid)
+            assert_equal "Q42", row.value
+          end
+
           test "create answers 400 for a missing name, wrong types and a malformed qid" do
             [{}, {birth_year: 1900}, {name: 5}, {name: "X", alternate_names: "x"}, {name: "X", birth_year: "abc"},
               {name: "X", birth_year: 4000}, {name: "X", wikidata_qid: "7243"}, {name: "X", wikidata_qid: 42}, {name: "X", wikidata_qid: nil}].each do |body|

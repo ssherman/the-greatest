@@ -20,7 +20,7 @@ module Api
             "alternate_names" => :strings
           }.freeze
           CREATE_FIELDS = (FIELDS.keys & %w[name alternate_names birth_year death_year]) + ["wikidata_qid"]
-          QID_FORMAT = /\AQ\d+\z/
+          QID_FORMAT = /\AQ\d+\z/i
 
           # GET /api/v1/admin/authors/:id -- the fields update_author takes
           def show
@@ -88,7 +88,7 @@ module Api
             unless value.is_a?(String) && value.strip.match?(QID_FORMAT)
               raise ::Api::Page::InvalidParameter, "wikidata_qid must be Q followed by digits, e.g. Q7243"
             end
-            value.strip
+            value.strip.upcase
           end
 
           def refuse_create(result)
