@@ -76,6 +76,22 @@ module Services
           assert_equal ["Book #{@book.id} has no author #{@other.id}."], result.errors
         end
 
+        test "add refuses an unknown role" do
+          assert_no_difference("::Books::BookAuthor.count") do
+            result = Edit.add(book: @book, author_id: @other.id, attrs: {"role" => "illustrator"})
+            refute result.success?
+            assert_equal :unprocessable, result.code
+            assert_equal ["role must be one of author, editor."], result.errors
+          end
+        end
+
+        test "update refuses an unknown role and changes nothing" do
+          result = Edit.update(book: @book, author_id: @tolstoy.id, attrs: {"role" => "illustrator"})
+          refute result.success?
+          assert_equal :unprocessable, result.code
+          assert_equal "author", @book.book_authors.find_by(author_id: @tolstoy.id).role
+        end
+
         test "remove deletes the row and leaves the author record" do
           assert_difference("::Books::BookAuthor.count", -1) do
             assert Edit.remove(book: @book, author_id: @tolstoy.id).success?

@@ -13,6 +13,7 @@ module Services
 
         def self.add(book:, author_id:, attrs: {})
           attrs = normalize(attrs)
+          return bad_role if bad_role?(attrs)
           unless ::Books::Author.exists?(author_id)
             return failure("No author #{author_id}.", :unprocessable)
           end
@@ -29,7 +30,10 @@ module Services
           row = book.book_authors.find_by(author_id: author_id)
           return not_on_book(book, author_id) unless row
 
-          row.assign_attributes(normalize(attrs))
+          attrs = normalize(attrs)
+          return bad_role if bad_role?(attrs)
+
+          row.assign_attributes(attrs)
           save(row)
         end
 
@@ -59,10 +63,19 @@ module Services
           else
             failure(row.errors.full_messages, :unprocessable)
           end
-        rescue ArgumentError => e # an unknown role
-          failure(e.message, :unprocessable)
         end
         private_class_method :save
+
+        # The enum raises on assignment, before any validation, so check first.
+        def self.bad_role?(attrs)
+          attrs.key?("role") && !::Books::BookAuthor.roles.key?(attrs["role"].to_s)
+        end
+        private_class_method :bad_role?
+
+        def self.bad_role
+          failure("role must be one of #{::Books::BookAuthor.roles.keys.join(", ")}.", :unprocessable)
+        end
+        private_class_method :bad_role
 
         def self.duplicate(author_id)
           failure("Author #{author_id} is already on this book. Use update_book_author to change the role, position or credited_as.", :unprocessable)
