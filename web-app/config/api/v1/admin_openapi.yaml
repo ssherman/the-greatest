@@ -2535,6 +2535,166 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/authors:
+    x-domain: books
+    post:
+      operationId: addBookAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add an author to a book
+      description: |
+        Adds the author in `author_id` to the book. `role` is `author` (default) or `editor`; `position` is a positive integer and defaults to one past the highest position on the book; `credited_as` is the name as printed on this book, and blank is stored as null.
+        An author already on the book is refused (422, change it with the update operation); an unknown author id is 422.
+        Returns the book's full author list ordered by position (nulls last), then row id. Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+      x-mcp:
+        description: >-
+          Adds author `author_id` to the book `id` and returns the book's authors in order. Optional `role`
+          (`author` or `editor`), `position` (positive integer; defaults to the end of the list) and `credited_as` (the
+          name as printed on this book). Ids come from get_admin_book and search_admin_authors. A 422 saying
+          the author is already on the book means use update_book_author instead.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBookAuthorAddRequest"
+      responses:
+        "200":
+          description: The book's authors after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookAuthors"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/books/{id}/authors/{author_id}:
+    x-domain: books
+    patch:
+      operationId: updateBookAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Change an author's role, position or credit on a book
+      description: |
+        Changes only the keys sent: `role` (`author` or `editor`), `position` (positive integer, or null to clear) and `credited_as` (string, or null or blank to clear). An empty body is 400, a value of the wrong JSON type is 400, an unknown key or unknown role is 422, and an author the book does not have is 404.
+        Returns the book's full author list ordered by position (nulls last), then row id. Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+      x-mcp:
+        description: >-
+          Changes the role, position or credited_as of author `author_id` on book `id` and returns the book's
+          authors in order. Send only the keys to change; null clears `position` or `credited_as`. Ids come
+          from get_admin_book and search_admin_authors. An author the book does not have is a 404: use
+          add_book_author for that. Setting a position on one row while the
+          others have none moves that row ahead of them.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/author_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBookAuthorUpdateRequest"
+      responses:
+        "200":
+          description: The book's authors after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookAuthors"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: removeBookAuthor
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Remove an author from a book
+      description: |
+        Takes the author off the book; the author record itself is kept. Removing the last author is allowed. An author the book does not have is 404.
+        Returns the book's remaining authors ordered by position (nulls last), then row id. Requires `books:admin:write`, and the token's owner must be allowed to change the book.
+      x-mcp:
+        description: >-
+          Removes author `author_id` from book `id` and returns the book's remaining authors. The author
+          record is kept, and add_book_author restores the link later, but its role, position and
+          credited_as are lost. This is the only way to drop a wrong author. Ids come from get_admin_book
+          and search_admin_authors.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/author_id"
+      responses:
+        "200":
+          description: The book's authors after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookAuthors"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -2586,6 +2746,14 @@ components:
       in: path
       required: true
       description: The category's integer id.
+      schema:
+        type: integer
+        minimum: 1
+    author_id:
+      name: author_id
+      in: path
+      required: true
+      description: The author's integer id.
       schema:
         type: integer
         minimum: 1
@@ -2811,7 +2979,7 @@ components:
             authors:
               type: array
               items:
-                $ref: "#/components/schemas/AuthorSummary"
+                $ref: "#/components/schemas/AdminBookAuthor"
             cleared_fields:
               type: array
               items: {type: string}
@@ -3793,6 +3961,45 @@ components:
           required: [dry_run]
           properties:
             dry_run: {type: boolean}
+    AdminBookAuthor:
+      type: object
+      required: [id, slug, name, role, position, credited_as]
+      properties:
+        id: {type: integer, description: The author's id.}
+        slug: {type: [string, "null"]}
+        name: {type: string}
+        role: {type: string, enum: [author, editor]}
+        position: {type: [integer, "null"]}
+        credited_as: {type: [string, "null"], description: The name as printed on this book, when it differs.}
+    AdminBookAuthors:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminBookAuthor"
+    AdminBookAuthorAddRequest:
+      type: object
+      required: [author_id]
+      additionalProperties: false
+      properties:
+        author_id:
+          description: The author to add. A JSON integer, or a string of plain decimal digits.
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+        role: {type: string, description: "`author` (default) or `editor`."}
+        position: {type: [integer, "null"], minimum: 1, description: Defaults to one past the highest position on the book.}
+        credited_as: {type: [string, "null"]}
+    AdminBookAuthorUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        role: {type: string, description: "`author` or `editor`."}
+        position: {type: [integer, "null"], minimum: 1}
+        credited_as: {type: [string, "null"]}
     CategoryLinkRequest:
       type: object
       required: [category_id]

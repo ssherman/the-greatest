@@ -7,9 +7,9 @@ module Api
     include McpRpcHelpers
 
     READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict get_book_identifiers get_author_identifiers find_by_identifier get_book_descriptions get_author_descriptions get_admin_book get_admin_author].freeze
-    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict].freeze
+    WRITE_TOOLS = %w[create_admin_category update_admin_category tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict].freeze
     MERGE_TOOLS = %w[delete_admin_category merge_categories merge_book merge_author merge_duplicate_candidate reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts].freeze
-    DESTRUCTIVE_TOOLS = %w[merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts].freeze
+    DESTRUCTIVE_TOOLS = %w[merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author remove_book_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts].freeze
 
     setup do
       host! "dev-new.thegreatestbooks.org"
@@ -52,13 +52,13 @@ module Api
       tools = listed_tools(@write_secret)
 
       assert_equal (READ_TOOLS + WRITE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
-      assert_equal %w[untag_author untag_book], destructive_names(tools).sort
+      assert_equal %w[remove_book_author untag_author untag_book], destructive_names(tools).sort
     end
 
-    test "a merge token lists all forty-six tools" do
+    test "a merge token lists all forty-nine tools" do
       tools = listed_tools(ApiTokenSecrets::ADMIN)
 
-      assert_equal 46, tools.size
+      assert_equal 49, tools.size
       assert_equal (READ_TOOLS + WRITE_TOOLS + MERGE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
       assert_equal DESTRUCTIVE_TOOLS.sort, destructive_names(tools).sort
     end
@@ -151,6 +151,17 @@ module Api
       assert_not_equal true, json.dig("result", "isError")
       assert_nil book.reload.first_published_year
       assert_equal "api", ClearedField.find_by!(clearable: book, field_name: "first_published_year").cleared_via
+    end
+
+    test "add_book_author adds the author through MCP and returns the book's authors" do
+      book = books_books(:war_and_peace)
+      king = books_authors(:king)
+
+      call_tool("add_book_author", {id: book.id, author_id: king.id, role: "editor"}, token: ApiTokenSecrets::ADMIN)
+
+      assert_not_equal true, json.dig("result", "isError")
+      assert_equal [books_authors(:tolstoy).id, king.id], tool_text["data"].map { |a| a["id"] }
+      assert_equal "editor", book.book_authors.find_by!(author_id: king.id).role
     end
 
     test "update_book with only an id is a 400 problem, not an internal error" do

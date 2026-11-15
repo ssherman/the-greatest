@@ -110,7 +110,7 @@ class Books::Book < ApplicationRecord
 
   belongs_to :original_language, class_name: "Language", optional: true
   belongs_to :default_edition, class_name: "Books::Edition", optional: true
-  has_many :book_authors, -> { order(:position) }, class_name: "Books::BookAuthor", dependent: :destroy
+  has_many :book_authors, -> { order(:position, :id) }, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :authors, through: :book_authors, class_name: "Books::Author"
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
   has_one :verification, class_name: "Books::Verification", dependent: :delete

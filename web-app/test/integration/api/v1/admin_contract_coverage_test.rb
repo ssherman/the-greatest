@@ -306,7 +306,34 @@ module Api
           end
           entries
         end.to_h
+      ).merge(
+        {
+          ["POST", "/api/v1/admin/books/{id}/authors", "200"] => -> { post author_rows_path, params: {author_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/books/{id}/authors", "400"] => -> { post author_rows_path, params: {author_id: "abc"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/books/{id}/authors", "401"] => -> { post author_rows_path, params: {author_id: books_authors(:king).id}, as: :json },
+          ["POST", "/api/v1/admin/books/{id}/authors", "403"] => -> { post author_rows_path, params: {author_id: books_authors(:king).id}, as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/books/{id}/authors", "404"] => -> { post author_rows_path(999_999_999), params: {author_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/books/{id}/authors", "422"] => -> { post author_rows_path, params: {author_id: books_authors(:tolstoy).id}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/books/{id}/authors", "429"] => -> { with_exhausted_limit { post author_rows_path, params: {author_id: books_authors(:king).id}, as: :json, headers: bearer(MERGE) } },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "200"] => -> { patch author_row_path, params: {role: "editor"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "400"] => -> { patch author_row_path, params: {role: 0}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "401"] => -> { patch author_row_path, params: {role: "editor"}, as: :json },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "403"] => -> { patch author_row_path, params: {role: "editor"}, as: :json, headers: bearer(READ) },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "404"] => -> { patch author_row_path(author_id: 999_999_999), params: {role: "editor"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "422"] => -> { patch author_row_path, params: {role: "translator"}, as: :json, headers: bearer(MERGE) },
+          ["PATCH", "/api/v1/admin/books/{id}/authors/{author_id}", "429"] => -> { with_exhausted_limit { patch author_row_path, params: {role: "editor"}, as: :json, headers: bearer(MERGE) } },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "200"] => -> { delete author_row_path, headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "400"] => -> { delete author_row_path(author_id: 0), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "401"] => -> { delete author_row_path },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "403"] => -> { delete author_row_path, headers: bearer(READ) },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "404"] => -> { delete author_row_path(author_id: 999_999_999), headers: bearer(MERGE) },
+          ["DELETE", "/api/v1/admin/books/{id}/authors/{author_id}", "429"] => -> { with_exhausted_limit { delete author_row_path, headers: bearer(MERGE) } }
+        }
       ).freeze
+
+      def author_rows_path(id = books_books(:war_and_peace).id) = "/api/v1/admin/books/#{id}/authors"
+
+      def author_row_path(author_id: books_authors(:tolstoy).id) = "#{author_rows_path}/#{author_id}"
 
       def tag_item(segment) = (segment == "books") ? books_books(:war_and_peace) : books_authors(:tolstoy)
 
