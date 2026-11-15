@@ -33,18 +33,25 @@ module Services
           series, created = find_or_create_series(id, entry["title"])
           return fact(entry, label, false, "deleted_series") if series.nil?
 
-          link = ::Books::SeriesBook.find_or_initialize_by(series: series, book: @book)
-          return fact(entry, label, false, "already_set") if link.persisted?
+          # Lock the series row and re-check it: a Delete or Merge may have committed since
+          # canonical was resolved, and a link on a deleted series is never cleaned up.
+          ::Books::Series.transaction do
+            series.lock!
+            return fact(entry, label, false, "deleted_series") if series.deleted?
 
-          if label&.match?(PLAIN_NUMBER)
-            link.position = BigDecimal(label)
-            link.numbered = true
-          else
-            link.position = nil
-            link.numbered = false
+            link = ::Books::SeriesBook.find_or_initialize_by(series: series, book: @book)
+            return fact(entry, label, false, "already_set") if link.persisted?
+
+            if label&.match?(PLAIN_NUMBER)
+              link.position = BigDecimal(label)
+              link.numbered = true
+            else
+              link.position = nil
+              link.numbered = false
+            end
+            link.position_label = label
+            link.save!
           end
-          link.position_label = label
-          link.save!
           fact(entry, label, true, created ? "created" : "linked")
         end
 

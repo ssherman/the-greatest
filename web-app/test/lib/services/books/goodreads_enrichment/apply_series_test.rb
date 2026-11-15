@@ -113,6 +113,20 @@ module Services
           end
         end
 
+        test "apply skips a series deleted after it was resolved" do
+          live = ::Books::Series.create!(title: "Raced Series")
+          ::Identifier.create!(identifiable: live, identifier_type: :books_series_goodreads_id, value: "987103", source: :goodreads)
+          stale = ::Books::Series.find(live.id)
+          ::Books::Series.where(id: live.id).update_all(deleted: true)
+          ::Books::Series.any_instance.stubs(:canonical).returns(stale)
+
+          assert_no_difference "::Books::SeriesBook.count" do
+            facts = ApplySeries.call(book: @book, entries: [entry(id: 987_103)])
+            assert_equal "deleted_series", facts.first["reason"]
+            assert_not facts.first["applied"]
+          end
+        end
+
         test "an entry with no series id is invalid" do
           facts = ApplySeries.call(book: @book, entries: [entry(id: nil)])
           assert_equal "invalid", facts.first["reason"]
