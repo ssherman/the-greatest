@@ -140,15 +140,6 @@ module Admin
         assert @series.reload.title.present?
       end
 
-      test "destroy deletes the series" do
-        series = ::Books::Series.create!(title: "Disposable Series")
-        sign_in_as(@admin_user, stub_auth: true)
-        assert_difference("::Books::Series.count", -1) do
-          delete admin_books_series_path(series)
-        end
-        assert_redirected_to admin_books_series_index_path
-      end
-
       test "destroy is forbidden for a regular user" do
         sign_in_as(@regular_user, stub_auth: true)
         assert_no_difference("::Books::Series.count") do
@@ -177,6 +168,46 @@ module Admin
           }
         end
         assert_includes @series.reload.images.map(&:id), Image.order(:created_at).last.id
+      end
+
+      # Soft delete
+
+      test "destroy soft-deletes and keeps the row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("::Books::Series.count") do
+          delete admin_books_series_path(@series)
+        end
+        assert_redirected_to admin_books_series_index_path
+        assert @series.reload.deleted?
+        assert_equal 0, @series.series_books.count
+      end
+
+      test "index hides deleted series" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_series_index_path
+        assert_response :success
+        assert_includes response.body, @series.title
+        assert_not_includes response.body, books_series(:junk_deleted).title
+      end
+
+      test "show of a merged series is ok" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_series_path(books_series(:merged_into_live))
+        assert_response :success
+      end
+
+      test "show of a deleted series is ok" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_series_path(books_series(:junk_deleted))
+        assert_response :success
+      end
+
+      test "update of a deleted series is unprocessable" do
+        sign_in_as(@admin_user, stub_auth: true)
+        series = books_series(:junk_deleted)
+        patch admin_books_series_path(series), params: {books_series: {title: "Revived"}}
+        assert_response :unprocessable_entity
+        assert_equal "Junk Deleted Series", series.reload.title
       end
     end
   end
