@@ -195,8 +195,10 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
         get admin_books_series_index_path
         assert_response :success
-        assert_includes response.body, @series.title
-        assert_not_includes response.body, books_series(:junk_deleted).title
+        listed = @controller.view_assigns["series_collection"].to_a
+        assert_includes listed, @series
+        assert_not_includes listed, books_series(:junk_deleted)
+        assert listed.none?(&:deleted?)
       end
 
       test "show of a merged series is ok" do

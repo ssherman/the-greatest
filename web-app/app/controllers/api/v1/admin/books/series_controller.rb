@@ -212,9 +212,15 @@ module Api
           # A dry run runs the real merges inside a transaction and rolls it back, so its
           # counts are exactly what a real merge would report, sources that share books
           # with each other included. Merge has no callbacks or enqueues to undo.
+          #
+          # Every row in the batch is locked up front, in ascending id order, before any
+          # merge runs. The outer transaction keeps each merge's locks until the end, so
+          # locking pair by pair would take them out of id order across the batch and could
+          # deadlock with ApplySeries, which also locks in ascending id order.
           def run_merges(target, sources, dry_run)
             outcome = nil
             ::Books::Series.transaction do
+              ::Books::Series.where(id: [target.id, *sources.map(&:id)]).order(:id).lock.to_a
               outcome = merge_in_order(target, sources, dry_run)
               raise ActiveRecord::Rollback if dry_run
             end

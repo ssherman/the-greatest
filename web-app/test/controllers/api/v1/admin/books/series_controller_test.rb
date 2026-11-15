@@ -247,6 +247,27 @@ module Api
             assert_api_response_conform(status: 422, api: :admin)
           end
 
+          test "a merge batch locks every series in ascending id order before merging any" do
+            target = books_series(:live_target)
+            low = ::Books::Series.create!(title: "Low")
+            high = ::Books::Series.create!(title: "High")
+            locks = []
+            capture = lambda do |*, payload|
+              next unless payload[:sql].include?("FOR UPDATE") && payload[:sql].include?(%("books_series"))
+
+              locks << [payload[:sql], Array(payload[:type_casted_binds]).flatten.map(&:to_i)]
+            end
+
+            ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
+              merge(target, {source_ids: [high.id, low.id]})
+            end
+
+            assert_response :success
+            sql, ids = locks.first
+            assert_match(/ORDER BY "books_series"\."id" ASC FOR UPDATE/, sql)
+            assert_equal [target.id, low.id, high.id].sort, ids.sort
+          end
+
           test "merge dry run of sources that share books matches the real merge and changes nothing" do
             target = books_series(:live_target)
             first = ::Books::Series.create!(title: "Dupe One")
