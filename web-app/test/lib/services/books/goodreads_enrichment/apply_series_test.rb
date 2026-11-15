@@ -127,6 +127,20 @@ module Services
           end
         end
 
+        test "facts keep entry order when entries are given in descending series id order" do
+          ApplySeries.call(book: @other, entries: [entry(id: 987_201, title: "First Made"), entry(id: 987_202, title: "Second Made")])
+          lower = series_for(987_201)
+          higher = series_for(987_202)
+          assert_operator lower.id, :<, higher.id
+
+          facts = ApplySeries.call(book: @book, entries: [entry(id: 987_202, title: "Second Made"), entry(id: 987_201, title: "First Made")])
+
+          assert_equal [987_202, 987_201], facts.map { |f| f["goodreads_series_id"] }
+          assert facts.all? { |f| f["applied"] }
+          assert_includes higher.reload.books, @book
+          assert_includes lower.reload.books, @book
+        end
+
         test "an entry with no series id is invalid" do
           facts = ApplySeries.call(book: @book, entries: [entry(id: nil)])
           assert_equal "invalid", facts.first["reason"]

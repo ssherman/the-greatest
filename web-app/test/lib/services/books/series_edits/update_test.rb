@@ -15,6 +15,16 @@ module Services
           assert_equal "Renamed", @series.reload.title
         end
 
+        test "update refuses a goodreads id that is not digits" do
+          ["130291-batman-2011", "https://www.goodreads.com/series/130291-batman-2011"].each do |value|
+            result = Update.call(series: @series, attrs: {"goodreads_series_id" => value})
+            assert_not result.success?
+            assert_equal :unprocessable, result.code
+            assert_equal ["goodreads_series_id must be the digits from the series URL (goodreads.com/series/<digits>-name)."], result.errors
+          end
+          assert_nil @series.identifiers.find_by(identifier_type: :books_series_goodreads_id, source: :admin)
+        end
+
         test "representative must be a book in the series" do
           outsider = books_books(:war_and_peace)
           result = Update.call(series: @series, attrs: {"representative_book_id" => outsider.id})

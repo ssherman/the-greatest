@@ -50,6 +50,7 @@ module Services
           if @attrs.key?("goodreads_series_id")
             value = @attrs["goodreads_series_id"].presence&.to_s
             return failure("goodreads_series_id must not be blank.") unless value
+            return failure("goodreads_series_id must be the digits from the series URL (goodreads.com/series/<digits>-name).") unless value.match?(/\A\d+\z/)
             error = attach_goodreads_id(value)
             return failure(error) if error
           end

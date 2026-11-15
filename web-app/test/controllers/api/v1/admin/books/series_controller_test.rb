@@ -217,6 +217,18 @@ module Api
             assert_equal "55555", json[:data][:goodreads_series_id]
           end
 
+          test "create refuses a Goodreads slug or URL with 422 and creates nothing" do
+            assert_no_difference -> { ::Books::Series.count } do
+              create_series({title: "Another", goodreads_series_id: "130291-batman-2011"})
+            end
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update refuses a Goodreads slug with 422" do
+            change(@asoiaf, {goodreads_series_id: "130291-batman-2011"})
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
           test "create refuses a Goodreads id another series holds and creates nothing" do
             Identifier.create!(identifiable: @asoiaf, identifier_type: :books_series_goodreads_id, value: "777", source: :admin)
 

@@ -2282,10 +2282,10 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Create a series
       description: |
-        Creates a series from a required `title`. `goodreads_series_id` (a string) is optional and is stored as an admin-sourced identifier. Refused (422) when the title is blank or when another series, deleted ones included, already holds that Goodreads id: a deleted series keeps its Goodreads id, so it cannot be claimed twice. Returns the new series with its books. Requires `books:admin:write`, and the token's owner must be allowed to create series.
+        Creates a series from a required `title`. `goodreads_series_id` (a string of digits, the number in goodreads.com/series/<digits>-name) is optional and is stored as an admin-sourced identifier. Refused (422) when the title is blank, when the id is blank or not all digits (a slug or a URL is refused), or when another series, deleted ones included, already holds that Goodreads id: a deleted series keeps its Goodreads id, so it cannot be claimed twice. Returns the new series with its books. Requires `books:admin:write`, and the token's owner must be allowed to create series.
       x-mcp:
         description: >-
-          Creates a series from a required `title`, optionally with `goodreads_series_id` (a string). Search with
+          Creates a series from a required `title`, optionally with `goodreads_series_id` (only the digits from goodreads.com/series/<digits>-name; a slug or URL is refused). Search with
           list_admin_series first so you do not create a duplicate, and pass the Goodreads series id when you know it:
           it is what lets the Goodreads enrichment keep adding books to this series. It is refused (422) when another
           series, a deleted one included, already holds that Goodreads id. The response carries the new series' integer `id`.
@@ -2372,12 +2372,12 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Edit a series
       description: |
-        Changes only the keys sent: `title`, `representative_book_id` (a book already in the series, or null to clear it) and `goodreads_series_id` (a string, accepted only while the series has none; an existing id is never replaced). An empty body or a value of the wrong JSON type is 400; an unknown key, a blank title, a representative book that is not in the series, a Goodreads id another series holds, or a deleted or merged series is 422. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+        Changes only the keys sent: `title`, `representative_book_id` (a book already in the series, or null to clear it) and `goodreads_series_id` (a string of digits from goodreads.com/series/<digits>-name, accepted only while the series has none; an existing id is never replaced). An empty body or a value of the wrong JSON type is 400; an unknown key, a blank title, a representative book that is not in the series, a blank or non-digit Goodreads id, a Goodreads id another series holds, or a deleted or merged series is 422. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
       x-mcp:
         description: >-
           Edits one series by integer id (from list_admin_series). Send only the keys to change: `title`,
-          `representative_book_id` (a book already in the series; null clears it) and `goodreads_series_id` (only while
-          the series has none). A deleted or merged series cannot be edited (422). To change which books are in the
+          `representative_book_id` (a book already in the series; null clears it) and `goodreads_series_id` (only the digits from
+          goodreads.com/series/<digits>-name, and only while the series has none). A deleted or merged series cannot be edited (422). To change which books are in the
           series or their positions use add_series_book, update_series_book and remove_series_book.
       parameters:
         - $ref: "#/components/parameters/id"
@@ -2595,7 +2595,7 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Change a book's place in a series
       description: |
-        Changes only the keys sent: `position` (number with at most 2 decimals, or null to clear), `numbered` (boolean) and `position_label` (string, or null or blank to clear). An empty body or a value of the wrong JSON type is 400, an unknown key is 422, and a book the series does not contain is 404. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
+        Changes only the keys sent: `position` (number with at most 2 decimals, or null to clear), `numbered` (boolean) and `position_label` (string, or null or blank to clear). An empty body or a value of the wrong JSON type is 400, an unknown key is 422, and a book the series does not contain is 404; a deleted or merged series is 422. Returns the series with its books. Requires `books:admin:write`, and the token's owner must be allowed to change series.
       x-mcp:
         description: >-
           Changes the position, numbered flag or position_label of book `book_id` in series `id` and returns the series
@@ -3758,7 +3758,7 @@ components:
       additionalProperties: false
       properties:
         title: {type: string, description: The series title. Blank is a 422.}
-        goodreads_series_id: {type: string, description: "The Goodreads series id, as a string. Refused (422) when another series holds it."}
+        goodreads_series_id: {type: string, pattern: "^[0-9]+$", description: "The digits from the Goodreads series URL (goodreads.com/series/<digits>-name), as a string. Refused (422) when another series holds it."}
     AdminSeriesUpdateRequest:
       type: object
       additionalProperties: false
@@ -3769,7 +3769,7 @@ components:
           description: A book already in the series, or null to clear it. A JSON integer.
           type: [integer, "null"]
           minimum: 1
-        goodreads_series_id: {type: string, description: Accepted only while the series has none.}
+        goodreads_series_id: {type: string, pattern: "^[0-9]+$", description: "The digits from goodreads.com/series/<digits>-name. Accepted only while the series has none."}
     AdminSeriesMergeRequest:
       type: object
       required: [source_ids]

@@ -44,6 +44,29 @@ module Services
           end
         end
 
+        test "create refuses a goodreads id that is not digits, or blank, and creates nothing" do
+          ["130291-batman-2011", "https://www.goodreads.com/series/130291-batman-2011", "12 3"].each do |value|
+            assert_no_difference("::Books::Series.count") do
+              result = Create.call(attrs: {"title" => "Bad Id", "goodreads_series_id" => value})
+              assert_not result.success?
+              assert_equal :unprocessable, result.code
+              assert_equal ["goodreads_series_id must be the digits from the series URL (goodreads.com/series/<digits>-name)."], result.errors
+            end
+          end
+          [nil, "", "  "].each do |value|
+            assert_no_difference("::Books::Series.count") do
+              result = Create.call(attrs: {"title" => "Blank Id", "goodreads_series_id" => value})
+              assert_not result.success?
+              assert_equal :unprocessable, result.code
+              assert_equal ["goodreads_series_id must not be blank."], result.errors
+            end
+          end
+        end
+
+        test "create without the goodreads key still succeeds" do
+          assert Create.call(attrs: {"title" => "No Key"}).success?
+        end
+
         test "create without a title is unprocessable" do
           assert_no_difference("::Books::Series.count") do
             result = Create.call(attrs: {"title" => " "})

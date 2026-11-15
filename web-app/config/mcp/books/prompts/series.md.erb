@@ -16,15 +16,18 @@ Tools:
 
 - `list_admin_series` lists series. Filters: `q` (title substring), `min_books`, `max_books`, `include_deleted`; sort by `title`, `book_count` or `id`. Start with `max_books=1` and `min_books=1`, since single-book series are where most junk is. Also look for titles that read like publisher lines. Page through the whole list.
 - `get_admin_series` shows one series with its books, their authors and their positions. `get_admin_book` shows which series a book is in. Use both before you decide.
-- `create_admin_series` (optional `goodreads_series_id`), `update_admin_series` (`title`, `representative_book_id`, and `goodreads_series_id` on a series that has none), `add_series_book`, `update_series_book` and `remove_series_book` (keyed by book id) fix the contents.
-- A book in several series: usually one of them is a publisher line or imprint. Check each with `get_admin_series` and delete the one that is not a real series.
+- `create_admin_series` (optional `goodreads_series_id`), `update_admin_series` (`title`, `representative_book_id`, and `goodreads_series_id` on a series that has none; digits only), `add_series_book`, `update_series_book` and `remove_series_book` (keyed by book id) fix the contents.
+- A book in several series: check each with `get_admin_series` before touching any.
+  - A book in a sub-series and in its wider world belongs in both ("Steel Ball Run" and "JoJo's Bizarre Adventure", "Lazarus Long" and "Future History"). Keep both.
+  - Delete one of a book's series only when that series is a publisher line, imprint, or format or subject collection.
+  - Reading-order variants ("(Publication Order)", "(Chronological)", "(Recommended Reading Order)", "(Internal Chronology Order)") are one series. Keep the publication-order one and rename it to the plain series name, dropping the "(Publication Order)" suffix. Merge each variant into it when the variant holds books the kept one lacks; otherwise delete the variant. Then check the positions follow publication order.
 - `delete_admin_series` and `merge_admin_series` take `dry_run`. In `merge_admin_series`, `id` is the series that survives and `source_ids` lists 1 to 50 series folded into it. Check you have not swapped them.
 
 Workflow:
 
 1. Call `dry_run: true` first on every `delete_admin_series` and `merge_admin_series`, read what it says would happen, and only then run it for real.
 2. Deletes and merges stick: the Goodreads enrichment follows a merge and skips a deleted series, so it will not bring either back. For a junk series, delete the whole series rather than removing its books one by one. Removing a single book from a series that stays live may be undone, because the next enrichment of that book re-links it if Goodreads still lists it there.
-3. Before `create_admin_series`, search with `list_admin_series q=...` and with `search_admin_books` to check the series and its books are not already there. Pass the Goodreads series id when you know it. Another series holding that id refuses the create.
+3. Before `create_admin_series`, search with `list_admin_series q=...` and with `search_admin_books` to check the series and its books are not already there. Pass the Goodreads series id when you know it: only the digits from the series URL (goodreads.com/series/<digits>-name). Another series holding that id refuses the create.
 4. A deleted or merged series cannot be edited. Take every id from the tools, never from memory.
 
 You are authorised to act without asking me. If you genuinely cannot tell whether something is a legitimate series, leave it alone and say why.

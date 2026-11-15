@@ -5,9 +5,11 @@ module Services
       # its Goodreads series id, never by title: unrelated series share titles, and the
       # slug (friendly_id) keeps same-titled rows apart.
       #
-      # Callers run this only on the goodreads_fetch capsule (concurrency 1). The
-      # find-then-create below takes no lock, so two concurrent calls for the same new
-      # series id could each create one.
+      # Find-or-create runs under GoodreadsIdLock, the same advisory lock the admin/API
+      # create takes, so concurrent callers can't create two series for one id. Linking
+      # locks the series row and re-checks it, so a concurrent Delete or Merge wins
+      # cleanly. Series are resolved first and then locked in ascending id order, the
+      # order Merge locks in, so a surrounding transaction can't deadlock against it.
       class ApplySeries
         PLAIN_NUMBER = /\A\d+(\.\d+)?\z/
 
@@ -20,19 +22,30 @@ module Services
         end
 
         def call(entries)
-          Array(entries).map { |entry| apply(entry) }
+          resolved = Array(entries).map do |entry|
+            label = entry["position"].to_s.strip.presence
+            if entry["goodreads_series_id"].blank?
+              {entry: entry, label: label, fact: fact(entry, label, false, "invalid")}
+            else
+              series, created = find_or_create_series(entry["goodreads_series_id"], entry["title"])
+              if series.nil?
+                {entry: entry, label: label, fact: fact(entry, label, false, "deleted_series")}
+              else
+                {entry: entry, label: label, series: series, created: created}
+              end
+            end
+          end
+
+          # Lock and link in ascending series id order; facts stay in entry order.
+          resolved.each_with_index.select { |r, _| r[:series] }.sort_by { |r, i| [r[:series].id, i] }.each do |r, _|
+            r[:fact] = link(r[:entry], r[:label], r[:series], r[:created])
+          end
+          resolved.map { |r| r[:fact] }
         end
 
         private
 
-        def apply(entry)
-          id = entry["goodreads_series_id"]
-          label = entry["position"].to_s.strip.presence
-          return fact(entry, label, false, "invalid") if id.blank?
-
-          series, created = find_or_create_series(id, entry["title"])
-          return fact(entry, label, false, "deleted_series") if series.nil?
-
+        def link(entry, label, series, created)
           # Lock the series row and re-check it: a Delete or Merge may have committed since
           # canonical was resolved, and a link on a deleted series is never cleaned up.
           ::Books::Series.transaction do
