@@ -759,6 +759,9 @@ Rails.application.routes.draw do
             delete "books/:id/categories/:category_id", to: "book_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
             post "authors/:id/categories", to: "author_categories#create", constraints: {id: /\d+/}
             delete "authors/:id/categories/:category_id", to: "author_categories#destroy", constraints: {id: /\d+/, category_id: /\d+/}
+            post "books/:id/authors", to: "book_authors#create", constraints: {id: /\d+/}
+            patch "books/:id/authors/:author_id", to: "book_authors#update", constraints: {id: /\d+/, author_id: /\d+/}
+            delete "books/:id/authors/:author_id", to: "book_authors#destroy", constraints: {id: /\d+/, author_id: /\d+/}
           end
         end
       end

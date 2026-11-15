@@ -24,7 +24,8 @@ module Api
           attributes :provisional
 
           attribute :authors do |book|
-            book.authors.map { |author| ::Api::V1::Books::AuthorSummaryResource.new(author).to_h }
+            book.book_authors.sort_by { |row| [row.position || Float::INFINITY, row.id] }
+              .map { |row| BookAuthorEntryResource.new(row).to_h }
           end
 
           attribute :cleared_fields do |book|

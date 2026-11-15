@@ -126,6 +126,15 @@ module Api
             assert_equal %w[first_published_year subtitle], data[:cleared_fields]
           end
 
+          test "show lists each author with the role, position and credited name of the join row" do
+            get "/api/v1/admin/books/#{@war.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            entry = json[:data][:authors].find { |a| a[:id] == books_authors(:tolstoy).id }
+            assert_equal %w[id slug name role position credited_as], entry.keys.map(&:to_s)
+            assert_equal ["author", 1, "Lev Tolstoy"], [entry[:role], entry[:position], entry[:credited_as]]
+          end
+
           test "show gives a null original_language and no cleared fields when there are none" do
             @war.update!(original_language: nil)
 
