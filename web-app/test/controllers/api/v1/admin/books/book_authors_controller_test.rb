@@ -9,6 +9,7 @@ module Api
           READ = ApiTokenSecrets::ADMIN_READ
 
           setup do
+            stub_workflow_dispatch
             host! "dev-new.thegreatestbooks.org"
             @book = books_books(:war_and_peace)
             @tolstoy = books_authors(:tolstoy)

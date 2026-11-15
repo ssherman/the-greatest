@@ -8,6 +8,7 @@ module Services
       # decided_by_user_id and reviewed_at, and reviewed_via says which surface they used ("admin_ui" or "api").
       class Review
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+        REIMPORT_MATCH_MESSAGE = "A re-import match can't be rejected; correct it with correct_repair_verdict instead."
 
         def self.approve(verdict:, user:, via:)
           verdict.with_lock do
@@ -24,6 +25,7 @@ module Services
         def self.reject(verdict:, user:, via:)
           verdict.with_lock do
             next failure(:already_rejected, "This verdict is already rejected.") if verdict.rejected?
+            next failure(:reimport_match, REIMPORT_MATCH_MESSAGE) if verdict.reimport_match?
 
             applied = verdict.applied_at.present?
             reverted = applied && verdict.mark_provisional?

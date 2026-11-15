@@ -66,6 +66,18 @@ module Services
           end
         end
 
+        test "reject refuses a reimport_match and leaves it unchanged" do
+          v = verdict("r:rm", kind: :reimport_match)
+
+          result = Review.reject(verdict: v, user: @admin, via: "api")
+
+          refute result.success?
+          assert_equal :reimport_match, result.data[:code]
+          assert_equal "A re-import match can't be rejected; correct it with correct_repair_verdict instead.", result.errors.first
+          assert_predicate v.reload, :proposed?
+          assert_nil v.reviewed_at
+        end
+
         test "reject refuses an already rejected verdict" do
           v = verdict("r:2", status: :rejected)
 

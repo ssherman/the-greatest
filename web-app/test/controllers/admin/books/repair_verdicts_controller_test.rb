@@ -207,6 +207,17 @@ module Admin
         assert_select "[data-testid=correct-form]", 0
       end
 
+      test "rejecting a reimport_match is refused and changes nothing" do
+        match = reimport_match
+        sign_in_as(@admin, stub_auth: true)
+
+        post reject_admin_books_repair_verdict_path(match)
+
+        assert_redirected_to admin_books_repair_verdict_path(match)
+        assert_predicate match.reload, :proposed?
+        assert_nil match.reviewed_at
+      end
+
       test "reject marks a verdict rejected" do
         sign_in_as(@admin, stub_auth: true)
 

@@ -1034,13 +1034,13 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Reject a repair verdict
       description: |
-        Rejects a repair verdict as the token's owner, via the API. A rejected verdict is never applied again. Rejecting an applied `mark_provisional` verdict takes it back (the book is no longer provisional); an applied merge or relink is not undone. Rejecting a `reimport_match` is final and strands the readers waiting on it: use the correct operation to give the right answer instead. Refused (422) when already rejected or superseded. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+        Rejects a repair verdict as the token's owner, via the API. A rejected verdict is never applied again. Rejecting an applied `mark_provisional` verdict takes it back (the book is no longer provisional); an applied merge or relink is not undone. A `reimport_match` cannot be rejected: it strands the readers waiting on it, so use the correct operation to give the right answer instead. Refused (422) for a `reimport_match`, or when already rejected or superseded. Requires `books:admin:write`, and the token's owner must be allowed to change books.
       x-mcp:
         description: >-
           Rejects one repair verdict so it is never applied. An applied mark_provisional is reverted (the book stops
-          being provisional); an applied merge or relink stays as it is. Do not reject a reimport_match that is wrong:
-          that strands its readers, so use correct_repair_verdict with the right book or create:true. A 422 means the
-          verdict is already rejected or was superseded. Returns the verdict with its detail.
+          being provisional); an applied merge or relink stays as it is. A reimport_match cannot be rejected
+          (it strands its readers): use correct_repair_verdict with the right book or create:true. A 422 means the
+          verdict is a reimport_match, is already rejected, or was superseded. Returns the verdict with its detail.
       parameters:
         - $ref: "#/components/parameters/id"
       responses:

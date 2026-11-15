@@ -21,7 +21,11 @@ module Services
 
           attrs["position"] = next_position(book) if attrs["position"].nil?
           row = book.book_authors.build(attrs.merge("author_id" => author_id))
-          save(row)
+          ::Books::BookAuthor.transaction do
+            result = save(row)
+            enrich_on_first_book(author_id) if result.success?
+            result
+          end
         rescue ActiveRecord::RecordNotUnique
           duplicate(author_id)
         end
@@ -51,6 +55,19 @@ module Services
           attrs
         end
         private_class_method :normalize
+
+        # An author made by hand (or by an agent) has never been enriched. Its first book is the evidence the
+        # enrichment needs, so the first link starts the run, once: the author row lock makes a second parallel
+        # link wait for the first commit and then see its run. Planned inside the transaction, dispatched after
+        # commit, so a rollback leaves nothing. An author created with a QID already has a run and is left alone.
+        def self.enrich_on_first_book(author_id)
+          author = ::Books::Author.lock.find_by(id: author_id)
+          return unless author
+          return if WorkflowRun.exists?(workflow: ::Workflows::Books::AuthorEnrichment.workflow, enrichable: author)
+
+          ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "first_book_link")
+        end
+        private_class_method :enrich_on_first_book
 
         def self.next_position(book)
           # Most books hold only NULL positions, which sort last. Numbering the new

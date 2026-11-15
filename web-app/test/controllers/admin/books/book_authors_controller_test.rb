@@ -4,6 +4,7 @@ module Admin
   module Books
     class BookAuthorsControllerTest < ActionDispatch::IntegrationTest
       setup do
+        stub_workflow_dispatch
         @admin_user = users(:admin_user)
         @regular_user = users(:regular_user)
         @book = books_books(:war_and_peace)
