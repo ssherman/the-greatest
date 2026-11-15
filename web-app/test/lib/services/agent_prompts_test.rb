@@ -72,8 +72,34 @@ module Services
       assert_equal before + 1, count.call
     end
 
+    test "series prompt renders the counts and names the tools" do
+      prompt = AgentPrompts.call(domain: :books, queue: :series)
+
+      live = ::Books::Series.active
+      single = live.joins(:series_books).group("books_series.id").having("COUNT(*) = 1").count.size
+      several = ::Books::SeriesBook.where(series_id: live.select(:id)).group(:book_id).having("COUNT(*) > 1").count.size
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "#{live.count} live series"
+      assert_includes prompt, "#{single} hold a single book"
+      assert_includes prompt, "#{several} books are in more than one series"
+      %w[list_admin_series get_admin_series create_admin_series update_admin_series delete_admin_series
+        merge_admin_series add_series_book update_series_book remove_series_book].each do |tool|
+        assert_includes prompt, tool
+      end
+    end
+
+    test "series counts ignore deleted series" do
+      count = -> { AgentPrompts.call(domain: :books, queue: :series)[/(\d+) live series/, 1].to_i }
+      before = count.call
+      ::Books::Series.create!(title: "Gone", deleted: true)
+      assert_equal before, count.call
+      ::Books::Series.create!(title: "Alive")
+      assert_equal before + 1, count.call
+    end
+
     test "is nil for a domain with no prompt file" do
       assert_nil AgentPrompts.call(domain: :games, queue: :repair_verdicts)
+      assert_nil AgentPrompts.call(domain: :games, queue: :series)
       assert_nil AgentPrompts.call(domain: :games, queue: :duplicates)
       assert_nil AgentPrompts.call(domain: :games, queue: :match_decisions)
     end

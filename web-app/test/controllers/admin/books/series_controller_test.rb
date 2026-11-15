@@ -36,6 +36,15 @@ module Admin
         assert_response :success
       end
 
+      test "index assigns the agent prompt" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get admin_books_series_index_path
+
+        assert_response :success
+        assert_equal Services::AgentPrompts.call(domain: :books, queue: :series), @controller.view_assigns["agent_prompt"]
+      end
+
       # Index behavior (SQL ILIKE — no OpenSearch, no stubbing; mirrors games series tests)
 
       test "index without a query renders the sorted list" do

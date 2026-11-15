@@ -5,6 +5,7 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
   def index
     authorize ::Books::Series
     load_series_for_index
+    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :series)
   end
 
   def show
