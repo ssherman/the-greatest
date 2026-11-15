@@ -50,21 +50,52 @@ module Api
             assert_equal [@asoiaf.title], titles
           end
 
-          test "sort=book_count orders by count descending, then id" do
-            list(sort: "book_count")
-
-            assert_equal @asoiaf.id, json[:data].first[:id]
-            rest = json[:data].drop(1)
-            assert_equal rest.map { |row| row[:id] }.sort, rest.map { |row| row[:id] }
-            assert_equal [3, 0], [json[:data].first[:book_count], json[:data].last[:book_count]]
+          def create_series_sorting_first
+            ::Books::Series.create!(title: "AAA Short Run").tap do |series|
+              ::Books::SeriesBook.create!(series: series, book: books_books(:war_and_peace), position: 1)
+            end
           end
 
-          test "paging works with a book_count filter and sort" do
-            list(min_books: 0, sort: "book_count", per_page: 1, page: 2)
+          test "sort=book_count orders by count descending, then id, unlike the title order" do
+            short = create_series_sorting_first
+            live = books_series(:live_target)
+
+            list
+            assert_equal [short.id, @asoiaf.id, live.id], json[:data].map { |row| row[:id] }
+
+            list(sort: "book_count")
+            assert_equal [@asoiaf.id, short.id, live.id], json[:data].map { |row| row[:id] }
+            assert_equal [3, 1, 0], json[:data].map { |row| row[:book_count] }
+          end
+
+          test "equal book counts fall back to id" do
+            first = create_series_sorting_first
+            second = ::Books::Series.create!(title: "ZZZ Short Run")
+            ::Books::SeriesBook.create!(series: second, book: books_books(:of_mice_and_men), position: 1)
+
+            list(sort: "book_count", max_books: 1, min_books: 1)
+
+            assert_equal [first.id, second.id].sort, json[:data].map { |row| row[:id] }
+          end
+
+          test "paging with sort=book_count returns the right row on each page" do
+            short = create_series_sorting_first
+
+            list(sort: "book_count", per_page: 1, page: 2)
             assert_api_response_conform(status: 200, api: :admin)
 
-            assert_equal [2, 1], [json[:meta][:page], json[:data].size]
-            assert_equal ::Books::Series.active.count, json[:meta][:total_count]
+            assert_equal [short.id], json[:data].map { |row| row[:id] }
+            assert_equal 3, json[:meta][:total_count]
+          end
+
+          test "min_books 1 with max_books 1 returns single-book series and not empty ones" do
+            short = create_series_sorting_first
+
+            list(min_books: 1, max_books: 1)
+
+            assert_equal [short.id], json[:data].map { |row| row[:id] }
+            list(max_books: 1)
+            assert_includes json[:data].map { |row| row[:id] }, books_series(:live_target).id
           end
 
           test "a row carries the count and the goodreads id" do
@@ -74,6 +105,16 @@ module Api
 
             assert_equal [{id: @asoiaf.id, slug: @asoiaf.slug, title: @asoiaf.title, book_count: 3, goodreads_series_id: "45", deleted: false, merged_into_id: nil}],
               json[:data]
+          end
+
+          test "show carries the goodreads id, or null when there is none" do
+            @asoiaf.identifiers.create!(identifier_type: :books_series_goodreads_id, value: "45")
+
+            get "/api/v1/admin/series/#{@asoiaf.id}", headers: bearer(READ)
+            assert_equal "45", json[:data][:goodreads_series_id]
+
+            get "/api/v1/admin/series/#{books_series(:live_target).id}", headers: bearer(READ)
+            assert_nil json[:data][:goodreads_series_id]
           end
 
           test "bad sort or a non-integer bound is a 400" do

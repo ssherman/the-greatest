@@ -2202,13 +2202,13 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: List book series
       description: |
-        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`max_books=1` finds single-book series); `sort` is `title` (default) or `book_count` (most books first). Requires `books:admin:read`.
+        Books series by title, with the number of books in each and its Goodreads series id. Deleted series (soft-deleted junk and series merged into another) are hidden unless `include_deleted=true`. `q` is a case-insensitive title substring; `min_books` and `max_books` bound the book count (`min_books=1` with `max_books=1` finds single-book series); `sort` is `title` (default) or `book_count` (most books first). Requires `books:admin:read`.
       x-mcp:
         description: >-
           Lists book series by title. A legitimate series is a run of books the author or publisher presents as one
           sequence; a single-book series is almost always a mistake. Deleted and merged series are hidden unless
-          `include_deleted` is true. `q` is a title substring, `max_books: 1` finds the single-book series worth
-          checking, `sort: book_count` puts the biggest first. Use it to find the integer series `id` that
+          `include_deleted` is true. `q` is a title substring, `min_books: 1` with `max_books: 1` finds the single-book series worth
+          checking (`max_books: 1` alone also returns series with no books), `sort: book_count` puts the biggest first. Use it to find the integer series `id` that
           get_admin_series takes.
       parameters:
         - name: q
@@ -2234,7 +2234,7 @@ paths:
         - name: max_books
           in: query
           required: false
-          description: Only series with at most this many books; 1 finds single-book series.
+          description: Only series with at most this many books; with `min_books=1`, 1 finds single-book series (alone it includes empty series).
           schema:
             type: integer
             minimum: 0
