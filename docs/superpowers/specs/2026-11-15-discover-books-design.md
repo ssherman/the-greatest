@@ -33,8 +33,9 @@ None of it saves anything: `SavedSearchQuery.call(criteria:, owner:)` takes a pl
 
 ## Goals
 
-- **One endpoint and tool:** `GET /api/v1/books/discover`, MCP tool `discover_books`, scope
-  `books:read`. It exposes every filter above plus:
+- **One endpoint and tool:** `GET /api/v1/discover/books`, MCP tool `discover_books`, scope
+  `books:read`. (The path mirrors `/api/v1/search/books`; `/api/v1/books/discover` would
+  shadow a book whose slug is `discover`.) It exposes every filter above plus:
   - an `order` of `rank` (the default) or `random`;
   - a rank range (`rank_min`, `rank_max`).
 - **A language lookup:** `GET /api/v1/languages`, MCP tool `list_languages`, so a model never
@@ -84,7 +85,7 @@ either order.
 
 ## Design
 
-### `GET /api/v1/books/discover` (`discoverBooks`, tool `discover_books`)
+### `GET /api/v1/discover/books` (`discoverBooks`, tool `discover_books`)
 
 **Parameters.** Every one is optional, and with none the endpoint returns the whole catalogue in
 rank order.
@@ -187,11 +188,11 @@ the documented 503 `search_unavailable`.
 ### `GET /api/v1/languages` (`listLanguages`, tool `list_languages`)
 
 - **What it lists:** every language that is the original language of at least one catalogue book
-  (`Books::Book.catalog`), with `id`, `slug`, `name` and `book_count` (catalogue books in that
+  (`Books::Book.catalog`), with `slug`, `name` and `book_count` (catalogue books in that
   language).
 - **`sort`:** `book_count` (most first, the default) or `name`; any other value is a 400.
 - **Paging:** standard, as `list_countries` does it. 220 rows fit in 3 pages at 100.
-- **Response schema:** `LanguageCollection`, with `Language` (`id, slug, name, book_count`).
+- **Response schema:** `LanguageCollection`, with `Language` (`slug, name, book_count`, like `Country`).
 - **Description for the model:** "use it to find the slugs `language` and `exclude_language`
   accept in discover_books".
 
