@@ -20,6 +20,7 @@ module Api
     LIST_PARAMS = %i[category_id exclude_category_id country_id exclude_country_id language exclude_language length].freeze
     RANGE_PARAMS = %i[published_start published_end].freeze
     MAX_LANGUAGES = 10
+    # Also the ceiling for rank_min and rank_max: ranked_position is an int32 in the index.
     MAX_SEED = 2_147_483_647
     RANKED_VALUES = %w[all ranked unranked].freeze
     ORDER_VALUES = %w[rank random].freeze
@@ -201,7 +202,7 @@ module Api
     def rank_bound(name)
       return nil unless sent?(name)
 
-      Api::Page.integer(@params[name], name: name.to_s, default: nil, min: 1)
+      Api::Page.integer(@params[name], name: name.to_s, default: nil, min: 1, max: MAX_SEED)
     end
 
     def apply_hide_read

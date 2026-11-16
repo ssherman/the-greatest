@@ -11,6 +11,11 @@ module Api
       names.each { |name| assert_includes error.message, name }
     end
 
+    test "rank_min and rank_max above the int32 range are rejected" do
+      assert_invalid({rank_max: "3000000000"}, "rank_max")
+      assert_invalid({rank_min: "3000000000"}, "rank_min")
+    end
+
     test "every parameter sent produces the exact criteria and applied" do
       result = filter(
         category_id: "novels,fiction", category_match: "any", exclude_category_id: "politics",

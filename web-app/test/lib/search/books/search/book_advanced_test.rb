@@ -337,9 +337,10 @@ module Search
         end
 
         test "build_query_definition raises ArgumentError for page 0 (shape only)" do
-          assert_raises(ArgumentError) do
+          error = assert_raises(ArgumentError) do
             ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}), page: 0)
           end
+          assert_includes error.message, "page must be >= 1"
         end
 
         # Real index: OpenSearch validates from + size against
@@ -393,13 +394,6 @@ module Search
           assert_equal [1], ids_for({"genre_match_mode" => "any"})
         end
 
-        private
-
-        def cleanup_test_index
-          ::Search::Books::BookIndex.delete_index
-        rescue OpenSearch::Transport::Transport::Errors::NotFound
-        end
-
         test "min_ranked_position excludes unranked books and ranks below the floor" do
           index_book(1, ranked_position: 1)
           index_book(2, ranked_position: 5)
@@ -449,11 +443,20 @@ module Search
         end
 
         test "random order without a seed raises ArgumentError" do
-          assert_raises(ArgumentError) { ids_for({}, order: :random) }
+          error = assert_raises(ArgumentError) { ids_for({}, order: :random) }
+          assert_includes error.message, "order: :random needs a seed"
         end
 
         test "an unknown order raises ArgumentError" do
-          assert_raises(ArgumentError) { ids_for({}, order: :newest) }
+          error = assert_raises(ArgumentError) { ids_for({}, order: :newest) }
+          assert_includes error.message, "order must be one of"
+        end
+
+        private
+
+        def cleanup_test_index
+          ::Search::Books::BookIndex.delete_index
+        rescue OpenSearch::Transport::Transport::Errors::NotFound
         end
       end
     end

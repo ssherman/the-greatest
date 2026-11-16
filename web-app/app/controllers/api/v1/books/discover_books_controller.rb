@@ -23,10 +23,11 @@ module Api
           page_number = ::Api::Page.integer(params[:page], name: "page", default: 1, min: 1, max: ::Api::Page::MAX_PAGE)
           per_page = ::Api::Page.integer(params[:per_page], name: "per_page", default: ::Api::Page::DEFAULT_PER_PAGE, min: 1, max: ::Api::Page::MAX_PER_PAGE)
 
+          # ceil, unlike Books::SavedSearchQuery.max_page (floor): the HTML pages never serve a short page, the API does.
           max_page = (WINDOW.to_f / per_page).ceil
           if page_number > max_page
             raise ::Api::Page::InvalidParameter,
-              "page must be at most #{max_page} at per_page=#{per_page}: only the first #{WINDOW} results can be paged, so narrow the filters"
+              "page is past the last reachable page (#{max_page} at per_page=#{per_page}): only the first #{WINDOW} results can be paged, so narrow the filters to see more"
           end
 
           result = search(filters, page_number, per_page)

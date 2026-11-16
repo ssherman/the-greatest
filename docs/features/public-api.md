@@ -66,8 +66,8 @@ Spec: `docs/superpowers/specs/2026-11-15-discover-books-design.md`. `GET /api/v1
   - `language`, `exclude_language`: up to 10 language slugs each, matched against the book's original language.
   - `length`: any of `very_short, short, medium, moderate, long, very_long`. A book with no length never matches.
   - `year`, or `published_start` / `published_end`: first published, inclusive, same bounds as `list_books`. `year` cannot be combined with the range.
-  - `ranked`: `all` (default), `ranked` or `unranked`. `rank_min`, `rank_max`: positive integers on the primary ranking, inclusive; either implies ranked only.
-  - `order`: `rank` (default) or `random`. `seed`: a positive integer, only with `order=random`.
+  - `ranked`: `all` (default), `ranked` or `unranked`. `rank_min`, `rank_max`: positive integers up to 2147483647 (the index stores `ranked_position` as an int32) on the primary ranking, inclusive; either implies ranked only.
+  - `order`: `rank` (default) or `random`. `seed`: a positive integer up to 2147483647, only with `order=random`.
   - `hide_read`: `true` or `false` (default). `true` leaves out the books on the token's user's read list.
   - `page`, `per_page`: the standard paging parameters.
 - **400s** (`invalid_parameter`, `detail` names the parameter): a blank, array or hash value; too many slugs; an unknown `length`, `ranked`, `order` or `category_match`; `category_match` without `category_id`; `year` with a range; `rank_min` above `rank_max`; a rank bound with `ranked=unranked`; `seed` without `order=random` or not a positive integer; a `hide_read` that is not `true` or `false`; a slug both included and excluded.

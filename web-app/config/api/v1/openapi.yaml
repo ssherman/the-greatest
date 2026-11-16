@@ -1315,17 +1315,17 @@ paths:
         - name: exclude_category_id
           in: query
           required: false
-          description: "Comma-separated category slugs to leave out. A slug cannot also be in `category_id`."
+          description: "Comma-separated category slugs to leave out, up to 6. A slug cannot also be in `category_id`."
           schema: {type: string, minLength: 1}
         - name: country_id
           in: query
           required: false
-          description: "Comma-separated country slugs, as listed by list_countries. A book from any of them matches."
+          description: "Comma-separated country slugs, up to 10, as listed by list_countries. A book from any of them matches."
           schema: {type: string, minLength: 1}
         - name: exclude_country_id
           in: query
           required: false
-          description: "Comma-separated country slugs to leave out."
+          description: "Comma-separated country slugs to leave out, up to 10."
           schema: {type: string, minLength: 1}
         - name: language
           in: query
@@ -1342,21 +1342,9 @@ paths:
           required: false
           description: "Comma-separated book lengths from very_short, short, medium, moderate, long, very_long. A book of any of them matches."
           schema: {type: string, minLength: 1}
-        - name: year
-          in: query
-          required: false
-          description: "Books first published in this year. Cannot be combined with published_start or published_end."
-          schema: {type: integer, minimum: -4000}
-        - name: published_start
-          in: query
-          required: false
-          description: "Books first published in or after this year."
-          schema: {type: integer, minimum: -4000}
-        - name: published_end
-          in: query
-          required: false
-          description: "Books first published in or before this year."
-          schema: {type: integer, minimum: -4000}
+        - $ref: "#/components/parameters/year"
+        - $ref: "#/components/parameters/published_start"
+        - $ref: "#/components/parameters/published_end"
         - name: ranked
           in: query
           required: false
@@ -1365,13 +1353,13 @@ paths:
         - name: rank_min
           in: query
           required: false
-          description: "Keep books ranked at this position or worse (a larger number). Implies ranked books only. Cannot be combined with ranked=unranked."
-          schema: {type: integer, minimum: 1}
+          description: "Keep books ranked at this position or worse (a larger number). Implies ranked books only. Cannot be combined with ranked=unranked. At most 2147483647."
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
         - name: rank_max
           in: query
           required: false
-          description: "Keep books ranked at this position or better (a smaller number). Implies ranked books only. Cannot be combined with ranked=unranked."
-          schema: {type: integer, minimum: 1}
+          description: "Keep books ranked at this position or better (a smaller number). Implies ranked books only. Cannot be combined with ranked=unranked. At most 2147483647."
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
         - name: order
           in: query
           required: false
