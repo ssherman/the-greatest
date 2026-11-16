@@ -144,6 +144,34 @@ namespace :e2e do
     puts "removed #{Books::RepairVerdict.where("subject_key LIKE 'e2e:%'").delete_all} verdict(s)"
   end
 
+  desc "Seed a duplicate pair naming a mixed book for e2e/tests/books/admin/duplicates-rebuilding.spec.ts"
+  task rebuilding_pair_seed: :environment do
+    # Two throwaway books, so the mixed verdict never names a real one: an apply run in development could only
+    # delete the throwaway. Idempotent: resets the pair to pending and the verdict to approved.
+    mixed = Books::Book.find_or_create_by!(title: "E2E Rebuilding Mixed Book")
+    other = Books::Book.find_or_create_by!(title: "E2E Rebuilding Other Book")
+    a, b = [mixed.id, other.id].minmax
+    pair = DuplicateCandidate.find_or_initialize_by(item_type: "Books::Book", item_a_id: a, item_b_id: b)
+    pair.update!(source: :human, status: :pending, resolved_at: nil, resolved_by: nil, resolved_via: nil,
+      resolution_note: nil, evidence: {"reason" => "E2E rebuilding spec"})
+    verdict = Books::RepairVerdict.find_or_initialize_by(kind: :reimport_mixed, subject_key: "e2e:rebuilding_mixed")
+    verdict.update!(status: :approved, decided_by: :rule, reason: "E2E rebuilding spec", applied_at: nil,
+      superseded_at: nil, reviewed_at: nil, error: nil, payload: {book_id: mixed.id})
+    puts({pair_id: pair.id}.to_json)
+  end
+
+  desc "Remove what e2e:rebuilding_pair_seed created"
+  task rebuilding_pair_cleanup: :environment do
+    books = Books::Book.where(title: ["E2E Rebuilding Mixed Book", "E2E Rebuilding Other Book"]).to_a
+    ids = books.map(&:id)
+    pairs = DuplicateCandidate.where(item_type: "Books::Book").where("item_a_id IN (:ids) OR item_b_id IN (:ids)", ids: ids)
+    removed = {pairs: pairs.count, verdicts: Books::RepairVerdict.where(subject_key: "e2e:rebuilding_mixed").count, books: books.size}
+    pairs.each(&:destroy!)
+    Books::RepairVerdict.where(subject_key: "e2e:rebuilding_mixed").each(&:destroy!)
+    books.each(&:destroy!)
+    puts "removed #{removed.to_json}"
+  end
+
   desc "Seed a placeholder author with one matched Wikidata link for e2e/tests/books/admin/reject-link.spec.ts"
   task reject_link_seed: :environment do
     # A placeholder (exclude_from_rankings), so the Wikidata run the reject
