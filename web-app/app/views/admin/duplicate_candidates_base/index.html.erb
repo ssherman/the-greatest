@@ -26,6 +26,18 @@
     <% end %>
   </div>
 
+  <% if @status == "pending" && (@hidden_rebuilding.positive? || @show_rebuilding) %>
+    <div role="status" class="alert" data-testid="being-rebuilt-notice">
+      <% if @show_rebuilding %>
+        <span>Showing the <%= @hidden_rebuilding %> pairs that name a mixed book the Goodreads re-import is emptying. They can't be judged yet, and close when the re-import deletes the book.</span>
+        <%= link_to "Back to the queue", duplicates_index_path(status: "pending"), class: "btn btn-sm" %>
+      <% else %>
+        <span><%= @hidden_rebuilding %> pairs hidden: they name a mixed book the Goodreads re-import is emptying, so they can't be judged yet.</span>
+        <%= link_to "Show them", duplicates_index_path(status: "pending", rebuilding: "1"), class: "btn btn-sm" %>
+      <% end %>
+    </div>
+  <% end %>
+
   <% if @status != "pending" %>
     <div class="join" data-testid="via-filter">
       <% [["All", nil], ["Admin page", "admin_ui"], ["API", "api"]].each do |label, via| %>

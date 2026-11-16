@@ -28,6 +28,18 @@ module Services
       assert_equal before, AgentPrompts.call(domain: "books", queue: :duplicates)
     end
 
+    test "duplicates counts leave out pairs naming a book the re-import is emptying" do
+      before = AgentPrompts.call(domain: "books", queue: :duplicates)
+      pair = duplicate_candidates(:books_pending_pair)
+      ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:mixed:#{pair.item_a_id}",
+        payload: {"book_id" => pair.item_a_id}, decided_by: :rule, status: :approved)
+
+      after = AgentPrompts.call(domain: "books", queue: :duplicates)
+      pending = DuplicateCandidate.pending.where(item_type: "Books::Book").count
+      assert_includes before, "#{pending} pending book pairs"
+      assert_includes after, "#{pending - 1} pending book pairs"
+    end
+
     test "match decisions renders the admin MCP url and the pending counts per finder" do
       pending = MatchDecision.needing_review.where(verify: false).group(:finder).count
       prompt = AgentPrompts.call(domain: :books, queue: :match_decisions)

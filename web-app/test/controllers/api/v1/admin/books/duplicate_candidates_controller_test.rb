@@ -43,6 +43,36 @@ module Api
             assert(json[:data].all? { |row| row[:status] == "pending" })
           end
 
+          def mix!(book)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:mixed:#{book.id}", payload: {"book_id" => book.id},
+              decided_by: :rule, status: :approved)
+          end
+
+          test "pairs naming a book the re-import is emptying are hidden unless include_rebuilding is true" do
+            mix!(::Books::Book.find(@pending.item_a_id))
+
+            list
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_not_includes json[:data].map { |row| row[:id] }, @pending.id
+            assert_operator json[:meta][:hidden_being_rebuilt], :>=, 1
+
+            list({include_rebuilding: "true"})
+            assert_api_response_conform(status: 200, api: :admin)
+            row = json[:data].find { |r| r[:id] == @pending.id }
+            assert row[:being_rebuilt]
+            assert_equal 0, json[:meta][:hidden_being_rebuilt]
+          end
+
+          test "a pair says whether a record is being rebuilt, and get shows it too" do
+            list
+            assert_equal false, json[:data].find { |r| r[:id] == @pending.id }[:being_rebuilt]
+
+            mix!(::Books::Book.find(@pending.item_b_id))
+            fetch(@pending.id)
+            assert_api_response_conform(status: 200, api: :admin)
+            assert json[:data][:being_rebuilt]
+          end
+
           test "status and item_type filter" do
             author = author_pair
 

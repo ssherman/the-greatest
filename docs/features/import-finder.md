@@ -127,6 +127,15 @@ pending one gains an occurrence and evidence. Every merger calls
 merged, other pending pairs naming the source re-key onto the target, and decisions that
 named the source now name the target.
 
+Pairs naming a record being rebuilt are left out of the queue (`Services::DuplicateCandidates::BeingRebuilt`):
+today, a book the Goodreads re-import is emptying (an approved, current, unapplied, not kept `reimport_mixed`
+verdict). Such a record holds readers of several books, so "is it the same as X?" has no answer yet. The admin
+page hides them from the pending tab and count, with a notice and a "Show them" link (`rebuilding=1`); the admin
+API's list hides them unless `include_rebuilding=true` and counts them in `meta.hidden_being_rebuilt`; each pair
+carries `being_rebuilt`; and the agent prompt's counts leave them out. When the re-import deletes the book, its
+pending pairs are closed as `not_duplicate` with a note saying why. A mixed book the re-import keeps stops being
+one, and its pairs return to the queue.
+
 ## State by increment
 
 Increment 1 wrapped every legacy lookup; **increment 2 (books)** replaced the books finder's

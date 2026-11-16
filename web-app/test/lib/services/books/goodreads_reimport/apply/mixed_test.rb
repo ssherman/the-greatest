@@ -232,6 +232,20 @@ module Services
             assert_not ::Books::Book.exists?(@mixed.id)
           end
 
+          test "deleting the book closes its pending duplicate pairs; a refused delete leaves them pending" do
+            ids = [@mixed.id, @to.id].minmax
+            pair = DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: ids[0], item_b_id: ids[1], source: :ai)
+            UserListItem.create!(user_list: list(:read), listable: @mixed)
+
+            assert_equal :noop, Mixed.call(verdict: mixed_verdict).data[:outcome]
+            assert pair.reload.pending?
+
+            UserListItem.where(listable: @mixed).delete_all
+            assert_equal :applied, Mixed.call(verdict: ::Books::RepairVerdict.reimport_mixed.last).data[:outcome]
+            assert pair.reload.not_duplicate?
+            assert_equal ::Services::DuplicateCandidates::BeingRebuilt::CLOSED_NOTE, pair.resolution_note
+          end
+
           test "refuses while a reader's list item is left that no copy accounts for" do
             UserListItem.create!(user_list: list(:read), listable: @mixed)
 
