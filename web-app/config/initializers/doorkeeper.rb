@@ -67,6 +67,19 @@ module OauthLoopbackUriChecker
   end
 end
 
+# offline_access is accepted at authorization and never stored (Oauth::Resources drops it), so a grant never holds
+# it. Codex sends its original scope list back on every refresh, offline_access included, and Doorkeeper requires a
+# refresh's scopes to be a subset of the grant's: the refresh failed with invalid_scope an hour into every Codex
+# session. A refresh therefore ignores offline_access; asking only for it keeps the grant's scopes, and any other
+# scope the grant does not hold is still invalid_scope. The version-pin test says when to re-check this patch.
+module OauthRefreshIgnoresOfflineAccess
+  def initialize(server, refresh_token, credentials, parameters = {})
+    super
+    asked = @original_scopes.to_s.split - ["offline_access"]
+    @original_scopes = asked.empty? ? nil : asked.join(" ")
+  end
+end
+
 Rails.application.config.to_prepare do
   # The API scopes plus offline_access, which is accepted from clients that
   # send it (Codex does) and not stored: refresh tokens are always issued.
@@ -78,4 +91,7 @@ Rails.application.config.to_prepare do
 
   singleton = Doorkeeper::OAuth::Helpers::URIChecker.singleton_class
   singleton.prepend(OauthLoopbackUriChecker) unless singleton.include?(OauthLoopbackUriChecker)
+
+  refresh = Doorkeeper::OAuth::RefreshTokenRequest
+  refresh.prepend(OauthRefreshIgnoresOfflineAccess) unless refresh.include?(OauthRefreshIgnoresOfflineAccess)
 end
