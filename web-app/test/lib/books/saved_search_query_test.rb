@@ -189,5 +189,14 @@ module Books
         result.books.each { |book| book.book_authors.map(&:author) }
       end
     end
+
+    test "forwards order, seed and track_total_hits to the search" do
+      ::Search::Books::Search::BookAdvanced
+        .expects(:call)
+        .with(anything, has_entries(order: :random, seed: 3, track_total_hits: true))
+        .returns({ids: [], total: 0, total_relation: "eq"})
+
+      ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner, order: :random, seed: 3, track_total_hits: true)
+    end
   end
 end

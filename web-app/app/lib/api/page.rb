@@ -40,15 +40,21 @@ module Api
       raise InvalidParameter, "#{name} must be an integer #{range}"
     end
 
-    def initialize(page:, per_page:, total_count:)
+    def initialize(page:, per_page:, total_count:, max_page: nil)
       @page = page
       @per_page = per_page
       @total_count = total_count
+      @max_page = max_page
     end
 
     def offset = (page - 1) * per_page
 
-    def total_pages = [(total_count.to_f / per_page).ceil, 1].max
+    # `max_page` is a ceiling a backing store imposes (OpenSearch's result window):
+    # the total is still exact, but pages past the ceiling cannot be read.
+    def total_pages
+      computed = [(total_count.to_f / per_page).ceil, 1].max
+      @max_page ? [computed, @max_page].min : computed
+    end
 
     def next_page = (page < total_pages) ? page + 1 : nil
 

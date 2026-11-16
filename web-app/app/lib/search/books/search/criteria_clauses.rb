@@ -45,6 +45,9 @@ module Search
 
           clauses << {exists: {field: "ranked_position"}} if criteria.ranked == :ranked
 
+          min_position = criteria.min_ranked_position
+          clauses << {range: {ranked_position: {gte: min_position}}} if min_position
+
           max_position = criteria.max_ranked_position
           clauses << {range: {ranked_position: {lte: max_position}}} if max_position
 

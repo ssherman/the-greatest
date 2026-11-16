@@ -18,9 +18,10 @@ module Books
   # the ranked-then-unranked interleaving from an IN clause.
   class SavedSearchQuery
     # `capped?` because track_total_hits stays at OpenSearch's default of
-    # 10,000 (spec §6): past that ceiling it stops counting and reports a lower
-    # bound. It answers that from OpenSearch's own `relation` rather than by
-    # comparing the total to the ceiling -- a search matching *exactly* 10,000
+    # 10,000 (spec §6) unless the caller passes `track_total_hits: true`: past
+    # that ceiling it stops counting and reports a lower bound. It answers
+    # that from OpenSearch's own `relation` rather than by comparing the
+    # total to the ceiling -- a search matching *exactly* 10,000
     # reports "eq" and is an exact total, not a capped one.
     Result = Struct.new(:books, :total, :total_relation, keyword_init: true) do
       def capped?
@@ -34,7 +35,8 @@ module Books
       ::Search::Books::Search::BookAdvanced::MAX_RESULT_WINDOW / per_page
     end
 
-    def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50)
+    def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50,
+      order: :rank, seed: nil, track_total_hits: false)
       default = ::Books::RankingConfiguration.default_primary
       rc = ranking_configuration || default
       ensure_default_primary!(rc, default)
@@ -43,7 +45,10 @@ module Books
         criteria,
         page: page,
         per_page: per_page,
-        excluded_book_ids: criteria.hide_read ? read_book_ids(owner) : []
+        excluded_book_ids: criteria.hide_read ? read_book_ids(owner) : [],
+        order: order,
+        seed: seed,
+        track_total_hits: track_total_hits
       )
 
       Result.new(

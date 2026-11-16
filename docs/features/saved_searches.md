@@ -141,6 +141,14 @@ Pages are per-user, so they are never cached (`prevent_caching`) and never index
 1. **`hide_read` filters against the search's owner, never the current viewer.** `SavedSearchQuery.call` is always given `owner: @search.user`, not `current_user`. This is what keeps a *public* search's results identical for every viewer — the "hide books I've read" the owner set stays about the owner, not about whoever happens to be looking.
 2. **A criterion that's present but unresolvable must match nothing, not everything.** If a stored or submitted value doesn't parse (an unresolvable `book_type`, a category id that isn't an integer, ...), `BookAdvanced` adds `MATCH_NOTHING_CLAUSE` (`{terms: {category_ids: []}}`) rather than silently dropping the clause. Dropping it would turn a broken filter into an unfiltered search over the whole corpus — the opposite of what the user asked for.
 
+## Shared with the public API
+
+`GET /api/v1/discover/books` (MCP `discover_books`, see `docs/features/public-api.md`) runs this same engine, so a criterion means the same thing in both. The API never creates or reads `saved_searches` rows: `Api::DiscoverBookFilters` builds a criteria hash and `Books::SavedSearchQuery.call` runs it with the token's user as `owner`. Three things were added for it, and saved searches keep their old behaviour because every default is unchanged:
+
+- **`min_ranked_position`**, a `SavedSearchCriteria` key beside `max_ranked_position`. `CriteriaClauses` turns it into a `gte` on `ranked_position`; with either bound set the clause is a range on that field, so unranked books are excluded.
+- **`order` and `seed`** on `BookAdvanced.call` / `build_query_definition` (and passed through `SavedSearchQuery.call`). The default `order: :rank` keeps `BookAdvanced::SORT`. `order: :random` wraps the query in a `function_score` with `random_score` (the seed, on `_seq_no`) and sorts by `_score` then `_id`.
+- **`track_total_hits:`**, default false. The API sets it true so its total is exact; saved searches leave it off and keep the 10,000 lower bound below.
+
 ## The 10,000-result ceiling
 
 OpenSearch's `track_total_hits` is left at its default, which stops the count at 10,000. Past that
