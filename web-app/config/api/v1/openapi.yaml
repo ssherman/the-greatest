@@ -1421,6 +1421,57 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/languages:
+    x-domain: books
+    get:
+      operationId: listLanguages
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Original languages of catalogue books
+      description: |
+        The original languages of the catalogue's books, with the slug that `language` and `exclude_language` accept on discover_books. `book_count` counts the catalogue books originally written in the language. `sort` is `book_count` (most books first, the default) or `name`. A language with no catalogue books is left out. Any other `sort` is a 400.
+      x-mcp:
+        description: >-
+          Lists the original languages of catalogue books, most books first, with their slugs and
+          `book_count`. Use it to find the slugs `language` and `exclude_language` accept in
+          discover_books, instead of guessing.
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [book_count, name]
+            default: book_count
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of languages.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguageCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -2080,6 +2131,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Country"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    Language:
+      type: object
+      required: [slug, name, book_count]
+      properties:
+        slug: {type: string, description: The value `language` and `exclude_language` accept on discover_books.}
+        name: {type: string}
+        book_count:
+          type: integer
+          minimum: 0
+          description: Catalogue books originally written in this language.
+    LanguageCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Language"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

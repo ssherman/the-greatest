@@ -372,7 +372,7 @@ module Api
       rpc("tools/list")
 
       names = json.dig("result", "tools").map { |tool| tool["name"] }
-      %w[search_categories list_countries get_ranking_configuration_book
+      %w[search_categories list_countries list_languages get_ranking_configuration_book
         list_ranking_configuration_book_lists get_ranking_configuration_list].each do |name|
         assert_includes names, name
       end

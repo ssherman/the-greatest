@@ -59,6 +59,25 @@ module Books
       order_by(scope, sort, "books_countries.name")
     end
 
+    # Languages with at least one catalogue book originally written in them,
+    # with that count as book_count. Provisional books are not counted.
+    def self.languages(sort: nil)
+      scope = ::Language
+        .joins(<<~SQL)
+          INNER JOIN (
+            SELECT original_language_id, COUNT(*) AS book_count
+            FROM books_books
+            WHERE NOT provisional AND original_language_id IS NOT NULL
+            GROUP BY original_language_id
+          ) language_counts ON language_counts.original_language_id = languages.id
+        SQL
+        .select("languages.*, language_counts.book_count")
+
+      return scope.order("languages.name") if normalized_sort(sort) == "name"
+
+      scope.order("language_counts.book_count DESC", "languages.name")
+    end
+
     def self.normalized_type(type)
       TYPES.include?(type.to_s) ? type.to_s : TYPES.first
     end

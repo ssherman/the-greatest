@@ -174,6 +174,11 @@ module Api
         ["GET", "/api/v1/countries", "401"] => -> { get "/api/v1/countries" },
         ["GET", "/api/v1/countries", "403"] => -> { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
         ["GET", "/api/v1/countries", "429"] => -> { with_exhausted_limit { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/languages", "200"] => -> { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/languages", "400"] => -> { get "/api/v1/languages?sort=popularity", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/languages", "401"] => -> { get "/api/v1/languages" },
+        ["GET", "/api/v1/languages", "403"] => -> { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/languages", "429"] => -> { with_exhausted_limit { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MEMBER) } },
         ["GET", "/api/v1/discover/books", "200"] => lambda {
           ::Search::Books::Search::BookAdvanced.stubs(:call).returns({ids: [books_books(:war_and_peace).id], total: 1, total_relation: "eq"})
           get "/api/v1/discover/books?language=english&order=random&seed=3", headers: bearer(ApiTokenSecrets::MEMBER)
