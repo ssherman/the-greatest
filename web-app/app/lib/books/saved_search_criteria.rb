@@ -17,12 +17,13 @@ module Books
     ].freeze
 
     # The criteria `#unparseable?` applies to: the id arrays, book_type,
-    # book_length, the publication-year bounds, and max_ranked_position. NOT
+    # book_length, the publication-year bounds, and the min/max ranked position. NOT
     # `ranked` (its blank state IS "All Books", not a failure -- see #ranked),
     # NOT `genre_match_mode` (defaults to :any by design, no invalid state),
     # NOT `hide_read` (a boolean cast has no unparseable state).
     UNPARSEABLE_KEYS = (ID_ARRAY_KEYS + %w[
-      book_type book_length first_year_published_gt first_year_published_lt max_ranked_position
+      book_type book_length first_year_published_gt first_year_published_lt
+      min_ranked_position max_ranked_position
     ]).freeze
 
     def initialize(raw)
@@ -72,6 +73,12 @@ module Books
     # false, for a blank value.
     def hide_read
       !!ActiveModel::Type::Boolean.new.cast(@raw["hide_read"])
+    end
+
+    # The rank floor: the public API's "skip the famous top N". A range on
+    # ranked_position also excludes unranked books, which have no position.
+    def min_ranked_position
+      int_or_nil("min_ranked_position")
     end
 
     def max_ranked_position

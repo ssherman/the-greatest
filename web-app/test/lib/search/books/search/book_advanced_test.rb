@@ -399,6 +399,62 @@ module Search
           ::Search::Books::BookIndex.delete_index
         rescue OpenSearch::Transport::Transport::Errors::NotFound
         end
+
+        test "min_ranked_position excludes unranked books and ranks below the floor" do
+          index_book(1, ranked_position: 1)
+          index_book(2, ranked_position: 5)
+          index_book(3, ranked_position: 10)
+          index_book(4, ranked_position: nil)
+
+          assert_equal [2, 3], ids_for({"min_ranked_position" => 5}).sort
+        end
+
+        test "random order with the same seed is stable and differs from rank order" do
+          (1..12).each { |id| index_book(id, ranked_position: id) }
+
+          first = ids_for({}, order: :random, seed: 42)
+          second = ids_for({}, order: :random, seed: 42)
+
+          assert_equal first, second
+          assert_not_equal (1..12).to_a, first
+          assert_not_equal first, ids_for({}, order: :random, seed: 7)
+        end
+
+        test "random pages with one seed cover every match exactly once" do
+          (1..7).each { |id| index_book(id) }
+
+          paged = (1..3).flat_map { |page| ids_for({}, order: :random, seed: 9, page: page, per_page: 3) }
+
+          assert_equal 7, paged.size
+          assert_equal (1..7).to_a, paged.sort
+        end
+
+        test "adds track_total_hits only when asked" do
+          with = ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}), track_total_hits: true)
+          without = ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}))
+
+          assert_equal true, with[:track_total_hits]
+          assert_not without.key?(:track_total_hits)
+        end
+
+        test "random order wraps the bool query in function_score" do
+          rank = ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}))
+          random = ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}), order: :random, seed: 42)
+
+          assert_equal(
+            {function_score: {query: rank[:query], random_score: {seed: 42, field: "_seq_no"}, boost_mode: "replace"}},
+            random[:query]
+          )
+          assert_equal [{_score: {order: "desc"}}, {_id: {order: "asc"}}], random[:sort]
+        end
+
+        test "random order without a seed raises ArgumentError" do
+          assert_raises(ArgumentError) { ids_for({}, order: :random) }
+        end
+
+        test "an unknown order raises ArgumentError" do
+          assert_raises(ArgumentError) { ids_for({}, order: :newest) }
+        end
       end
     end
   end
