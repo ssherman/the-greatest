@@ -19,8 +19,9 @@ module Books
   class SavedSearchQuery
     # `capped?` because track_total_hits stays at OpenSearch's default of
     # 10,000 (spec §6) unless the caller passes `track_total_hits: true`: past
-    # that ceiling it stops counting and reports a lower bound. It answers that from OpenSearch's own `relation` rather than by
-    # comparing the total to the ceiling -- a search matching *exactly* 10,000
+    # that ceiling it stops counting and reports a lower bound. It answers
+    # that from OpenSearch's own `relation` rather than by comparing the
+    # total to the ceiling -- a search matching *exactly* 10,000
     # reports "eq" and is an exact total, not a capped one.
     Result = Struct.new(:books, :total, :total_relation, keyword_init: true) do
       def capped?
