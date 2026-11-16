@@ -14,6 +14,7 @@ House rules, from past decisions:
 - Judge a record by its own title, author and year, not by editions or readers attached to it by mistake. The legacy importer put other books' readers on many records, and the Goodreads re-import moves them; that is not a reason to hold back an otherwise clear merge.
 - Anthologies a publisher assembled ("... and Other Tales", "Selected Stories", "Best of") are different books unless their contents are shown to match: dismiss them as different selections. A collection the author fixed (Dubliners, Nine Stories, Ficciones) is one work, and its translations merge.
 - A single volume, part or issue is never the same book as the whole work or as another volume: dismiss.
+- When a record's own data caused a false pair (an alternate title, subtitle or year that belongs to a different work), fix that record with get_admin_book and update_book as well as dismissing: remove the wrong alternate titles (the list is replaced whole) and correct the subtitle or year, with the evidence in the note. Left in place, the wrong data keeps pulling the record into searches and future pairs. Only correct a field you have a source for; never invent a value.
 
 Rules for author pairs, from past decisions (find an author's id with search_admin_authors and read it with get_admin_author):
 

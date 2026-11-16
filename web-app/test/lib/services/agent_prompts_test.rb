@@ -28,6 +28,13 @@ module Services
       assert_equal before, AgentPrompts.call(domain: "books", queue: :duplicates)
     end
 
+    test "duplicates prompt tells the agent to fix the data that caused a false pair" do
+      prompt = AgentPrompts.call(domain: "books", queue: :duplicates)
+
+      assert_includes prompt, "update_book"
+      assert_match(/own data caused a false pair/, prompt)
+    end
+
     test "duplicates counts leave out pairs naming a book the re-import is emptying" do
       before = AgentPrompts.call(domain: "books", queue: :duplicates)
       pair = duplicate_candidates(:books_pending_pair)
