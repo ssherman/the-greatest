@@ -57,7 +57,18 @@ module Api
       assert_includes names, "get_book"
       assert_includes names, "list_books"
       assert_includes names, "search_books"
+      assert_includes names, "discover_books"
       assert names.none? { |name| name.include?("per_page") }
+    end
+
+    test "tools/call discover_books dispatches the filters and returns the seed" do
+      ::Search::Books::Search::BookAdvanced.stubs(:call).returns({ids: [@war_and_peace.id], total: 1, total_relation: "eq"})
+
+      call_tool("discover_books", {language: "english", order: "random", seed: 3})
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [@war_and_peace.id], tool_text["data"].map { |book| book["id"] }
+      assert_equal [3, "random"], [tool_text.dig("meta", "seed"), tool_text.dig("meta", "order")]
     end
 
     test "tools/call get_book returns the REST body" do

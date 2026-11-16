@@ -40,7 +40,8 @@ paths:
           narrowing with `country_id`, `year`, `category_id`, `collection` or the published range
           (list_categories and search_categories find category slugs; list_countries finds country
           slugs), and prefer search_books when you have a title or author.
-          `limit` is at most 100; `meta.total_count` gives the size of the whole result.
+          `limit` is at most 100; `meta.total_count` gives the size of the whole result. For length,
+          original language, exclusions, unranked books, rank ranges or a random order, use discover_books.
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
@@ -1282,6 +1283,144 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/discover/books:
+    x-domain: books
+    get:
+      operationId: discoverBooks
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Discover books
+      description: |
+        Filters the catalogue by category, country, original language, length, year, rank range and your own Read list, in rank order or a seeded random order. Unlike `/api/v1/books` it can return unranked books. `rank` is the book's position in the site's primary ranking, or null when it is unranked. `meta.filters` echoes the filters that were sent, in canonical form. `meta.total_count` is exact, but only the first 10,000 results can be paged: a larger `page` is a 400, so narrow the filters. With `order=random`, `meta.seed` is the seed used and every link carries it. Empty until a primary ranking has been calculated. When the search service is down the answer is a 503 with code `search_unavailable`; retry shortly.
+      x-mcp:
+        description: >-
+          Finds books by combining filters list_books lacks: length, original language, excluded
+          categories, countries or languages, unranked books, a rank range, your own Read list
+          (`hide_read`) and a random order. Use it for "a short Russian novel I have not read" or "surprise
+          me" questions; prefer list_books for a plain top-N. Take slugs from search_categories,
+          list_categories, list_countries and list_languages. Results are best-ranked first with
+          `order=rank`, and `rank` is null for an unranked book. For `order=random`, pass `meta.seed` back
+          as `seed` to page the same order. `meta.total_count` is exact, but at most the first 10,000
+          results can be paged.
+      parameters:
+        - name: category_id
+          in: query
+          required: false
+          description: "Comma-separated category slugs, up to 6, as listed by list_categories or search_categories. Merged and renamed slugs resolve."
+          schema: {type: string, minLength: 1}
+        - name: category_match
+          in: query
+          required: false
+          description: "How several `category_id` slugs combine. `all` (the default) needs every one, `any` needs at least one. Only valid with `category_id`."
+          schema: {type: string, enum: [all, any], default: all}
+        - name: exclude_category_id
+          in: query
+          required: false
+          description: "Comma-separated category slugs to leave out. A slug cannot also be in `category_id`."
+          schema: {type: string, minLength: 1}
+        - name: country_id
+          in: query
+          required: false
+          description: "Comma-separated country slugs, as listed by list_countries. A book from any of them matches."
+          schema: {type: string, minLength: 1}
+        - name: exclude_country_id
+          in: query
+          required: false
+          description: "Comma-separated country slugs to leave out."
+          schema: {type: string, minLength: 1}
+        - name: language
+          in: query
+          required: false
+          description: "Comma-separated original-language slugs, up to 10, as listed by list_languages. A book in any of them matches. An unknown slug is a 404."
+          schema: {type: string, minLength: 1}
+        - name: exclude_language
+          in: query
+          required: false
+          description: "Comma-separated original-language slugs to leave out, up to 10."
+          schema: {type: string, minLength: 1}
+        - name: length
+          in: query
+          required: false
+          description: "Comma-separated book lengths from very_short, short, medium, moderate, long, very_long. A book of any of them matches."
+          schema: {type: string, minLength: 1}
+        - name: year
+          in: query
+          required: false
+          description: "Books first published in this year. Cannot be combined with published_start or published_end."
+          schema: {type: integer, minimum: -4000}
+        - name: published_start
+          in: query
+          required: false
+          description: "Books first published in or after this year."
+          schema: {type: integer, minimum: -4000}
+        - name: published_end
+          in: query
+          required: false
+          description: "Books first published in or before this year."
+          schema: {type: integer, minimum: -4000}
+        - name: ranked
+          in: query
+          required: false
+          description: "`ranked` keeps only books on the primary ranking, `unranked` only those off it, `all` (the default) both."
+          schema: {type: string, enum: [all, ranked, unranked], default: all}
+        - name: rank_min
+          in: query
+          required: false
+          description: "Keep books ranked at this position or worse (a larger number). Implies ranked books only. Cannot be combined with ranked=unranked."
+          schema: {type: integer, minimum: 1}
+        - name: rank_max
+          in: query
+          required: false
+          description: "Keep books ranked at this position or better (a smaller number). Implies ranked books only. Cannot be combined with ranked=unranked."
+          schema: {type: integer, minimum: 1}
+        - name: order
+          in: query
+          required: false
+          description: "`rank` (the default) is best-ranked first, unranked books after. `random` is a seeded shuffle."
+          schema: {type: string, enum: [rank, random], default: rank}
+        - name: seed
+          in: query
+          required: false
+          description: "Seed for `order=random`, 1 to 2147483647. Omitted, one is generated and returned in `meta.seed`; pass it back to page the same order. Only valid with order=random."
+          schema: {type: integer, minimum: 1, maximum: 2147483647}
+        - name: hide_read
+          in: query
+          required: false
+          description: "`true` leaves out the books on your own Read list."
+          schema: {type: boolean, default: false}
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: "A page of books."
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -1661,6 +1800,40 @@ components:
               properties:
                 filters:
                   $ref: "#/components/schemas/AppliedFilters"
+    DiscoverFilters:
+      type: object
+      additionalProperties: false
+      description: The filters the server applied, in canonical form. Only the ones that were sent appear.
+      properties:
+        category_id: {type: string}
+        category_match: {type: string, enum: [all, any]}
+        exclude_category_id: {type: string}
+        country_id: {type: string}
+        exclude_country_id: {type: string}
+        language: {type: string}
+        exclude_language: {type: string}
+        length: {type: string}
+        year: {type: integer}
+        published_start: {type: integer}
+        published_end: {type: integer}
+        ranked: {type: string, enum: [all, ranked, unranked]}
+        rank_min: {type: integer}
+        rank_max: {type: integer}
+        hide_read: {type: boolean}
+    DiscoverBookCollection:
+      allOf:
+        - $ref: "#/components/schemas/BookCollection"
+        - type: object
+          required: [meta]
+          properties:
+            meta:
+              type: object
+              required: [order]
+              properties:
+                filters:
+                  $ref: "#/components/schemas/DiscoverFilters"
+                order: {type: string, enum: [rank, random]}
+                seed: {type: integer, description: "The seed of a random order. Present only with order=random."}
     BookItem:
       type: object
       required: [data]
