@@ -172,6 +172,34 @@ module Oauth
       assert_mcp_works(response.parsed_body["access_token"])
     end
 
+    test "a refresh that repeats the original scope list with offline_access succeeds, as Codex sends it" do
+      tokens = obtain_tokens(scope: "books:read offline_access")
+      assert_equal "books:read", tokens["scope"]
+
+      refresh(tokens["refresh_token"], scope: "books:read offline_access")
+
+      assert_response :success
+      assert_equal "books:read", response.parsed_body["scope"]
+      assert_mcp_works(response.parsed_body["access_token"])
+    end
+
+    test "a refresh asking for only offline_access keeps the original scopes" do
+      tokens = obtain_tokens(scope: "books:read offline_access")
+
+      refresh(tokens["refresh_token"], scope: "offline_access")
+
+      assert_response :success
+      assert_equal "books:read", response.parsed_body["scope"]
+    end
+
+    test "a refresh asking for a scope the grant does not hold is still invalid_scope" do
+      tokens = obtain_tokens(scope: "books:read offline_access")
+
+      refresh(tokens["refresh_token"], scope: "books:read music:read offline_access")
+
+      assert_oauth_error(400, "invalid_scope")
+    end
+
     test "a refresh naming another resource is invalid_target" do
       tokens = obtain_tokens
 
