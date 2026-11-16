@@ -58,6 +58,18 @@ module Search
 
           assert_includes clauses, {terms: {category_ids: [target.id]}}
         end
+
+        test "min and max ranked position each produce their own range clause" do
+          clauses = CriteriaClauses.filter_clauses(criteria("min_ranked_position" => 5, "max_ranked_position" => 20))
+          assert_includes clauses, {range: {ranked_position: {gte: 5}}}
+          assert_includes clauses, {range: {ranked_position: {lte: 20}}}
+        end
+
+        test "min_ranked_position alone produces only the gte clause" do
+          clauses = CriteriaClauses.filter_clauses(criteria("min_ranked_position" => 5))
+          assert_includes clauses, {range: {ranked_position: {gte: 5}}}
+          assert_not clauses.any? { |c| c.dig(:range, :ranked_position, :lte) }
+        end
       end
     end
   end

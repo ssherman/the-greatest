@@ -173,7 +173,25 @@ module Api
         ["GET", "/api/v1/countries", "400"] => -> { get "/api/v1/countries?sort=popularity", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/countries", "401"] => -> { get "/api/v1/countries" },
         ["GET", "/api/v1/countries", "403"] => -> { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
-        ["GET", "/api/v1/countries", "429"] => -> { with_exhausted_limit { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/countries", "429"] => -> { with_exhausted_limit { get "/api/v1/countries", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/languages", "200"] => -> { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/languages", "400"] => -> { get "/api/v1/languages?sort=popularity", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/languages", "401"] => -> { get "/api/v1/languages" },
+        ["GET", "/api/v1/languages", "403"] => -> { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/languages", "429"] => -> { with_exhausted_limit { get "/api/v1/languages", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/discover/books", "200"] => lambda {
+          ::Search::Books::Search::BookAdvanced.stubs(:call).returns({ids: [books_books(:war_and_peace).id], total: 1, total_relation: "eq"})
+          get "/api/v1/discover/books?language=english&order=random&seed=3", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/discover/books", "400"] => -> { get "/api/v1/discover/books?rank_min=10&rank_max=5", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/discover/books", "401"] => -> { get "/api/v1/discover/books" },
+        ["GET", "/api/v1/discover/books", "403"] => -> { get "/api/v1/discover/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/discover/books", "404"] => -> { get "/api/v1/discover/books?language=klingon", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/discover/books", "429"] => -> { with_exhausted_limit { get "/api/v1/discover/books", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/discover/books", "503"] => lambda {
+          ::Search::Books::Search::BookAdvanced.stubs(:call).raises(Faraday::ConnectionFailed, "down")
+          get "/api/v1/discover/books", headers: bearer(ApiTokenSecrets::MEMBER)
+        }
       }.freeze
 
       setup do

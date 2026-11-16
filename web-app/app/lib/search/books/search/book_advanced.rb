@@ -35,6 +35,18 @@ module Search
           {_id: {order: "asc"}}
         ].freeze
 
+        # `order: :random` replaces SORT with a seeded shuffle: function_score's
+        # random_score scores every match from the seed and each document's
+        # `_seq_no`, so one seed gives one stable order that pages consistently
+        # (the same seed over an unchanged index covers every match exactly once).
+        # `_id` again breaks any score tie.
+        RANDOM_SORT = [
+          {_score: {order: "desc"}},
+          {_id: {order: "asc"}}
+        ].freeze
+
+        ORDERS = %i[rank random].freeze
+
         MATCH_NOTHING_CLAUSE = CriteriaClauses::MATCH_NOTHING_CLAUSE
 
         DEFAULT_PER_PAGE = 50
@@ -48,9 +60,13 @@ module Search
           ::Search::Books::BookIndex.index_name
         end
 
-        def self.call(criteria, page: 1, per_page: DEFAULT_PER_PAGE, excluded_book_ids: [])
+        # `track_total_hits: true` asks OpenSearch for an exact total instead of
+        # stopping at 10,000; saved searches leave it off.
+        def self.call(criteria, page: 1, per_page: DEFAULT_PER_PAGE, excluded_book_ids: [],
+          order: :rank, seed: nil, track_total_hits: false)
           definition = build_query_definition(
-            criteria, page: page, per_page: per_page, excluded_book_ids: excluded_book_ids
+            criteria, page: page, per_page: per_page, excluded_book_ids: excluded_book_ids,
+            order: order, seed: seed, track_total_hits: track_total_hits
           )
           response = search(definition)
 
@@ -65,8 +81,11 @@ module Search
           }
         end
 
-        def self.build_query_definition(criteria, page: 1, per_page: DEFAULT_PER_PAGE, excluded_book_ids: [])
+        def self.build_query_definition(criteria, page: 1, per_page: DEFAULT_PER_PAGE, excluded_book_ids: [],
+          order: :rank, seed: nil, track_total_hits: false)
           raise ArgumentError, "page must be >= 1 (got #{page.inspect})" if page < 1
+          raise ArgumentError, "order must be one of #{ORDERS.inspect} (got #{order.inspect})" unless ORDERS.include?(order)
+          raise ArgumentError, "order: :random needs a seed" if order == :random && seed.nil?
 
           from = (page - 1) * per_page
           # `from + size` must stay <= MAX_RESULT_WINDOW or OpenSearch raises
@@ -78,15 +97,22 @@ module Search
           # 10080, over the ceiling.
           beyond_window = from >= MAX_RESULT_WINDOW
 
-          {
-            query: ::Search::Shared::Utils.build_bool_query(
-              filter: CriteriaClauses.filter_clauses(criteria),
-              must_not: CriteriaClauses.must_not_clauses(criteria, excluded_book_ids)
-            ),
-            sort: SORT,
+          query = ::Search::Shared::Utils.build_bool_query(
+            filter: CriteriaClauses.filter_clauses(criteria),
+            must_not: CriteriaClauses.must_not_clauses(criteria, excluded_book_ids)
+          )
+          if order == :random
+            query = {function_score: {query: query, random_score: {seed: seed, field: "_seq_no"}, boost_mode: "replace"}}
+          end
+
+          definition = {
+            query: query,
+            sort: (order == :random) ? RANDOM_SORT : SORT,
             from: beyond_window ? 0 : from,
             size: beyond_window ? 0 : [per_page, MAX_RESULT_WINDOW - from].min
           }
+          definition[:track_total_hits] = true if track_total_hits
+          definition
         end
       end
     end

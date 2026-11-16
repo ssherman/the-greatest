@@ -94,5 +94,20 @@ module Api
       assert_nil links[:next]
       assert_nil links[:prev]
     end
+
+    test "max_page caps total_pages, next_page and the last link" do
+      page = Page.new(page: 334, per_page: 30, total_count: 100_000, max_page: 334)
+
+      assert_equal 334, page.total_pages
+      assert_nil page.next_page
+      assert_includes page.links("https://x.test/p")[:last], "page=334"
+    end
+
+    test "without max_page total_pages is unchanged" do
+      page = Page.new(page: 334, per_page: 30, total_count: 100_000)
+
+      assert_equal 3334, page.total_pages
+      assert_equal 335, page.next_page
+    end
   end
 end

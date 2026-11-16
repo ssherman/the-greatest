@@ -177,5 +177,15 @@ module Books
         c.book_type
       end
     end
+
+    test "reads min_ranked_position from either shape" do
+      assert_equal 5, criteria({"min_ranked_position" => "5"}).min_ranked_position
+      assert_equal 5, criteria({"min_ranked_position" => 5}).min_ranked_position
+      assert_nil criteria({}).min_ranked_position
+    end
+
+    test "min_ranked_position that does not parse is unparseable" do
+      assert criteria({"min_ranked_position" => "abc"}).unparseable?("min_ranked_position")
+    end
   end
 end

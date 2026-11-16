@@ -88,6 +88,10 @@ Generation fails loudly (`Mcp::Catalog::GenerationError`) rather than build a to
 
 The texts are read once when `Mcp::Sites::Books` loads, so editing one needs a restart. Tests pin what they must say (`test/lib/mcp/sites/books_test.rb`), so a rewording that drops a rule fails.
 
+### Discover and languages tools
+
+`discover_books` (`GET /api/v1/discover/books`) and `list_languages` (`GET /api/v1/languages`) are ordinary `x-mcp` tools on the public document, scope `books:read`; they need no site code beyond the instructions text. `discover_books` is the one to use for any length, language or exclusion filter, unranked books, a rank range (`rank_min`, `rank_max`) or a random order (`order=random`). When paging a random order the client passes `meta.seed` back as `seed`, or each page is a new shuffle. Past the 10,000th result a page is a 400 asking for narrower filters, and an unknown category, country or language slug is a 404. `list_languages` gives the slugs `language` and `exclude_language` take, so a model does not guess them. Their parameters, limits and statuses are in `docs/features/public-api.md` ("Discover books"). `config/mcp/books/instructions.md` names the order (`discover_books` is rank order unless asked for random) and points to `list_languages` beside `search_categories` and `list_countries`; `list_books`' description points to `discover_books`.
+
 ### The tool directory (`Mcp::ToolDirectory`)
 
 `app/lib/mcp/tool_directory.rb`. A list of every tool an endpoint can offer, with no principal: `Entry(name, title, description, destructive, composite)`, catalogue tools in catalogue order and then the site's composites. It exists so documentation pages, which render the same for every visitor, can list tools. It is built from the same catalogue and composites as the factory, so a page cannot drift from the endpoint. It is not a per-request listing. `/developers` uses it for its MCP section (books only; hosts whose catalogue is empty have none) and never lists the admin document.
