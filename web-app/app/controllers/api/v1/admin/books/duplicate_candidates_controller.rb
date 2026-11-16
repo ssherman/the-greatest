@@ -4,7 +4,8 @@ module Api
   module V1
     module Admin
       module Books
-        # GET  /api/v1/admin/duplicate_candidates         -- the queue; status and item_type filter
+        # GET  /api/v1/admin/duplicate_candidates         -- the queue; status and item_type filter; pairs naming a
+        #                                                    book the re-import is emptying are hidden unless include_rebuilding
         # GET  /api/v1/admin/duplicate_candidates/:id     -- one pair with detail, any status
         # POST /api/v1/admin/duplicate_candidates/:id/merge   -- keep target_id, PERMANENTLY delete the pair's other record
         # POST /api/v1/admin/duplicate_candidates/:id/dismiss -- mark the pair not a duplicate
@@ -21,6 +22,7 @@ module Api
           ITEM_TYPES = {"book" => "Books::Book", "author" => "Books::Author"}.freeze
           STATUSES = ::DuplicateCandidate.statuses.keys.freeze
           NOTE_LIMIT = 1000
+          REBUILT = ::Services::DuplicateCandidates::BeingRebuilt
           CHANGED_PAIR = "These records are not this pair's (it changed after another merge); nothing was changed. Get the pair again."
           # Per item type: the model, its policy and the merge response's record shape.
           KINDS = {
@@ -31,15 +33,21 @@ module Api
           def index
             status = enum_param!(:status, STATUSES) || "pending"
             item_type = enum_param!(:item_type, ITEM_TYPES.keys)
+            include_rebuilding = enum_param!(:include_rebuilding, %w[true false]) == "true"
             # id is the tiebreaker: a bulk raise stamps many pairs with one created_at.
             pairs = domain_scope.where(status: status).includes(:resolved_by).newest_first.order(id: :desc)
             pairs = pairs.where(item_type: ITEM_TYPES.fetch(item_type)) if item_type
+            # A record the Goodreads re-import is emptying cannot be judged yet (Services::DuplicateCandidates::BeingRebuilt).
+            hidden = include_rebuilding ? 0 : REBUILT.only(pairs).count
+            pairs = REBUILT.exclude(pairs) unless include_rebuilding
 
             render_page(pairs, path: "/api/v1/admin/duplicate_candidates",
-              query: {status: status, item_type: item_type}.compact) do |rows|
+              query: {status: status, item_type: item_type, include_rebuilding: include_rebuilding || nil}.compact,
+              meta: {hidden_being_rebuilt: hidden}) do |rows|
               loaded = ::Services::DuplicateCandidates::PairRecords.call(rows)
+              rebuilt = rebuilt_ids(rows)
               rows.map do |pair|
-                DuplicateCandidateResource.new(pair, records: loaded.records, summaries: loaded.summaries).to_h
+                DuplicateCandidateResource.new(pair, records: loaded.records, summaries: loaded.summaries, being_rebuilt: rebuilt).to_h
               end
             end
           end
@@ -50,7 +58,7 @@ module Api
 
             loaded = ::Services::DuplicateCandidates::PairRecords.call([pair])
             render json: {data: DuplicateCandidateResource.new(pair, records: loaded.records,
-              summaries: loaded.summaries, detail: true).to_h}
+              summaries: loaded.summaries, being_rebuilt: rebuilt_ids([pair]), detail: true).to_h}
           end
 
           def merge
@@ -128,6 +136,11 @@ module Api
           end
 
           private
+
+          # The book ids on these pairs that the re-import is emptying.
+          def rebuilt_ids(pairs)
+            REBUILT.book_ids(pairs.select { |pair| pair.item_type == "Books::Book" }.flat_map { |pair| [pair.item_a_id, pair.item_b_id] }.uniq)
+          end
 
           def domain_scope
             ::DuplicateCandidate.where(item_type: ITEM_TYPES.values)

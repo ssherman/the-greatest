@@ -15,10 +15,12 @@ module Api
           DESCRIPTION_LIMIT = 500
           DETAIL_LIMIT = 25
 
-          def initialize(pair, records:, summaries:, detail: false)
+          # being_rebuilt: the book ids the Goodreads re-import is emptying (Services::DuplicateCandidates::BeingRebuilt).
+          def initialize(pair, records:, summaries:, being_rebuilt: Set.new, detail: false)
             @pair = pair
             @records = records
             @summaries = summaries
+            @being_rebuilt = being_rebuilt
             @detail = detail
           end
 
@@ -32,6 +34,7 @@ module Api
               evidence: @pair.evidence,
               created_at: @pair.created_at,
               resolution: resolution,
+              being_rebuilt: @pair.item_type == "Books::Book" && [@pair.item_a_id, @pair.item_b_id].any? { |id| @being_rebuilt.include?(id) },
               records: [@pair.item_a_id, @pair.item_b_id].map { |id| record_hash(id) }
             }.tap { |hash| hash[:match_decision] = match_decision if @detail }
           end

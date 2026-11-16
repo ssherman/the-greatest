@@ -388,7 +388,7 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: List suspected duplicate pairs
       description: |
-        The duplicate review queue for books and authors, newest first. Pending pairs by default; `status` selects merged or not_duplicate (dismissed) pairs and `item_type` narrows to books or authors. Each pair carries both records (`records`, lower id first) with the evidence the admin queue page shows. A record a merge or delete has since removed is `{id, missing: true}`. Requires `books:admin:read`.
+        The duplicate review queue for books and authors, newest first. Pending pairs by default; `status` selects merged or not_duplicate (dismissed) pairs and `item_type` narrows to books or authors. Pairs naming a book the Goodreads re-import is emptying (a mixed book, holding readers of several different books) are hidden unless `include_rebuilding` is true; `meta.hidden_being_rebuilt` says how many. They cannot be judged yet, and are closed when the re-import deletes the book. Each pair carries both records (`records`, lower id first) with the evidence the admin queue page shows. A record a merge or delete has since removed is `{id, missing: true}`. Requires `books:admin:read`.
       x-mcp:
         description: >-
           Lists suspected duplicate pairs of books and authors, newest first; pending pairs by default, and
@@ -397,7 +397,8 @@ paths:
           ranked position, list count and identifiers; a record that no longer exists is `missing: true`. Use
           it to work through the queue; get_duplicate_candidate adds more detail for one pair.
           Resolving pairs shrinks the queue, so after merging or dismissing, list again from page 1 rather than
-          continuing to a later page.
+          continuing to a later page. Pairs naming a book the Goodreads re-import is emptying (a mixed book) are
+          left out, since they cannot be judged yet; meta.hidden_being_rebuilt counts them.
       parameters:
         - name: status
           in: query
@@ -414,6 +415,14 @@ paths:
           schema:
             type: string
             enum: [book, author]
+        - name: include_rebuilding
+          in: query
+          required: false
+          description: "`true` also lists pairs naming a book the Goodreads re-import is emptying (hidden by default)."
+          schema:
+            type: string
+            enum: ["true", "false"]
+            default: "false"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/per_page"
       responses:
@@ -3998,7 +4007,7 @@ components:
               rank: {type: [integer, "null"]}
     AdminDuplicateCandidate:
       type: object
-      required: [id, item_type, raised_by, status, occurrences, evidence, created_at, resolution, records]
+      required: [id, item_type, raised_by, status, occurrences, evidence, created_at, resolution, being_rebuilt, records]
       properties:
         id: {type: integer}
         item_type:
@@ -4028,6 +4037,9 @@ components:
                   type: [string, "null"]
                   enum: [admin_ui, api, null]
                 note: {type: [string, "null"]}
+        being_rebuilt:
+          type: boolean
+          description: True when one record is a book the Goodreads re-import is emptying (a mixed book); such a pair cannot be judged yet.
         records:
           type: array
           description: Both records, lower id first.
@@ -4605,7 +4617,15 @@ components:
           items:
             $ref: "#/components/schemas/AdminDuplicateCandidate"
         meta:
-          $ref: "#/components/schemas/PaginationMeta"
+          allOf:
+            - $ref: "#/components/schemas/PaginationMeta"
+            - type: object
+              required: [hidden_being_rebuilt]
+              properties:
+                hidden_being_rebuilt:
+                  type: integer
+                  minimum: 0
+                  description: Pairs left out because they name a book the Goodreads re-import is emptying.
         links:
           $ref: "#/components/schemas/PaginationLinks"
     AdminBookCollection:

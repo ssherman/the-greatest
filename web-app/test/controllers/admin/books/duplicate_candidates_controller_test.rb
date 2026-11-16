@@ -44,6 +44,20 @@ module Admin
         assert_select "[data-testid=pair-row][data-item-type='Books::Book'][data-status=pending]"
       end
 
+      test "pending pairs naming a book the re-import is emptying are hidden, counted, and shown on request" do
+        ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:mixed:#{@pending.item_a_id}",
+          payload: {"book_id" => @pending.item_a_id}, decided_by: :rule, status: :approved)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_duplicate_candidates_path
+        assert_empty pair_ids
+        assert_select "[data-testid=status-count-pending]", text: "0"
+        assert_select "[data-testid=being-rebuilt-notice]", text: /1/
+
+        get admin_books_duplicate_candidates_path(rebuilding: "1")
+        assert_equal [@pending.id], pair_ids
+      end
+
       test "status filter shows dismissed pairs; an unknown status falls back to pending" do
         sign_in_as(@admin, stub_auth: true)
         get admin_books_duplicate_candidates_path(status: "not_duplicate")

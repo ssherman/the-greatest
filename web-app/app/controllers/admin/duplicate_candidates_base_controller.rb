@@ -26,10 +26,18 @@ class Admin::DuplicateCandidatesBaseController < Admin::BaseController
 
   def index
     @status = STATUSES.include?(params[:status]) ? params[:status] : "pending"
+    # Pending pairs naming a book the Goodreads re-import is emptying cannot be judged yet: hidden unless asked for
+    # (Services::DuplicateCandidates::BeingRebuilt), and left out of the pending count.
+    @hidden_rebuilding = ::Services::DuplicateCandidates::BeingRebuilt.only(domain_scope.pending).count
+    @show_rebuilding = params[:rebuilding] == "1"
     @counts = domain_scope.group(:status).count
+    @counts["pending"] = @counts["pending"].to_i - @hidden_rebuilding
     # The via filter narrows resolved tabs only; pending pairs have no resolver.
     @via = params[:via] if VIAS.include?(params[:via]) && @status != "pending"
     pairs = domain_scope.where(status: @status).includes(:match_decision, :resolved_by).newest_first
+    if @status == "pending"
+      pairs = @show_rebuilding ? ::Services::DuplicateCandidates::BeingRebuilt.only(pairs) : ::Services::DuplicateCandidates::BeingRebuilt.exclude(pairs)
+    end
     pairs = pairs.where(resolved_via: @via) if @via
     @pagy, @pairs = pagy(pairs, limit: PER_PAGE)
 

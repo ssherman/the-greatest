@@ -49,7 +49,8 @@ everything on the record, including each image's columns and its stored file's i
 The record stays matchable (change 2026-11-03: the survey's mixed rule groups by author and year and ignores
 titles, so many "mixed" records are the right English book, and the per-edition AI check decides). The record is
 deleted later, once every row on it has moved. Deleting detaches each image's file first, so the stored file is
-kept and the archive can re-attach it.
+kept and the archive can re-attach it. Until then its duplicate pairs are kept out of the duplicate queue, and
+deleting it closes them (`Services::DuplicateCandidates::BeingRebuilt`; see `docs/features/import-finder.md`).
 
 If any reader is headed to the mixed record, `decide` marks the verdict `kept`. "Headed to" is read from the
 database, not from the record's own rows: any current, non-rejected, non-superseded `reimport_row` verdict (of any

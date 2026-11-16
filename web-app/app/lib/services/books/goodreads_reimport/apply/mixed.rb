@@ -55,6 +55,8 @@ module Services
               items.each(&:destroy!)
               keep_image_files(book)
               book.reload.destroy!
+              # Its duplicate pairs were hidden from the queue while it was being emptied; deleted, it was never one book.
+              ::Services::DuplicateCandidates::BeingRebuilt.close_pairs_for(book.id)
             end
             return keep(verdict, book) if kept
             return Entries.noop(reason) if reason

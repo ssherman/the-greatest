@@ -70,9 +70,11 @@ module Services
       }
     end
 
+    # What the queue shows: pairs naming a book the Goodreads re-import is emptying are hidden there, so not counted.
     def duplicate_counts
       models = ::DataImporters::FinderRegistry.for_domain(@domain).map(&:model)
-      pending = ::DuplicateCandidate.pending.where(item_type: models).group(:item_type).count
+      pending = ::Services::DuplicateCandidates::BeingRebuilt.exclude(::DuplicateCandidate.pending.where(item_type: models))
+        .group(:item_type).count
       DUPLICATE_TYPES.transform_values { |type| pending[type].to_i }
     end
 
