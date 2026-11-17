@@ -59,4 +59,14 @@ Rails.application.configure do
     oauth_register: 600,
     oauth_token: 3_000
   }
+
+  # Book changes one member may make through the API per UTC day (library API).
+  # Counted per change, not per request, so a batch of 50 costs 50.
+  config.x.api.library_changes_per_day = 1_000
+
+  # Most items one batch request may carry.
+  config.x.api.library_batch_max = 50
+
+  # Most custom lists a member may own before the API refuses to create another.
+  config.x.api.max_custom_lists = 500
 end
