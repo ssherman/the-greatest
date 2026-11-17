@@ -252,7 +252,8 @@ Delete `ff.json` afterwards. A failure here after a Camoufox bump means in-page
 ## Rails client
 
 `PageFetcher::Client` (`web-app/app/lib/page_fetcher/`) posts to `/fetch` and
-returns a `PageFetcher::Page`. Configure it with `PAGE_FETCHER_SERVICE_URL`
+returns a `PageFetcher::Page`; `fetch_file` posts to `/fetch_file` and returns a
+`PageFetcher::FileResponse`. Both share one connection, one breaker and one error mapping. Configure it with `PAGE_FETCHER_SERVICE_URL`
 (default `http://127.0.0.1:8081`).
 
 ```ruby
@@ -270,16 +271,32 @@ private storage, so a parser fix can re-read it without fetching again. These ar
 stored for internal parsing and never served (`docs/features/goodreads-import.md`, "Goodreads
 verification").
 
+```ruby
+file = PageFetcher::Client.new.fetch_file(
+  "https://us.macmillan.com/sitemaps/sitemap-products.1.xml.gz",
+  page_url: "https://us.macmillan.com/"  # optional: opened first, to pass the site's bot check
+)
+file.status         # the SITE's status, as on Page
+file.content_type   # nil when the site sent none
+file.body           # the bytes exactly as sent: a .gz arrives still gzipped
+file.inflated       # the body unzipped when it starts with the gzip magic bytes, else the body;
+                    # raises InflatedTooLargeError past `limit:` (default 100 MiB) bytes of output
+```
+
+`FileResponse` carries `url`, `final_url`, `status`, `content_type`, `body`, `elapsed_ms` and
+`fetched_at`. The file body is never logged, never put on an exception and never stored by the
+client. `fetch_file` does not pace or retry: both stay the caller's job, as for `fetch`.
+
 Every failure is a `PageFetcher::Exceptions::Error`:
 
 | Raised | When | Counts against the breaker |
 |---|---|---|
 | `ClientError` | any 4xx: a bad URL, selector or body (`error_code` says which) | no |
-| `UpstreamError` | `upstream_unreachable`, `html_too_large` | no |
+| `UpstreamError` | `upstream_unreachable`, `html_too_large`, `file_too_large` | no |
 | `ServerError` | `browser_error`, `browser_unavailable`, `navigation_timeout`, any other 5xx | yes |
 | `HttpError` | any other status (e.g. a 3xx -- Faraday does not follow redirects) | yes |
 | `TimeoutError`, `NetworkError` | the service did not answer | yes |
-| `ParseError` | a 200 that is not a fetch response | yes |
+| `ParseError` | a 200 that is not a fetch (or fetch_file) response | yes |
 | `CircuitOpenError` | five counted failures in a row; 60 s cooldown | — |
 
 The read timeout is `timeout_ms / 1000 + 10`, so the service always answers
