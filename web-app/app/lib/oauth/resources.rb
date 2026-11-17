@@ -16,11 +16,10 @@ module Oauth
   module Resources
     Resource = Struct.new(:key, :path, :admin, keyword_init: true) do
       # An admin resource offers every admin scope of the domain, in registry
-      # order; a member resource offers the domain's read scope.
+      # order; a member resource offers every non-admin scope of the domain
+      # (read, and for books the library scopes), in registry order.
       def scopes(domain)
-        return ["#{domain}:read"] unless admin
-
-        ::Api::Scopes.all.select { |scope| ::Api::Scopes.admin?(scope) && scope.start_with?("#{domain}:") }
+        ::Api::Scopes.all.select { |scope| ::Api::Scopes.admin?(scope) == admin && scope.start_with?("#{domain}:") }
       end
 
       def url(base_url) = base_url + path

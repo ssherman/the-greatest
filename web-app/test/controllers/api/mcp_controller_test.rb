@@ -197,7 +197,7 @@ module Api
 
       assert_response :unauthorized
       assert_equal "unauthenticated", json["code"]
-      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 
@@ -206,7 +206,7 @@ module Api
 
       assert_response :unauthorized
       assert_equal "invalid_token", json["code"]
-      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 
@@ -228,7 +228,7 @@ module Api
       rpc("tools/list", token: secret)
 
       assert_response :unauthorized
-      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 

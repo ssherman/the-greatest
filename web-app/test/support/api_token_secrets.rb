@@ -8,5 +8,7 @@ module ApiTokenSecrets
   NON_MEMBER = "tg_#{"n" * 40}".freeze
   ADMIN = "tg_#{"a" * 40}".freeze
   ADMIN_READ = "tg_#{"r" * 40}".freeze
+  LIBRARY = "tg_#{"l" * 40}".freeze
+  LIBRARY_READ = "tg_#{"k" * 40}".freeze
   SERVICE = "tg_#{"s" * 40}".freeze
 end

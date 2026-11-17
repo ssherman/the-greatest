@@ -78,3 +78,17 @@ books_viewer_admin_read_token:
   token_prefix: <%= ApiTokenSecrets::ADMIN_READ[0, 12] %>
   scopes: ["books:admin:read"]
   expires_at: <%= 30.days.from_now.iso8601 %>
+
+regular_user_library_token:
+  user: regular_user
+  name: library
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::LIBRARY) %>
+  token_prefix: <%= ApiTokenSecrets::LIBRARY[0, 12] %>
+  scopes: ["books:read", "books:library:write"]
+
+regular_user_library_read_token:
+  user: regular_user
+  name: library-read
+  token_digest: <%= Digest::SHA256.hexdigest(ApiTokenSecrets::LIBRARY_READ) %>
+  token_prefix: <%= ApiTokenSecrets::LIBRARY_READ[0, 12] %>
+  scopes: ["books:read", "books:library:read"]

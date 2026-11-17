@@ -30,6 +30,20 @@ module Api
         implies: [],
         eligible: READER
       ),
+      "books:library:read" => Scope.new(
+        name: "books:library:read",
+        description: "Read your book lists on The Greatest Books",
+        admin: false,
+        implies: [],
+        eligible: READER
+      ),
+      "books:library:write" => Scope.new(
+        name: "books:library:write",
+        description: "Add, move and remove books on your lists, and create, edit and delete your custom lists",
+        admin: false,
+        implies: ["books:library:read"],
+        eligible: READER
+      ),
       "music:read" => Scope.new(
         name: "music:read",
         description: "Read albums, artists and songs on The Greatest Music",
