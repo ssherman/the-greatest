@@ -13,15 +13,18 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fetcher.browser import (
     Browser,
     BrowserError,
     BrowserFailure,
     BrowserSession,
+    DocumentResponse,
+    DownloadStarted,
     InvalidSelector,
     LaunchFailed,
     NavigationTimeout,
@@ -32,7 +35,14 @@ from fetcher.budget import Budget, StageTimeout
 from fetcher.guards import RequestFilter, first_non_public_hop
 from fetcher.limiter import Limiter
 from fetcher.settings import Settings
-from fetcher.urlcheck import HostChecker, InvalidUrl, Resolver, Unresolvable, system_resolver
+from fetcher.urlcheck import (
+    HostChecker,
+    InvalidUrl,
+    Resolver,
+    Unresolvable,
+    origin,
+    system_resolver,
+)
 
 log = logging.getLogger("fetcher")
 
@@ -69,6 +79,25 @@ class FetchResult:
     fetched_at: str
 
 
+@dataclass(frozen=True)
+class FileFetchRequest:
+    url: str
+    page_url: str | None = None
+    timeout_ms: int = 30_000
+
+
+@dataclass(frozen=True)
+class FileFetchResult:
+    url: str
+    final_url: str
+    status: int
+    content_type: str | None
+    body: bytes
+    size_bytes: int
+    elapsed_ms: int
+    fetched_at: str
+
+
 class FetchError(Exception):
     """A fetch that ends in the error body `{"error": code, "detail": detail}` (spec §2)."""
 
@@ -90,6 +119,14 @@ class _LogLine:
     elapsed_ms: int | None = None
     launch_ms: int | None = None
     waited: bool = False
+
+
+@dataclass
+class _FileLogLine(_LogLine):
+    """A file fetch's line: the page line's keys plus the size. Never the bytes."""
+
+    event: str = "fetch_file"
+    size_bytes: int | None = None
 
 
 def exit_process(reason: str) -> None:
@@ -166,9 +203,48 @@ class Fetcher:
     async def fetch(self, request: FetchRequest) -> FetchResult:
         started = time.monotonic()
         line = _LogLine()
+
+        async def work(session, budget, request_filter):
+            return await self._read(session, request, budget, request_filter, started)
+
+        async def run() -> FetchResult:
+            return await self._run(request.url, request.timeout_ms, line, work)
+
+        return await self._counted(line, started, run)
+
+    async def fetch_file(self, request: FileFetchRequest) -> FileFetchResult:
+        started = time.monotonic()
+        line = _FileLogLine()
+        page_url = request.page_url
+
+        def choose_page_url() -> None:
+            nonlocal page_url
+            if page_url is None:
+                parts = urlsplit(request.url)
+                page_url = f"{parts.scheme}://{parts.netloc}/robots.txt"
+            elif origin(page_url) != origin(request.url):
+                raise FetchError("invalid_url", 400, "page_url must have the same origin as url")
+
+        async def work(session, budget, request_filter):
+            return await self._read_file(
+                session, request, page_url, budget, request_filter, started
+            )
+
+        async def run() -> FileFetchResult:
+            return await self._run(
+                request.url, request.timeout_ms, line, work, before_launch=choose_page_url
+            )
+
+        def on_ok(result: FileFetchResult) -> None:
+            line.size_bytes = result.size_bytes
+
+        return await self._counted(line, started, run, on_ok)
+
+    async def _counted(self, line: _LogLine, started: float, run, on_ok=None):
+        """Count the fetch and log its one line, whatever way it ends."""
         self._counts["in_flight"] += 1
         try:
-            result = await self._fetch(request, started, line)
+            result = await run()
         except FetchError as exc:
             self._counts["failed"] += 1
             line.outcome = exc.code
@@ -185,18 +261,30 @@ class Fetcher:
             self._counts["ok"] += 1
             line.outcome = "ok"
             line.status = result.status
+            if on_ok is not None:
+                on_ok(result)
             return result
         finally:
             self._counts["in_flight"] -= 1
             line.elapsed_ms = _ms_since(started)
             log.info(json.dumps(asdict(line)))
 
-    async def _fetch(self, request: FetchRequest, started: float, line: _LogLine) -> FetchResult:
-        budget = Budget(request.timeout_ms / 1000)
+    async def _run(
+        self,
+        url: str,
+        timeout_ms: int,
+        line: _LogLine,
+        work: Callable[..., Awaitable],
+        before_launch: Callable[[], None] | None = None,
+    ):
+        """Check the host, take a slot, launch a browser, run `work` on it, close it."""
+        budget = Budget(timeout_ms / 1000)
         hosts = HostChecker(self._resolver)
         try:
             try:
-                target = await budget.run(hosts.check(request.url), "resolving the host")
+                target = await budget.run(hosts.check(url), "resolving the host")
+                if before_launch is not None:
+                    before_launch()
             except InvalidUrl as exc:
                 raise FetchError("invalid_url", 400, str(exc)) from None
             except Unresolvable as exc:
@@ -204,19 +292,18 @@ class Fetcher:
             line.host = target.host
             async with self._limiter.slot(target.host, budget) as waited:
                 line.waited = waited
-                return await self._in_browser(request, budget, hosts, started, line)
+                return await self._in_browser(budget, hosts, line, work)
         except StageTimeout as exc:
             detail = f"the budget ran out while {exc.stage}"
             raise FetchError("navigation_timeout", 504, detail) from None
 
     async def _in_browser(
         self,
-        request: FetchRequest,
         budget: Budget,
         hosts: HostChecker,
-        started: float,
         line: _LogLine,
-    ) -> FetchResult:
+        work: Callable[..., Awaitable],
+    ):
         request_filter = RequestFilter(hosts)
         launch_started = time.monotonic()
         launch_budget_s = budget.remaining()
@@ -236,9 +323,28 @@ class Fetcher:
         self._launch_failures = 0
         line.launch_ms = _ms_since(launch_started)
         try:
-            return await self._read(session, request, budget, request_filter, started)
+            return await work(session, budget, request_filter)
         finally:
             await self._close(session)
+
+    async def _check_hops(self, responses: list[DocumentResponse], what: str) -> None:
+        """The redirect backstop: no hop of `responses` may be non-public."""
+        try:
+            hop = await asyncio.wait_for(
+                first_non_public_hop(responses, self._resolver), timeout=REDIRECT_CHECK_LIMIT_S
+            )
+        except TimeoutError:
+            hop = (f"the {what}'s redirect hops", "could not be checked in time")
+        if hop is not None:
+            host, reason = hop
+            detail = f"the {what} went through {host}, which {reason}"
+            # The backstop failed closed rather than found a non-public address:
+            # that is this service's own DNS coming up empty or too slow, not
+            # something wrong with the request, so it is retryable (502) rather
+            # than the caller's fault (400).
+            if reason in ("no longer resolves", "could not be checked in time"):
+                raise FetchError("upstream_unreachable", 502, detail)
+            raise FetchError("invalid_url", 400, detail)
 
     async def _read(
         self,
@@ -267,22 +373,7 @@ class Fetcher:
         title = _drop_lone_surrogates(title)
 
         responses = session.document_responses()
-        try:
-            hop = await asyncio.wait_for(
-                first_non_public_hop(responses, self._resolver), timeout=REDIRECT_CHECK_LIMIT_S
-            )
-        except TimeoutError:
-            hop = ("the page's redirect hops", "could not be checked in time")
-        if hop is not None:
-            host, reason = hop
-            detail = f"the page went through {host}, which {reason}"
-            # The backstop failed closed rather than found a non-public address:
-            # that is this service's own DNS coming up empty or too slow, not
-            # something wrong with the request, so it is retryable (502) rather
-            # than the caller's fault (400).
-            if reason in ("no longer resolves", "could not be checked in time"):
-                raise FetchError("upstream_unreachable", 502, detail)
-            raise FetchError("invalid_url", 400, detail)
+        await self._check_hops(responses, "page")
         if not responses:
             raise FetchError("browser_error", 502, "navigation produced no document response")
 
@@ -301,6 +392,73 @@ class Fetcher:
             title=title,
             html=html,
             selector_found=selector_found,
+            elapsed_ms=_ms_since(started),
+            fetched_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+
+    async def _read_file(
+        self,
+        session: BrowserSession,
+        request: FileFetchRequest,
+        page_url: str,
+        budget: Budget,
+        request_filter: RequestFilter,
+        started: float,
+    ) -> FileFetchResult:
+        with self._mapped("loading the page", request_filter):
+            try:
+                await budget.run(
+                    session.goto(page_url, "load", budget.remaining()), "loading the page"
+                )
+            except DownloadStarted:
+                detail = (
+                    "page_url is not a displayable page: loading it started a download; "
+                    "pass a different page_url"
+                )
+                raise FetchError("invalid_url", 400, detail) from None
+
+        responses = session.document_responses()
+        await self._check_hops(responses, "page")
+        if not responses:
+            raise FetchError("browser_error", 502, "navigation produced no document response")
+        landed = responses[-1].url
+        try:
+            same_origin = origin(landed) == origin(request.url)
+        except InvalidUrl:
+            same_origin = False
+        if not same_origin:
+            parts = urlsplit(landed)
+            detail = (
+                f"the page load landed on {parts.scheme}://{parts.hostname}, not url's origin; "
+                "pass a page_url on url's origin, or request the file from the origin "
+                "the site redirects to"
+            )
+            raise FetchError("invalid_url", 400, detail)
+
+        cap = self.settings.max_file_bytes
+        with self._mapped("downloading the file", request_filter):
+            outcome = await budget.run(session.fetch_file(request.url, cap), "downloading the file")
+
+        file_responses = session.file_responses()
+        await self._check_hops(file_responses, "file request")
+        if outcome.outcome == "rejected":
+            detail = f"the in-page request for the file was rejected: {outcome.detail}"
+            raise FetchError("upstream_unreachable", 502, detail)
+        size = outcome.size_bytes if outcome.outcome == "too_large" else len(outcome.body)
+        if outcome.outcome == "too_large" or size > cap:
+            raise FetchError(
+                "file_too_large", 502, f"the file is {size} bytes, over the {cap}-byte cap"
+            )
+        if not file_responses:
+            raise FetchError("browser_error", 502, "the file request produced no recorded response")
+
+        return FileFetchResult(
+            url=request.url,
+            final_url=outcome.final_url or request.url,
+            status=outcome.status or 0,
+            content_type=outcome.content_type,
+            body=outcome.body,
+            size_bytes=len(outcome.body),
             elapsed_ms=_ms_since(started),
             fetched_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
