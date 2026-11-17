@@ -51,6 +51,10 @@ module PageFetcher
       end
     end
 
+    # A gzipped file fetch that inflates past the caller's byte limit
+    # (FileResponse#inflated). Raised locally, never by the service.
+    class InflatedTooLargeError < Error; end
+
     # Raised in place of the breaker's own Books::OpenLibrary one, so that
     # `rescue PageFetcher::Exceptions::Error` catches a tripped breaker too.
     class CircuitOpenError < Error; end
