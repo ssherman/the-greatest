@@ -711,6 +711,9 @@ Rails.application.routes.draw do
           # The token holder's own lists (library scopes), not a catalogue.
           scope "my", module: :my, as: :my do
             get "lists", to: "lists#index", as: :lists
+            post "lists", to: "lists#create"
+            patch "lists/:list", to: "lists#update"
+            delete "lists/:list", to: "lists#destroy"
             get "lists/:list/books", to: "list_books#index", as: :list_books
             post "lists/:list/books", to: "list_books#create"
             patch "lists/:list/books/:slug", to: "list_books#update", as: :list_book

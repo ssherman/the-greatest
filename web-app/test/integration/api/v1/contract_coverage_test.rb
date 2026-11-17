@@ -197,6 +197,32 @@ module Api
         ["GET", "/api/v1/my/lists", "401"] => -> { get "/api/v1/my/lists" },
         ["GET", "/api/v1/my/lists", "403"] => -> { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/my/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["POST", "/api/v1/my/lists", "201"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "400"] => -> { post "/api/v1/my/lists", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "401"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json },
+        ["POST", "/api/v1/my/lists", "403"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["POST", "/api/v1/my/lists", "404"] => -> { post "/api/v1/my/lists", params: {name: "Summer", books: ["no-such-book"]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "422"] => -> { post "/api/v1/my/lists", params: {name: "Summer", list_type: "read"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          post "/api/v1/my/lists", params: {name: "Summer", books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["PATCH", "/api/v1/my/lists/{list}", "200"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "400"] => -> { patch "/api/v1/my/lists/favorites", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "401"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json },
+        ["PATCH", "/api/v1/my/lists/{list}", "403"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["PATCH", "/api/v1/my/lists/{list}", "404"] => -> { patch "/api/v1/my/lists/bogus", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "422"] => -> { patch "/api/v1/my/lists/favorites", params: {name: "Renamed"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "429"] => -> { with_exhausted_limit { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) } },
+        ["DELETE", "/api/v1/my/lists/{list}", "200"] => lambda {
+          list = ::Books::UserList.create!(user: users(:regular_user), name: "Doomed", list_type: :custom)
+          delete "/api/v1/my/lists/#{list.id}", headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["DELETE", "/api/v1/my/lists/{list}", "401"] => -> { delete "/api/v1/my/lists/favorites" },
+        ["DELETE", "/api/v1/my/lists/{list}", "403"] => -> { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["DELETE", "/api/v1/my/lists/{list}", "404"] => -> { delete "/api/v1/my/lists/bogus", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}", "422"] => -> { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}", "429"] => -> { with_exhausted_limit { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY) } },
         ["GET", "/api/v1/my/lists/{list}/books", "200"] => -> { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
         ["GET", "/api/v1/my/lists/{list}/books", "400"] => -> { get "/api/v1/my/lists/read/books?sort=rank", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
         ["GET", "/api/v1/my/lists/{list}/books", "401"] => -> { get "/api/v1/my/lists/read/books" },

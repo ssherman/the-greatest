@@ -1504,6 +1504,154 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createMyList
+      security: [{bearerAuth: ["books:library:write"]}]
+      summary: Create a custom list
+      description: |
+        Creates a custom book list for the token holder. `name` is 1 to 100 characters, `description` up to 1,000 and optional, `public` a JSON boolean (default false). `books` optionally names 1 to 50 catalogue books (by slug) to put on the new list, in one step: it is all or nothing, so a refused batch leaves no list behind. Each book counts one change against the daily budget of 1,000 changes (429 when it would be exceeded; `meta.library_changes_remaining` says what is left); a list with no books costs nothing. A member may hold 500 custom lists (422 past that). A wrong type, a blank or over-long name or a null byte is a 400; an unknown body key is a 422; an unknown book slug is a 404 naming them all.
+      x-mcp:
+        description: >-
+          Creates a custom book list for the token holder. `name` (1 to 100 characters) is required; `description`
+          (up to 1,000), `public` (true or false, default false) and `books` (1 to 50 catalogue slugs to put on the
+          new list) are optional. Returns the new list and, with `books`, each book's outcome. All or nothing: if the
+          books cannot be added, no list is created. Each book counts against a daily limit of 1,000 changes. A member
+          may have 500 custom lists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryCreateListRequest"
+      responses:
+        "201":
+          description: The new list and, when `books` was sent, each book's outcome.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/my/lists/{list}:
+    x-domain: books
+    patch:
+      operationId: updateMyList
+      security: [{bearerAuth: ["books:library:write"]}]
+      summary: Edit one of my lists
+      description: |
+        Changes a list's `name`, `description` and/or `public`. `{list}` is the list's id or a default list name. A default list (favorites, read, reading, want_to_read) can change `description` and `public` but not `name` (422). An empty body, a blank or over-long name or description, or a `public` that is not a JSON boolean is a 400; an unknown body key is a 422. Costs nothing against the daily budget.
+      x-mcp:
+        description: >-
+          Edits one of the token holder's own lists: `name` (1 to 100 characters), `description` (up to 1,000, or null
+          to clear) and/or `public` (true or false). Send at least one. `list` is a list id or favorites, read,
+          reading or want_to_read; the four default lists cannot be renamed. Returns the list.
+      parameters:
+        - $ref: "#/components/parameters/my_list"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryUpdateListRequest"
+      responses:
+        "200":
+          description: The list as it now stands.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteMyList
+      security: [{bearerAuth: ["books:library:write"]}]
+      summary: Delete one of my custom lists
+      description: |
+        Permanently deletes one of the token holder's custom lists and every entry on it (the books themselves are untouched). The four default lists cannot be deleted (422). Returns the list as it was. Costs nothing against the daily budget.
+      x-mcp:
+        destructive: true
+        description: >-
+          Permanently deletes one of the token holder's custom lists and everything on it; the books stay in the
+          catalogue. `list` is a list id. The four default lists (favorites, read, reading, want_to_read) cannot be
+          deleted. Returns the list as it was. This cannot be undone.
+      parameters:
+        - $ref: "#/components/parameters/my_list"
+      responses:
+        "200":
+          description: The list as it was before it was deleted.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/my/lists/{list}/books:
     x-domain: books
     get:
@@ -2582,6 +2730,56 @@ components:
           type: integer
           minimum: 1
           description: The new place on the list, 1 up to the list's item count.
+    LibraryCreateListRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        description: {type: [string, "null"], maxLength: 1000}
+        public: {type: boolean, description: Defaults to false.}
+        books:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: {type: string, minLength: 1}
+          description: Catalogue book slugs to put on the new list. Duplicates count once.
+    LibraryUpdateListRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100, description: Not allowed on a default list.}
+        description: {type: [string, "null"], maxLength: 1000}
+        public: {type: boolean}
+    UserListDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/UserList"
+    UserListCreated:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/UserList"
+        meta:
+          type: object
+          required: [results, library_changes_remaining]
+          properties:
+            results:
+              type: array
+              description: One entry per book named, in request order; empty when no books were sent.
+              items:
+                type: object
+                required: [book, outcome]
+                properties:
+                  book: {type: string, description: The book's slug.}
+                  outcome: {type: string, enum: [added]}
+            library_changes_remaining:
+              type: integer
+              description: Book changes left in today's budget (UTC day).
     LibraryWriteResult:
       type: object
       required: [data, meta]

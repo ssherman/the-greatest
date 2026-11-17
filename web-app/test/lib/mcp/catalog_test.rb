@@ -355,7 +355,7 @@ module Mcp
 
       test "tools_for filters by scope" do
         library_reads = %w[list_my_lists list_my_list_books list_my_book_lists]
-        library_writes = %w[add_my_list_books update_my_list_book remove_my_list_books]
+        library_writes = %w[add_my_list_books update_my_list_book remove_my_list_books create_my_list update_my_list delete_my_list]
         library = library_reads + library_writes
         read_only = catalog.tools_for(::Api::Principal.new(scopes: ["books:read"]))
 

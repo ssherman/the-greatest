@@ -105,6 +105,18 @@ module Api
       assert_equal false, tools.fetch("add_my_list_books").dig("annotations", "destructiveHint")
     end
 
+    test "delete_my_list is destructive and create_my_list needs the write scope" do
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY)
+      tools = json.dig("result", "tools").index_by { |tool| tool["name"] }
+      assert_equal true, tools.fetch("delete_my_list").dig("annotations", "destructiveHint")
+      assert_equal false, tools.fetch("create_my_list").dig("annotations", "destructiveHint")
+      assert_includes tools.keys, "update_my_list"
+
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY_READ)
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_not_includes names, "create_my_list"
+    end
+
     test "tools/call get_book returns the REST body" do
       call_tool("get_book", {slug: @war_and_peace.slug})
       assert_response :success
