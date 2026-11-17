@@ -57,7 +57,7 @@ for item in response.json()["data"]:
     <ul>
       <li>Send it on every request as <code>Authorization: Bearer &lt;token&gt;</code>.</li>
       <li>Keep it out of code and out of version control. An environment variable is the usual place.</li>
-      <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>.</li>
+      <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>. Two more cover your own book lists: <code>books:library:read</code> and <code>books:library:write</code>.</li>
       <li>If a token leaks, revoke it at <%= link_to "/developers/tokens", developers_tokens_path %>. Anything using it gets a 401 from that moment.</li>
       <li>A member's token only reads: it cannot sign in to the site or change anything.</li>
     </ul>
@@ -295,10 +295,10 @@ codex mcp login the-greatest-books</code></pre>
               insufficient_scope: "The token lacks the scope this endpoint needs; the WWW-Authenticate header names it.",
               forbidden: "The account behind the token is not allowed to perform this action on this record.",
               not_found: "Nothing on this site has that slug or id.",
-              invalid_parameter: "A query parameter is out of range; detail says which.",
+              invalid_parameter: "A query parameter or request body field is missing, malformed or out of range; detail says which.",
               conflict: "The request names something another record already holds (an author creation with a Wikidata id another author has); detail says which.",
               unprocessable: "The request was understood but cannot be carried out; detail says why.",
-              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait.",
+              rate_limited: "A rate-limit window or the daily library change budget is exhausted; Retry-After says how long to wait.",
               search_unavailable: "Search is temporarily unavailable; retry shortly."
             }
           %>
