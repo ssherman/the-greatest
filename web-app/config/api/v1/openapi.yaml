@@ -2315,7 +2315,7 @@ components:
           $ref: "#/components/schemas/PaginationLinks"
     UserList:
       type: object
-      required: [id, name, list_type, default, description, public, book_count, created_at, updated_at, url, api_url, books_api_url]
+      required: [id, name, list_type, default, description, public, book_count, created_at, updated_at, url, books_api_url]
       properties:
         id: {type: integer}
         name: {type: string}
@@ -2330,7 +2330,6 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         url: {type: string, format: uri, description: The list's page on the site.}
-        api_url: {type: string, format: uri}
         books_api_url: {type: string, format: uri, description: The list's books.}
     UserListCollection:
       type: object

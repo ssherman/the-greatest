@@ -22,6 +22,15 @@ module Api
 
           def json = response.parsed_body.deep_symbolize_keys
 
+          def count_queries(&block)
+            count = 0
+            counter = ->(_name, _start, _finish, _id, payload) {
+              count += 1 unless payload[:name].in?(%w[CACHE SCHEMA TRANSACTION])
+            }
+            ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+            count
+          end
+
           def ids = json[:data].map { |row| row[:book][:id] }
 
           test "the read name and the numeric id serve the same list in position order" do
@@ -102,6 +111,20 @@ module Api
             get "/api/v1/my/lists/read/books", headers: bearer(@token)
 
             assert_equal [7, nil, nil], json[:data].map { |row| row[:book][:rank] }
+          end
+
+          test "the query count does not grow with the number of books on the page" do
+            RankedItem.create!(item: @wp, ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 99)
+            # Warm up: the first request pays one-off lookups (token, rate limiter) the later ones skip.
+            get "/api/v1/my/lists/read/books?per_page=1", headers: bearer(@token)
+
+            small = count_queries { get "/api/v1/my/lists/read/books?per_page=2", headers: bearer(@token) }
+            assert_equal 2, json[:data].size
+
+            large = count_queries { get "/api/v1/my/lists/read/books?per_page=3", headers: bearer(@token) }
+            assert_equal 3, json[:data].size
+
+            assert_equal small, large, "query count grew from #{small} to #{large} as books were added -- N+1 on my list books"
           end
 
           test "a token with books:read only is a 403 insufficient_scope" do

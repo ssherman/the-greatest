@@ -35,10 +35,6 @@ module Api
           "#{::Api::Host.base_url}/my/lists/#{list.id}"
         end
 
-        attribute :api_url do |list|
-          "#{::Api::Host.base_url}/api/v1/my/lists/#{list.id}"
-        end
-
         attribute :books_api_url do |list|
           "#{::Api::Host.base_url}/api/v1/my/lists/#{list.id}/books"
         end

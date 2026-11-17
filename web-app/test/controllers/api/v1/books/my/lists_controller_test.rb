@@ -15,14 +15,14 @@ module Api
 
           test "lists the four default lists first in default order, then custom lists by name, creating missing defaults" do
             assert_nil ::Books::UserList.find_by(user: @user, list_type: :reading)
-            ::Books::UserList.create!(user: @user, name: "zebra picks", list_type: :custom)
-            ::Books::UserList.create!(user: @user, name: "Apple picks", list_type: :custom)
+            ::Books::UserList.create!(user: @user, name: "Cherry", list_type: :custom)
+            ::Books::UserList.create!(user: @user, name: "banana", list_type: :custom)
 
             get "/api/v1/my/lists", headers: bearer(@token)
             assert_api_conform(status: 200)
 
             assert_equal %w[favorites read reading want_to_read custom custom], json[:data].map { |l| l[:list_type] }
-            assert_equal ["Apple picks", "zebra picks"], json[:data].last(2).map { |l| l[:name] }
+            assert_equal ["banana", "Cherry"], json[:data].last(2).map { |l| l[:name] }
             assert_equal [true] * 4 + [false] * 2, json[:data].map { |l| l[:default] }
             assert_equal 6, json[:meta][:total_count]
             assert ::Books::UserList.exists?(user: @user, list_type: :reading)
