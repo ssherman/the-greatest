@@ -48,21 +48,32 @@ module PageFetcher
 
     # The body unzipped when it starts with the gzip magic bytes, the body
     # itself otherwise. Reads in chunks and stops at `limit` bytes of output,
-    # so a gzip bomb never inflates in full.
+    # so a gzip bomb never inflates in full. Every member of a multi-member
+    # gzip is read (GzipReader alone stops after the first and loses the rest
+    # silently); the limit is one running total across members. Not
+    # GzipReader.zcat: with a block it yields lines, and a bomb with no
+    # newlines would arrive as one huge chunk.
     def inflated(limit: MAX_INFLATED_BYTES)
       return body unless body.start_with?(GZIP_MAGIC)
 
       out = "".b
-      reader = Zlib::GzipReader.new(StringIO.new(body))
-      begin
-        while (chunk = reader.read(CHUNK_BYTES))
-          out << chunk
-          if out.bytesize > limit
-            raise Exceptions::InflatedTooLargeError, "gzip body inflates past #{limit} bytes"
+      io = StringIO.new(body)
+      loop do
+        reader = Zlib::GzipReader.new(io)
+        begin
+          while (chunk = reader.read(CHUNK_BYTES))
+            out << chunk
+            if out.bytesize > limit
+              raise Exceptions::InflatedTooLargeError, "gzip body inflates past #{limit} bytes"
+            end
           end
+          unused = reader.unused
+        ensure
+          reader.finish # not close: that would close the StringIO the next member reads
         end
-      ensure
-        reader.close
+        break if unused.nil?
+
+        io.pos -= unused.bytesize
       end
       out
     rescue Zlib::Error => e

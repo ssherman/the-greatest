@@ -9,6 +9,7 @@ module PageFetcher
     def gzip(string)
       io = StringIO.new("".b)
       gz = Zlib::GzipWriter.new(io)
+      gz.mtime = 0 # the header would otherwise carry the clock, and two calls could differ
       gz.write(string)
       gz.close
       io.string
@@ -90,6 +91,32 @@ module PageFetcher
 
       assert_raises(Exceptions::InflatedTooLargeError) { response.inflated(limit: 1_024) }
       assert_equal 4_096, response.inflated.bytesize
+    end
+
+    def response_for(bytes)
+      FileResponse.from_response(
+        response_hash(body_base64: Base64.strict_encode64(bytes), size_bytes: bytes.bytesize)
+      )
+    end
+
+    test "inflated reads every member of a multi-member gzip" do
+      assert_equal "firstsecond".b, response_for(gzip("first") + gzip("second")).inflated
+    end
+
+    test "the inflate limit counts across members" do
+      response = response_for(gzip("\0" * 800) + gzip("\0" * 800))
+
+      assert_raises(Exceptions::InflatedTooLargeError) { response.inflated(limit: 1_000) }
+      assert_equal 1_600, response.inflated(limit: 1_600).bytesize
+    end
+
+    test "bytes after the last gzip member raise ParseError, not a silent stop" do
+      error = assert_raises(Exceptions::ParseError) { response_for(gzip("first") + "garbage").inflated }
+      assert_nil error.response_body
+    end
+
+    test "the gzip helper is deterministic" do
+      assert_equal gzip(XML), gzip(XML)
     end
 
     test "a truncated gzip body raises ParseError, not a Zlib error" do
