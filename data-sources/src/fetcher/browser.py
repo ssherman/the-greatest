@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import binascii
 import contextlib
 import functools
 import importlib.metadata
@@ -20,6 +19,7 @@ import json
 import logging
 import os
 import time
+import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -242,7 +242,7 @@ def _file_result(answer: Any) -> FileResult:
             body=body,
             size_bytes=answer["size_bytes"],
         )
-    except (KeyError, TypeError, binascii.Error) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise BrowserError("the file request returned an unexpected answer") from exc
 
 
@@ -425,7 +425,10 @@ class CamoufoxSession:
             )
             if request.is_navigation_request() and response.frame == self._page.main_frame:
                 self._responses.append(document)
-            elif self._file_url is not None and first.url == self._file_url:
+            elif (
+                self._file_url is not None
+                and urllib.parse.urldefrag(first.url).url == self._file_url
+            ):
                 self._file_responses.append(document)
         except Exception:
             # A response for a frame being torn down; there is nothing to record.
@@ -481,9 +484,14 @@ class CamoufoxSession:
         return list(self._responses)
 
     async def fetch_file(self, url: str, max_bytes: int) -> FileResult:
-        self._file_url = url  # before evaluating, so responses arriving during it match
         self._file_responses = []
         try:
+            # The browser reports request URLs in its canonical form (lowercase
+            # host, default port dropped, escapes, punycode), so match on that
+            # form, stored before the file request so its responses are caught.
+            self._file_url = await self._page.evaluate(
+                "u => { const parsed = new URL(u); parsed.hash = ''; return parsed.href; }", url
+            )
             answer = await self._page.evaluate(FILE_FETCH_SCRIPT, [url, max_bytes])
         except Exception as exc:
             raise translate_playwright_error(exc) from exc

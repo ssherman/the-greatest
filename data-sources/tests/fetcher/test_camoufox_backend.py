@@ -360,12 +360,17 @@ class _EvaluatingPage:
 
     main_frame = object()
 
-    def __init__(self, answer, during=None) -> None:
+    def __init__(self, answer, during=None, canonical=None) -> None:
         self.answer = answer
         self.during = during
-        self.calls: list[tuple] = []
+        self.canonical = canonical  # the canonicalizing evaluate's answer (or error)
+        self.calls: list[tuple] = []  # the file script's calls only
 
     async def evaluate(self, script, arg):
+        if script is not FILE_FETCH_SCRIPT:  # the canonicalizing call
+            if isinstance(self.canonical, BaseException):
+                raise self.canonical
+            return self.canonical or arg
         self.calls.append((script, arg))
         if self.during is not None:
             self.during()
@@ -452,7 +457,13 @@ async def test_a_failing_page_script_is_a_browser_error():
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "answer",
-    [None, {"outcome": "ok"}, _ok(b"x", body_base64="!!not base64!!"), {"outcome": "weird"}],
+    [
+        None,
+        {"outcome": "ok"},
+        _ok(b"x", body_base64="!!not base64!!"),
+        _ok(b"x", body_base64="é"),
+        {"outcome": "weird"},
+    ],
 )
 async def test_an_answer_that_is_not_the_scripts_shape_is_a_browser_error(answer):
     page = _EvaluatingPage(answer)
@@ -503,3 +514,25 @@ async def test_file_responses_keeps_each_hop_of_the_file_request_with_its_chain(
     assert session.document_responses() == [
         DocumentResponse("https://books.example/robots.txt", 200)
     ]
+
+
+@pytest.mark.anyio
+async def test_file_responses_match_the_browsers_canonical_spelling_of_the_url():
+    spelled = "https://Books.example:443/sitemaps/products.1.xml.gz#frag"
+    canonical = "https://books.example/sitemaps/products.1.xml.gz"
+    page = _EvaluatingPage(_ok(b"x"), canonical=canonical)
+    session = CamoufoxSession(object(), page)
+    page.during = lambda: session.record_response(_Resp(_Req(canonical), 200, page.main_frame))
+
+    await session.fetch_file(spelled, 1024)
+
+    assert session.file_responses() == [DocumentResponse(canonical, 200)]
+    assert page.calls[0][1] == [spelled, 1024]  # the script still gets the caller's spelling
+
+
+@pytest.mark.anyio
+async def test_a_failing_canonicalization_is_a_browser_error():
+    page = _EvaluatingPage(_ok(b"x"), canonical=PlaywrightError("Page.evaluate: boom"))
+    with pytest.raises(BrowserError):
+        await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+    assert page.calls == []
