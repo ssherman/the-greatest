@@ -86,7 +86,7 @@ module Oauth
       assert_equal [], Resources.usable_scopes(oauth_connections(:member_mcp), :books)
     end
 
-    test "a member is granted the read scope when none is requested" do
+    test "a member is granted every offered scope when none is requested" do
       mcp = Resources.fetch("mcp")
 
       assert_equal ["books:read", "books:library:read", "books:library:write"], Resources.grantable_scopes(users(:regular_user), mcp, :books, requested: nil)
