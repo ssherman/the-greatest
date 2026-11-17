@@ -216,9 +216,18 @@ async ([url, maxBytes]) => {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
-  return {...meta, outcome: "ok", size_bytes: blob.size, body_base64: String(dataUrl).split(",")[1] || ""};
+  const text = String(dataUrl);
+  const comma = text.lastIndexOf(",");
+  return {...meta, outcome: "ok", size_bytes: blob.size, body_base64: comma < 0 ? "" : text.slice(comma + 1)};
 }
 """  # noqa: E501 -- the page script is kept verbatim
+
+
+_NAVIGATED_AWAY_MARKERS = (
+    "Execution context was destroyed",
+    "most likely because of a navigation",
+    "Frame was detached",
+)
 
 
 def _file_result(answer: Any) -> FileResult:
@@ -494,6 +503,12 @@ class CamoufoxSession:
             )
             answer = await self._page.evaluate(FILE_FETCH_SCRIPT, [url, max_bytes])
         except Exception as exc:
+            # A challenge page can reload itself while the request is pending; that is
+            # one site's behaviour, not a browser fault (which would trip the breaker).
+            if any(marker in str(exc) for marker in _NAVIGATED_AWAY_MARKERS):
+                raise UpstreamUnreachable(
+                    "the page navigated away while the file was being requested"
+                ) from exc
             raise translate_playwright_error(exc) from exc
         return _file_result(answer)
 

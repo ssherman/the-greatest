@@ -17,6 +17,7 @@ from fetcher.browser import (
     DocumentResponse,
     FileResult,
     LaunchFailed,
+    UpstreamUnreachable,
     _route_handler,
 )
 from fetcher.fetcher import exit_process
@@ -443,6 +444,7 @@ async def test_the_page_script_uses_the_variant_that_works_in_camoufox():
     assert script is FILE_FETCH_SCRIPT
     assert "readAsDataURL" in script
     assert "credentials" in script
+    assert 'lastIndexOf(",")' in script
     for banned in ("Uint8Array", "fromCharCode", "btoa"):
         assert banned not in script
 
@@ -528,6 +530,26 @@ async def test_file_responses_match_the_browsers_canonical_spelling_of_the_url()
 
     assert session.file_responses() == [DocumentResponse(canonical, 200)]
     assert page.calls[0][1] == [spelled, 1024]  # the script still gets the caller's spelling
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "Execution context was destroyed, most likely because of a navigation",
+        "Page.evaluate: most likely because of a navigation",
+        "Frame was detached",
+    ],
+)
+@pytest.mark.parametrize("stage", ["canonicalizing", "file script"])
+async def test_a_page_that_navigates_during_the_file_request_is_upstream_unreachable(marker, stage):
+    error = PlaywrightError(marker)
+    if stage == "canonicalizing":
+        page = _EvaluatingPage(_ok(b"x"), canonical=error)
+    else:
+        page = _EvaluatingPage(error)
+    with pytest.raises(UpstreamUnreachable):
+        await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
 
 
 @pytest.mark.anyio

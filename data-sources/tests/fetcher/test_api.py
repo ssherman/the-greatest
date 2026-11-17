@@ -192,6 +192,14 @@ def test_fetch_file_returns_the_bytes_as_base64():
     )
 
 
+def test_fetch_file_encodes_with_the_standard_alphabet_and_padding():
+    odd = FileResult(outcome="ok", status=200, final_url=FILE_URL, body=b"\xfb\xff", size_bytes=2)
+    client, _ = make_client(file_script(file_result=odd))
+    with client:
+        response = client.post("/fetch_file", json={"url": FILE_URL})
+    assert response.json()["body_base64"] == "+/8="
+
+
 def test_fetch_file_passes_a_missing_content_type_through_as_null():
     no_type = FileResult(
         outcome="ok", status=200, final_url=FILE_URL, body=FILE_BODY, size_bytes=len(FILE_BODY)
@@ -212,6 +220,7 @@ def test_fetch_file_takes_a_page_url_and_a_timeout():
         )
     assert response.status_code == 200
     assert browser.sessions[0].goto_calls[0][0] == "https://books.example/about"
+    assert 0 < browser.launch_timeouts[0] <= 5.0
 
 
 @pytest.mark.parametrize(

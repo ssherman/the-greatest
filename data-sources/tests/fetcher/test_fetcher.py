@@ -761,6 +761,16 @@ async def test_the_budget_running_out_during_the_download_names_the_stage():
     assert error.detail.endswith("downloading the file")
 
 
+async def test_a_page_navigating_away_is_upstream_unreachable_for_the_file():
+    message = "the page navigated away while the file was being requested"
+    fetcher, _, _ = build(file_script(file_result=UpstreamUnreachable(message)))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert message in error.detail
+
+
 async def test_a_failing_page_script_is_a_browser_error_for_the_file():
     fetcher, _, _ = build(file_script(file_result=BrowserError("boom")))
 
