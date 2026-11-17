@@ -1460,6 +1460,145 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/my/lists:
+    x-domain: books
+    get:
+      operationId: listMyLists
+      security: [{bearerAuth: ["books:library:read"]}]
+      summary: My book lists
+      description: |
+        The token holder's own book lists: the four default lists (favorites, read, reading, want_to_read) first, in that order, then custom lists by name. A default list that does not exist yet is created by the call. `book_count` counts the catalogue books on the list.
+      x-mcp:
+        description: >-
+          Returns the token holder's own book lists: the four default lists (favorites, read, reading,
+          want_to_read) first, then custom lists by name, each with its `id`, `list_type` and
+          `book_count`. The four default list names can be used as `list` in the other library tools.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the token holder's lists.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/my/lists/{list}/books:
+    x-domain: books
+    get:
+      operationId: listMyListBooks
+      security: [{bearerAuth: ["books:library:read"]}]
+      summary: Books on one of my lists
+      description: |
+        The books on one of the token holder's own lists. `{list}` is the list's id or a default list name (favorites, read, reading, want_to_read). `sort` is `position` (the list's own order, the default), `added` (most recently added first) or `completed_on` (most recently finished first, undated last; only for a list with completion dates, such as read, otherwise a 400). Books not yet in the catalogue are not shown, so positions can skip numbers. `rank` on the embedded book is the primary ranking's. A list that is not the caller's, or does not exist, is a 404.
+      x-mcp:
+        description: >-
+          Returns the books on one of the token holder's own lists, each with its `position`, `added_at`,
+          `completed_on` and primary-ranking `rank`. `list` is a list id or one of favorites, read, reading
+          or want_to_read. `sort` is `position` (default), `added` (newest first) or `completed_on` (read
+          list and others with completion dates). Books not yet in the catalogue are not shown, so
+          positions can skip numbers.
+      parameters:
+        - $ref: "#/components/parameters/my_list"
+        - $ref: "#/components/parameters/my_list_books_sort"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the list's books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListBookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/my/books/{slug}/lists:
+    x-domain: books
+    get:
+      operationId: listMyBookLists
+      security: [{bearerAuth: ["books:library:read"]}]
+      summary: Which of my lists a book is on
+      description: The token holder's own lists that hold the book, in the `/api/v1/my/lists` order, each with the book's `position`, when it was added and its completion date. An empty `data` means the book is on none of them. An unknown book slug is a 404.
+      x-mcp:
+        description: >-
+          Returns which of the token holder's own lists a book is on, with its `position`, `added_at` and
+          `completed_on` on each. Use it to answer "is this book on my read list?" or "have I saved this?".
+      parameters:
+        - $ref: "#/components/parameters/slug"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of the token holder's lists that hold the book.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListMembershipCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -1561,6 +1700,23 @@ components:
       schema:
         type: integer
         minimum: 1
+    my_list:
+      name: list
+      in: path
+      required: true
+      description: One of the token holder's own book lists, by integer id or by default name (favorites, read, reading, want_to_read).
+      schema:
+        type: string
+        minLength: 1
+    my_list_books_sort:
+      name: sort
+      in: query
+      required: false
+      description: "`position` is the list's own order; `added` is most recently added first; `completed_on` is most recently finished first with undated rows last, and is a 400 on a list without completion dates."
+      schema:
+        type: string
+        enum: [position, added, completed_on]
+        default: position
   headers:
     X-RateLimit-Limit:
       description: Requests allowed per calendar minute.
@@ -2153,6 +2309,89 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BookListingRow"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    UserList:
+      type: object
+      required: [id, name, list_type, default, description, public, book_count, created_at, updated_at, url, api_url, books_api_url]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        list_type: {type: string, enum: [favorites, read, reading, want_to_read, custom]}
+        default: {type: boolean, description: True for the four default lists; they cannot be renamed or deleted.}
+        description: {type: [string, "null"]}
+        public: {type: boolean}
+        book_count:
+          type: integer
+          minimum: 0
+          description: Catalogue books on the list.
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        url: {type: string, format: uri, description: The list's page on the site.}
+        api_url: {type: string, format: uri}
+        books_api_url: {type: string, format: uri, description: The list's books.}
+    UserListCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserList"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    UserListBook:
+      type: object
+      required: [position, added_at, completed_on, book]
+      properties:
+        position:
+          type: integer
+          minimum: 1
+          description: The book's place on the list. Books not yet in the catalogue are not shown, so positions can skip numbers.
+        added_at: {type: string, format: date-time}
+        completed_on:
+          type: [string, "null"]
+          format: date
+          description: When the member finished the book; null when not set.
+        book:
+          $ref: "#/components/schemas/Book"
+    UserListBookCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserListBook"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    BookListMembership:
+      type: object
+      required: [list, position, added_at, completed_on]
+      properties:
+        list:
+          $ref: "#/components/schemas/UserList"
+        position:
+          type: integer
+          minimum: 1
+        added_at: {type: string, format: date-time}
+        completed_on:
+          type: [string, "null"]
+          format: date
+    BookListMembershipCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookListMembership"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
         links:

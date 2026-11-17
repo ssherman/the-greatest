@@ -191,7 +191,24 @@ module Api
         ["GET", "/api/v1/discover/books", "503"] => lambda {
           ::Search::Books::Search::BookAdvanced.stubs(:call).raises(Faraday::ConnectionFailed, "down")
           get "/api/v1/discover/books", headers: bearer(ApiTokenSecrets::MEMBER)
-        }
+        },
+        ["GET", "/api/v1/my/lists", "200"] => -> { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists", "400"] => -> { get "/api/v1/my/lists?page=0", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists", "401"] => -> { get "/api/v1/my/lists" },
+        ["GET", "/api/v1/my/lists", "403"] => -> { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["GET", "/api/v1/my/lists/{list}/books", "200"] => -> { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "400"] => -> { get "/api/v1/my/lists/read/books?sort=rank", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "401"] => -> { get "/api/v1/my/lists/read/books" },
+        ["GET", "/api/v1/my/lists/{list}/books", "403"] => -> { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/lists/{list}/books", "404"] => -> { get "/api/v1/my/lists/bogus/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["GET", "/api/v1/my/books/{slug}/lists", "200"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "400"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists?page=0", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "401"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists" },
+        ["GET", "/api/v1/my/books/{slug}/lists", "403"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "404"] => -> { get "/api/v1/my/books/no-such-book/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } }
       }.freeze
 
       setup do

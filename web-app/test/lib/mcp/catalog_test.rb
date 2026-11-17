@@ -354,7 +354,12 @@ module Mcp
       end
 
       test "tools_for filters by scope" do
-        assert_equal catalog.operations.size, catalog.tools_for(::Api::Principal.new(scopes: ["books:read"])).size
+        library = %w[list_my_lists list_my_list_books list_my_book_lists]
+        read_only = catalog.tools_for(::Api::Principal.new(scopes: ["books:read"]))
+
+        assert_equal catalog.operations.size - library.size, read_only.size
+        assert_empty read_only.map(&:name_value) & library
+        assert_equal catalog.operations.size, catalog.tools_for(::Api::Principal.new(scopes: ["books:read", "books:library:read"])).size
         assert_empty catalog.tools_for(::Api::Principal.new(scopes: ["music:read"]))
       end
 

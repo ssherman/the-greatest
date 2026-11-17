@@ -71,6 +71,24 @@ module Api
       assert_equal [3, "random"], [tool_text.dig("meta", "seed"), tool_text.dig("meta", "order")]
     end
 
+    test "tools/list offers the library tools only to a token with books:library:read" do
+      rpc("tools/list")
+      assert_not_includes json.dig("result", "tools").map { |tool| tool["name"] }, "list_my_lists"
+
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY_READ)
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_includes names, "list_my_lists"
+      assert_includes names, "list_my_list_books"
+      assert_includes names, "list_my_book_lists"
+    end
+
+    test "tools/call list_my_list_books returns the member's list" do
+      call_tool("list_my_list_books", {list: "read"}, token: ApiTokenSecrets::LIBRARY_READ)
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [books_books(:clash).id], tool_text["data"].map { |row| row.dig("book", "id") }
+    end
+
     test "tools/call get_book returns the REST body" do
       call_tool("get_book", {slug: @war_and_peace.slug})
       assert_response :success

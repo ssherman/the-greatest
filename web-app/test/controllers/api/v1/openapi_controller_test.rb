@@ -32,7 +32,7 @@ module Api
           "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
           "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
-          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries", "/api/v1/discover/books", "/api/v1/languages"], response.parsed_body["paths"].keys
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries", "/api/v1/discover/books", "/api/v1/languages", "/api/v1/my/lists", "/api/v1/my/lists/{list}/books", "/api/v1/my/books/{slug}/lists"], response.parsed_body["paths"].keys
       end
 
       test "on the music and games hosts the document advertises only what those hosts serve" do
@@ -105,7 +105,7 @@ module Api
           "/api/v1/ranking_configurations/{id}/books/{slug}", "/api/v1/ranking_configurations/{id}/books/{slug}/lists",
           "/api/v1/ranking_configurations/{id}/lists", "/api/v1/ranking_configurations/{id}/lists/{list_id}", "/api/v1/lists", "/api/v1/lists/{id}", "/api/v1/lists/{id}/items",
           "/api/v1/categories", "/api/v1/categories/{slug}", "/api/v1/categories/{slug}/books",
-          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries", "/api/v1/discover/books", "/api/v1/languages"], ::Api::OpenapiDocument.raw["paths"].keys
+          "/api/v1/ranking_configurations/{id}/categories/{slug}/books", "/api/v1/search/books", "/api/v1/search/authors", "/api/v1/search/categories", "/api/v1/countries", "/api/v1/discover/books", "/api/v1/languages", "/api/v1/my/lists", "/api/v1/my/lists/{list}/books", "/api/v1/my/books/{slug}/lists"], ::Api::OpenapiDocument.raw["paths"].keys
       end
     end
   end
