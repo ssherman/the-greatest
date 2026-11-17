@@ -140,7 +140,7 @@ same meanings (service spec §2), plus one new code:
 | HTTP | `error` | Meaning here |
 |---|---|---|
 | 400 | `invalid_url` | Bad `url` or `page_url`; a non-public address; `page_url` on a different origin; the page load landing on a different origin; the page load turning into a download. |
-| 502 | `upstream_unreachable` | The page load could not reach the site, **or the in-page request was rejected**. `detail` says which stage. |
+| 502 | `upstream_unreachable` | The page load could not reach the site, **or the in-page request was rejected**. `detail` says which stage. A page navigating away while the file is being requested is reported here too. |
 | 502 | `file_too_large` | New. The body is over the size cap (§3). Describes the site, not the service. |
 | 502 | `browser_error` | Anything else the browser raised, including a failure of the in-page script itself (as opposed to the request it made). |
 | 503 | `browser_unavailable` | As `/fetch`. |
@@ -329,6 +329,8 @@ Nothing calls `fetch_file` when this ships. The publisher intake is its first ca
   a moment to clear, the in-page request may run before clearance and come back 403. The caller
   sees `status: 403` and retries later, the same as a blocked page fetch. If this proves common,
   the remedy is a `page_url` pointing at a page plus a selector wait, which is a later addition.
+  If the challenge navigates the page while the in-page request is pending, the fetch fails as
+  `upstream_unreachable` (retryable, not a breaker failure) instead of returning `status: 403`.
 - **Camoufox's isolated world.** One of two byte-reading variants failed on a cross-world
   permission error. A Camoufox upgrade could break the other. The smoke check exists to catch
   that at upgrade time; the download-event method is the fallback.

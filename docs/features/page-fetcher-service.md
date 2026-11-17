@@ -158,9 +158,9 @@ that request), `status` (the site's status for the file request),
 |---|---|---|
 | 400 | `invalid_url` | Bad `url` or `page_url`, a non-public address, `page_url` on another origin, the page load landing on another origin or becoming a download |
 | 422 | FastAPI's body | Unknown field, `timeout_ms` out of bounds |
-| 502 | `upstream_unreachable` | The page load could not reach the site, or the in-page request was rejected; `detail` says which stage |
+| 502 | `upstream_unreachable` | The page load could not reach the site, the in-page request was rejected, or the page navigated away while the file was being requested (a challenge page clearing itself); `detail` says which stage. Retryable, and not a breaker failure |
 | 502 | `file_too_large` | The body is over `FETCHER_MAX_FILE_BYTES`. Describes the site, not the service |
-| 502 | `browser_error` | Anything else the browser raised, including a failure of the in-page script itself |
+| 502 | `browser_error` | Anything else the browser raised, including a failure of the in-page script itself and a file request that left no recorded response. Counts against the Rails breaker (`upstream_unreachable` does not) |
 | 503 | `browser_unavailable` | The browser failed to launch |
 | 504 | `navigation_timeout` | The budget ran out; the new stage is "downloading the file" |
 
@@ -236,25 +236,26 @@ means Cloudflare's challenge did not clear.
 Then fetch one file (`/fetch_file` needs the same running container):
 
     curl -s localhost:8081/fetch_file -H 'content-type: application/json' \
-      -d '{"url":"https://us.macmillan.com/sitemaps/sitemap-products.1.xml.gz"}' -o ff.json
-    python3 -I -c "
-    import json,base64,gzip,re
-    r=json.load(open('ff.json')); b=base64.b64decode(r.get('body_base64',''))
+      -d '{"url":"https://us.macmillan.com/sitemaps/sitemap-products.1.xml.gz"}' | python3 -I -c "
+    import json,base64,gzip,re,sys
+    r=json.load(sys.stdin); b=base64.b64decode(r.get('body_base64',''))
     print({k:v for k,v in r.items() if k!='body_base64'})
     print('gzip' if b[:2]==b'\x1f\x8b' else 'NOT GZIP', len(re.findall(rb'<loc>', gzip.decompress(b))) if b[:2]==b'\x1f\x8b' else b[:120])"
 
 Expected: `status` 200, `gzip`, 1000 `<loc>` entries, `size_bytes` about 15,000.
 A `status` of 403 with a "Just a moment" body means the page load had not
 cleared the challenge: retry with `"page_url":"https://us.macmillan.com/"`.
-Delete `ff.json` afterwards. A failure here after a Camoufox bump means in-page
+The response is piped straight into the check, never written to a file: the body is
+a publisher's file and `data-sources/` is not gitignored. A failure here after a Camoufox bump means in-page
 `fetch()` broke; the download-event method (below) is the fallback.
 
 ## Rails client
 
 `PageFetcher::Client` (`web-app/app/lib/page_fetcher/`) posts to `/fetch` and
 returns a `PageFetcher::Page`; `fetch_file` posts to `/fetch_file` and returns a
-`PageFetcher::FileResponse`. Both share one connection, one breaker and one error mapping. Configure it with `PAGE_FETCHER_SERVICE_URL`
-(default `http://127.0.0.1:8081`).
+`PageFetcher::FileResponse`. Both share one connection, one breaker and one
+error mapping. Configure it with `PAGE_FETCHER_SERVICE_URL` (default
+`http://127.0.0.1:8081`).
 
 ```ruby
 page = PageFetcher::Client.new.fetch(
@@ -282,6 +283,11 @@ file.body           # the bytes exactly as sent: a .gz arrives still gzipped
 file.inflated       # the body unzipped when it starts with the gzip magic bytes, else the body;
                     # raises InflatedTooLargeError past `limit:` (default 100 MiB) bytes of output
 ```
+
+`inflated` reads every member of a multi-member gzip (`bgzip` output, `cat a.gz b.gz`),
+with one output limit across all of them. A corrupt or truncated gzip body raises
+`ParseError`. That `ParseError` comes from the caller's own call to `inflated`, not from
+the client, so it does not go through the circuit breaker.
 
 `FileResponse` carries `url`, `final_url`, `status`, `content_type`, `body`, `elapsed_ms` and
 `fetched_at`. The file body is never logged, never put on an exception and never stored by the
@@ -335,6 +341,14 @@ described by size and kind only.
 | `https://US.Macmillan.com:443/sitemaps/sitemap-products.2.xml.gz` (spelled differently from how the browser writes it) | 200 | `https://us.macmillan.com/sitemaps/sitemap-products.2.xml.gz` | 14077 | 1603 | gzip, 1000 `<loc>` entries |
 | `us.macmillan.com/sitemap.xml` (redirects on the same site) | 200 | `https://us.macmillan.com/sitemap_index.xml` | 13296 | 2297 | XML, starts `<?xml`, `content_type` `text/xml; charset=UTF-8` |
 | `www.harpercollins.com/sitemap.xml` | 200 | same as `url` | 26830 | 2170 | XML, starts `<?xml`, `content_type` `application/xml; charset=utf-8` |
+
+Re-checked 2026-11-17 after the in-page script's data-URL split changed
+(`lastIndexOf(",")`), same build, two requests four seconds apart:
+
+| Request `url` | `status` | `final_url` | `size_bytes` | `elapsed_ms` | Body |
+|---|---|---|---|---|---|
+| `us.macmillan.com/sitemaps/sitemap-products.3.xml.gz` | 200 | same as `url` | 14470 | 1740 | gzip, 1000 `<loc>` entries |
+| `www.harpercollins.com/sitemap.xml` | 200 | same as `url` | 26830 | 1670 | XML, starts `<?xml`, `content_type` `application/xml; charset=utf-8` |
 
 The first row's `content_type` was `application/octet-stream`. The default
 `/robots.txt` page load cleared the challenge on every request, so no
