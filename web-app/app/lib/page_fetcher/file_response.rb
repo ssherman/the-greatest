@@ -71,9 +71,12 @@ module PageFetcher
         ensure
           reader.finish # not close: that would close the StringIO the next member reads
         end
-        break if unused.nil?
 
-        io.pos -= unused.bytesize
+        # Zlib reads in 2048-byte blocks: a member ending exactly on a block
+        # boundary leaves `unused` nil with more members still in the IO, so
+        # end on the end of the body, never on `unused`.
+        io.pos -= unused.bytesize if unused
+        break if io.eof?
       end
       out
     rescue Zlib::Error => e

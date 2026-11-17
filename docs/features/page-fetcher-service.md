@@ -245,9 +245,10 @@ Then fetch one file (`/fetch_file` needs the same running container):
 Expected: `status` 200, `gzip`, 1000 `<loc>` entries, `size_bytes` about 15,000.
 A `status` of 403 with a "Just a moment" body means the page load had not
 cleared the challenge: retry with `"page_url":"https://us.macmillan.com/"`.
-The response is piped straight into the check, never written to a file: the body is
-a publisher's file and `data-sources/` is not gitignored. A failure here after a Camoufox bump means in-page
-`fetch()` broke; the download-event method (below) is the fallback.
+The response is piped straight into the check, never written to a file: the
+body is a publisher's file and `data-sources/` is not gitignored. A failure
+here after a Camoufox bump means in-page `fetch()` broke; the download-event
+method (below) is the fallback.
 
 ## Rails client
 

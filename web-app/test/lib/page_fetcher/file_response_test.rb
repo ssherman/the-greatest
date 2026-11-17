@@ -115,6 +115,33 @@ module PageFetcher
       assert_nil error.response_body
     end
 
+    # Level 0 over seeded random bytes, so the member's compressed size is predictable.
+    def stored_gzip(payload)
+      io = StringIO.new("".b)
+      gz = Zlib::GzipWriter.new(io, Zlib::NO_COMPRESSION)
+      gz.mtime = 0
+      gz.write(payload)
+      gz.close
+      io.string
+    end
+
+    test "a member ending exactly on zlib's 2048-byte read boundary does not hide the next member" do
+      first = Random.new(1).bytes(2025)
+      member = stored_gzip(first)
+      assert_equal 2048, member.bytesize # a zlib change must not make this test vacuous
+
+      assert_equal (first + "SECOND").b, response_for(member + gzip("SECOND")).inflated
+    end
+
+    test "every member is read whatever size the first one compresses to" do
+      [2000..2100, 4070..4130].each do |sizes|
+        sizes.each do |n|
+          first = Random.new(1).bytes(n)
+          assert_equal (first + "SECOND").b, response_for(stored_gzip(first) + gzip("SECOND")).inflated, "first payload #{n} bytes"
+        end
+      end
+    end
+
     test "the gzip helper is deterministic" do
       assert_equal gzip(XML), gzip(XML)
     end
