@@ -182,8 +182,10 @@ module Services
             assert UserListItem.exists?(reading.id)
           end
 
-          test "a redirect alone, like the one a mixed delete writes, does not change where MergedBook sends a row" do
+          test "the redirect a mixed delete writes does not change where MergedBook sends a row" do
             gone_id, = gone_ids(1)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{gone_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => gone_id, "redirect_to_book_id" => @from.id, "archive" => {}})
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @from.id)
 
             assert_nil GoodreadsReplay::Apply::MergedBook.call(gone_id)
@@ -255,6 +257,8 @@ module Services
               row = row_verdict(csv_row(exclusive_shelf: (i.zero? ? "read" : "currently-reading")), action: "copy", from: @from, to: dest)
               row.update!(applied_at: Time.current, payload: row.payload.merge("from_book_id" => mixed_id))
             end
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @from.id, "archive" => {}})
             RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @from.id)
             hand_added = UserListItem.create!(user_list: list(:reading), listable: @from)
             source = ::Books::Book.create!(title: "Move Source", book_kind: :standalone)
