@@ -296,4 +296,29 @@ class UserListTest < ActiveSupport::TestCase
     assert_includes visible, @custom_list
     assert_not_includes visible, user_lists(:regular_user_games_favorites)
   end
+
+  test "move_item! shifts siblings, keeps positions contiguous and marks manually ordered" do
+    list = ::Books::UserList.create!(user: @user, list_type: :reading, name: "Reading")
+    books = %i[war_and_peace crime_and_punishment cannery_row of_mice_and_men].map { |name| books_books(name) }
+    items = books.map { |book| list.user_list_items.create!(listable: book) }
+    books[2].update_columns(provisional: true)
+
+    list.move_item!(items[3], 1)
+
+    assert_equal [items[3], items[0], items[1], items[2]].map(&:id), list.user_list_items.reload.map(&:id)
+    assert_equal [1, 2, 3, 4], list.user_list_items.map(&:position)
+    assert list.reload.manually_ordered
+
+    list.move_item!(items[3], 4)
+    assert_equal [1, 2, 3, 4], list.user_list_items.reload.map(&:position)
+    assert_equal items.map(&:id), list.user_list_items.map(&:id)
+  end
+
+  test "move_item! rejects positions outside 1..count" do
+    list = ::Books::UserList.create!(user: @user, list_type: :reading, name: "Reading")
+    items = %i[war_and_peace crime_and_punishment cannery_row of_mice_and_men].map { |name| list.user_list_items.create!(listable: books_books(name)) }
+
+    assert_raises(ArgumentError) { list.move_item!(items[0], 5) }
+    assert_raises(ArgumentError) { list.move_item!(items[0], 0) }
+  end
 end
