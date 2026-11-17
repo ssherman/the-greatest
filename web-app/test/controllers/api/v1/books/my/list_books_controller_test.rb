@@ -363,6 +363,34 @@ module Api
             assert_empty book_ids_on(@read)
           end
 
+          test "remove with an unknown slug is a 404 naming it, writes nothing and spends nothing" do
+            UserListItem.create!(user_list: @read, listable: @wp, position: 1)
+
+            delete "/api/v1/my/lists/read/books?books=#{@wp.slug},nope-one", headers: bearer(@token)
+
+            assert_response :not_found
+            assert_includes json[:detail], "nope-one"
+            assert_equal [@wp.id], book_ids_on(@read)
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "remove cleans the query slugs: whitespace, a duplicate and a trailing blank count one book" do
+            UserListItem.create!(user_list: @read, listable: @wp, position: 1)
+
+            delete "/api/v1/my/lists/read/books?books=#{CGI.escape("#{@wp.slug}, #{@wp.slug},")}", headers: bearer(@token)
+
+            assert_response :ok
+            assert_equal [{book: @wp.slug, outcome: "removed"}], json[:data]
+            assert_equal 999, json[:meta][:library_changes_remaining]
+          end
+
+          test "a non-string entry in books is a 400 about slug strings" do
+            add("read", {books: [@wp.slug, 5]})
+
+            assert_response :bad_request
+            assert_includes json[:detail], "slug strings"
+          end
+
           test "remove without books, or with too many, is a 400" do
             delete "/api/v1/my/lists/read/books", headers: bearer(@token)
             assert_response :bad_request

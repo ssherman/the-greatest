@@ -234,6 +234,10 @@ module Api
         ["DELETE", "/api/v1/my/lists/{list}/books", "401"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x" },
         ["DELETE", "/api/v1/my/lists/{list}/books", "403"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
         ["DELETE", "/api/v1/my/lists/{list}/books", "404"] => -> { delete "/api/v1/my/lists/bogus/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "422"] => lambda {
+          ::Services::UserLists::RemoveItems.stubs(:call).returns(::Services::UserLists::MutationResult.stale_item)
+          delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
         ["DELETE", "/api/v1/my/lists/{list}/books", "429"] => lambda {
           ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
           delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY)

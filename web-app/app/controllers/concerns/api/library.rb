@@ -73,7 +73,7 @@ module Api
       end
 
       unless list&.all? { |slug| slug.is_a?(String) && !slug.include?("\u0000") }
-        bad_body("books must be #{max} or fewer book slugs, as an array or a comma-separated string")
+        bad_body("books must hold book slug strings, as an array or a comma-separated string")
         return nil
       end
 

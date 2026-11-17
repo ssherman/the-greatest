@@ -1613,7 +1613,7 @@ paths:
       security: [{bearerAuth: ["books:library:write"]}]
       summary: Remove books from one of my lists
       description: |
-        Removes 1 to 50 catalogue books, by slug, from one of the token holder's own lists. `books` is a comma-separated query string. Each result is `removed` or `not_present` (a catalogue book the list does not hold; a no-op, so a retried removal is safe). Removing a book loses its completion date and position. Counts one change per book named, `not_present` included, against the daily budget. Any unknown slug makes the whole call a 404 naming them all.
+        Removes 1 to 50 catalogue books, by slug, from one of the token holder's own lists. `books` is a comma-separated query string. Each result is `removed` or `not_present` (a catalogue book the list does not hold; a no-op, so a retried removal is safe). Removing a book loses its completion date and position. Counts one change per book named, `not_present` included, against the daily budget. Any unknown slug makes the whole call a 404 naming them all. A change that cannot be applied (a book removed from the list by someone else mid-call) is a 422 and nothing is removed.
       x-mcp:
         destructive: true
         description: >-
@@ -1653,6 +1653,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/my/lists/{list}/books/{slug}:
