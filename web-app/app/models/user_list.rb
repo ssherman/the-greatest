@@ -193,36 +193,6 @@ class UserList < ApplicationRecord
     end
   end
 
-  # Moves one item to a 1-based position, shifting the rows in between by one
-  # in a single UPDATE (a list can hold tens of thousands of items). Counts
-  # hidden provisional items too, since positions stay contiguous over all of them.
-  def move_item!(item, to_position)
-    raise ArgumentError, "Item belongs to another list" unless item.user_list_id == id
-
-    count = user_list_items.count
-    unless to_position.is_a?(Integer) && to_position.between?(1, count)
-      raise ArgumentError, "Position must be between 1 and #{count}"
-    end
-
-    transaction do
-      from = UserListItem.where(id: item.id).pick(:position)
-      raise ActiveRecord::RecordNotFound, "Item no longer exists" if from.nil?
-      next if from == to_position # a no-op must not flip manually_ordered or bump updated_at
-
-      siblings = UserListItem.where(user_list_id: id)
-      if to_position > from
-        siblings.where(position: (from + 1)..to_position).update_all("position = position - 1")
-      elsif to_position < from
-        siblings.where(position: to_position..(from - 1)).update_all("position = position + 1")
-      end
-      UserListItem.where(id: item.id).update_all(position: to_position)
-      update_columns(manually_ordered: true)
-      touch
-      item.position = to_position
-      item.clear_attribute_changes([:position])
-    end
-  end
-
   private
 
   def list_type_immutable

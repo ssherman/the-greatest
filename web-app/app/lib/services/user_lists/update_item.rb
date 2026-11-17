@@ -25,13 +25,8 @@ module Services
           end
 
           unless position == :unchanged
-            begin
-              user_list.move_item!(current, position)
-            rescue ActiveRecord::RecordNotFound
-              raise BatchFailed.new(["Item no longer exists"])
-            rescue ArgumentError => error
-              raise BatchFailed.new([error.message])
-            end
+            moved = MoveItem.call(item: current, to_position: position)
+            raise BatchFailed.new(moved.errors) unless moved.success?
           end
 
           current

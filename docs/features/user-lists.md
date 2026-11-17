@@ -453,7 +453,7 @@ Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-des
 Members read and edit their books lists over REST and MCP (`docs/features/public-api.md`, "Library (my lists)"; spec `docs/superpowers/specs/2026-11-16-library-api-design.md`).
 
 - **Shared write path.** `Services::UserLists::OwnerMutation` runs a mutation under the owner's row lock and enqueues one reading-goal purge after commit. The web `UserListItemsController` and the API both call it, so goal invalidation is identical. `AddItems`, `RemoveItems` and `UpdateItem` run a batch through the existing per-item services and are all or nothing (a `BatchFailed` rolls back the savepoint).
-- **`UserList#move_item!(item, position)`** moves one item in a single UPDATE and counts hidden provisional items, so stored positions stay contiguous.
+- **`Services::UserLists::MoveItem.call(item:, to_position:)`** moves one item in a single UPDATE and counts hidden provisional items, so stored positions stay contiguous. A real move marks the list manually ordered; a move to the same position changes nothing.
 - **Limits.** 50 books per call, 1,000 book changes per user per UTC day (`Services::Api::LibraryBudget`), 500 custom lists (API creation only).
 - **Deleting a list** removes its items in one statement and does no reading-goal purge; goals count only the `read` list, which cannot be deleted.
 - **Cache lag.** An API write sets no `tg_state_mark` cookie, so the browser's cached list state can lag up to an hour. `/my/lists` is immediate.
