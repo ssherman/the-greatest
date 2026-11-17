@@ -111,8 +111,9 @@ as `get_book` resolves them (`Books::Book.catalog.find_by!(slug:)`); a provision
 - **List:** `id`, `name`, `list_type` (`favorites`, `read`, `reading`, `want_to_read`, `custom`),
   `default` (bool), `description`, `public`, `book_count`, `created_at`, `updated_at`, `url` (the web
   page, `/my/lists/{id}`), `api_url`, `books_api_url`.
-- **List book:** the public `Book` shape (rank = primary rank, or null) plus `position`, `added_at`
-  and `completed_on` (ISO date or null).
+- **List book:** `{position, added_at, completed_on, book}`, where `completed_on` is an ISO date or
+  null and `book` is the public `Book` shape (rank = primary rank, or null), embedded the way
+  `list_list_items` embeds it.
 - **Write results:** one entry per named book, in request order: `{book: slug, outcome}`, where
   `outcome` is `added`, `moved` (taken off *Reading* by adding to *Read*), `already_present`,
   `updated` (an already-present book whose completion date changed), `removed` or `not_present` (a
