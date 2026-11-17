@@ -223,7 +223,7 @@ module Api
             assert_response :not_found
           end
 
-          test "a future, malformed or null completed_on is a 400" do
+          test "a future or malformed completed_on is a 400" do
             add("read", {books: [@wp.slug], completed_on: "2999-01-01"})
             assert_response :bad_request
             add("read", {books: [@wp.slug], completed_on: "03/01/2024"})
