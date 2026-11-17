@@ -8,9 +8,14 @@ module Services
         # book was merged away, the book it ended up merged into. The merge is
         # found through an approved merge_books verdict (which records the
         # direction), else through a merged duplicate pair, where the other half
-        # is the target. Chains are followed. Merges run before relinks in
-        # ApplyVerdicts, and admins merge between passes, so without this a
-        # relink naming a merged book would no-op on every pass.
+        # is the target, else through the record_redirects row every merge
+        # writes. That last edge is the only one an admin merge of two books that
+        # were never a duplicate pair leaves (merge_book in the admin UI, API or
+        # MCP). A deleted mixed book's redirect is the exception: it points at a
+        # guess (the book most of its readers moved to), and moves and copies
+        # must not send readers there. Chains are followed. Merges run before
+        # relinks in ApplyVerdicts, and admins merge between passes, so without
+        # this a relink naming a merged book would no-op on every pass.
         class MergedBook
           MAX_HOPS = 10
 
@@ -29,7 +34,7 @@ module Services
           end
 
           # The id one merge hop from `id`, or nil. Public for Reimport::Apply::Leftovers, which walks the same edges
-          # plus record_redirects.
+          # plus a deleted mixed book's redirect.
           def self.merge_target(id)
             target = ::Books::RepairVerdict.merge_books.approved.where("payload->>'source_id' = ?", id.to_s)
               .order(:id).pick(Arel.sql("payload->>'target_id'"))
@@ -37,8 +42,17 @@ module Services
 
             pair = ::DuplicateCandidate.merged.where(item_type: "Books::Book")
               .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc).first
-            pair && ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id)
+            return ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id) if pair
+
+            redirect_target(id)
           end
+
+          def self.redirect_target(id)
+            return nil if ::Books::RepairVerdict.reimport_mixed.where("payload->>'book_id' = ?", id.to_s).exists?
+
+            ::RecordRedirect.where(item_type: "Books::Book", from_id: id).where.not(to_id: nil).pick(:to_id)
+          end
+          private_class_method :redirect_target
         end
       end
     end
