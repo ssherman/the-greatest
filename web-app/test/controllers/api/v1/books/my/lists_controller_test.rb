@@ -193,6 +193,43 @@ module Api
             end
           end
 
+          test "update can change a default list's description and clear one with null or blank" do
+            patch "/api/v1/my/lists/favorites", params: {description: "Best"}, as: :json, headers: write_headers
+            assert_api_conform(status: 200)
+            assert_equal "Best", json[:data][:description]
+
+            patch "/api/v1/my/lists/favorites", params: {description: nil}, as: :json, headers: write_headers
+            assert_api_conform(status: 200)
+            assert_nil json[:data][:description]
+
+            patch "/api/v1/my/lists/favorites", params: {description: "x"}, as: :json, headers: write_headers
+            patch "/api/v1/my/lists/favorites", params: {description: "   "}, as: :json, headers: write_headers
+            assert_nil json[:data][:description]
+          end
+
+          test "update with a null byte is a 400" do
+            list = custom_list
+            patch "/api/v1/my/lists/#{list.id}", params: {name: "a\u0000b"}, as: :json, headers: write_headers
+            assert_api_response_conform(status: 400)
+            patch "/api/v1/my/lists/#{list.id}", params: {description: "a\u0000b"}, as: :json, headers: write_headers
+            assert_api_response_conform(status: 400)
+          end
+
+          test "a description is measured after trimming" do
+            post "/api/v1/my/lists", params: {name: "Padded", description: "#{"d" * 1_000}   "}, as: :json, headers: write_headers
+            assert_response :created
+          end
+
+          test "create re-checks the cap inside the owner lock" do
+            Api::V1::Books::My::ListsController.any_instance.stubs(:custom_list_count).returns(0, 500)
+
+            assert_no_difference -> { ::Books::UserList.count } do
+              post "/api/v1/my/lists", params: {name: "Raced", books: [books_books(:got).slug]}, as: :json, headers: write_headers
+            end
+            assert_api_conform(status: 422)
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
           test "update on another member's list is a 404" do
             theirs = custom_list("Theirs", user: users(:admin_user))
 
@@ -215,17 +252,15 @@ module Api
             assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
           end
 
-          test "destroy tells the reading goal about each dated item" do
+          test "destroy removes dated items without a per-row callback or goal purge" do
             list = custom_list("Dated")
             UserListItem.create!(user_list: list, listable: books_books(:war_and_peace), completed_on: Date.new(2026, 1, 5))
-            UserListItem.create!(user_list: list, listable: books_books(:got))
-            calls = []
-            ::Services::Books::ReadingGoals::CompletionChangeInvalidator.stubs(:call).with { |**kw| calls << kw }.returns([])
+            ::Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).never
 
             delete "/api/v1/my/lists/#{list.id}", headers: write_headers
 
             assert_response :success
-            assert_equal [[Date.new(2026, 1, 5), nil]], calls.map { |kw| [kw[:old_completed_on], kw[:new_completed_on]] }
+            assert_not UserListItem.exists?(user_list_id: list.id)
           end
 
           test "destroy refuses the four default lists with a 422" do

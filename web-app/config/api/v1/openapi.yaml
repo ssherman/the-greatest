@@ -1562,7 +1562,7 @@ paths:
       security: [{bearerAuth: ["books:library:write"]}]
       summary: Edit one of my lists
       description: |
-        Changes a list's `name`, `description` and/or `public`. `{list}` is the list's id or a default list name. A default list (favorites, read, reading, want_to_read) can change `description` and `public` but not `name` (422). An empty body, a blank or over-long name or description, or a `public` that is not a JSON boolean is a 400; an unknown body key is a 422. Costs nothing against the daily budget.
+        Changes a list's `name`, `description` and/or `public`. `{list}` is the list's id or a default list name. A default list (favorites, read, reading, want_to_read) can change `description` and `public` but not `name` (422). A blank `description` clears it, like null. An empty body, a blank or over-long name, an over-long description (after trimming) or a `public` that is not a JSON boolean is a 400; an unknown body key is a 422. Costs nothing against the daily budget.
       x-mcp:
         description: >-
           Edits one of the token holder's own lists: `name` (1 to 100 characters), `description` (up to 1,000, or null
@@ -2772,14 +2772,18 @@ components:
               type: array
               description: One entry per book named, in request order; empty when no books were sent.
               items:
-                type: object
-                required: [book, outcome]
-                properties:
-                  book: {type: string, description: The book's slug.}
-                  outcome: {type: string, enum: [added]}
+                $ref: "#/components/schemas/LibraryBookOutcome"
             library_changes_remaining:
               type: integer
               description: Book changes left in today's budget (UTC day).
+    LibraryBookOutcome:
+      type: object
+      required: [book, outcome]
+      properties:
+        book: {type: string, description: The book's slug.}
+        outcome:
+          type: string
+          enum: [added, moved, already_present, updated, removed, not_present]
     LibraryWriteResult:
       type: object
       required: [data, meta]
@@ -2788,13 +2792,7 @@ components:
           type: array
           description: One entry per named book, in request order, duplicates removed.
           items:
-            type: object
-            required: [book, outcome]
-            properties:
-              book: {type: string, description: The book's slug.}
-              outcome:
-                type: string
-                enum: [added, moved, already_present, updated, removed, not_present]
+            $ref: "#/components/schemas/LibraryBookOutcome"
         meta:
           type: object
           required: [list, library_changes_remaining]

@@ -102,11 +102,13 @@ module Api
             return refuse("A default list cannot be deleted") if list.default?
 
             body = list_json(list)
-            ::Services::UserLists::OwnerMutation.call(owner: library_user) do |tracker|
-              # Only dated items: a list can hold tens of thousands of rows.
-              dates = ::UserListItem.where(user_list_id: list.id).where.not(completed_on: nil).pluck(:completed_on)
+            # One DELETE for the items, not a callback per row: a list can hold
+            # thousands. No reading-goal purge: goals count only the read list
+            # (ProgressQuery), and default lists cannot be deleted, so a custom
+            # list's dates never move a goal.
+            ::Services::UserLists::OwnerMutation.call(owner: library_user) do
+              ::UserListItem.where(user_list_id: list.id).delete_all
               list.destroy!
-              dates.each { |date| tracker.change(old_completed_on: date, new_completed_on: nil) }
             end
             render json: {data: body}
           end
@@ -150,11 +152,12 @@ module Api
           def description!(raw)
             return nil if raw.nil?
 
-            if !raw.is_a?(String) || raw.length > DESCRIPTION_MAX || raw.include?("\u0000")
+            text = raw.is_a?(String) ? raw.strip : nil
+            if text.nil? || text.length > DESCRIPTION_MAX || text.include?("\u0000")
               bad_body("description must be a string of up to #{DESCRIPTION_MAX} characters, or null")
               return nil
             end
-            raw.strip.presence
+            text.presence
           end
 
           # Only a JSON boolean: "yes" and "true" are rejected, not cast.
