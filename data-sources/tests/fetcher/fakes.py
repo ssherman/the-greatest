@@ -9,10 +9,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-from fetcher.browser import DocumentResponse, RequestFilter
+from fetcher.browser import DocumentResponse, FileResult, RequestFilter
 
 PUBLIC_ADDRESS = "93.184.215.14"
 PAGE_URL = "https://books.example/book/1"
+FILE_URL = "https://books.example/sitemaps/products.1.xml.gz"
+ROBOTS_URL = "https://books.example/robots.txt"
+FILE_BODY = b"\x1f\x8b fake gzip bytes"
 PAGE_HTML = "<html><head><title>A Book</title></head><body><h1>A Book</h1></body></html>"
 
 
@@ -53,6 +56,25 @@ class Script:
     content_error: BaseException | None = None
     content_delay_s: float = 0.0
     close_delay_s: float = 0.0
+    file_result: FileResult | BaseException = field(
+        default_factory=lambda: FileResult(
+            outcome="ok",
+            status=200,
+            final_url=FILE_URL,
+            content_type="application/octet-stream",
+            body=FILE_BODY,
+            size_bytes=len(FILE_BODY),
+        )
+    )
+    file_delay_s: float = 0.0
+    # Requests the in-page file request "makes", as (url, resource_type,
+    # is_navigation); each goes through the fetcher's request filter.
+    file_requests: list[tuple[str, str, bool]] = field(
+        default_factory=lambda: [(FILE_URL, "fetch", False)]
+    )
+    file_responses: list[DocumentResponse] = field(
+        default_factory=lambda: [DocumentResponse(FILE_URL, 200)]
+    )
 
 
 class FakeSession:
@@ -62,6 +84,7 @@ class FakeSession:
         self.goto_calls: list[tuple[str, str, float]] = []
         self.selector_calls: list[tuple[str, float]] = []
         self.filter_decisions: list[tuple[str, bool]] = []
+        self.file_calls: list[tuple[str, int]] = []
         self.closed = False
 
     async def goto(self, url: str, wait_until: str, timeout_s: float) -> None:
@@ -92,6 +115,20 @@ class FakeSession:
 
     def document_responses(self) -> list[DocumentResponse]:
         return list(self.script.responses)
+
+    async def fetch_file(self, url: str, max_bytes: int) -> FileResult:
+        self.file_calls.append((url, max_bytes))
+        for request_url, resource_type, is_navigation in self.script.file_requests:
+            allowed = await self.request_filter(request_url, resource_type, is_navigation)
+            self.filter_decisions.append((request_url, allowed))
+        if self.script.file_delay_s:
+            await asyncio.sleep(self.script.file_delay_s)
+        if isinstance(self.script.file_result, BaseException):
+            raise self.script.file_result
+        return self.script.file_result
+
+    def file_responses(self) -> list[DocumentResponse]:
+        return list(self.script.file_responses)
 
     async def close(self) -> None:
         if self.script.close_delay_s:

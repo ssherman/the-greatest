@@ -7,6 +7,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from fetcher.browser import (
     BrowserError,
+    DownloadStarted,
     InvalidSelector,
     NavigationTimeout,
     UpstreamUnreachable,
@@ -103,3 +104,9 @@ def test_no_fetcher_module_imports_camoufox_or_playwright_at_import_time():
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_a_navigation_that_becomes_a_download_is_its_own_browser_error():
+    failure = translate_playwright_error(PlaywrightError("Page.goto: Download is starting"))
+    assert isinstance(failure, DownloadStarted)
+    assert isinstance(failure, BrowserError)  # so /fetch still calls it browser_error

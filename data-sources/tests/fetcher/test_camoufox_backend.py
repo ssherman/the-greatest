@@ -1,13 +1,24 @@
 import asyncio
+import base64
 import gc
 import importlib.metadata
 import json
 import logging
 
 import pytest
+from playwright.async_api import Error as PlaywrightError
 
 from fetcher.api.main import create_app
-from fetcher.browser import CamoufoxBrowser, CamoufoxSession, LaunchFailed, _route_handler
+from fetcher.browser import (
+    FILE_FETCH_SCRIPT,
+    BrowserError,
+    CamoufoxBrowser,
+    CamoufoxSession,
+    DocumentResponse,
+    FileResult,
+    LaunchFailed,
+    _route_handler,
+)
 from fetcher.fetcher import exit_process
 
 
@@ -337,3 +348,158 @@ async def test_the_filter_hears_only_main_frame_navigations_as_navigations(
 
     assert heard == [main_frame_navigation]
     assert route.outcome == "continued"
+
+
+FILE = "https://books.example/sitemaps/products.1.xml.gz"
+FINAL = "https://cdn.books.example/sitemaps/products.1.xml.gz"
+
+
+class _EvaluatingPage:
+    """A page whose `evaluate` records its arguments and returns a canned answer
+    (or raises it); `during` runs first, as the browser's events would."""
+
+    main_frame = object()
+
+    def __init__(self, answer, during=None) -> None:
+        self.answer = answer
+        self.during = during
+        self.calls: list[tuple] = []
+
+    async def evaluate(self, script, arg):
+        self.calls.append((script, arg))
+        if self.during is not None:
+            self.during()
+        if isinstance(self.answer, BaseException):
+            raise self.answer
+        return self.answer
+
+
+def _ok(body: bytes, **extra):
+    return {
+        "outcome": "ok",
+        "status": 200,
+        "final_url": FILE,
+        "content_type": None,
+        "size_bytes": len(body),
+        "body_base64": base64.b64encode(body).decode(),
+        **extra,
+    }
+
+
+@pytest.mark.anyio
+async def test_fetch_file_decodes_the_page_scripts_answer():
+    page = _EvaluatingPage(_ok(b"hello"))
+    result = await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+    assert result == FileResult(
+        outcome="ok", status=200, final_url=FILE, content_type=None, body=b"hello", size_bytes=5
+    )
+    assert page.calls[0][1] == [FILE, 1024]  # the url and the cap, in that order
+
+
+@pytest.mark.anyio
+async def test_fetch_file_decodes_an_empty_file():
+    page = _EvaluatingPage(_ok(b""))
+    result = await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+    assert (result.outcome, result.body, result.size_bytes) == ("ok", b"", 0)
+
+
+@pytest.mark.anyio
+async def test_fetch_file_reports_too_large_and_rejected_without_a_body():
+    big = _EvaluatingPage(
+        {
+            "outcome": "too_large",
+            "status": 200,
+            "final_url": FILE,
+            "content_type": "x",
+            "size_bytes": 9999,
+        }
+    )
+    result = await CamoufoxSession(object(), big).fetch_file(FILE, 10)
+    assert result == FileResult(
+        outcome="too_large",
+        status=200,
+        final_url=FILE,
+        content_type="x",
+        body=b"",
+        size_bytes=9999,
+    )
+
+    message = "NetworkError when attempting to fetch resource."
+    rejected = _EvaluatingPage({"outcome": "rejected", "detail": message})
+    result = await CamoufoxSession(object(), rejected).fetch_file(FILE, 10)
+    assert result == FileResult(outcome="rejected", detail=message)
+
+
+@pytest.mark.anyio
+async def test_the_page_script_uses_the_variant_that_works_in_camoufox():
+    page = _EvaluatingPage(_ok(b"x"))
+    await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+    script = page.calls[0][0]
+    assert script is FILE_FETCH_SCRIPT
+    assert "readAsDataURL" in script
+    assert "credentials" in script
+    for banned in ("Uint8Array", "fromCharCode", "btoa"):
+        assert banned not in script
+
+
+@pytest.mark.anyio
+async def test_a_failing_page_script_is_a_browser_error():
+    page = _EvaluatingPage(PlaywrightError("Page.evaluate: boom"))
+    with pytest.raises(BrowserError):
+        await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "answer",
+    [None, {"outcome": "ok"}, _ok(b"x", body_base64="!!not base64!!"), {"outcome": "weird"}],
+)
+async def test_an_answer_that_is_not_the_scripts_shape_is_a_browser_error(answer):
+    page = _EvaluatingPage(answer)
+    with pytest.raises(BrowserError):
+        await CamoufoxSession(object(), page).fetch_file(FILE, 1024)
+
+
+class _Req:
+    def __init__(self, url, *, navigation=False, redirected_from=None) -> None:
+        self.url = url
+        self.redirected_from = redirected_from
+        self._navigation = navigation
+
+    def is_navigation_request(self):
+        return self._navigation
+
+
+class _Resp:
+    def __init__(self, request, status, frame) -> None:
+        self.request = request
+        self.url = request.url
+        self.status = status
+        self.frame = frame
+
+
+@pytest.mark.anyio
+async def test_file_responses_keeps_each_hop_of_the_file_request_with_its_chain():
+    page = _EvaluatingPage(_ok(b"x"))
+    session = CamoufoxSession(object(), page)
+    first = _Req(FILE)
+    last = _Req(FINAL, redirected_from=first)
+
+    def during():
+        session.record_response(
+            _Resp(_Req("https://books.example/robots.txt", navigation=True), 200, page.main_frame)
+        )
+        session.record_response(_Resp(_Req("https://books.example/app.js"), 200, object()))
+        session.record_response(_Resp(first, 302, page.main_frame))
+        session.record_response(_Resp(last, 200, page.main_frame))
+
+    page.during = during
+    await session.fetch_file(FILE, 1024)
+
+    assert session.file_responses() == [
+        DocumentResponse(FILE, 302),
+        DocumentResponse(FINAL, 200, redirect_chain=(FILE,)),
+    ]
+    assert session.document_responses() == [
+        DocumentResponse("https://books.example/robots.txt", 200)
+    ]
