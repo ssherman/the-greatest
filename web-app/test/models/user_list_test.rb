@@ -308,6 +308,8 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal [items[3], items[0], items[1], items[2]].map(&:id), list.user_list_items.reload.map(&:id)
     assert_equal [1, 2, 3, 4], list.user_list_items.map(&:position)
     assert list.reload.manually_ordered
+    assert_equal 2, items[0].reload.position
+    refute items[3].changed?
 
     list.move_item!(items[3], 4)
     assert_equal [1, 2, 3, 4], list.user_list_items.reload.map(&:position)
@@ -320,5 +322,22 @@ class UserListTest < ActiveSupport::TestCase
 
     assert_raises(ArgumentError) { list.move_item!(items[0], 5) }
     assert_raises(ArgumentError) { list.move_item!(items[0], 0) }
+  end
+
+  test "move_item! refuses another list's item and a vanished item, and touches the list" do
+    list = ::Books::UserList.create!(user: @user, list_type: :reading, name: "Reading")
+    other = user_lists(:regular_user_books_read)
+    foreign = other.user_list_items.first
+    mine = [books_books(:war_and_peace), books_books(:cannery_row)].map { |book| list.user_list_items.create!(listable: book) }
+
+    assert_raises(ArgumentError) { list.move_item!(foreign, 1) }
+
+    list.update_columns(updated_at: 1.day.ago)
+    list.move_item!(mine[1], 1)
+    assert_operator list.reload.updated_at, :>, 1.hour.ago
+
+    stale = UserListItem.find(mine[0].id)
+    UserListItem.where(id: stale.id).delete_all
+    assert_raises(ActiveRecord::RecordNotFound) { list.move_item!(stale, 1) }
   end
 end

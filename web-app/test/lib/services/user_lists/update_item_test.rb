@@ -38,6 +38,23 @@ module Services
         refute result.success?
         assert_equal 2, @item.reload.position
       end
+
+      test "a valid completed_on with an out-of-range position rolls the date back" do
+        result = UpdateItem.call(item: @item, completed_on: Date.new(2024, 3, 1), position: 99)
+
+        refute result.success?
+        assert_nil @item.reload.completed_on
+      end
+
+      test "an item deleted underneath the call reads as no longer existing" do
+        stale = UserListItem.find(@item.id)
+        UserListItem.where(id: @item.id).delete_all
+
+        result = UpdateItem.call(item: stale, position: 1)
+
+        refute result.success?
+        assert_equal ["Item no longer exists"], result.errors
+      end
     end
   end
 end
