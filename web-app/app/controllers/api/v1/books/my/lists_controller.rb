@@ -48,12 +48,12 @@ module Api
               attrs[:description] = description!(body["description"])
               return if performed?
             end
-            if body.key?("public")
+            if !body["public"].nil?
               attrs[:public] = public!(body["public"])
               return if performed?
             end
             slugs = nil
-            if body.key?("books")
+            if !body["books"].nil?
               return bad_body("books must be an array of book slugs") unless body["books"].is_a?(Array)
 
               slugs = book_slugs!(body["books"]) or return

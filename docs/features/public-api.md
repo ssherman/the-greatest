@@ -83,13 +83,13 @@ Spec: `docs/superpowers/specs/2026-11-15-discover-books-design.md`. `GET /api/v1
 
 Failures follow RFC 6750: 401 `WWW-Authenticate: Bearer` / `Bearer error="invalid_token"`; 403 `membership_required` (no challenge); 403 `Bearer error="insufficient_scope", scope="…"`.
 
-Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the three read scopes, and an expiry of never, 30, 90 or 365 days. Ten per account.
+Members mint tokens at `/developers/tokens`: a name (≤60 chars), any scope they are eligible for (the three reads and the two library scopes; admin scopes only for admins), and an expiry of never, 30, 90 or 365 days. Ten per account.
 
 A second kind of bearer token comes from the MCP server's OAuth sign-in (`docs/features/mcp-server.md`, "Signing in with OAuth"). It works only on `/api/mcp`: `Services::Api::Authenticator` ties it to that path, so on `/api/v1/*` it is a 401 `invalid_token`, with the same body and headers as any other bad token. The REST API keeps personal tokens as its only credential.
 
 ## Scopes
 
-`Api::Scopes` — `books:read`, `music:read`, `games:read`, `books:library:read`, `books:library:write` (see "Library (my lists)"), plus the admin scopes under "Admin permissions". Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+`Api::Scopes` — `books:read`, `music:read`, `games:read`, `books:library:read`, `books:library:write` (see "Library (my lists)"), plus the admin scopes under "Admin permissions". Members may mint the three reads and the two library scopes; service accounts get the read and library scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy is live: `books:library:write` implies `books:library:read`. A scope marked `writes` is never pre-ticked on the token form (nor are admin scopes).
 
 ## Library (my lists)
 

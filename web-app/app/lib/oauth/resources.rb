@@ -65,7 +65,16 @@ module Oauth
       offered = resource.scopes(domain)
       asked = Array(requested) - ["offline_access"]
       asked = offered if asked.empty?
-      offered & asked & ::Api::Scopes.mintable_by(user)
+      mintable = ::Api::Scopes.mintable_by(user)
+      granted = offered & asked & mintable
+      # A library scope on a token that cannot connect is useless: the member
+      # endpoint needs the domain's read scope, so add it when they may hold it.
+      read = "#{domain}:read"
+      if !resource.admin && granted.any? { |scope| scope.start_with?("#{domain}:library:") } &&
+          !granted.include?(read) && mintable.include?(read)
+        granted = offered & (granted + [read])
+      end
+      granted
     end
 
     # What a connection's token may do right now: the connection's scopes cut

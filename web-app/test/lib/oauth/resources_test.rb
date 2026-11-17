@@ -110,6 +110,15 @@ module Oauth
         Resources.grantable_scopes(users(:user_with_expired_membership), mcp, :books, requested: ["offline_access"])
     end
 
+    test "a library scope on its own brings the domain read scope the connection needs" do
+      mcp = Resources.fetch("mcp")
+
+      assert_equal ["books:read", "books:library:write"],
+        Resources.grantable_scopes(users(:regular_user), mcp, :books, requested: ["books:library:write"])
+      assert_equal ["books:read", "books:library:read"],
+        Resources.grantable_scopes(users(:regular_user), mcp, :books, requested: ["books:library:read"])
+    end
+
     test "a user with no membership and no role is granted nothing" do
       mcp = Resources.fetch("mcp")
       user = users(:regular_user)

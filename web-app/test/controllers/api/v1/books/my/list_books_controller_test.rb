@@ -228,8 +228,34 @@ module Api
             assert_response :bad_request
             add("read", {books: [@wp.slug], completed_on: "03/01/2024"})
             assert_response :bad_request
+          end
+
+          test "an add with a null completed_on is the same as none" do
             add("read", {books: [@wp.slug], completed_on: nil})
+
+            assert_response :ok
+            assert_equal [{book: @wp.slug, outcome: "added"}], json[:data]
+          end
+
+          test "completed_on allows the date in the furthest-ahead zone and no later" do
+            travel_to Time.utc(2026, 11, 17, 20, 0, 0) do
+              add("read", {books: [@wp.slug], completed_on: "2026-11-18"})
+              assert_response :ok
+              add("read", {books: [@crime.slug], completed_on: "2026-11-19"})
+              assert_response :bad_request
+            end
+          end
+
+          test "update with a null completed_on on a list without dates is absent" do
+            UserListItem.create!(user_list: @favorites, listable: @wp, position: 1)
+            UserListItem.create!(user_list: @favorites, listable: @crime, position: 2)
+
+            patch "/api/v1/my/lists/favorites/books/#{@wp.slug}", params: {completed_on: nil}, as: :json, headers: bearer(@token)
             assert_response :bad_request
+
+            patch "/api/v1/my/lists/favorites/books/#{@crime.slug}", params: {completed_on: nil, position: 1}, as: :json, headers: bearer(@token)
+            assert_response :ok
+            assert_equal [@crime.id, @wp.id], book_ids_on(@favorites)
           end
 
           test "completed_on on favorites is a 422" do

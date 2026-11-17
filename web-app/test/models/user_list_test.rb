@@ -316,6 +316,20 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal items.map(&:id), list.user_list_items.map(&:id)
   end
 
+  test "move_item! to the same position changes nothing" do
+    list = ::Books::UserList.create!(user: @user, list_type: :reading, name: "Reading")
+    items = %i[war_and_peace crime_and_punishment].map { |name| list.user_list_items.create!(listable: books_books(name)) }
+    stamp = 1.day.ago.change(usec: 0)
+    list.update_columns(updated_at: stamp)
+
+    list.move_item!(items[1], 2)
+
+    list.reload
+    assert_not list.manually_ordered
+    assert_equal stamp, list.updated_at
+    assert_equal [1, 2], list.user_list_items.reload.map(&:position)
+  end
+
   test "move_item! rejects positions outside 1..count" do
     list = ::Books::UserList.create!(user: @user, list_type: :reading, name: "Reading")
     items = %i[war_and_peace crime_and_punishment cannery_row of_mice_and_men].map { |name| list.user_list_items.create!(listable: books_books(name)) }

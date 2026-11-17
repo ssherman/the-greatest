@@ -207,6 +207,7 @@ class UserList < ApplicationRecord
     transaction do
       from = UserListItem.where(id: item.id).pick(:position)
       raise ActiveRecord::RecordNotFound, "Item no longer exists" if from.nil?
+      next if from == to_position # a no-op must not flip manually_ordered or bump updated_at
 
       siblings = UserListItem.where(user_list_id: id)
       if to_position > from

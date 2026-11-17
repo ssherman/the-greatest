@@ -114,12 +114,18 @@ module Api
         nil
       end
 
-      if date.nil? || date > Date.current
-        bad_body("completed_on must be a date as YYYY-MM-DD, no later than today#{" (or null)" if allow_nil}")
+      if date.nil? || date > latest_allowed_date
+        bad_body("completed_on must be a date as YYYY-MM-DD, no later than today's date anywhere (UTC+14)#{" (or null)" if allow_nil}")
         return nil
       end
 
       date
+    end
+
+    # The date it already is in the furthest-ahead zone, so a member east of UTC
+    # can record their own today.
+    def latest_allowed_date
+      Time.current.in_time_zone("Pacific/Kiritimati").to_date
     end
 
     # Reserves `count` book changes for today, yields, and gives them back

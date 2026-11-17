@@ -95,6 +95,14 @@ module Api
             assert_equal @user.id, ::Books::UserList.find(json[:data][:id]).user_id
           end
 
+          test "create treats a null public and a null books as absent" do
+            post "/api/v1/my/lists", params: {name: "Nulls", public: nil, books: nil}, as: :json, headers: write_headers
+
+            assert_response :created
+            assert_equal false, json[:data][:public]
+            assert_equal [], json[:meta][:results]
+          end
+
           test "create with books adds them and spends budget" do
             slugs = [books_books(:war_and_peace).slug, books_books(:got).slug]
             post "/api/v1/my/lists", params: {name: "Pair", description: "two", public: true, books: slugs}, as: :json, headers: write_headers
@@ -129,7 +137,7 @@ module Api
           test "create refuses bad names, descriptions, flags and bodies with a 400" do
             [
               {name: "x" * 101}, {name: "   "}, {}, {name: 5}, {name: "a\u0000b"},
-              {name: "ok", public: "yes"}, {name: "ok", public: "true"}, {name: "ok", public: nil},
+              {name: "ok", public: "yes"}, {name: "ok", public: "true"},
               {name: "ok", description: "d" * 1_001}, {name: "ok", description: 3},
               {name: "ok", books: "slug"}, {name: "ok", books: []}
             ].each do |body|

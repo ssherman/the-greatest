@@ -67,7 +67,7 @@ module Api
             return bad_body("books must be an array of book slugs") unless body["books"].is_a?(Array)
 
             slugs = book_slugs!(body["books"]) or return
-            completed_on = completed_on!(body.fetch("completed_on", :absent), allow_nil: false)
+            completed_on = completed_on!(body["completed_on"].nil? ? :absent : body["completed_on"], allow_nil: false)
             return if performed?
 
             list = find_my_list!(params[:list]) or return
@@ -100,6 +100,10 @@ module Api
             list = find_my_list!(params[:list]) or return
             unknown = body.keys - UPDATE_FIELDS
             return unknown_fields(unknown, UPDATE_FIELDS) if unknown.any?
+            # null clears a date, which only means something on a list that has
+            # dates; elsewhere it is the same as leaving the field out.
+            completed_on = :absent if completed_on.nil? && !list.completed_on_enabled?
+            return bad_body("Send completed_on, position, or both.") if completed_on == :absent && position == :absent
             return completed_on_refused unless completed_on == :absent || list.completed_on_enabled?
 
             book = (catalog_books!([params[:slug].to_s]) or return).first
