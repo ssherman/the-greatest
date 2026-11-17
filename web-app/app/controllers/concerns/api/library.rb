@@ -8,6 +8,9 @@ module Api
   # Api::V1 a bare Books:: resolves to Api::V1::Books:: and raises NameError.
   module Library
     extend ActiveSupport::Concern
+    include ::Api::JsonBody
+
+    COMPLETED_ON_FORMAT = /\A\d{4}-\d{2}-\d{2}\z/
 
     # `/my/lists` order: the four defaults by list_type, then custom lists by
     # name. id breaks ties so paging is stable.
@@ -58,5 +61,103 @@ module Api
     end
 
     def iso_date(value) = value&.iso8601
+
+    # The unique, stripped slugs of a write: an Array (JSON body) or a
+    # comma-separated String (query). Renders the 400 and returns nil unless
+    # there are 1..library_batch_max of them.
+    def book_slugs!(raw)
+      max = Rails.application.config.x.api.library_batch_max
+      list = case raw
+      when Array then raw
+      when String then raw.split(",")
+      end
+
+      unless list&.all? { |slug| slug.is_a?(String) && !slug.include?("\u0000") }
+        bad_body("books must be #{max} or fewer book slugs, as an array or a comma-separated string")
+        return nil
+      end
+
+      slugs = list.map(&:strip).reject(&:empty?).uniq
+      unless slugs.size.between?(1, max)
+        bad_body("books must name between 1 and #{max} different books")
+        return nil
+      end
+
+      slugs
+    end
+
+    # The catalogue books for `slugs`, in slug order. One 404 naming every
+    # unknown slug (a provisional book is unknown), so a retry can fix them all.
+    def catalog_books!(slugs)
+      found = ::Books::Book.catalog.where(slug: slugs).index_by(&:slug)
+      unknown = slugs - found.keys
+      if unknown.any?
+        render_problem(::Api::Problem.new(:not_found,
+          detail: "Unknown book#{"s" if unknown.size > 1}: #{unknown.join(", ")}"))
+        return nil
+      end
+
+      found.values_at(*slugs)
+    end
+
+    # A Date; nil for an allowed null; :absent when the caller passed :absent
+    # (`body.fetch("completed_on", :absent)`). Anything else renders a 400 and
+    # returns nil, so callers follow it with `return if performed?`.
+    # Future dates are refused so a guessed date cannot be written.
+    def completed_on!(raw, allow_nil:)
+      return :absent if raw == :absent
+      return nil if raw.nil? && allow_nil
+
+      date = begin
+        Date.strptime(raw, "%Y-%m-%d") if raw.is_a?(String) && COMPLETED_ON_FORMAT.match?(raw)
+      rescue Date::Error
+        nil
+      end
+
+      if date.nil? || date > Date.current
+        bad_body("completed_on must be a date as YYYY-MM-DD, no later than today#{" (or null)" if allow_nil}")
+        return nil
+      end
+
+      date
+    end
+
+    # Reserves `count` book changes for today, yields, and gives them back
+    # unless the block rendered a 2xx (or raised). `now` is read once so the
+    # release lands in the same UTC day as the reservation.
+    def with_budget(count)
+      @library_now = Time.current
+      reservation = ::Services::Api::LibraryBudget.reserve(library_user, count, now: @library_now)
+      return render_budget_refused(reservation, @library_now) unless reservation.ok?
+
+      kept = false
+      begin
+        yield
+        kept = response.status.between?(200, 299)
+      ensure
+        ::Services::Api::LibraryBudget.release(library_user, count, now: @library_now) unless kept
+      end
+    end
+
+    def render_budget_refused(reservation, now)
+      seconds = [(reservation.reset_at - now).ceil, 1].max
+      response.headers["Retry-After"] = seconds.to_s
+      render_problem(::Api::Problem.new(:rate_limited,
+        detail: "Daily library limit of #{reservation.limit} book changes reached; #{reservation.remaining} remaining. Retry after #{seconds} seconds."))
+    end
+
+    # The batch response: one {book: slug, outcome:} per named book in request
+    # order, the list as it now stands, and what is left of today's budget.
+    def write_result(list, outcomes, status: :ok)
+      list.reload
+      count = book_count_for([list]).fetch(list.id, 0)
+      render status: status, json: {
+        data: outcomes.map { |outcome| {book: outcome[:listable].slug, outcome: outcome[:outcome]} },
+        meta: {
+          list: ::Api::V1::Books::UserListResource.new(list, params: {book_count: count}).to_h,
+          library_changes_remaining: ::Services::Api::LibraryBudget.remaining(library_user, now: @library_now || Time.current)
+        }
+      }
+    end
   end
 end

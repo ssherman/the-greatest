@@ -89,6 +89,22 @@ module Api
       assert_equal [books_books(:clash).id], tool_text["data"].map { |row| row.dig("book", "id") }
     end
 
+    test "tools/call add_my_list_books writes through the REST endpoint" do
+      slug = books_books(:got).slug
+      call_tool("add_my_list_books", {list: "want_to_read", books: [slug]}, token: ApiTokenSecrets::LIBRARY)
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [{"book" => slug, "outcome" => "added"}], tool_text["data"]
+    end
+
+    test "remove_my_list_books is a destructive tool and add_my_list_books is not" do
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY)
+      tools = json.dig("result", "tools").index_by { |tool| tool["name"] }
+
+      assert_equal true, tools.fetch("remove_my_list_books").dig("annotations", "destructiveHint")
+      assert_equal false, tools.fetch("add_my_list_books").dig("annotations", "destructiveHint")
+    end
+
     test "tools/call get_book returns the REST body" do
       call_tool("get_book", {slug: @war_and_peace.slug})
       assert_response :success

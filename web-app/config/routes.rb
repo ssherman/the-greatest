@@ -712,6 +712,9 @@ Rails.application.routes.draw do
           scope "my", module: :my, as: :my do
             get "lists", to: "lists#index", as: :lists
             get "lists/:list/books", to: "list_books#index", as: :list_books
+            post "lists/:list/books", to: "list_books#create"
+            patch "lists/:list/books/:slug", to: "list_books#update", as: :list_book
+            delete "lists/:list/books", to: "list_books#destroy"
             get "books/:slug/lists", to: "book_lists#index", as: :book_lists
           end
         end

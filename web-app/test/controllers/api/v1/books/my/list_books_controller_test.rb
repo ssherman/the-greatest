@@ -138,3 +138,239 @@ module Api
     end
   end
 end
+
+module Api
+  module V1
+    module Books
+      module My
+        class ListBookWritesTest < ActionDispatch::IntegrationTest
+          setup do
+            host! "dev-new.thegreatestbooks.org"
+            @user = users(:regular_user)
+            @read = ::Books::UserList.find_by!(user: @user, list_type: :read)
+            @favorites = ::Books::UserList.find_by!(user: @user, list_type: :favorites)
+            UserListItem.where(user_list: [@read, @favorites]).delete_all
+            @wp = books_books(:war_and_peace)
+            @crime = books_books(:crime_and_punishment)
+            @got = books_books(:got)
+            @token = ApiTokenSecrets::LIBRARY
+          end
+
+          def json = response.parsed_body.deep_symbolize_keys
+
+          def add(list, body, token: @token)
+            post "/api/v1/my/lists/#{list}/books", params: body, as: :json, headers: bearer(token)
+          end
+
+          def book_ids_on(list) = UserListItem.where(user_list: list).order(:position).map(&:listable_id)
+
+          test "adds books in order and reports the list and the budget" do
+            add("read", {books: [@wp.slug, @crime.slug]})
+            assert_api_conform(status: 200)
+
+            assert_equal [{book: @wp.slug, outcome: "added"}, {book: @crime.slug, outcome: "added"}], json[:data]
+            assert_equal 2, json[:meta][:list][:book_count]
+            assert_equal @read.id, json[:meta][:list][:id]
+            assert_equal 998, json[:meta][:library_changes_remaining]
+            assert_equal [@wp.id, @crime.id], book_ids_on(@read)
+          end
+
+          test "duplicate slugs count once" do
+            add("read", {books: [@wp.slug, @wp.slug]})
+
+            assert_equal [{book: @wp.slug, outcome: "added"}], json[:data]
+            assert_equal 999, json[:meta][:library_changes_remaining]
+          end
+
+          test "an add with completed_on dates the book" do
+            add("read", {books: [@wp.slug], completed_on: "2024-03-01"})
+
+            assert_response :ok
+            assert_equal Date.new(2024, 3, 1), UserListItem.find_by!(user_list: @read, listable: @wp).completed_on
+          end
+
+          test "a batch over 50, an empty batch and a non-array are 400s" do
+            add("read", {books: (1..51).map { |i| "book-#{i}" }})
+            assert_response :bad_request
+            add("read", {books: []})
+            assert_response :bad_request
+            add("read", {books: "x"})
+            assert_response :bad_request
+            add("read", {})
+            assert_response :bad_request
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "a malformed body is a 400" do
+            post "/api/v1/my/lists/read/books", params: "{nope", headers: bearer(@token).merge("CONTENT_TYPE" => "application/json")
+            assert_response :bad_request
+          end
+
+          test "two unknown slugs are a 404 naming both, and nothing is written or spent" do
+            add("read", {books: [@wp.slug, "nope-one", "nope-two"]})
+
+            assert_response :not_found
+            assert_includes json[:detail], "nope-one"
+            assert_includes json[:detail], "nope-two"
+            assert_empty book_ids_on(@read)
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "a provisional book is unknown" do
+            @crime.update_columns(provisional: true)
+            add("read", {books: [@crime.slug]})
+
+            assert_response :not_found
+          end
+
+          test "a future, malformed or null completed_on is a 400" do
+            add("read", {books: [@wp.slug], completed_on: "2999-01-01"})
+            assert_response :bad_request
+            add("read", {books: [@wp.slug], completed_on: "03/01/2024"})
+            assert_response :bad_request
+            add("read", {books: [@wp.slug], completed_on: nil})
+            assert_response :bad_request
+          end
+
+          test "completed_on on favorites is a 422" do
+            add("favorites", {books: [@wp.slug], completed_on: "2024-03-01"})
+
+            assert_response :unprocessable_entity
+            assert_empty book_ids_on(@favorites)
+          end
+
+          test "an unknown body key is a 422" do
+            add("read", {books: [@wp.slug], color: "red"})
+
+            assert_response :unprocessable_entity
+            assert_includes json[:detail], "color"
+          end
+
+          test "an unknown list is a 404" do
+            add("nonsense", {books: [@wp.slug]})
+            assert_response :not_found
+          end
+
+          test "a read-only token is a 403" do
+            add("read", {books: [@wp.slug]}, token: ApiTokenSecrets::LIBRARY_READ)
+            assert_response :forbidden
+          end
+
+          test "a failing service is a 422 and gives the reserved budget back" do
+            ::Services::UserLists::AddItems.stubs(:call).returns(::Services::UserLists::MutationResult.failure(["boom"]))
+
+            add("read", {books: [@wp.slug]})
+
+            assert_response :unprocessable_entity
+            assert_includes json[:detail], "boom"
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "an exception in the service gives the budget back" do
+            ::Services::UserLists::AddItems.stubs(:call).raises(RuntimeError, "kaboom")
+
+            assert_raises(RuntimeError) { add("read", {books: [@wp.slug]}) }
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "a call over the remaining budget is a 429 with Retry-After and writes nothing" do
+            assert ::Services::Api::LibraryBudget.reserve(@user, 990).ok?
+            extra = Array.new(18) { |i| ::Books::Book.create!(title: "Budget book #{i}") }
+
+            add("read", {books: ([@wp, @crime] + extra).map(&:slug)})
+
+            assert_response :too_many_requests
+            assert_equal "rate_limited", json[:code]
+            assert_operator response.headers["Retry-After"].to_i, :>=, 1
+            assert_includes json[:detail], "10 remaining"
+            assert_empty book_ids_on(@read)
+            assert_equal 10, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "a call that fits the remaining budget exactly succeeds" do
+            assert ::Services::Api::LibraryBudget.reserve(@user, 990).ok?
+            extra = Array.new(8) { |i| ::Books::Book.create!(title: "Fit book #{i}") }
+
+            add("read", {books: ([@wp, @crime] + extra).map(&:slug)})
+
+            assert_response :ok
+            assert_equal 0, json[:meta][:library_changes_remaining]
+          end
+
+          test "update sets, clears and moves" do
+            [@wp, @crime, @got].each_with_index do |book, i|
+              UserListItem.create!(user_list: @read, listable: book, position: i + 1)
+            end
+
+            patch "/api/v1/my/lists/read/books/#{@wp.slug}", params: {completed_on: "2024-03-01"}, as: :json, headers: bearer(@token)
+            assert_api_conform(status: 200)
+            assert_equal [{book: @wp.slug, outcome: "updated"}], json[:data]
+            assert_equal Date.new(2024, 3, 1), UserListItem.find_by!(user_list: @read, listable: @wp).completed_on
+            assert_equal 999, json[:meta][:library_changes_remaining]
+
+            patch "/api/v1/my/lists/read/books/#{@wp.slug}", params: {completed_on: nil}, as: :json, headers: bearer(@token)
+            assert_response :ok
+            assert_nil UserListItem.find_by!(user_list: @read, listable: @wp).completed_on
+
+            patch "/api/v1/my/lists/read/books/#{@got.slug}", params: {position: 1}, as: :json, headers: bearer(@token)
+            assert_response :ok
+            assert_equal [@got.id, @wp.id, @crime.id], book_ids_on(@read)
+          end
+
+          test "update with a position past the end is a 422" do
+            UserListItem.create!(user_list: @read, listable: @wp, position: 1)
+
+            patch "/api/v1/my/lists/read/books/#{@wp.slug}", params: {position: 99}, as: :json, headers: bearer(@token)
+
+            assert_response :unprocessable_entity
+            assert_equal 1_000, ::Services::Api::LibraryBudget.remaining(@user)
+          end
+
+          test "update with a bad position, or no fields, is a 400" do
+            UserListItem.create!(user_list: @read, listable: @wp, position: 1)
+
+            [{}, {position: 0}, {position: "1"}, {position: 1.5}].each do |body|
+              patch "/api/v1/my/lists/read/books/#{@wp.slug}", params: body, as: :json, headers: bearer(@token)
+              assert_response :bad_request, body.inspect
+            end
+          end
+
+          test "update of a book that is not on the list is a 422, of an unknown book a 404" do
+            patch "/api/v1/my/lists/read/books/#{@wp.slug}", params: {position: 1}, as: :json, headers: bearer(@token)
+            assert_response :unprocessable_entity
+
+            patch "/api/v1/my/lists/read/books/no-such-book", params: {position: 1}, as: :json, headers: bearer(@token)
+            assert_response :not_found
+          end
+
+          test "update with completed_on on favorites is a 422" do
+            UserListItem.create!(user_list: @favorites, listable: @wp, position: 1)
+
+            patch "/api/v1/my/lists/favorites/books/#{@wp.slug}", params: {completed_on: "2024-03-01"}, as: :json, headers: bearer(@token)
+
+            assert_response :unprocessable_entity
+          end
+
+          test "remove reports removed and not_present and spends both" do
+            UserListItem.create!(user_list: @read, listable: @wp, position: 1)
+
+            delete "/api/v1/my/lists/read/books?books=#{@wp.slug},#{@crime.slug}", headers: bearer(@token)
+            assert_api_conform(status: 200)
+
+            assert_equal [{book: @wp.slug, outcome: "removed"}, {book: @crime.slug, outcome: "not_present"}], json[:data]
+            assert_equal 998, json[:meta][:library_changes_remaining]
+            assert_equal 0, json[:meta][:list][:book_count]
+            assert_empty book_ids_on(@read)
+          end
+
+          test "remove without books, or with too many, is a 400" do
+            delete "/api/v1/my/lists/read/books", headers: bearer(@token)
+            assert_response :bad_request
+            delete "/api/v1/my/lists/read/books?books=#{(1..51).map { |i| "b#{i}" }.join(",")}", headers: bearer(@token)
+            assert_response :bad_request
+          end
+        end
+      end
+    end
+  end
+end

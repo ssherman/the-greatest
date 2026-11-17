@@ -208,7 +208,36 @@ module Api
         ["GET", "/api/v1/my/books/{slug}/lists", "401"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists" },
         ["GET", "/api/v1/my/books/{slug}/lists", "403"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/my/books/{slug}/lists", "404"] => -> { get "/api/v1/my/books/no-such-book/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
-        ["GET", "/api/v1/my/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } }
+        ["GET", "/api/v1/my/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["POST", "/api/v1/my/lists/{list}/books", "200"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "400"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: []}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "401"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json },
+        ["POST", "/api/v1/my/lists/{list}/books", "403"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["POST", "/api/v1/my/lists/{list}/books", "404"] => -> { post "/api/v1/my/lists/bogus/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "422"] => -> { post "/api/v1/my/lists/favorites/books", params: {books: [books_books(:war_and_peace).slug], completed_on: "2024-03-01"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "200"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {completed_on: "2024-03-01"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "400"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "401"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "403"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "404"] => -> { patch "/api/v1/my/lists/bogus/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "422"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 99}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "200"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "400"] => -> { delete "/api/v1/my/lists/want_to_read/books", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "401"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x" },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "403"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "404"] => -> { delete "/api/v1/my/lists/bogus/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY)
+        }
       }.freeze
 
       setup do
