@@ -473,9 +473,22 @@ Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-des
 
 `GET /my/lists/:id/edit` (`MyListsController#edit`, owner only, `edit_my_list_path`) is reached from the "Edit list" button on a list's page. It has three parts:
 
-- **Details form** (`UserLists::Edit::DetailsFormComponent`): name, description and public toggle, saved with `PATCH /my/lists/:id` through `Services::UserLists::UpdateList`. The answer is a Turbo Stream that replaces the form and appends a "Saved" toast. Built-in lists (`default?`) keep their names: the field is disabled with the note "Built-in lists keep their names.", and the controller ignores an unchanged name from it.
-- **Rows** (`UserLists::Edit::RowsComponent` / `RowComponent`, inside `#edit-list-rows`): one row per book with its position, cover, title, by-line, a "⋯" menu (Move to top, Move to bottom, Move to position, and "Set finished date…" on lists that record one), a remove button and a drag handle. The item-count heading lives inside `#edit-list-rows` so it morphs with the rows. Rows load 100 to a page (`EditPageRows::EDIT_PAGE_LIMIT`, path-based paging).
-- **Delete list**: shown on custom lists only, behind `data-turbo-confirm`; `DELETE /my/lists/:id` redirects to the dashboard.
+- **Header and details card** (`UserLists::Edit::DetailsFormComponent`): the h1 is the list's name (`#list-name-heading`, refreshed after a rename) with a "Built-in" badge on default lists. The card holds name, description and a "Public" toggle, saved with `PATCH /my/lists/:id` through `Services::UserLists::UpdateList` (Save bottom-right). The answer is a Turbo Stream that replaces the form and appends a "Saved" toast. Built-in lists (`default?`) keep their names: the field is disabled with the note "Built-in lists keep their names.", and the controller ignores an unchanged name from it. Custom lists get "Delete list" bottom-left, a `button[form=delete-list-form]` whose hidden form carries the `data-turbo-confirm`; `DELETE /my/lists/:id` redirects to the dashboard.
+- **Rows** (`UserLists::Edit::RowsComponent` / `RowComponent`, inside `#edit-list-rows`): one row per book with its position, cover, title, by-line, a "⋯" menu, a remove button and a drag handle. The count line ("12 books" / "1 book", using the list noun) lives inside `#edit-list-rows` so it morphs with the rows. Rows load 100 to a page (`EditPageRows::EDIT_PAGE_LIMIT`, path-based paging). A row is `[data-item-id][tabindex='-1']`; the menu buttons also carry `data-item-id`, so locators must include the tabindex.
+
+### The row menu and the position dialog
+
+The "⋯" menu is a daisyUI `ul.menu` whose items are "Move to top", "Move to bottom", "Move to position…" and, on lists that record a date, "Set finished date…" after a divider. daisyUI's `.menu` styles `li > *`, so each `li`'s direct child must be the button itself, never a `<form>`. The move forms therefore sit hidden beside the dropdown (`class="hidden"`, ids `move_top_*` / `move_bottom_*`) and the buttons submit them through the `form` attribute.
+
+"Move to position…" opens one shared `dialog#position-dialog` (`UserLists::Edit::PositionDialogComponent`, driven by `user_list_position_controller.js`): title `Move “<title>”`, subtitle `Currently #<position>`, a number input labelled "New position (1–<count>)", and Cancel / Move. Escape, Cancel and the backdrop close it without submitting; a successful Move submits the same `PATCH .../position` as the other moves.
+
+### Focus after a move
+
+Morph keeps the moved row's DOM node, but a menu click leaves focus on a button that then hides, so focus would fall to `<body>`. `user_list_edit_controller.js` remembers the row before the write and, once the stream renders, focuses it with `preventScroll: true` (rows are `tabindex="-1"`); if the row left the page, focus goes to the count heading instead. Closing the position dialog also focuses the row, because a closing `<dialog>` would otherwise return focus to its opener inside the closed menu.
+
+### Pointer cursor
+
+Tailwind 4 resets buttons to the default cursor. Each domain stylesheet (`books`, `music`, `games`) adds `button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer }` in `@layer base`, so every enabled button, including the menu items, shows a pointer.
 
 ### Save per move, with morph
 
@@ -493,7 +506,7 @@ Built-in lists cannot be renamed or deleted from this page; custom lists can do 
 
 ### E2E
 
-`e2e/tests/books/account/edit-list.spec.ts` drives all of it against the `E2E Edit Books` list that `bin/rails e2e:prepare` recreates (12 books, new id each run, so specs find it by name). The rename and delete tests create their own `E2E Created List *` lists through the dashboard.
+`e2e/tests/books/account/edit-list.spec.ts` drives all of it against the `E2E Edit Books` list that `bin/rails e2e:prepare` recreates (12 books, new id each run, so specs find it by name). The menu, dialog-dismissal, focus and pointer-cursor checks sit alongside them. The rename and delete tests create their own `E2E Created List *` lists through the dashboard.
 
 ## Library API
 
