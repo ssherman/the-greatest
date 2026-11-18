@@ -17,6 +17,8 @@ class Books::PublisherIntake::DiscoveryRequestJob
     data = ::Services::Books::PublisherIntake::RunDiscoveryRequest.call(run: run, request: request, due: due, attempt: attempt).data
     case data[:action]
     when :wait then self.class.perform_in(data[:wait], run_id, request_hash, true, attempt)
+    # Nothing was reserved, so the later attempt must reserve its own turn.
+    when :refused then self.class.perform_in(data[:wait], run_id, request_hash, false, attempt)
     when :retry then self.class.perform_async(run_id, request_hash, false, attempt + 1)
     when :done then complete(run, request, data[:requests])
     end

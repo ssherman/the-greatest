@@ -68,15 +68,33 @@ module Services
 
           result = run_request(due: false)
 
-          assert_equal :wait, result.data[:action]
+          assert_equal :refused, result.data[:action]
           assert_equal 6.hours.to_i, result.data[:wait]
+        end
+
+        test "a parser that raises fails the run at once with the class name and not the message" do
+          @client.stubs(:fetch).returns(page_response)
+          PublisherIntakeFetchHelper::TestStrategy.any_instance.stubs(:parse_discovery).raises(NoMethodError.new("secret page text"))
+          lines = []
+          Rails.logger.stubs(:warn).with { |line| lines << line.to_s }
+
+          result = run_request
+
+          assert_equal :done, result.data[:action]
+          @run.reload
+          assert_predicate @run, :status_failed?
+          assert_equal "#{URL}: unparseable (NoMethodError)", @run.error
+          assert(lines.any? { |l| l.include?("NoMethodError") })
+          assert(lines.none? { |l| l.include?("secret page text") })
         end
 
         test "a refused turn with nothing to reopen waits at least a minute" do
           @gate.stubs(:reserve).returns(::Books::FetchGate::Reservation.new(wait: nil, refusal: :daily_cap))
           @gate.stubs(:reopens_at).returns(nil)
 
-          assert_equal 60, run_request(due: false).data[:wait]
+          result = run_request(due: false)
+
+          assert_equal [:refused, 60], [result.data[:action], result.data[:wait]]
         end
 
         test "a wait from the gate is returned without fetching" do
@@ -95,7 +113,7 @@ module Services
           result = run_request
 
           assert_predicate @gate, :blocked?
-          assert_equal [:wait, 6.hours.to_i], [result.data[:action], result.data[:wait]]
+          assert_equal [:refused, 6.hours.to_i], [result.data[:action], result.data[:wait]]
           assert_predicate @run.reload, :status_running?
         end
 

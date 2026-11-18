@@ -36,6 +36,30 @@ class Books::PublisherIntake::DiscoveryRequestJobTest < ActiveSupport::TestCase
     Job.new.perform(@run.id, @request.to_h)
   end
 
+  test "a refused turn reschedules with due false so the later attempt reserves a fresh turn" do
+    @gate.block!
+    Job.expects(:perform_in).with(6.hours.to_i, @run.id, @request.to_h, false, 2)
+
+    Job.new.perform(@run.id, @request.to_h, false, 2)
+  end
+
+  test "a blocked response reschedules with due false" do
+    PublisherIntakeFetchHelper::TestStrategy.discovery_value = Discovery.new(outcome: :blocked, listings: [], requests: [])
+    Job.expects(:perform_in).with(6.hours.to_i, @run.id, @request.to_h, false, 1)
+
+    Job.new.perform(@run.id, @request.to_h, true)
+  end
+
+  test "a skipped request leaves the run's counts unchanged" do
+    Books::PublisherIntake.settings.enabled_sources = []
+    Job.expects(:perform_in).never
+
+    Job.new.perform(@run.id, @request.to_h, true)
+
+    assert_equal [1, 1], @run.reload.counts.values_at("requests", "outstanding")
+    assert_predicate @run, :status_running?
+  end
+
   test "an unavailable fetch is queued again with the next attempt" do
     @client.stubs(:fetch).raises(PageFetcher::Exceptions::TimeoutError, "slow")
     Job.expects(:perform_async).with(@run.id, @request.to_h, false, 2)

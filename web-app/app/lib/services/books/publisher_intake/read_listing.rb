@@ -11,7 +11,8 @@ module Services
       # data: {action:, wait:, outcome:}
       # - action :done, a fetch was attempted and its outcome stored (outcome is
       #   :fetcher_down when nothing reached the site);
-      # - :wait, the turn is not due yet, wait seconds;
+      # - :wait, the turn is not due yet, wait seconds (the job reschedules with
+      #   due true; a :refused read is never rescheduled, the sweep re-queues it);
       # - :refused, the gate is spent or blocked: the listing stays pending and
       #   its queue mark is cleared, so the sweep queues it again;
       # - :skipped, nothing to do: the listing is no longer pending (reading a
@@ -47,7 +48,7 @@ module Services
           response, failure = FetchRequest.call(strategy.listing_request(@listing))
           return store_failure(failure) if failure
 
-          reading = strategy.parse_listing(listing: @listing, page: response)
+          reading = parse(strategy, response)
           # StoreReading keeps a page's HTML; a file response has none to keep.
           stored = StoreReading.call(listing: @listing, reading: reading, page: response.is_a?(::PageFetcher::Page) ? response : nil,
             parser_version: strategy.parser_version)
@@ -57,6 +58,16 @@ module Services
         end
 
         private
+
+        # A strategy that raises is a page it cannot read: unparseable, stored
+        # with the page like any other. Only the class name is logged: the
+        # message can carry page text.
+        def parse(strategy, response)
+          strategy.parse_listing(listing: @listing, page: response)
+        rescue => e
+          Rails.logger.warn("PublisherIntake: #{@listing.source} listing #{@listing.id} parser raised #{e.class.name}")
+          ::Books::PublisherIntake::Reading.new(outcome: :unparseable, facts: nil, sibling_keys: [])
+        end
 
         def enabled?
           ::Books::PublisherIntake.settings.enabled_sources.include?(@listing.source) &&

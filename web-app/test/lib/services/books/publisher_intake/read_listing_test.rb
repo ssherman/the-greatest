@@ -76,17 +76,49 @@ module Services
         end
 
         test "a blocked page blocks the gate for that source only" do
-          other = ::Books::FetchGate.new(key: "test:other", config: ::Books::PublisherIntake.settings, label: "o",
-            redis: ::Books::OpenLibrary::FakeRedis.new)
+          # Two gates on one Redis, keyed per source as Books::PublisherIntake.gate_for does.
+          redis = ::Books::OpenLibrary::FakeRedis.new
+          config = ::Books::PublisherIntake.settings
+          gate_a = ::Books::FetchGate.new(key: "test:a", config: config, label: "a", redis: redis)
+          gate_b = ::Books::FetchGate.new(key: "test:b", config: config, label: "b", redis: redis)
+          ::Books::PublisherIntake.stubs(:gate_for).with("test_source").returns(gate_a)
+          ::Books::PublisherIntake.stubs(:gate_for).with("other_source").returns(gate_b)
+          ::Books::PublisherIntake::Sources.stubs(:registry)
+            .returns({"test_source" => PublisherIntakeFetchHelper::TestStrategy, "other_source" => PublisherIntakeFetchHelper::TestStrategy})
+          ::Books::PublisherIntake.settings.enabled_sources = %w[test_source other_source]
+          listing_b = new_pending_listing(source: "other_source")
           @client.stubs(:fetch).returns(page_response(status: 403))
           PublisherIntakeFetchHelper::TestStrategy.listing_reading = reading(:blocked)
 
           read
 
-          assert_predicate @gate, :blocked?
-          assert_not other.blocked?
+          assert_predicate gate_a, :blocked?
+          assert_not gate_b.blocked?
           assert_predicate @listing.reload, :state_pending?
           assert_equal "blocked", @listing.last_attempt_outcome
+
+          PublisherIntakeFetchHelper::TestStrategy.listing_reading = reading(:unparseable)
+          result = read(listing: listing_b)
+
+          assert_equal :done, result.data[:action]
+          assert_equal "unparseable", listing_b.reload.last_attempt_outcome
+        end
+
+        test "a parser that raises is stored as unparseable without its message or blocking the gate" do
+          @client.stubs(:fetch).returns(page_response)
+          PublisherIntakeFetchHelper::TestStrategy.any_instance.stubs(:parse_listing).raises(NoMethodError.new("secret page text"))
+          lines = []
+          Rails.logger.stubs(:warn).with { |line| lines << line.to_s }
+
+          result = read
+
+          assert_equal [:done, :unparseable], [result.data[:action], result.data[:outcome]]
+          @listing.reload
+          assert_equal ["pending", "unparseable", nil], [@listing.state, @listing.last_attempt_outcome, @listing.queued_at]
+          assert @listing.html.attached?
+          assert_not @gate.blocked?
+          assert(lines.any? { |l| l.include?("NoMethodError") })
+          assert(lines.none? { |l| l.include?("secret page text") })
         end
 
         test "an unparseable page does not block the gate" do

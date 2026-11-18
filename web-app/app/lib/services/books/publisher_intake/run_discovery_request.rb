@@ -11,7 +11,12 @@ module Services
       # - action :done, with the follow-up requests to enqueue (none when the
       #   run was failed here: its status is then failed, and the job must not
       #   count the request);
-      # - :wait, reschedule for wait seconds with the turn marked due;
+      # - :wait, the turn is reserved: reschedule for wait seconds with the turn
+      #   marked due;
+      # - :refused, no turn was reserved (the daily cap is spent, or the source is
+      #   blocked, including by this very response): reschedule for wait seconds
+      #   WITHOUT marking the turn due, so the later attempt reserves a fresh one
+      #   and is counted;
       # - :retry, no answer yet and attempts remain;
       # - :skipped, the run is not running or its source is switched off.
       #
@@ -41,18 +46,20 @@ module Services
           turn = ::Books::Goodreads::GateTurn.call(gate: @gate, due: @due)
           case turn.action
           when :wait then return result(:wait, wait: turn.wait)
-          when :refused then return result(:wait, wait: until_reopened)
+          when :refused then return result(:refused, wait: until_reopened)
           end
 
           response, failure = FetchRequest.call(@request)
           return no_answer(failure) if failure
 
-          discovery = @strategy.parse_discovery(request: @request, response: response)
+          discovery = parse(response)
+          return fail_run(:unparseable) if discovery.nil?
+
           case discovery.outcome
           when :ok then record(discovery)
           when :blocked
             @gate.block!
-            result(:wait, wait: until_reopened, outcome: :blocked)
+            result(:refused, wait: until_reopened, outcome: :blocked)
           when :unavailable then no_answer(:unavailable)
           else fail_run(discovery.outcome)
           end
@@ -63,6 +70,16 @@ module Services
         def enabled?
           ::Books::PublisherIntake.settings.enabled_sources.include?(@run.source) &&
             ::Books::PublisherIntake::Sources.fetch(@run.source).present?
+        end
+
+        # A strategy that raises is a format it cannot read. Only the class name
+        # is logged and kept: the message can carry page text.
+        def parse(response)
+          @strategy.parse_discovery(request: @request, response: response)
+        rescue => e
+          Rails.logger.warn("PublisherIntake: #{@run.source} run #{@run.id} discovery parser raised #{e.class.name}")
+          @parser_error = e.class.name
+          nil
         end
 
         def record(discovery)
@@ -77,7 +94,8 @@ module Services
         end
 
         def fail_run(outcome)
-          @run.update!(status: :failed, finished_at: Time.current, error: "#{@request.url}: #{outcome}")
+          detail = @parser_error ? " (#{@parser_error})" : ""
+          @run.update!(status: :failed, finished_at: Time.current, error: "#{@request.url}: #{outcome}#{detail}")
           result(:done, outcome: outcome)
         end
 
