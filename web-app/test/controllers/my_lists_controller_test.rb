@@ -696,6 +696,172 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes @controller.view_assigns["items"].map(&:id), item.id
   end
 
+  # --- edit / update / destroy ---
+
+  test "edit renders for the owner" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_response :success
+    assert_select "#edit-list-rows"
+  end
+
+  test "edit signed out redirects" do
+    get edit_my_list_path(@custom_albums)
+    assert_response :redirect
+  end
+
+  test "edit 404s for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_response :not_found
+  end
+
+  test "edit shows provisional books to the owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+    item = list.user_list_items.create!(listable: provisional)
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(list)
+
+    assert_response :success
+    assert_includes @controller.view_assigns["items"].map(&:id), item.id
+  end
+
+  test "edit renders a songs list" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_music_songs_favorites))
+    assert_response :success
+  end
+
+  test "edit renders a games list" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_games_favorites))
+    assert_response :success
+  end
+
+  test "edit renders a books completion list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_books_read))
+    assert_response :success
+  end
+
+  test "edit offers delete for a custom list only" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_select "form[data-turbo-confirm]", 1
+    get edit_my_list_path(@albums_favorites)
+    assert_select "form[data-turbo-confirm]", 0
+  end
+
+  test "update renames a custom list" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "  Island Picks  ", description: "", public: "0"}}, as: :turbo_stream
+    assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    @custom_albums.reload
+    assert_equal "Island Picks", @custom_albums.name
+    assert_nil @custom_albums.description
+    refute @custom_albums.public?
+  end
+
+  test "update with a blank name answers 422 as a turbo stream and keeps the name" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "  "}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, "list-details-errors"
+    assert_equal "My Desert Island Picks", @custom_albums.reload.name
+  end
+
+  test "update with an over-long description answers 422" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {description: "x" * 1001}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "Albums I'd take to a desert island", @custom_albums.reload.description
+  end
+
+  test "update refuses to rename a default list" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@albums_favorites), params: {user_list: {name: "Renamed"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal "Favorite Albums", @albums_favorites.reload.name
+  end
+
+  test "update saves a default list's description" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@albums_favorites), params: {user_list: {description: "My best"}}, as: :turbo_stream
+    assert_response :success
+    assert_equal "My best", @albums_favorites.reload.description
+  end
+
+  test "update 404s as a turbo stream for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "Mine now"}}, as: :turbo_stream
+    assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal "My Desert Island Picks", @custom_albums.reload.name
+  end
+
+  test "update signed out answers 401 as a turbo stream" do
+    patch my_list_path(@custom_albums), params: {user_list: {name: "X"}}, as: :turbo_stream
+    assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "update with an invalid CSRF token answers 422 as a turbo stream" do
+    sign_in_as(@user, stub_auth: true)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    patch my_list_path(@custom_albums), params: {authenticity_token: "bogus", user_list: {name: "X"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "destroy deletes a custom list and redirects to the dashboard" do
+    sign_in_as(@user, stub_auth: true)
+    assert_difference -> { UserList.count }, -1 do
+      delete my_list_path(@custom_albums)
+    end
+    assert_response :see_other
+    assert_redirected_to my_lists_path
+  end
+
+  test "destroy refuses a default list with 422 and keeps it" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      delete my_list_path(@albums_favorites), as: :turbo_stream
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "destroy 404s as a turbo stream for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      delete my_list_path(@custom_albums), as: :turbo_stream
+    end
+    assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "show renders the Edit list link for the owner only" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@custom_albums)
+    assert_select "a[href=?]", edit_my_list_path(@custom_albums)
+
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    get my_list_path(@custom_albums)
+    assert_response :success
+    assert_select "a[href=?]", edit_my_list_path(@custom_albums), 0
+  end
+
   # --- legacy /user_lists redirects ---
 
   test "legacy /user_lists index 301s to /my/lists" do
@@ -712,12 +878,12 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/my/lists"
   end
 
-  test "legacy /user_lists/:id/edit 301s to the read page" do
+  test "legacy /user_lists/:id/edit 301s to the edit page" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
     get "/user_lists/#{list.id}/edit"
     assert_response :moved_permanently
-    assert_redirected_to "/my/lists/#{list.id}"
+    assert_redirected_to "/my/lists/#{list.id}/edit"
   end
 
   test "the /user_lists/:id alias still resolves to the show action" do

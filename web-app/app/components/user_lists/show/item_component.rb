@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class UserLists::Show::ItemComponent < ViewComponent::Base
+  include UserLists::ListableDisplay
+
   # Listables that have a dedicated card component (rendered as a <div> in the
   # grid view). Everything else (songs, movies) renders as a <tr> table row.
   CARD_LISTABLES = %w[Music::Album Games::Game Books::Book].freeze
@@ -78,22 +80,6 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   # of whether a given item has a date.
   def completed_on_column?
     item.user_list.completed_on_enabled?
-  end
-
-  def by_line
-    if listable.is_a?(Books::Book)
-      listable.book_authors.map { |book_author| book_author.author.name }.join(", ")
-    elsif listable.respond_to?(:artists)
-      listable.artists.map(&:name).join(", ")
-    elsif listable.is_a?(Games::Game)
-      listable.game_companies.select(&:developer?).map { |gc| gc.company.name }.join(", ")
-    else
-      ""
-    end
-  end
-
-  def title
-    listable.try(:title) || listable.try(:name)
   end
 
   def year

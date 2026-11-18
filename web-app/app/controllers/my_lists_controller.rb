@@ -2,10 +2,10 @@
 # Current.domain to the relevant UserList STI subclasses and pick the per-domain
 # layout dynamically. index is owner-only (requires sign-in); show serves the
 # owner or any viewer, including anonymous, when the list is public (404s
-# otherwise via UserList.visible_to). Never cached. Write actions
-# (create/edit/reorder/remove/delete) are Phase B (user-lists-02f).
+# otherwise via UserList.visible_to). Never cached. The owner's list writes
+# (create, edit, update, destroy) live here; item writes live elsewhere.
 class MyListsController < ApplicationController
-  STREAM_ACTIONS = [:create].freeze
+  STREAM_ACTIONS = [:create, :update, :destroy].freeze
 
   include Pagy::Method
   include Cacheable
@@ -16,7 +16,7 @@ class MyListsController < ApplicationController
 
   # show is reachable anonymously for public lists; visibility is enforced by the
   # visible_to scope below, which 404s rather than redirecting.
-  before_action :require_signed_in!, only: [:index]
+  before_action :require_signed_in!, only: [:index, :edit]
   before_action :require_signed_in_as_stream!, only: STREAM_ACTIONS
   before_action :prevent_caching
 
@@ -118,6 +118,44 @@ class MyListsController < ApplicationController
     end
   end
 
+  # GET /my/lists/:id/edit
+  # The owner's Edit page. Shows every item, provisional books included (no
+  # catalog filter), in position order. Non-owners 404.
+  def edit
+    @list = find_owned_list
+    @indexable = false
+    scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
+    @pagy, @items = pagy_path(scope, limit: 100)
+  end
+
+  # PATCH /my/lists/:id
+  # Saves name / description / visibility. Answers as Turbo Streams: the form
+  # is replaced in place with a "Saved" toast, or the error lands in the form.
+  def update
+    list = find_owned_list
+    attrs, error = update_attrs(list)
+    return render_details_errors(error) if error
+
+    result = Services::UserLists::UpdateList.call(list: list, attrs: attrs)
+    return render_details_errors(result.errors.to_sentence) unless result.success?
+
+    render turbo_stream: [
+      turbo_stream.replace("list-details", UserLists::Edit::DetailsFormComponent.new(user_list: list)),
+      turbo_stream.append("toast-region", Toast::MessageComponent.new(message: "Saved"))
+    ]
+  end
+
+  # DELETE /my/lists/:id
+  # Deletes a custom list and returns to the dashboard (the navigation is
+  # intended). A default list is refused with an error toast.
+  def destroy
+    list = find_owned_list
+    result = Services::UserLists::DeleteList.call(list: list)
+    return render_stream_error(result.errors.to_sentence, :unprocessable_entity) unless result.success?
+
+    redirect_to my_lists_path, status: :see_other
+  end
+
   private
 
   def stream_action?
@@ -126,29 +164,75 @@ class MyListsController < ApplicationController
 
   def require_signed_in_as_stream!
     return if current_user
-    render turbo_stream: turbo_stream.update("new-list-errors", "Sign in again to create a list"),
-      status: :unauthorized
+    render_stream_error(
+      (action_name == "create") ? "Sign in again to create a list" : "Sign in again to continue",
+      :unauthorized
+    )
   end
 
   def render_new_list_errors(errors)
-    render turbo_stream: turbo_stream.update("new-list-errors", errors.to_sentence),
+    render_stream_error(errors.to_sentence, :unprocessable_entity)
+  end
+
+  # create answers into the dialog's error line; the Edit page's writes answer
+  # with an error toast. Messages are escaped: they may echo user text.
+  def render_stream_error(message, status)
+    if action_name == "create"
+      render turbo_stream: turbo_stream.update("new-list-errors", ERB::Util.html_escape(message)), status: status
+    else
+      toast = Toast::MessageComponent.new(message: message, type: :error)
+      render turbo_stream: turbo_stream.append("toast-region", toast), status: status
+    end
+  end
+
+  def render_details_errors(message)
+    render turbo_stream: turbo_stream.update("list-details-errors", ERB::Util.html_escape(message)),
       status: :unprocessable_entity
   end
 
   def stream_forbidden(exception)
     return user_not_authorized unless stream_action?
-    render turbo_stream: [], status: :forbidden
+    return render(turbo_stream: [], status: :forbidden) if action_name == "create"
+    render_stream_error("You can't change that list", :forbidden)
   end
 
   def stream_not_found(exception)
     return render_not_found unless stream_action?
-    render turbo_stream: [], status: :not_found
+    return render(turbo_stream: [], status: :not_found) if action_name == "create"
+    render_stream_error("That list no longer exists. Reload the page", :not_found)
   end
 
   def stream_invalid_token(exception)
     raise exception unless stream_action?
-    render turbo_stream: turbo_stream.update("new-list-errors", "Your session expired. Reload the page and try again"),
-      status: :unprocessable_entity
+    render_stream_error("Your session expired. Reload the page and try again", :unprocessable_entity)
+  end
+
+  # The signed-in owner's list for this domain, or RecordNotFound (404).
+  def find_owned_list
+    types = UserList.subclasses_for(Current.domain).map(&:name)
+    list = current_user.user_lists.where(type: types).find(params[:id])
+    authorize list, :update?, policy_class: UserListPolicy
+    list
+  end
+
+  # Normalised attrs for UpdateList (which trusts its caller), or an error
+  # message when the name or description is unacceptable.
+  def update_attrs(list)
+    raw = params.fetch(:user_list, {}).permit(:name, :description, :public)
+    attrs = {}
+    # A built-in list's name field is locked; an unchanged name is not a rename.
+    if raw.key?(:name) && !(list.default? && raw[:name] == list.name)
+      name = Services::UserLists::ListRules.normalize_name(raw[:name])
+      return [nil, "Name must be 1 to #{Services::UserLists::ListRules::NAME_MAX} characters"] if name.nil?
+      attrs[:name] = name
+    end
+    if raw.key?(:description)
+      description = Services::UserLists::ListRules.normalize_description(raw[:description])
+      return [nil, "Description must be at most #{Services::UserLists::ListRules::DESCRIPTION_MAX} characters"] if description == :invalid
+      attrs[:description] = description
+    end
+    attrs[:public] = ActiveModel::Type::Boolean.new.cast(raw[:public]) || false if raw.key?(:public)
+    [attrs, nil]
   end
 
   # Persist the view_mode when the owner switches it via the query param. A

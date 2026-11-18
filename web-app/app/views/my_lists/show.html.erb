@@ -56,6 +56,10 @@
         </div>
       <% end %>
 
+      <% if @owner %>
+        <%= link_to "Edit list", edit_my_list_path(@list), class: "btn btn-sm btn-outline", data: {testid: "edit-list"} %>
+      <% end %>
+
       <div class="ml-auto">
         <%= render CsvExports::DownloadButtonComponent.new(
               export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: sort_param),

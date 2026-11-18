@@ -1,0 +1,23 @@
+<% content_for :page_title, "Edit #{@list.name} - My Lists" %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-6">
+    <%= link_to my_list_path(@list), class: "text-sm text-base-content/60 hover:text-primary", data: {testid: "back-to-list"} do %>
+      ← Back to list
+    <% end %>
+    <h1 class="text-3xl font-bold">Edit list</h1>
+  </div>
+
+  <%= render UserLists::FavoritesNoteComponent.new(user_list: @list) %>
+  <%= render UserLists::Edit::DetailsFormComponent.new(user_list: @list) %>
+
+  <h2 class="mb-2 text-xl font-semibold"><%= pluralize(@pagy.count, "item") %></h2>
+  <%= render UserLists::Edit::RowsComponent.new(user_list: @list, items: @items, pagy: @pagy) %>
+
+  <% unless @list.default? %>
+    <div class="mt-10 border-t border-base-300 pt-6">
+      <%= button_to "Delete list", my_list_path(@list), method: :delete, class: "btn btn-error btn-outline",
+            form: {data: {turbo_confirm: "Delete “#{@list.name}”? This removes the list and its #{pluralize(@pagy.count, "item")}. It can't be undone."}} %>
+    </div>
+  <% end %>
+</div>

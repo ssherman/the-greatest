@@ -1,0 +1,17 @@
+<div id="edit-list-rows" data-user-list-edit-target="rows" class="flex flex-col gap-2">
+  <% if pagy.count.zero? %>
+    <p class="py-8 text-center text-base-content/70" data-testid="empty-list">No items in this list yet.</p>
+  <% else %>
+    <% if pagy.pages > 1 %>
+      <div class="flex justify-center mb-2"><%== pagy.series_nav %></div>
+    <% end %>
+
+    <% items.each do |item| %>
+      <%= render UserLists::Edit::RowComponent.new(item: item, page: pagy.page) %>
+    <% end %>
+
+    <% if pagy.pages > 1 %>
+      <div class="flex justify-center mt-2"><%== pagy.series_nav %></div>
+    <% end %>
+  <% end %>
+</div>
