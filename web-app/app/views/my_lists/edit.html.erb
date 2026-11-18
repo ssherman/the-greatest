@@ -11,13 +11,12 @@
   <%= render UserLists::FavoritesNoteComponent.new(user_list: @list) %>
   <%= render UserLists::Edit::DetailsFormComponent.new(user_list: @list) %>
 
-  <h2 class="mb-2 text-xl font-semibold"><%= pluralize(@pagy.count, "item") %></h2>
   <%= render UserLists::Edit::RowsComponent.new(user_list: @list, items: @items, pagy: @pagy) %>
 
   <% unless @list.default? %>
     <div class="mt-10 border-t border-base-300 pt-6">
       <%= button_to "Delete list", my_list_path(@list), method: :delete, class: "btn btn-error btn-outline",
-            form: {data: {turbo_confirm: "Delete “#{@list.name}”? This removes the list and its #{pluralize(@pagy.count, "item")}. It can't be undone."}} %>
+            form: {data: {turbo_confirm: "Delete “#{@list.name}”? This removes the list and all its items. It can't be undone."}} %>
     </div>
   <% end %>
 

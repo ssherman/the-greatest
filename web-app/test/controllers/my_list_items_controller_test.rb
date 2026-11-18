@@ -125,6 +125,16 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the streamed rows carry the new item count after a remove and after a restore" do
+    sign_in_as(@user, stub_auth: true)
+
+    delete my_list_item_path(@list, @second), as: :turbo_stream
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "2 items"
+
+    post restore_my_list_item_path(@list), params: {listable_id: @second.listable_id, position: 2}, as: :turbo_stream
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "3 items"
+  end
+
   test "destroy escapes the title in the toast" do
     sign_in_as(@user, stub_auth: true)
     @second.listable.update_columns(title: "<b>Bold</b> Album")
