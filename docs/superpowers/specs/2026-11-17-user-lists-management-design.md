@@ -116,6 +116,24 @@ These would make the work a failure even if it technically worked:
   snappier, but it would need the hidden-item numbering in JavaScript and adds a second write
   pattern. Rejected.
 
+### Drag library: SortableJS (chosen by Shane)
+
+npm data checked 2026-11-17:
+
+- **SortableJS** (5.8M weekly downloads, 1.15.7 Feb 2026, MIT). Other rows slide out of the way
+  while you drag, which is the feel of the old site and Letterboxd. Touch works out of the box, and
+  it scrolls the page when you drag near the edge. It doesn't depend on any framework. Releases are
+  slow, which is acceptable because the ⋯ menu covers every move without dragging.
+- **Pragmatic drag and drop** (Atlassian; 3.0M, 4.0.0 Sep 2026). Actively maintained, but
+  low-level: it draws a drop line rather than shifting rows. Indicators and auto-scroll are ours to
+  build, and its ready-made pieces are React-only. Rejected: more code for a feel further from what
+  Shane wants.
+- **Shopify Draggable** (122k): small user base. **dragula**: abandoned since 2022. **Native HTML5
+  drag and drop**: poor touch behaviour, and we would rebuild what SortableJS gives.
+- **@stimulus-components/sortable**: a wrapper around SortableJS whose save-on-drop request does not
+  fit our neighbour-position calculation and morphing Turbo Stream reply. Instead, our own small
+  Stimulus controller uses SortableJS directly.
+
 ## Design
 
 ### Increments (my call, proposed to Shane and not objected to)
