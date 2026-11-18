@@ -27,6 +27,8 @@ class EnrichmentQueueTestType < Services::EnrichmentQueue::Type
 
     def priority_sql = "books_books.id"
 
+    def priority_for(record) = record.id
+
     def still_needed?(record) = needed
 
     def payload(record) = {"book_id" => record.id}

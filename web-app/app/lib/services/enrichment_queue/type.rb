@@ -28,6 +28,10 @@ module Services
         # SQL expression valid inside candidates, lower first.
         def priority_sql = raise(NotImplementedError, "#{name} must define priority_sql")
 
+        # The priority this one record would get in candidates (the value
+        # priority_sql gives it), whether or not candidates would offer it now.
+        def priority_for(record) = raise(NotImplementedError, "#{name} must define priority_for")
+
         def still_needed?(record) = raise(NotImplementedError, "#{name} must define still_needed?")
 
         # JSON-able Hash for one item.

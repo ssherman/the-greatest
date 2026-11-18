@@ -90,10 +90,23 @@ module Services
         row = record(facts(confidence: "medium"), hold_low_confidence: "deferred")
 
         assert_equal "applied", row.outcome
+        assert_equal 1999, @book.reload.first_published_year
       end
 
       test "strict review raises before anything is written when the review call fails" do
         stub_review(spoilers: nil, style_violations: [], rewritten: nil, success: false)
+
+        assert_no_difference -> { Enrichment.count } do
+          assert_raises(RecordBookFacts::ReviewFailed) { record(strict_review: true) }
+        end
+        assert_nil @book.reload.first_published_year
+        assert_empty @book.descriptions
+      end
+
+      test "strict review raises when the review succeeds but returns no spoilers verdict" do
+        review = mock
+        review.stubs(:call).returns(Services::Ai::Result.new(success: true, data: {}))
+        Services::Ai::Tasks::Books::DescriptionReviewTask.stubs(:new).returns(review)
 
         assert_no_difference -> { Enrichment.count } do
           assert_raises(RecordBookFacts::ReviewFailed) { record(strict_review: true) }

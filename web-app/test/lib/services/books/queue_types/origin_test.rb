@@ -53,6 +53,16 @@ module Services
           assert_includes Type.candidates(scope: "all").pluck(:id), unranked.id
         end
 
+        test "priority_for is the rank, or the unranked constant, and ignores a running run" do
+          assert_equal Services::Books::QueueTypes::BookScope::UNRANKED_PRIORITY, Type.priority_for(@blank)
+          RankedItem.create!(item: @blank, ranking_configuration: ::Books::RankingConfiguration.default_primary, rank: 42, score: 1)
+          assert_equal 42, Type.priority_for(@blank)
+          WorkflowRun.create!(workflow: ::Workflows::Books::BookCategorize.workflow, definition_version: 1,
+            enrichable: @blank, status: :running, initiated_by: "test")
+          assert_equal 42, Type.priority_for(@blank)
+          assert_equal 42, Services::Books::QueueTypes::Categories.priority_for(@blank)
+        end
+
         test "still_needed? follows the data" do
           assert Type.still_needed?(@blank)
           assert_not Type.still_needed?(@placed)

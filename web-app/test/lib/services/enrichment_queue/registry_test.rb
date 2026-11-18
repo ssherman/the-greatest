@@ -18,8 +18,8 @@ module Services
       end
 
       test "every registered type answers the whole interface" do
-        assert_operator Registry.types.size, :>=, 2
-        assert_equal %w[books.categories books.origin], Registry.types.map(&:kind).sort
+        assert_operator Registry.types.size, :>=, 3
+        assert_equal %w[books.book_facts books.categories books.origin], Registry.types.map(&:kind).sort
         Registry.types.each do |type|
           assert_match ::Enrichment::KIND_FORMAT, type.kind
           assert_kind_of Integer, type.version
@@ -29,7 +29,16 @@ module Services
           assert_operator type.target_class, :<, ApplicationRecord
           assert_kind_of String, type.priority_sql
           assert type.priority_sql.present?
+          assert_respond_to type, :priority_for
         end
+      end
+
+      test "find resolves the book facts type by slug" do
+        assert_equal Services::Books::QueueTypes::BookFacts, Registry.find(domain: "books", slug: "book_facts")
+      end
+
+      test "priority_for is not implemented on the base type" do
+        assert_raises(NotImplementedError) { Class.new(Type).priority_for(nil) }
       end
 
       test "domain and slug derive from kind" do

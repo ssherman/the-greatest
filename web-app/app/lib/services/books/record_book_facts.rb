@@ -51,11 +51,14 @@ module Services
           )
         end
 
-        # A low-confidence knowledge answer is a guess about to be checked by
-        # the paid research run. Applying it first would leave research able
-        # only to fill blanks, so its facts are recorded and deferred; research
-        # applies what it verifies. When the budget is gone and research will
-        # not run, the guess is the best we have and is applied as usual.
+        # A low overall confidence is recorded, not applied, when the caller
+        # names a reason to hold it. The paid enricher holds a low-confidence
+        # knowledge answer under "deferred" while a research run is still to
+        # follow: applying the guess first would leave research able only to
+        # fill blanks, so research applies what it verifies. When the budget
+        # is gone and research will not run, the enricher passes no reason and
+        # the guess is applied as usual. The agent queue holds a low overall
+        # confidence under "low_confidence", and nothing is written.
         if hold_low_confidence && confidence == "low"
           return book.enrichments.create!(
             row_attributes.merge(
@@ -100,9 +103,10 @@ module Services
         Enrichment.confidences.key?(normalized) ? normalized : nil
       end
 
-      # Every fact recorded, none applied: "unrecognized" when the model did
-      # not know the book and was guessing, "deferred" when a low-confidence
-      # answer is about to be checked by research.
+      # Every fact recorded, none applied, under the given reason:
+      # "unrecognized" when the model did not know the book and was guessing,
+      # or the caller's hold reason for a low-confidence answer ("deferred"
+      # from the paid enricher, "low_confidence" from the agent queue).
       def unapplied_facts(facts, reason:)
         facts.except(:recognized, :confidence).to_h do |name, fact|
           entry = fact.is_a?(Hash) ? {"value" => fact[:value], "confidence" => fact[:confidence]} : {"value" => fact, "confidence" => nil}

@@ -20,12 +20,12 @@ module Api
             post "/api/v1/admin/enrichment_queues/#{type}/claims", params: params, as: :json, headers: bearer(token)
           end
 
-          test "lists both queue types with all six counts and conforms" do
+          test "lists every queue type with all six counts and conforms" do
             queue_row
             get "/api/v1/admin/enrichment_queues", headers: bearer(ApiTokenSecrets::ADMIN_READ)
             assert_api_response_conform(status: 200, api: :admin)
 
-            assert_equal %w[origin categories], json["data"].map { |row| row["type"] }
+            assert_equal %w[origin categories book_facts], json["data"].map { |row| row["type"] }
             json["data"].each do |row|
               assert_equal STATUS_KEYS, row["counts"].keys
               assert_equal %w[type kind label version counts], row.keys
