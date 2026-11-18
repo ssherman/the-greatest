@@ -82,7 +82,7 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
 ## The ledger
 
 `Enrichment` (`enrichments`): polymorphic `enrichable`, `kind` (`books.book_facts`, `books.goodreads`, `books.evidence`, `books.origin` or `books.categories`), `mode`
-(knowledge/research/sourced), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
+(knowledge/research/sourced/agent), `outcome` (applied, nothing_to_apply, unrecognized, skipped, failed),
 `recognized`, `confidence`, `facts` JSON, `citations`, `provider`, `model`, `ai_chat_id`,
 `error`, `reason`. Each `facts` entry is `{value, confidence, applied, reason}` (historical
 `origin_countries` entries also carry `unmatched`, which new rows do not, and `description` carries `review`); reasons are `filled`,
@@ -93,7 +93,9 @@ applied correction (the corrections flow accepts blanks on purpose) or by a `cle
 (written when an admin blanks a subtitle, first published year, original language, birth year or death
 year on the edit page or through `update_book` / `update_author`; setting a value again deletes the row)
 and the AI value is never used to refill it. Merges carry a source's row to the target only when the
-target's field is blank. Useful queries:
+target's field is blank. `agent` is a row written by the enrichment queue (`docs/features/enrichment-queue.md`) for an answer an AI agent researched itself and submitted through the admin API. It carries `facts["context"]` and `facts["label"]` both `"agent"`, `facts["queue_request_id"]` (the `enrichment_requests` id), the agent's sources as `citations`, `provider` `"agent"` and no model. An agent row counts as web-verified (`Enrichment::WEB_VERIFIED_MODES`, read by `Dossier#research_backed?`) but not as a paid research call, so it never counts against the research caps. The paced backfill treats an agent row as done only when its outcome is `applied`: an agent answer that was held leaves the book for the backfill to try with gathered evidence, but only when the backfill has not judged it already: a held agent row is ignored when looking for the latest row, so it never undoes a done row the paid pipeline wrote.
+
+Useful queries:
 
 ```ruby
 Enrichment.for_kind("books.book_facts").low_confidence_on(:word_count)
@@ -177,6 +179,8 @@ Two research caps apply. Imports and admin runs spend `config.x.ai.research_dail
 `Enrichment.against_research_cap` as `EnrichBook` does (backfill origin research is excluded). The backfill spends its own
 `config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
 rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
+
+The answer half of a judgment (an answer in, the apply and the ledger row out) lives in `Services::Books::Origin::RecordAnswer`, shared by `Judge` and the enrichment queue's `books.origin` type, so a paid row and an agent row have the same shape and the same rules (fill blanks only, the confidence gates above).
 
 ### The `books.categories` kind
 
@@ -266,6 +270,8 @@ research rows of both `books.origin` and `books.categories`.
 
 The alias suggestions are for adding alternative names to existing genres, or ignoring; nothing
 creates a genre from them.
+
+The same split holds for categories: `Services::Books::Categories::RecordAnswer` holds the mapping, the apply and the ledger row, and is shared by `Judge` and the queue's `books.categories` type. The queue calls it with `rejudge: false`, so an agent never removes a link, and it applies even while `BOOKS_CATEGORIES_JUDGE_ENABLED` is off, because that switch gates only the automatic judge.
 
 ## Tuning
 

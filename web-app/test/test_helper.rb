@@ -26,6 +26,7 @@ require_relative "support/ol_backfill_helper"
 require_relative "support/workflows/test_definition"
 require_relative "support/workflows/dispatch_helper"
 require_relative "support/validator_response_stub"
+require_relative "support/enrichment_queue_test_type"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api

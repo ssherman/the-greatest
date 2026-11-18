@@ -96,6 +96,15 @@ module Mcp
         assert_match(/untag_book.*untag_author.*no dry run|no dry run.*untag/m, text)
       end
 
+      test "the admin usage text tells the agent to decide queue items itself and never overwrite" do
+        text = admin_usage_text
+
+        assert_includes text, "## The enrichment queues"
+        assert_includes text, "You decide each item yourself; do not ask before submitting or skipping."
+        assert_includes text, "Submitting never overwrites a value the catalogue holds."
+        assert_includes text, "send their `lease_token` back"
+      end
+
       test "the admin instructions are one paragraph that mentions dry-running first" do
         text = Mcp::Sites::Books.instructions(:admin)
 

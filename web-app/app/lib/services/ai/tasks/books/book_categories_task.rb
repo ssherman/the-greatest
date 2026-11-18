@@ -10,6 +10,15 @@ module Services
         class BookCategoriesTask < EnrichmentTask
           include DossierPromptHelpers
 
+          RULES = <<~RULES.chomp.freeze
+            - "book_type": fiction, nonfiction, poetry, religious or unknown.
+            - "genres": ids from the numbered genre list below, at most 5, most important first. Use only ids on the list. Never invent an id.
+            - "audience": the id of one audience from the audience list, or null. Most books have none: there is no adult audience. Choose one only when the book is written for that readership.
+            - "subjects": free-text names, at most 8, most important first. A subject is a browse page a reader would want this book on ("World War II", "Chess", "Slavery"). It is not a theme so broad that it describes most literary fiction, such as identity, love, family or human nature, unless the book is centrally about that.
+            - "locations": free-text places, at most 5. Each is the most specific place the book is substantially set in; for nonfiction, the place the book is about. Never list every place the book mentions. Mark each "real" or "fictional" (an invented place such as Middle-earth or Yoknapatawpha County is fictional). Give "parent", the containing place ("France" for Paris, "United States" for Georgia the state), or null when there is none. For a fictional place, "parent" is the real place it sits in (Maycomb is in "Alabama", East Egg in "Long Island", Longbourn in "Hertfordshire"), or null for an invented world with no real setting (Middle-earth).
+            - "unlisted_genres": at most 5 genre names the evidence uses (Wikidata, Wikipedia, WorldCat, Goodreads) that are not on the lists, such as "Bildungsroman". For each, give "closest_id", the id of the listed genre or audience it means, or null when nothing on the list covers it. This is a report only.
+          RULES
+
           PROMPT_VERSION = 2
           WORLDCAT_SUBJECTS = 25
           GOODREADS_SHELVES = 15
@@ -32,12 +41,7 @@ module Services
               You categorize one book for a book catalog, from the evidence given.#{research_instruction}
 
               Give:
-              - "book_type": fiction, nonfiction, poetry, religious or unknown.
-              - "genres": ids from the numbered genre list below, at most 5, most important first. Use only ids on the list. Never invent an id.
-              - "audience": the id of one audience from the audience list, or null. Most books have none: there is no adult audience. Choose one only when the book is written for that readership.
-              - "subjects": free-text names, at most 8, most important first. A subject is a browse page a reader would want this book on ("World War II", "Chess", "Slavery"). It is not a theme so broad that it describes most literary fiction, such as identity, love, family or human nature, unless the book is centrally about that.
-              - "locations": free-text places, at most 5. Each is the most specific place the book is substantially set in; for nonfiction, the place the book is about. Never list every place the book mentions. Mark each "real" or "fictional" (an invented place such as Middle-earth or Yoknapatawpha County is fictional). Give "parent", the containing place ("France" for Paris, "United States" for Georgia the state), or null when there is none. For a fictional place, "parent" is the real place it sits in (Maycomb is in "Alabama", East Egg in "Long Island", Longbourn in "Hertfordshire"), or null for an invented world with no real setting (Middle-earth).
-              - "unlisted_genres": at most 5 genre names the evidence uses (Wikidata, Wikipedia, WorldCat, Goodreads) that are not on the lists, such as "Bildungsroman". For each, give "closest_id", the id of the listed genre or audience it means, or null when nothing on the list covers it. This is a report only.
+              #{RULES}
 
               Every genre, the audience, every subject and every location carries a "confidence" (high, medium or low) and an "evidence" note, a short phrase naming the dossier section that supports it (record, Wikidata, Wikipedia, WorldCat, Goodreads, current categories or your own knowledge). Give low confidence to a guess. Set "recognized" to false if you do not know this specific book, and give an overall "confidence" for the whole answer. Output only the JSON object described by the schema.
 

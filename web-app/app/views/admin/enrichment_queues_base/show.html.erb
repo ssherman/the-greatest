@@ -1,0 +1,111 @@
+<%# web-app/app/views/admin/enrichment_queues_base/show.html.erb %>
+<% content_for :title, @type.label %>
+
+<div class="space-y-4">
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-2xl font-bold"><%= @type.label %></h1>
+    <%= link_to "All queues", queues_path, class: "btn btn-sm btn-ghost" %>
+  </div>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% @statuses.each do |status| %>
+      <%= link_to queue_path(@type, status: status), role: "tab",
+            class: "tab #{"tab-active" if @status == status}", data: {testid: "status-tab-#{status}"} do %>
+        <%= status.humanize %>
+        <span class="badge badge-sm ml-2" data-testid="status-count-<%= status %>"><%= @counts[status] %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <% if %w[done skipped failed].include?(@status) %>
+    <div class="join" data-testid="via-filter">
+      <%= link_to "All", queue_path(@type, status: @status, outcome: @outcome), class: "btn btn-xs join-item #{"btn-active" if @via.nil?}", data: {testid: "via-all"} %>
+      <% @vias.each do |via| %>
+        <%= link_to via.humanize, queue_path(@type, status: @status, via: via, outcome: @outcome),
+              class: "btn btn-xs join-item #{"btn-active" if @via == via}", data: {testid: "via-#{via}"} %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if @outcome_counts.any? %>
+    <div class="flex flex-wrap items-center gap-2" data-testid="outcome-filter">
+      <span class="text-xs font-semibold">Outcome</span>
+      <div class="join">
+        <%= link_to "All", queue_path(@type, status: @status, via: @via), class: "btn btn-xs join-item #{"btn-active" if @outcome.nil?}", data: {testid: "outcome-all"} %>
+        <% @outcome_counts.sort.each do |outcome, count| %>
+          <%= link_to "#{outcome.humanize} (#{count})", queue_path(@type, status: @status, via: @via, outcome: outcome),
+                class: "btn btn-xs join-item #{"btn-active" if @outcome == outcome}", data: {testid: "outcome-#{outcome}"} %>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @requests.any? %>
+    <div class="overflow-x-auto">
+      <table class="table bg-base-100 table-sm">
+        <thead>
+          <tr><th>Record</th><th>Reason</th><th>Status</th><th>Outcome</th><th>Note</th><th>Sources</th><th>Who and when</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% @requests.each do |request| %>
+            <% path = Admin::DomainRouting.path_for(request.enrichable) %>
+            <tr data-testid="request-row" data-request-id="<%= request.id %>">
+              <td style="overflow-wrap: anywhere">
+                <% if path %>
+                  <%= link_to record_name(request.enrichable), path, class: "link" %>
+                <% else %>
+                  <%= record_name(request.enrichable) %>
+                <% end %>
+              </td>
+              <td><%= request.reason.humanize %></td>
+              <td><span class="badge badge-ghost badge-sm"><%= request.status.humanize %></span></td>
+              <td style="overflow-wrap: anywhere"><%= request.outcome&.humanize %></td>
+              <td class="max-w-xs" style="overflow-wrap: anywhere">
+                <%= request.note %>
+                <% if request.failed? && request.error.present? %>
+                  <div class="text-xs"><span class="font-semibold">Error:</span> <%= request.error %></div>
+                <% end %>
+              </td>
+              <td class="max-w-xs" style="overflow-wrap: anywhere">
+                <% Array(request.sources).each do |source| %>
+                  <div>
+                    <% if source.to_s.match?(%r{\Ahttps?://}i) %>
+                      <%= link_to source, source, target: "_blank", rel: "noopener noreferrer nofollow", class: "link" %>
+                    <% else %>
+                      <%= source %>
+                    <% end %>
+                  </div>
+                <% end %>
+              </td>
+              <td class="text-xs" style="overflow-wrap: anywhere">
+                <% if request.resolved_at %>
+                  <%= user_name(request.resolved_by) || "unknown" %>
+                  <% if request.resolved_via %>(<%= request.resolved_via.humanize.downcase %>)<% end %>
+                  <div><%= l request.resolved_at, format: :short %></div>
+                <% elsif request.claimed? %>
+                  Claimed by <%= user_name(request.claimed_by) || "unknown" %>
+                <% end %>
+              </td>
+              <td>
+                <% if current_user_can_write? %>
+                  <% if %w[done skipped failed].include?(request.status) %>
+                    <%= button_to "Re-queue", requeue_path(request), method: :post, class: "btn btn-xs", data: {testid: "requeue-#{request.id}"} %>
+                  <% end %>
+                  <% if (request.failed? && request.answer.present?) || stale_submitted?(request) %>
+                    <%= button_to "Retry apply", retry_apply_path(request), method: :post, params: {status: @status}, class: "btn btn-xs", data: {testid: "retry-apply-#{request.id}"} %>
+                  <% end %>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 py-8">No <%= @status.humanize.downcase %> items.</p>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

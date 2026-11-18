@@ -131,6 +131,14 @@ class EnrichmentTest < ActiveSupport::TestCase
     assert enrichments(:crime_and_punishment_unrecognized).confidence_low?
   end
 
+  test "agent is mode 3 and web-verified, but is not a paid research row" do
+    assert_equal 3, Enrichment.modes["agent"]
+    assert_equal %w[research agent], Enrichment::WEB_VERIFIED_MODES
+    row = books_authors(:tolstoy).enrichments.create!(kind: "books.origin", mode: :agent, outcome: :applied, facts: {})
+    assert_not_includes Enrichment.research, row
+    assert_not_includes Enrichment.against_research_cap, row
+  end
+
   test "against_research_cap leaves out backfill origin research rows only" do
     book = books_authors(:tolstoy)
     make = ->(kind, facts) { book.enrichments.create!(kind: kind, mode: :research, outcome: :applied, facts: facts) }

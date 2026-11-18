@@ -149,6 +149,14 @@ module Books
         assert_equal "Books::Book", row.enrichable_type
       end
 
+      test "moves queue rows to the target" do
+        row = EnrichmentRequest.create!(enrichable: @source, kind: "books.origin", reason: "missing")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target, row.reload.enrichable
+      end
+
       test "moves images to the target" do
         image = attach_image(@source, primary: false)
 

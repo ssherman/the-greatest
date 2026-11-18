@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_18_043222) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -791,6 +791,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
     t.index ["resolved_by_id"], name: "index_duplicate_candidates_on_resolved_by_id"
     t.index ["status", "created_at"], name: "index_duplicate_candidates_on_status_and_created_at"
     t.check_constraint "item_a_id < item_b_id", name: "duplicate_candidates_a_before_b"
+  end
+
+  create_table "enrichment_requests", force: :cascade do |t|
+    t.string "enrichable_type", null: false
+    t.bigint "enrichable_id", null: false
+    t.string "kind", null: false
+    t.integer "version", default: 1, null: false
+    t.integer "status", default: 0, null: false
+    t.integer "priority", default: 1000000, null: false
+    t.string "reason", null: false
+    t.string "fingerprint"
+    t.string "outcome"
+    t.text "note"
+    t.jsonb "answer"
+    t.text "error"
+    t.jsonb "sources", default: [], null: false
+    t.bigint "enrichment_id"
+    t.string "lease_token"
+    t.datetime "lease_expires_at"
+    t.integer "attempts", default: 0, null: false
+    t.bigint "claimed_by_id"
+    t.bigint "resolved_by_id"
+    t.integer "resolved_via"
+    t.datetime "resolved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["claimed_by_id"], name: "index_enrichment_requests_on_claimed_by_id"
+    t.index ["enrichable_type", "enrichable_id", "kind"], name: "index_enrichment_requests_one_per_record_and_kind", unique: true
+    t.index ["enrichment_id"], name: "index_enrichment_requests_on_enrichment_id"
+    t.index ["kind", "status", "priority", "id"], name: "idx_on_kind_status_priority_id_ac9b960249"
+    t.index ["resolved_by_id"], name: "index_enrichment_requests_on_resolved_by_id"
   end
 
   create_table "enrichments", force: :cascade do |t|
@@ -1846,6 +1877,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
   add_foreign_key "donations", "users"
   add_foreign_key "duplicate_candidates", "match_decisions", on_delete: :nullify
   add_foreign_key "duplicate_candidates", "users", column: "resolved_by_id", on_delete: :nullify
+  add_foreign_key "enrichment_requests", "enrichments", on_delete: :nullify
+  add_foreign_key "enrichment_requests", "users", column: "claimed_by_id", on_delete: :nullify
+  add_foreign_key "enrichment_requests", "users", column: "resolved_by_id", on_delete: :nullify
   add_foreign_key "enrichments", "ai_chats", on_delete: :nullify
   add_foreign_key "enrichments", "match_decisions", on_delete: :nullify
   add_foreign_key "enrichments", "workflow_steps", on_delete: :nullify
