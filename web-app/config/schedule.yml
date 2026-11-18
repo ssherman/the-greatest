@@ -61,6 +61,16 @@ wikidata_recheck_after_refresh:
   cron: "0 6 * * *"
   description: "After the local Wikidata copy is refreshed, re-check recent books and authors with no match (off unless config.x.wikidata.recheck_after_refresh)"
 
+publisher_intake_daily:
+  class: Books::PublisherIntake::DailyJob
+  cron: "20 6 * * *"
+  description: "Fail publisher intake runs that stopped progressing, queue due re-reads, and start a weekly run for each source that is due one (does nothing unless PUBLISHER_INTAKE_SOURCES names a source)"
+
+publisher_intake_sweep:
+  class: Books::PublisherIntake::SweepJob
+  cron: "*/10 * * * *"
+  description: "Queue reads for the oldest pending publisher listings of each source whose gate is open (does nothing unless PUBLISHER_INTAKE_SOURCES names a source)"
+
 oauth_prune:
   class: Oauth::PruneJob
   cron: "45 3 * * *"

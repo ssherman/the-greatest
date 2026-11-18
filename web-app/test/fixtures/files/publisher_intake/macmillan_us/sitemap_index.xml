@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- HAND-BUILT from the shape recorded for the real index (94 entries): a few of its children, real URL layout. -->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<sitemap><loc>https://us.macmillan.com/page-sitemap.xml</loc><lastmod>2026-11-06</lastmod></sitemap>
+	<sitemap><loc>https://us.macmillan.com/sitemaps/sitemap-products.1.xml.gz</loc><lastmod>2026-11-06</lastmod></sitemap>
+	<sitemap><loc>https://us.macmillan.com/sitemaps/sitemap-products.2.xml.gz</loc><lastmod>2026-11-06</lastmod></sitemap>
+	<sitemap><loc>https://us.macmillan.com/sitemaps/sitemap-products.70.xml.gz</loc><lastmod>2026-11-06</lastmod></sitemap>
+	<sitemap><loc>https://us.macmillan.com/sitemaps/sitemap-contributors.1.xml.gz</loc><lastmod>2026-11-06</lastmod></sitemap>
+	<sitemap><loc>https://us.macmillan.com/sitemaps/sitemap-contributors.2.xml.gz</loc><lastmod>2026-11-06</lastmod></sitemap>
+</sitemapindex>

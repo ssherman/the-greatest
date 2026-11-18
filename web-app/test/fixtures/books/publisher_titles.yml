@@ -1,0 +1,100 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_publisher_titles
+#
+#  id              :bigint           not null, primary key
+#  age_range       :string
+#  contributors    :jsonb            not null
+#  cover_url       :string
+#  description     :text
+#  first_read_at   :datetime
+#  formats         :jsonb            not null
+#  genres          :jsonb            not null
+#  hold_reason     :integer
+#  imprint_name    :string
+#  isbn13s         :string           default([]), not null, is an Array
+#  language        :string
+#  last_read_at    :datetime
+#  on_sale_on      :date
+#  parser_version  :integer
+#  publisher_name  :string
+#  series_name     :string
+#  series_position :string
+#  source          :string           not null
+#  source_key      :string
+#  status          :integer          default("ready"), not null
+#  subtitle        :string
+#  title           :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_books_publisher_titles_on_isbn13s                (isbn13s) USING gin
+#  index_books_publisher_titles_on_on_sale_on             (on_sale_on)
+#  index_books_publisher_titles_on_source_and_source_key  (source,source_key) UNIQUE WHERE (source_key IS NOT NULL)
+#  index_books_publisher_titles_on_source_and_status      (source,status)
+#
+ready_title:
+  source: hachette_us
+  source_key: wk-1001
+  isbn13s: ["9780316000011", "9780316000028"]
+  title: The Example Garden
+  subtitle: A Novel
+  contributors: [{"name": "Ada Example", "role": "author"}]
+  on_sale_on: 2027-03-02
+  formats: [{"isbn13": "9780316000011", "format": "hardcover", "format_label": "Hardcover", "on_sale_on": "2027-03-02", "pages": 320, "price_cents": 2900, "currency": "USD"}, {"isbn13": "9780316000028", "format": "ebook", "format_label": "eBook", "on_sale_on": "2027-03-02", "pages": null, "price_cents": 1499, "currency": "USD"}]
+  imprint_name: Example Imprint
+  publisher_name: Hachette Book Group
+  language: English
+  genres: ["Fiction"]
+  description: A short example description.
+  status: ready
+  first_read_at: 2026-11-10 12:00:00
+  last_read_at: 2026-11-10 12:00:00
+  parser_version: 1
+
+undated_title:
+  source: hachette_us
+  source_key: wk-1002
+  isbn13s: ["9780316000035"]
+  title: The Undated Book
+  status: ready
+
+held_incomplete_title:
+  source: macmillan_us
+  isbn13s: ["9781250000011"]
+  title: Half a Page
+  status: held
+  hold_reason: incomplete
+
+held_placeholder_title:
+  source: macmillan_us
+  isbn13s: ["9781250000028"]
+  title: Untitled Placeholder
+  status: held
+  hold_reason: placeholder
+
+held_non_english_title:
+  source: macmillan_us
+  isbn13s: ["9781250000035"]
+  title: Un Libro
+  language: Spanish
+  status: held
+  hold_reason: non_english
+
+held_not_a_book_title:
+  source: macmillan_us
+  isbn13s: ["9781250000042"]
+  title: Reading Journal Stationery
+  status: held
+  hold_reason: not_a_book
+
+held_set_title:
+  source: macmillan_us
+  isbn13s: ["9781250000059"]
+  title: The Boxed Set
+  status: held
+  hold_reason: set
