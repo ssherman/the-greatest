@@ -122,7 +122,7 @@ second export on the same day reuses the day's file name and the trainer reports
    run) have been done once: `all` weekly before the categories backfill would plan the whole catalog for
    categories. It needs `APPLY=1` like those steps. Re-running it
    after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
-   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done and waits in the origin or categories agent queue instead). Books with a running import are left to their import. While the
+   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done, and gets a pending row in the origin or categories agent queue when it has no row in that queue yet). Books with a running import are left to their import. While the
    section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
 
@@ -642,7 +642,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    A pending row in the matching agent queue (`books.book_facts`, `books.author_facts`, `books.origin`,
    `books.categories`) is inserted only when the record has no row of that kind yet and the queue still needs the
    record. The paced backfill stops researching too (raising its cap does nothing) and counts a book whose research
-   was deferred as done; those books wait in the origin and categories queues (step 12). The page
+   was deferred as done; a deferred book gets a pending row in the origin or categories queue when it has no row in that queue yet (step 12). The page
    `/admin/enrichment_queues` says which mode is on. Do it before step 6, so the deferrals made from here on reach the
    queues.
    (`docs/features/enrichment-queue.md`, "The web-search switch".) Set it back to `api` to spend through the API again.
@@ -678,8 +678,11 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
 9. Read what the agents did, under the label `agent`: `bin/rails "books:origin:report[agent]"` and
    `bin/rails "books:categories:report[agent]"`, then the alias step `bin/rails "books:categories:add_aliases[agent]"`
    (dry run first, then `APPLY=1`, as in step 13 below). Held answers stay for the paced backfill in step 11, which is
-   now the path for whatever is left: books the queue never reached, books an agent skipped, and books whose answer
-   was held.
+   now the path for whatever is left. With `AI_RESEARCH_VIA=queue` it never runs a web search; it gathers evidence and
+   judges from knowledge. For books the queue never reached, a judgment that is not enough defers research and queues the
+   book (`research_wanted`). For books an agent skipped, or whose agent answer was held or applied nothing, the evidence
+   (the Wikidata shortcut, a supported medium answer) can settle some of them; the rest are not queued again, because
+   their queue row is already closed (step 12 says how to reach them).
 10. **The paid worker, a second worker for rows still waiting (optional, spends money).** Use it for a queue, or the
    rest of one, that you choose to pay for rather than give to an agent. It reaches only claimable rows: pending, or
    claimed with an expired lease. An item an agent skipped is closed and is never claimed: to send it to the paid worker,
@@ -700,8 +703,8 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. With `AI_RESEARCH_VIA=api`, books whose
    judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. With
    `AI_RESEARCH_VIA=queue` (step 4) the backfill never researches whatever the cap, raising it does nothing, and a book
-   whose judgment deferred research counts as done and gets a pending row in the `books.origin` or `books.categories`
-   queue (step 12). Until
+   whose judgment deferred research counts as done and, when it has no row in the `books.origin` or `books.categories`
+   queue yet (and still has the gap), gets a pending one (step 12). Until
    WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
    judge works without it.
    Run the categories after the origins with `bin/rails "books:categorize:backfill[categories_only,all,categories-v1]"`
@@ -711,8 +714,13 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    categories research together.
 12. **With `AI_RESEARCH_VIA=queue`, work the origin and categories queues again once the backfill has finished.** The
    judges inserted a pending `books.origin` or `books.categories` row (reason `research_wanted`) for each book they
-   deferred that still had the gap. Copy prompt on the "Book origin" and "Book categories" rows again, or step 10's
-   `enrichment_queue:work`, to clear them. No fill is needed for those rows, though a fill does no harm.
+   deferred that still had the gap and had no row in that queue yet; a book that already has a row there, in any status,
+   gets none. Copy prompt on the "Book origin" and "Book categories" rows again, or step 10's
+   `enrichment_queue:work`, to clear the pending ones. No fill is needed for those rows, though a fill does no harm.
+   Books an agent skipped, or whose agent answer was held or applied nothing, that the backfill did not settle are not
+   in that pending set: their rows are closed. To reach one, press Re-queue on its row on the admin page (the Skipped
+   tab, and the Done tab filtered to the outcome `nothing_to_apply`), then run an agent or `work` again. Re-queue is one
+   row at a time; there is no bulk re-queue.
 13. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
    label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The
    categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
