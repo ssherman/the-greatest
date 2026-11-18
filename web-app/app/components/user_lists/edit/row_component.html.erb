@@ -22,30 +22,50 @@
     <% end %>
   </div>
 
+  <%# The menu's buttons submit these through their form attribute: a form between li and button breaks the daisyUI menu. %>
+  <%= form_with url: move_my_list_item_path(user_list, item), method: :patch, id: dom_id(item, :move_top), class: "hidden" do %>
+    <%= hidden_field_tag "user_list_item[position]", 1, id: nil %>
+    <%= hidden_field_tag :page, page, id: nil %>
+  <% end %>
+  <%= form_with url: move_my_list_item_path(user_list, item), method: :patch, id: dom_id(item, :move_bottom), class: "hidden" do %>
+    <%= hidden_field_tag "user_list_item[position]", item_count, id: nil %>
+    <%= hidden_field_tag :page, page, id: nil %>
+  <% end %>
+
   <div class="dropdown dropdown-end shrink-0">
     <button type="button" tabindex="0" class="btn btn-ghost btn-sm" aria-label="Actions for <%= title %>">⋯</button>
     <ul tabindex="0" class="dropdown-content menu z-10 w-60 rounded-box bg-base-100 p-2 shadow" data-row-actions>
-      <li><%= button_to "Move to top", move_my_list_item_path(user_list, item), method: :patch,
-            params: {user_list_item: {position: 1}, page: page}, form_class: "contents", class: "w-full text-left" %></li>
-      <li><%= button_to "Move to bottom", move_my_list_item_path(user_list, item), method: :patch,
-            params: {user_list_item: {position: item_count}, page: page}, form_class: "contents", class: "w-full text-left" %></li>
       <li>
-        <%= form_with url: move_my_list_item_path(user_list, item), method: :patch, class: "flex items-center gap-2" do |form| %>
-          <%= hidden_field_tag :page, page, id: nil %>
-          <label for="<%= dom_id(item, :position) %>" class="sr-only">Move <%= title %> to position</label>
-          <%= number_field_tag "user_list_item[position]", nil, id: dom_id(item, :position), min: 1, max: item_count, required: true,
-                placeholder: "Position", class: "input input-sm w-24" %>
-          <button type="submit" class="btn btn-sm">Move</button>
-        <% end %>
+        <button type="submit" form="<%= dom_id(item, :move_top) %>">
+          <%= helpers.icon "arrow-up-to-line", library: "lucide", class: "size-4", aria_hidden: "true" %>Move to top
+        </button>
+      </li>
+      <li>
+        <button type="submit" form="<%= dom_id(item, :move_bottom) %>">
+          <%= helpers.icon "arrow-down-to-line", library: "lucide", class: "size-4", aria_hidden: "true" %>Move to bottom
+        </button>
+      </li>
+      <li>
+        <button type="button"
+                data-action="user-list-position#open"
+                data-item-id="<%= item.id %>"
+                data-item-title="<%= title %>"
+                data-position="<%= item.position %>"
+                data-max="<%= item_count %>">
+          <%= helpers.icon "hash", library: "lucide", class: "size-4", aria_hidden: "true" %>Move to position…
+        </button>
       </li>
       <% if completed_on_enabled? %>
+        <li role="separator" aria-hidden="true" class="pointer-events-none my-1 h-px bg-base-content/10 p-0"></li>
         <li>
           <button type="button"
                   data-action="user-list-completion#open"
                   data-variant="row"
                   data-item-id="<%= item.id %>"
                   data-item-title="<%= title %>"
-                  data-completed-on="<%= item.completed_on&.iso8601 %>">Set <%= user_list.completion_label.downcase %> date…</button>
+                  data-completed-on="<%= item.completed_on&.iso8601 %>">
+            <%= helpers.icon "calendar", library: "lucide", class: "size-4", aria_hidden: "true" %>Set <%= user_list.completion_label.downcase %> date…
+          </button>
         </li>
       <% end %>
     </ul>

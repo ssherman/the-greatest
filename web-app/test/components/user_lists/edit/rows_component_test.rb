@@ -10,7 +10,7 @@ class UserLists::Edit::RowsComponentTest < ViewComponent::TestCase
     render_inline(UserLists::Edit::RowsComponent.new(user_list: list, items: items, pagy: pagy))
 
     assert_selector "div#edit-list-rows"
-    assert_selector "#edit-list-rows [data-item-id]", count: items.size
+    assert_selector "#edit-list-rows [data-item-id][tabindex='-1']", count: items.size
   end
 
   test "count uses the list noun" do

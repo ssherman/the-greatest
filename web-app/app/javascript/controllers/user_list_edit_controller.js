@@ -13,15 +13,8 @@ export default class extends Controller {
   // (e.g. empty list -> populated) Stimulus reconnects the target and we rebind.
   rowsTargetConnected(element) {
     this.sortable?.destroy()
-    this.closeMenuOnSubmit = () => {
-      // daisyUI keeps the menu open while a button inside it holds focus, and
-      // morph keeps that focus on the moved row, so drop it when the form submits.
-      const active = document.activeElement
-      if (active?.closest?.(".dropdown")) active.blur()
-    }
-    element.addEventListener("turbo:submit-start", this.closeMenuOnSubmit)
     this.sortable = Sortable.create(element, {
-      draggable: "[data-item-id]",
+      draggable: "[data-item-id][tabindex='-1']",
       handle: "[data-sortable-handle]",
       animation: 150,
       ghostClass: "opacity-50",
@@ -35,17 +28,52 @@ export default class extends Controller {
   }
 
   rowsTargetDisconnected(element) {
-    element.removeEventListener("turbo:submit-start", this.closeMenuOnSubmit)
     this.sortable?.destroy()
     this.sortable = null
+  }
+
+  connect() {
+    this.element.addEventListener("turbo:submit-start", this.rememberRow)
+    document.addEventListener("turbo:before-stream-render", this.focusAfterRender)
   }
 
   disconnect() {
+    this.element.removeEventListener("turbo:submit-start", this.rememberRow)
+    document.removeEventListener("turbo:before-stream-render", this.focusAfterRender)
     this.sortable?.destroy()
     this.sortable = null
   }
 
+  // A menu or dialog write is about to morph the rows. Morph leaves focus on the
+  // button the member pressed (which holds the daisyUI menu open), or loses it
+  // when the row leaves the page, so remember the row and refocus it after the
+  // render. The position dialog's form is outside any row and names its item.
+  rememberRow = (event) => {
+    const form = event.target
+    const itemId = form.dataset?.itemId
+    const row = form.closest?.("[data-item-id][tabindex='-1']") ||
+      (itemId && this.element.querySelector(`[data-item-id="${itemId}"][tabindex='-1']`))
+    this.pendingFocusId = row?.dataset.itemId || null
+  }
+
+  focusAfterRender = (event) => {
+    if (!this.pendingFocusId || event.target.getAttribute("target") !== "edit-list-rows") return
+    const id = this.pendingFocusId
+    this.pendingFocusId = null
+    const render = event.detail.render
+    event.detail.render = async (stream) => {
+      await render(stream)
+      requestAnimationFrame(() => {
+        const target = document.querySelector(`[data-item-id="${id}"][tabindex='-1']`) ||
+          // The row left this page: fall back to the count heading.
+          document.querySelector("#edit-list-rows [data-testid=item-count]")
+        target?.focus({ preventScroll: true })
+      })
+    }
+  }
+
   async #submitMove(itemId, position) {
+    this.pendingFocusId = null
     const failed = () => window.dispatchEvent(new CustomEvent("toast:show", {
       detail: { type: "error", message: "Couldn't save that move. Reload the page to see your list." },
     }))

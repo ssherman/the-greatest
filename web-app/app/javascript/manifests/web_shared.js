@@ -77,6 +77,9 @@ application.register("user-list-edit", UserListEditController)
 import UserListModalController from "../controllers/user_list_modal_controller"
 application.register("user-list-modal", UserListModalController)
 
+import UserListPositionController from "../controllers/user_list_position_controller"
+application.register("user-list-position", UserListPositionController)
+
 import UserListStateController from "../controllers/user_list_state_controller"
 application.register("user-list-state", UserListStateController)
 

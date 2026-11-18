@@ -19,8 +19,12 @@ Only icons actually referenced in the codebase live here. Currently:
 | `check` | `Games::UserList.list_type_icons[:played]` |
 | `download` | `CsvExports::DownloadButtonComponent` button |
 | `eye` | `Movies::UserList.list_type_icons[:watched]` |
+| `arrow-down-to-line` | `UserLists::Edit::RowComponent` ⋯ menu |
+| `arrow-up-to-line` | `UserLists::Edit::RowComponent` ⋯ menu |
+| `calendar` | `UserLists::Edit::RowComponent` ⋯ menu |
 | `gamepad-2` | `Games::UserList.list_type_icons[:currently_playing]` |
 | `headphones` | `Music::Albums::UserList.list_type_icons[:listened]` |
+| `hash` | `UserLists::Edit::RowComponent` ⋯ menu |
 | `heart` | `*::UserList.list_type_icons[:favorites]` |
 | `lock` | `my_lists/edit` Built-in badge |
 | `plus` | `UserLists::CardWidgetComponent` button |

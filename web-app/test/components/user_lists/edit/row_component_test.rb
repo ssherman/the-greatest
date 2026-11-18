@@ -63,8 +63,7 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
     title = item.listable.title
     assert_selector "button[aria-label='Actions for #{title}']"
     assert_selector "button[aria-label='Remove #{title}']"
-    assert_selector "input[name='user_list_item[position]'][value='7']", visible: :all
-    assert_selector "input[type=number][min='1'][max='7'][required]"
+    assert_selector "form##{ActionView::RecordIdentifier.dom_id(item, :move_bottom)} input[name='user_list_item[position]'][value='7']", visible: :all
     assert_no_selector "[data-action='user-list-completion#open']"
   end
 
@@ -73,5 +72,45 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
     render_inline(UserLists::Edit::RowComponent.new(item: item))
 
     assert_selector "button[data-action='user-list-completion#open'][data-variant=row][data-completed-on='2026-01-20']", text: "Set finished date…"
+  end
+
+  test "menu items are direct li > button children" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 7))
+
+    assert_selector "ul.menu > li > button", text: "Move to top"
+    assert_selector "ul.menu > li > button", text: "Move to bottom"
+    assert_selector "ul.menu > li > button", text: "Move to position…"
+    assert_no_selector "ul.menu form"
+  end
+
+  test "Move to top targets its hidden form" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 7))
+
+    id = ActionView::RecordIdentifier.dom_id(item, :move_top)
+    assert_selector "button[form='#{id}']", text: "Move to top"
+    assert_selector "form##{id} input[name='user_list_item[position]'][value='1']", visible: :all
+  end
+
+  test "Move to position opens the shared dialog with the row's values" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 7))
+
+    assert_selector "button[data-action='user-list-position#open'][data-item-id='#{item.id}'][data-position='#{item.position}'][data-max='7']"
+  end
+
+  test "renders for a songs list" do
+    item = user_list_items(:regular_user_fav_song_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 3))
+
+    assert_selector "ul.menu > li > button", text: "Move to bottom"
+  end
+
+  test "one-item list: bottom form posts 1" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 1))
+
+    assert_selector "form##{ActionView::RecordIdentifier.dom_id(item, :move_bottom)} input[name='user_list_item[position]'][value='1']", visible: :all
   end
 end

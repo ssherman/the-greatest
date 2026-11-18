@@ -1,7 +1,7 @@
 <%# Chrome scroll anchoring would follow a moved row up or down the page; the page must stay put. %>
 <div id="edit-list-rows" class="flex flex-col gap-2 [overflow-anchor:none]">
   <div class="mb-2 flex items-center justify-between gap-3">
-    <h2 class="text-lg font-semibold" data-testid="item-count"><%= count_text %></h2>
+    <h2 class="text-lg font-semibold" tabindex="-1" data-testid="item-count"><%= count_text %></h2>
     <% if pagy.pages > 1 %>
       <div><%== pagy.series_nav %></div>
     <% end %>

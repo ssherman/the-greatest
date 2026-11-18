@@ -1,6 +1,7 @@
 <% content_for :page_title, "Edit #{@list.name} - My Lists" %>
 
-<div class="container mx-auto max-w-3xl px-4 py-8" data-controller="user-list-completion user-list-edit"
+<div class="container mx-auto max-w-3xl px-4 py-8" data-controller="user-list-completion user-list-edit user-list-position"
+     data-user-list-position-url-value="<%= move_my_list_item_path(@list, "__ID__") %>"
      data-user-list-edit-move-url-value="<%= move_my_list_item_path(@list, "__ID__") %>"
      data-user-list-edit-page-value="<%= @pagy.page %>">
   <div class="mb-6">
@@ -23,6 +24,8 @@
   <% unless @list.default? %>
     <%= render "my_lists/delete_form", list: @list %>
   <% end %>
+
+  <%= render UserLists::Edit::PositionDialogComponent.new(user_list: @list, page: @pagy.page) %>
 
   <% if @list.completed_on_enabled? %>
     <%= render UserLists::Show::CompletionDialogComponent.new %>

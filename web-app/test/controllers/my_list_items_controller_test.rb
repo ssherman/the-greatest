@@ -244,7 +244,20 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_rows_morphed
-    assert_select "[data-item-id]", count: 3
+    assert_select "[data-item-id][tabindex='-1']", count: 3
+  end
+
+  test "a move posted with page 2 re-renders page 2" do
+    sign_in_as(@user, stub_auth: true)
+
+    stub_const_limit(2) do
+      move(@first, 2, page: 2)
+    end
+
+    assert_response :success
+    assert_rows_morphed
+    assert_select "[data-item-id][data-page='2']", count: 1
+    assert_select "[data-item-id][data-page='1']", count: 0
   end
 
   test "rows in the stream are identical to the Edit page's rows" do
