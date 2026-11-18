@@ -1,0 +1,6 @@
+<div class="alert alert-<%= type %> shadow-lg" role="status" data-controller="toast-item" data-toast-item-ttl-value="<%= ttl %>">
+  <span><%= message %></span>
+  <% if action %>
+    <%= button_to action[:label], action[:url], method: action[:method], params: action[:params], class: "btn btn-sm" %>
+  <% end %>
+</div>

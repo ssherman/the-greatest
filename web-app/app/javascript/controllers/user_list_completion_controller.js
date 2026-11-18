@@ -4,7 +4,7 @@ import { Controller } from "@hotwired/stimulus"
 // The trigger provides only the item id plus its display values; the form action
 // and editable date are populated immediately before native dialog opens.
 export default class extends Controller {
-  static targets = ["dialog", "form", "title", "date"]
+  static targets = ["dialog", "form", "title", "date", "variant"]
 
   open(event) {
     this.opener = event.currentTarget
@@ -13,6 +13,7 @@ export default class extends Controller {
     this.formTarget.action = `/user_list_items/${itemId}/completion`
     this.titleTarget.textContent = `Edit completion date for ${itemTitle}`
     this.dateTarget.value = completedOn || ""
+    this.variantTarget.value = this.opener.dataset.variant || "table"
     this.dialogTarget.showModal()
     this.dateTarget.focus()
   }
@@ -20,6 +21,11 @@ export default class extends Controller {
   clear() {
     this.dateTarget.value = ""
     this.formTarget.requestSubmit()
+  }
+
+  // The Turbo Stream response has already updated the page; just close.
+  submitted(event) {
+    if (event.detail.success) this.dialogTarget.close()
   }
 
   cancel() {

@@ -10,20 +10,8 @@
       <td class="text-base-content/70"><%= by_line %></td>
       <td class="text-base-content/60"><%= year %></td>
       <% if completed_on_column? %>
-        <td class="text-base-content/60">
-          <% if item.completed_on.present? %>
-            <span class="badge badge-ghost badge-sm"><%= item.completed_on.to_fs(:long) %></span>
-          <% end %>
-          <% if completion_editable? %>
-            <button type="button"
-                    class="btn btn-ghost btn-xs mt-1"
-                    data-action="user-list-completion#open"
-                    data-item-id="<%= item.id %>"
-                    data-item-title="<%= title %>"
-                    data-completed-on="<%= item.completed_on&.iso8601 %>">
-              Edit completion date for <%= title %>
-            </button>
-          <% end %>
+        <td>
+          <%= render UserLists::CompletionDateComponent.new(item: item, variant: :table, editable: completion_editable?) %>
         </td>
       <% end %>
       <td class="text-right" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
@@ -32,17 +20,10 @@
     </tr>
   <% end %>
 <% else %>
-  <% if completion_editable? %>
+  <% if completed_on_column? %>
     <div class="flex flex-col gap-2">
       <%= render listable_card %>
-      <button type="button"
-              class="btn btn-ghost btn-sm self-start"
-              data-action="user-list-completion#open"
-              data-item-id="<%= item.id %>"
-              data-item-title="<%= title %>"
-              data-completed-on="<%= item.completed_on&.iso8601 %>">
-        Edit completion date for <%= title %>
-      </button>
+      <%= render UserLists::CompletionDateComponent.new(item: item, variant: :text) %>
     </div>
   <% else %>
     <%= render listable_card %>

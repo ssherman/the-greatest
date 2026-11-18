@@ -55,12 +55,24 @@ class UserListItemsController < ApplicationController
       Services::UserLists::UpdateCompletion.call(item: item, completed_on: completion_attrs[:completed_on])
     end
     unless result.success?
+      return render_completion_failure(result) if request.format.turbo_stream?
+
       redirect_to my_list_path(item.user_list), alert: result.errors.to_sentence, status: :see_other
       return
     end
 
     mark_user_state_changed
-    redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
+    if request.format.turbo_stream?
+      render turbo_stream: [
+        turbo_stream.replace(
+          helpers.dom_id(item, :completion),
+          UserLists::CompletionDateComponent.new(item: item, variant: params[:variant] || "table", editable: true)
+        ),
+        turbo_stream.append("toast-region", Toast::MessageComponent.new(message: completion_message(result)))
+      ]
+    else
+      redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
+    end
   end
 
   private
@@ -118,6 +130,11 @@ class UserListItemsController < ApplicationController
     else
       "Added to #{item.user_list.name}"
     end
+  end
+
+  def render_completion_failure(result)
+    toast = Toast::MessageComponent.new(message: result.errors.to_sentence, type: :error)
+    render turbo_stream: turbo_stream.append("toast-region", toast), status: :unprocessable_entity
   end
 
   def completion_message(result)

@@ -62,6 +62,9 @@ application.register("corrections--form", Shared__FormTokenController)
 import ToastController from "../controllers/toast_controller"
 application.register("toast", ToastController)
 
+import ToastItemController from "../controllers/toast_item_controller"
+application.register("toast-item", ToastItemController)
+
 import UserListAddItemController from "../controllers/user_list_add_item_controller"
 application.register("user-list-add-item", UserListAddItemController)
 

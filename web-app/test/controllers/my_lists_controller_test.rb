@@ -206,23 +206,24 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_listened, view_mode: "table_view")
     assert_response :success
-    assert_includes response.body, "Completed" # column header
+    assert_includes response.body, "Listened" # column header
     assert_includes response.body, "February 01, 2026"
   end
 
-  test "an owner can edit each Books Read completion date in every view mode" do
+  test "an owner edits Books Read completion dates from the table; the grid shows quiet text" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_read)
     item = user_list_items(:regular_user_books_item_3)
     sign_in_as(@user, stub_auth: true)
 
-    %w[table_view grid_view].each do |mode|
-      get my_list_path(list, view_mode: mode)
+    get my_list_path(list, view_mode: "table_view")
+    assert_response :success
+    assert_select "dialog#completion-date-dialog", count: 1
+    assert_select "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']", count: 1
 
-      assert_response :success
-      assert_select "dialog#completion-date-dialog", count: 1
-      assert_select "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']", count: 1
-    end
+    get my_list_path(list, view_mode: "grid_view")
+    assert_response :success
+    assert_select "button[data-action='user-list-completion#open']", count: 0
   end
 
   test "the completion-date controller scopes the read-list triggers and singleton dialog" do
@@ -231,7 +232,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     item = user_list_items(:regular_user_books_item_3)
     sign_in_as(@user, stub_auth: true)
 
-    get my_list_path(list)
+    get my_list_path(list, view_mode: "table_view")
 
     assert_response :success
     assert_select "[data-controller='user-list-completion']", count: 1 do

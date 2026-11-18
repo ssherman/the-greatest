@@ -93,7 +93,7 @@
                 <th>Title</th>
                 <th>By</th>
                 <th>Year</th>
-                <% if show_completed %><th>Completed</th><% end %>
+                <% if show_completed %><th><%= @list.completion_label %></th><% end %>
                 <th></th>
               </tr>
             </thead>

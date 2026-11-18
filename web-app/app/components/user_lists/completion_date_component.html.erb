@@ -1,0 +1,20 @@
+<% if variant == :text %>
+  <% if date.present? %>
+    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= date.to_fs(:long) %></p>
+  <% else %>
+    <span id="<%= dom_id_value %>"></span>
+  <% end %>
+<% elsif editable %>
+  <span id="<%= dom_id_value %>">
+    <button type="button"
+            class="link <%= "text-base-content/60" if date.blank? %>"
+            aria-label="Edit <%= label.downcase %> date for <%= title %>"
+            data-action="user-list-completion#open"
+            data-variant="table"
+            data-item-id="<%= item.id %>"
+            data-item-title="<%= title %>"
+            data-completed-on="<%= date&.iso8601 %>"><%= date ? date.to_fs(:long) : "Add date" %></button>
+  </span>
+<% else %>
+  <span id="<%= dom_id_value %>" class="text-base-content/60"><%= date&.to_fs(:long) %></span>
+<% end %>

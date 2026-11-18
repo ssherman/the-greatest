@@ -120,30 +120,21 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "tr td", text: "1869"
   end
 
-  test "renders a completion-date edit trigger for an editable read-list book in every view" do
+  test "grid view renders no completion buttons" do
     item = user_list_items(:regular_user_books_item_3)
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1, completion_editable: true))
 
-    %w[table_view grid_view].each do |view_mode|
-      render_inline(Component.new(item: item, view_mode: view_mode, position: 1, completion_editable: true))
-
-      assert_selector "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']",
-        text: "Edit completion date for #{item.listable.title}"
-    end
-  end
-
-  test "does not render a completion-date edit trigger without owner edit permission" do
-    item = user_list_items(:regular_user_books_item_3)
-    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
-
+    assert_no_selector "button", text: /completion date/i
     assert_no_selector "button[data-action='user-list-completion#open']"
+    assert_text "Finished"
   end
 
-  test "completion-date edit trigger carries only the item identity and display data" do
+  test "table view renders the editable date trigger only for the owner" do
     item = user_list_items(:regular_user_books_item_3)
     render_inline(Component.new(item: item, view_mode: "table_view", position: 1, completion_editable: true))
+    assert_selector "button[data-action='user-list-completion#open'][data-variant='table'][data-item-id='#{item.id}']"
 
-    assert_selector "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']"
-    assert_no_selector "button[data-action='user-list-completion#open'][data-user-list-id]"
-    assert_no_selector "button[data-action='user-list-completion#open'][data-listable-id]"
+    render_inline(Component.new(item: item, view_mode: "table_view", position: 1))
+    assert_no_selector "button[data-action='user-list-completion#open']"
   end
 end

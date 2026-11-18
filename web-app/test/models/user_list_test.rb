@@ -300,6 +300,11 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal "Listened", user_lists(:regular_user_music_albums_listened).completion_label
   end
 
+  test "completion_label reads Played and Beaten for games lists" do
+    assert_equal "Played", Games::UserList.new(list_type: :played).completion_label
+    assert_equal "Beaten", Games::UserList.new(list_type: :beaten).completion_label
+  end
+
   test "completion_label falls back to Completed" do
     assert_equal "Completed", user_lists(:regular_user_books_favorites).completion_label
   end

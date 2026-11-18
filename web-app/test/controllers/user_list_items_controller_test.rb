@@ -582,4 +582,31 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Completion date updated", flash[:notice]
     assert_equal Date.new(2025, 3, 4), item.reload.completed_on
   end
+
+  test "update_completion as turbo stream replaces the date and appends a toast" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item),
+      params: {user_list_item: {completed_on: "2026-03-03"}, variant: "table"}, as: :turbo_stream
+
+    assert_response :success
+    assert_includes response.body, %(turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(item, :completion)}")
+    assert_includes response.body, 'target="toast-region"'
+    assert_equal Date.new(2026, 3, 3), item.reload.completed_on
+  end
+
+  test "update_completion as turbo stream with an invalid date answers 422 with an error toast" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+    original = item.completed_on
+
+    patch user_list_item_completion_path(item),
+      params: {user_list_item: {completed_on: "March 4, 2025"}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, 'target="toast-region"'
+    refute_includes response.body, 'action="replace"'
+    assert_equal original, item.reload.completed_on
+  end
 end
