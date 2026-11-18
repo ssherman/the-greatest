@@ -46,7 +46,14 @@ numbers; production will differ.
   they are for imports and backfills. They are fast and cost under a cent.
 - **Removing the research code or the paced backfill.** Both stay and keep working.
 - **Overwriting values.** The queue fills blanks. Corrections stay with the existing field-edit tools
-  (`update_book`, `tag_book`, `add_book_description` and the rest).
+  (`update_book`, `tag_book`, `add_book_description` and the rest). Shane is not sure blanks-only is right in the
+  long run and accepted it for this spec (2026-11-17); revisit it once the first queues have run. An answer that
+  differs from a held value is already recorded on the ledger row (value, `applied: false`), so nothing an agent
+  finds is lost in the meantime.
+- **Reader corrections.** Shane wants an agent to work the pending `Correction` rows (the legacy `changesets`,
+  migrated by `Services::BooksMigration::CorrectionMigrator`), which are often "this value is wrong". That is its
+  own future spec. `corrections` already has a status and a resolver, so it needs list, read and review tools and
+  a Copy prompt in the pattern of the repair verdicts queue, not this queue table.
 - **A review step for Shane.** Answers apply at once, as merges do on the duplicates queue.
 - **Automatic filling on a schedule.** Filling a queue is a button or a rake task in increments 1 to 3.
 - **Music, games and movies types.** Nothing is built for them; nothing in the engine stops them.
