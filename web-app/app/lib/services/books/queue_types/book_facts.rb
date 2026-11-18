@@ -29,10 +29,12 @@ module Services
             base_relation(scope: scope).where(has_author_sql).where(need_sql)
           end
 
-          # The same author and need conditions as candidates, for one book: a
-          # book with a running run is still needed, a fill just does not offer it.
+          # The need conditions of candidates, for one book: a book with a running
+          # run is still needed, a fill just does not offer it. Unlike candidates
+          # it does not require an author link: the importer can enrich a book
+          # before its links exist, and its deferred research must still be queued.
           def still_needed?(book)
-            ::Books::Book.where(id: book.id).where(has_author_sql).where(need_sql).exists?
+            ::Books::Book.where(id: book.id).where(need_sql).exists?
           end
 
           def payload(book)

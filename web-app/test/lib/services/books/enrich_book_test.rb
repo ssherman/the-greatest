@@ -613,7 +613,7 @@ module Services
         assert_equal 0, book_facts_requests.count
       end
 
-      test "queue mode: a book with only passed-in author names is skipped as queued and gets no queue row" do
+      test "queue mode: a book with only passed-in author names is skipped as queued and gets a queue row" do
         queue_mode!
         @book = ::Books::Book.create!(title: "No Author Link")
         expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
@@ -622,7 +622,22 @@ module Services
 
         assert result.success?
         assert_equal "queued", result.data[:enrichments].last.reason
-        assert_equal 0, book_facts_requests.count
+        request = book_facts_requests.sole
+        assert_equal %w[pending research_wanted], [request.status, request.reason]
+      end
+
+      test "queue mode: a low-confidence guess for a book with only passed-in author names is held and queued" do
+        queue_mode!
+        @book = ::Books::Book.create!(title: "No Author Link")
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book, author_names: ["Leo Tolstoy"])
+
+        knowledge, skipped = result.data[:enrichments]
+        assert_equal "nothing_to_apply", knowledge.outcome
+        assert_nil @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal 1, book_facts_requests.count
       end
 
       test "queue mode: a high-confidence knowledge run never looks at the queue" do

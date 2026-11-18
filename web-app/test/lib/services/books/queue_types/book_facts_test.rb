@@ -152,7 +152,12 @@ module Services
           assert Type.still_needed?(book)
           complete(book)
           assert_not Type.still_needed?(book)
-          assert_not Type.still_needed?(::Books::Book.create!(title: "No Author"))
+        end
+
+        test "still_needed? does not require an author link" do
+          orphan = ::Books::Book.create!(title: "No Author")
+          assert Type.still_needed?(orphan)
+          assert_not_includes candidate_ids, orphan.id
         end
 
         test "payload names what is missing and what was tried" do
