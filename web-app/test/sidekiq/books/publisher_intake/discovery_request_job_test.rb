@@ -15,9 +15,13 @@ class Books::PublisherIntake::DiscoveryRequestJobTest < ActiveSupport::TestCase
     @run = new_running_run
     @request = Request.page("https://x.test/index.xml")
     @client.stubs(:fetch).returns(page_response)
+    Job.jobs.clear
   end
 
-  teardown { teardown_intake_fetching }
+  teardown do
+    Job.jobs.clear
+    teardown_intake_fetching
+  end
 
   def discovery(requests) = PublisherIntakeFetchHelper::TestStrategy.discovery_value = Discovery.new(outcome: :ok, listings: [], requests: requests)
 
