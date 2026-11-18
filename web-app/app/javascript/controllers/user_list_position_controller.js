@@ -26,6 +26,13 @@ export default class extends Controller {
     this.inputTarget.focus()
   }
 
+  // A closing dialog hands focus back to its opener, a button inside the daisyUI
+  // menu, which would pop the menu open again. Focus the opener's row instead.
+  restoreFocus() {
+    document.querySelector(`[data-item-id="${this.formTarget.dataset.itemId}"][tabindex='-1']`)
+      ?.focus({ preventScroll: true })
+  }
+
   cancel() {
     this.dialogTarget.close()
   }

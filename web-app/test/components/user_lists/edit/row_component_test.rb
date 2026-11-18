@@ -100,6 +100,13 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
     assert_selector "button[data-action='user-list-position#open'][data-item-id='#{item.id}'][data-position='#{item.position}'][data-max='7']"
   end
 
+  test "the divider is a bare empty separator so daisyUI draws it" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(UserLists::Edit::RowComponent.new(item: item))
+
+    assert_selector "ul.menu > li[role=separator]:empty[aria-hidden=true]:not([class])", visible: :all
+  end
+
   test "renders for a songs list" do
     item = user_list_items(:regular_user_fav_song_1)
     render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 3))
