@@ -119,8 +119,6 @@ module Services
           return [failed_row(mode, task_result, task_result.error), false] unless task_result.success?
 
           answer = (task_result.data[:facts] || {}).to_h.deep_symbolize_keys
-          return [failed_row(mode, task_result, "empty response"), false] if answer.empty?
-
           row = RecordAnswer.call(book: book, dossier: dossier, answer: answer, vocabulary: vocabulary, mode: mode,
             context: context, label: label, rejudge: context != "import",
             citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model)
