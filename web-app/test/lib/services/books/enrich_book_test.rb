@@ -551,6 +551,22 @@ module Services
         assert_equal 1, book_facts_requests.count
       end
 
+      test "queue mode: a low-confidence guess is held while the book's queue row is submitted" do
+        queue_mode!
+        ::EnrichmentRequest.create!(enrichable: @book, kind: "books.book_facts", reason: "missing", version: 1, priority: 1,
+          sources: [], status: :submitted, answer: {})
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, skipped = result.data[:enrichments]
+        assert_equal "nothing_to_apply", knowledge.outcome
+        assert_equal "deferred", knowledge.facts["first_published_year"]["reason"]
+        assert_nil @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal ["submitted"], book_facts_requests.map(&:status)
+      end
+
       test "queue mode: a low-confidence guess is applied when the book's queue row is already resolved" do
         queue_mode!
         ::EnrichmentRequest.create!(enrichable: @book, kind: "books.book_facts", reason: "missing", version: 1, priority: 1,

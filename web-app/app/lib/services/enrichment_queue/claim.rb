@@ -8,7 +8,8 @@ module Services
     # the rows say "claimed", and a concurrent claim skips them instead of
     # waiting or taking the same ones.
     #
-    # user is nil for the paid research worker, which has no admin behind it.
+    # user is required but may be nil: the paid research worker passes nil, as it
+    # has no admin behind it. A caller must say so rather than forget it.
     #
     # A row that is abandoned MAX_ATTEMPTS times (its lease expired each time)
     # is closed, and a row whose gap was filled meanwhile is closed too. Both
@@ -20,7 +21,7 @@ module Services
       DEFAULT_LIMIT = 10
       MAX_PASSES = 3
 
-      def self.call(kind:, user: nil, limit: DEFAULT_LIMIT)
+      def self.call(kind:, user:, limit: DEFAULT_LIMIT)
         new(kind: kind, limit: limit, user: user).call
       end
 

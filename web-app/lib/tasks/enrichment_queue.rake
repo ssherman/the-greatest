@@ -30,9 +30,12 @@ namespace :enrichment_queue do
     limit = Integer(args[:limit].to_s.strip, exception: false)
     abort usage unless limit&.positive?
 
+    blocker = ::Services::EnrichmentQueue::Registry.fetch(kind).paid_research_blocker
+    abort "Not queued: #{blocker}." if blocker.present?
+
     claimable = ::EnrichmentRequest.for_kind(kind).claimable.count
     queued = [limit, claimable].min
     queued.times { ::EnrichmentQueue::ResearchJob.perform_async(kind) }
-    puts "Queued #{queued} paid research job(s) for #{kind} (#{claimable} claimable). Each can spend one web search."
+    puts "Queued #{queued} paid research job(s) for #{kind} (#{claimable} claimable). Each can make one research call (a call can run more than one web search)."
   end
 end

@@ -193,6 +193,14 @@ module Services
           assert Type.paid_research?
         end
 
+        test "paid_research_blocker names the switched-off judge and is nil when it is on" do
+          Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(false)
+          assert_equal "the categories judge is switched off (BOOKS_CATEGORIES_JUDGE_ENABLED)", Type.paid_research_blocker
+
+          Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(true)
+          assert_nil Type.paid_research_blocker
+        end
+
         test "research runs the forced paid path and maps its row" do
           record = ::Books::Book.create!(title: "Forced Categories")
           request = ::EnrichmentRequest.new(enrichable: record, kind: Type.kind)

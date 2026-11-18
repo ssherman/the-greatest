@@ -31,14 +31,16 @@ module Services
         assert ResearchRoute.open_for?(kind: KIND, record: @book)
       end
 
-      test "open_for? is true for a pending or a claimed row" do
+      test "open_for? is true for a pending, a claimed or a submitted row" do
         row = request_with(:pending)
         assert ResearchRoute.open_for?(kind: KIND, record: @book)
         row.update_columns(status: ::EnrichmentRequest.statuses.fetch("claimed"))
         assert ResearchRoute.open_for?(kind: KIND, record: @book)
+        row.update_columns(status: ::EnrichmentRequest.statuses.fetch("submitted"))
+        assert ResearchRoute.open_for?(kind: KIND, record: @book)
       end
 
-      %i[submitted done skipped failed].each do |status|
+      %i[done skipped failed].each do |status|
         test "open_for? is false for a #{status} row" do
           request_with(status)
           refute ResearchRoute.open_for?(kind: KIND, record: @book)

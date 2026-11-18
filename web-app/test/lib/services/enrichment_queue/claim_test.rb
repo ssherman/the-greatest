@@ -117,6 +117,10 @@ module Services
         assert result.errors.any?
       end
 
+      test "a claim must say who is claiming" do
+        assert_raises(ArgumentError) { Claim.call(kind: "books.test_type", limit: 1) }
+      end
+
       test "a claim with no user leaves claimed_by empty" do
         data = Claim.call(kind: "books.test_type", limit: 1, user: nil).data
         row = data[:items].sole.reload

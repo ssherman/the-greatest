@@ -122,7 +122,7 @@ second export on the same day reuses the day's file name and the trainer reports
    run) have been done once: `all` weekly before the categories backfill would plan the whole catalog for
    categories. It needs `APPLY=1` like those steps. Re-running it
    after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
-   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done, and gets a pending row in the origin or categories agent queue when it has no row in that queue yet). Books with a running import are left to their import. While the
+   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done, and gets a pending row in the origin or categories agent queue when it has no row in that queue yet and still has the gap). Books with a running import are left to their import. While the
    section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
 
@@ -642,7 +642,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    A pending row in the matching agent queue (`books.book_facts`, `books.author_facts`, `books.origin`,
    `books.categories`) is inserted only when the record has no row of that kind yet and the queue still needs the
    record. The paced backfill stops researching too (raising its cap does nothing) and counts a book whose research
-   was deferred as done; a deferred book gets a pending row in the origin or categories queue when it has no row in that queue yet (step 12). The page
+   was deferred as done; a deferred book gets a pending row in the origin or categories queue when it has no row in that queue yet and still has the gap (step 12). The page
    `/admin/enrichment_queues` says which mode is on. Do it before step 6, so the deferrals made from here on reach the
    queues.
    (`docs/features/enrichment-queue.md`, "The web-search switch".) Set it back to `api` to spend through the API again.
@@ -693,8 +693,9 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    call can run more than one search; an origin the stored Wikidata evidence settles spends none). The kind is any of the four
    (`books.origin`, `books.categories`, `books.book_facts`, `books.author_facts`); the limit is required. Start with a
    small limit and read the rows' outcomes on the page (Done, Failed, and `paid_research` in the "via" filter) before
-   a large one. Running it for `books.categories` while the judge is off (step 3) closes each row Failed with
-   "skipped: disabled" and spends nothing. A failed row is not retried by itself: Re-queue it on the page. A job killed
+   a large one. For `books.categories` while the judge is off (step 3) the task refuses
+   ("Not queued: the categories judge is switched off") and queues nothing; a judge switched off after the jobs were
+   queued closes each remaining row Failed with "skipped: disabled" and spends nothing. A failed row is not retried by itself: Re-queue it on the page. A job killed
    mid-run leaves its row claimed for 30 minutes; after that the row can be researched again. Read the rows under the
    label `queue`: `bin/rails "books:origin:report[queue]"` and `bin/rails "books:categories:report[queue]"`.
 11. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
@@ -719,7 +720,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    `enrichment_queue:work`, to clear the pending ones. No fill is needed for those rows, though a fill does no harm.
    Books an agent skipped, or whose agent answer was held or applied nothing, that the backfill did not settle are not
    in that pending set: their rows are closed. To reach one, press Re-queue on its row on the admin page (the Skipped
-   tab, and the Done tab filtered to the outcome `nothing_to_apply`), then run an agent or `work` again. Re-queue is one
+   tab, and the Done tab filtered to the outcome `nothing_to_apply` or `unrecognized`), then run an agent or `work` again. Re-queue is one
    row at a time; there is no bulk re-queue.
 13. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
    label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The

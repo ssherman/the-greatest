@@ -14,11 +14,14 @@ module Services
         def queue? = Rails.application.config.x.ai.research_via == "queue"
 
         # True while the record's research is still owed to the queue: it has no
-        # row of this kind, or its row is pending or claimed. A resolved row
-        # (submitted, done, skipped, failed) means the queue is finished with it.
+        # row of this kind, or its row is pending, claimed or submitted. A
+        # submitted row holds an agent's web-verified answer that the apply job
+        # has yet to write, so the research is done but has not landed, and a
+        # guess applied now would leave that answer only blanks to fill. A
+        # resolved row (done, skipped, failed) means the queue is finished.
         def open_for?(kind:, record:)
           !::EnrichmentRequest.where(enrichable: record, kind: kind)
-            .where.not(status: [:pending, :claimed]).exists?
+            .where.not(status: [:pending, :claimed, :submitted]).exists?
         end
 
         # Inserts one pending row unless the type no longer needs the record.

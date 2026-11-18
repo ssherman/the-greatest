@@ -49,6 +49,10 @@ module Services
         # (Research), which runs the same forced path an importer would.
         def paid_research? = false
 
+        # A reason String when the paid path cannot run right now (so the rake
+        # task refuses to queue jobs that can only fail), else nil.
+        def paid_research_blocker = nil
+
         # The paid research path for one claimed row: runs the type's own model
         # call with research forced and returns a Result with
         # data: {enrichment:, outcome:} (see ledger_result).
@@ -62,7 +66,7 @@ module Services
           errors = if row.nil?
             ["no ledger row"]
           elsif row.failed?
-            [row.error]
+            [row.error.presence || "failed (no error recorded)"]
           elsif row.skipped?
             ["skipped: #{row.reason}"]
           end

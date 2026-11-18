@@ -90,7 +90,7 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    `config.x.ai.research_via` set to `queue` (ENV `AI_RESEARCH_VIA`, default `api`), neither enricher spends the
    web search: each writes a skipped research row with reason `queued` and inserts a pending row in the
    `books.book_facts` or `books.author_facts` queue when the type still needs the record, and a low-confidence
-   knowledge answer is held (recorded, not applied) while the record has no queue row yet, or one that is pending or claimed.
+   knowledge answer is held (recorded, not applied) while the record has no queue row yet, or one that is pending, claimed or submitted.
    `Books::EnrichBookJob` does not count a skipped research row as "researched" when it tells the categorize run
    whether to search. See `docs/features/enrichment-queue.md`, "The web-search switch".
 
