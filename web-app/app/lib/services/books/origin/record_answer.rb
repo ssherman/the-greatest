@@ -19,6 +19,14 @@ module Services
             citations: citations, ai_chat: ai_chat, provider: provider, model: model, extra_facts: extra_facts).call
         end
 
+        # The facts every books.origin row starts from; callers merge their own
+        # keys over it. The one definition, shared with Judge's other rows.
+        def self.base_facts(context:, label:, dossier:, path:)
+          {"prompt_version" => Services::Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION, "context" => context,
+           "label" => label, "path" => path, "dossier" => dossier&.to_ledger, "answer" => nil, "origin" => nil,
+           "deferred_research" => false}
+        end
+
         def initialize(book:, dossier:, answer:, mode:, context:, label:, citations:, ai_chat:, provider:, model:, extra_facts:)
           @book = book
           @dossier = dossier
@@ -39,7 +47,7 @@ module Services
           answer_facts = {"nationality" => answer[:nationality], "confidence" => answer[:confidence],
                           "reason" => answer[:reason], "recognized" => recognized,
                           "original_language" => answer[:original_language]}
-          facts = base_facts.merge("answer" => answer_facts)
+          facts = self.class.base_facts(context: context, label: label, dossier: dossier, path: "judge").merge("answer" => answer_facts)
 
           attributes = {kind: KIND, mode: mode, ai_chat: ai_chat, provider: provider, model: model,
                         recognized: recognized, confidence: confidence_for(answer[:confidence]), citations: citations}
@@ -57,12 +65,6 @@ module Services
         private
 
         attr_reader :book, :dossier, :answer, :mode, :context, :label, :citations, :ai_chat, :provider, :model, :extra_facts
-
-        def base_facts
-          {"prompt_version" => Services::Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION, "context" => context,
-           "label" => label, "path" => "judge", "dossier" => dossier&.to_ledger, "answer" => nil, "origin" => nil,
-           "deferred_research" => false}
-        end
 
         def confidence_for(value)
           normalized = value.to_s.strip.downcase

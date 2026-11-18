@@ -11,7 +11,7 @@ module Services
       class Judge
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        KIND = "books.origin"
+        KIND = RecordAnswer::KIND
 
         def self.call(book:, context:, label: nil, research_allowed: true, force: false, force_research: false)
           new(book: book, context: context, label: label, research_allowed: research_allowed,
@@ -143,8 +143,8 @@ module Services
             facts: base_facts("judge"))), false]
         end
 
-        # Read before the row is written, so an error here is the failed row
-        # and the mode run still leaves exactly one.
+        # Read after RecordAnswer has written the answer row. A raise here
+        # reaches run's rescue, which adds a failed row beside the answer row.
         def row_needs_research?(mode, confidence, unrecognized)
           mode == :knowledge && !real_country? && (confidence == "low" || unrecognized)
         end
@@ -172,9 +172,7 @@ module Services
         end
 
         def base_facts(path)
-          {"prompt_version" => Services::Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION, "context" => context,
-           "label" => label, "path" => path, "dossier" => dossier&.to_ledger, "answer" => nil, "origin" => nil,
-           "deferred_research" => false}
+          RecordAnswer.base_facts(context: context, label: label, dossier: dossier, path: path)
         end
 
         def result

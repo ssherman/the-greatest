@@ -47,8 +47,10 @@ module Services
           configuration = ::Books::RankingConfiguration.default_primary
           assert_not_nil configuration
           RankedItem.create!(item: @blank, ranking_configuration: configuration, rank: 42, score: 1)
+          unranked = ::Books::Book.create!(title: "Unranked And Countryless")
           rows = Type.candidates(scope: "ranked").pluck(Arel.sql("books_books.id"), Arel.sql(Type.priority_sql))
           assert_equal [[@blank.id, 42]], rows
+          assert_includes Type.candidates(scope: "all").pluck(:id), unranked.id
         end
 
         test "still_needed? follows the data" do
@@ -98,6 +100,18 @@ module Services
           row = result.data[:enrichment]
           assert_equal ["books.origin", "agent", "agent", request.id], [row.kind, row.mode, row.provider, row.facts["queue_request_id"]]
           assert_equal ["https://example.org/a"], row.citations
+          assert_equal ["Japanese"], @blank.countries.reload.pluck(:name)
+        end
+
+        test "apply stores each source once" do
+          request = ::EnrichmentRequest.create!(enrichable: @blank, kind: "books.origin", reason: "missing", status: :submitted,
+            answer: {"recognized" => true, "original_language" => nil, "nationality" => "Japanese", "confidence" => "high", "reason" => "r"},
+            sources: ["https://example.org/a", "https://example.org/a", "https://example.org/b"], resolved_by: users(:admin_user))
+          assert_equal ["https://example.org/a", "https://example.org/b"], Type.apply(request).data[:enrichment].citations
+        end
+
+        test "reference holds the answer schema only" do
+          assert_equal ["answer_schema"], Type.reference.keys
         end
 
         test "is registered" do
@@ -115,7 +129,9 @@ module Services
 
         test "ranked fill queues a ranked countryless book at its rank" do
           RankedItem.create!(item: @blank, ranking_configuration: ::Books::RankingConfiguration.default_primary, rank: 17, score: 1)
+          unranked = ::Books::Book.create!(title: "Unranked And Countryless")
           result = fill("ranked")
+          assert_equal 0, ::EnrichmentRequest.where(kind: "books.origin", enrichable: unranked).count
           assert result.success?
           assert_equal 1, result.data[:inserted]
           assert_equal 17, ::EnrichmentRequest.find_by!(kind: "books.origin", enrichable: @blank).priority

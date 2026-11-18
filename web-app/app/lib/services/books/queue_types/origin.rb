@@ -39,11 +39,7 @@ module Services
           end
 
           def reference
-            {"kind" => kind, "label" => label, "answer_schema" => answer_schema,
-             "instructions" => "Decide the single country whose literature this book belongs to, as one English " \
-               "nationality adjective such as French or Japanese. Start from the original language, then the author's " \
-               "nationality at first publication. Answer Unknown when no single nationality can be determined. " \
-               "Set recognized to false if you do not know this specific book."}
+            {"answer_schema" => answer_schema}
           end
 
           def answer_schema
@@ -55,7 +51,7 @@ module Services
             row = Services::Books::Origin::RecordAnswer.call(
               book: book, dossier: Services::Books::Categorize::Dossier.build(book: book),
               answer: request.answer.symbolize_keys, mode: :agent, context: "agent", label: "agent",
-              citations: request.sources, provider: "agent", model: nil,
+              citations: request.sources.uniq, provider: "agent", model: nil,
               extra_facts: {"queue_request_id" => request.id}
             )
             return Services::EnrichmentQueue::Type::Result.new(success?: false, data: {enrichment: row}, errors: [row.error]) if row.failed?

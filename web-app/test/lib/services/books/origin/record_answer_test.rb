@@ -30,6 +30,18 @@ module Services
           assert_equal 7, row.facts["queue_request_id"]
         end
 
+        test "the row's facts have one fixed set of keys, with and without extra facts" do
+          base = %w[answer context deferred_research dossier label origin path prompt_version]
+          answer = {recognized: true, original_language: nil, nationality: "Japanese", confidence: "high", reason: "r"}
+          with_extra = Services::Books::Origin::RecordAnswer.call(book: @book, dossier: @dossier, answer: answer, mode: :agent,
+            context: "agent", label: "agent", extra_facts: {"queue_request_id" => 7})
+          assert_equal (base + ["queue_request_id"]).sort, with_extra.facts.keys.sort
+          other = ::Books::Book.create!(title: "Another Origin Test")
+          plain = Services::Books::Origin::RecordAnswer.call(book: other, dossier: Services::Books::Categorize::Dossier.build(book: other),
+            answer: answer, mode: :agent, context: "agent", label: "agent")
+          assert_equal base, plain.facts.keys.sort
+        end
+
         test "a medium answer with no stored evidence is held" do
           row = record({recognized: true, original_language: nil, nationality: "Japanese", confidence: "medium", reason: "r"})
           assert_equal ["nothing_to_apply", "unsupported"], [row.outcome, row.reason]
