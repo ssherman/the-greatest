@@ -65,7 +65,7 @@ module Music
       end
 
       def self.listable_display_includes
-        [:artists, :categories, :primary_image, :descriptions]
+        [:artists, :categories, :primary_image]
       end
 
       def self.generated_list_class

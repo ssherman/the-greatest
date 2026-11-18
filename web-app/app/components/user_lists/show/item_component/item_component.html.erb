@@ -2,8 +2,7 @@
   <% if rich_song_row? %>
     <%= render Music::Songs::ListItemComponent.new(song: listable, show_index: position) %>
   <% else %>
-    <%# Generic table row shared across listables. Phase B adds the inline %>
-    <%# completed_on editor + row actions into the actions cell. %>
+    <%# Generic table row shared across listables. %>
     <tr class="hover" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
       <td class="text-center text-base-content/60"><%= position %></td>
       <td><span class="font-bold"><%= title %></span></td>

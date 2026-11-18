@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 class UserLists::Show::ItemComponent < ViewComponent::Base
-  # Listables that have a dedicated card component (rendered as a <div> in
-  # default/grid views). Everything else (songs, movies) renders as a <tr>
-  # table row.
+  # Listables that have a dedicated card component (rendered as a <div> in the
+  # grid view). Everything else (songs, movies) renders as a <tr> table row.
   CARD_LISTABLES = %w[Music::Album Games::Game Books::Book].freeze
 
   DEFAULT_GRID_CONTAINER_CLASS =

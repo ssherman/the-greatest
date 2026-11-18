@@ -72,7 +72,7 @@ module Games
     end
 
     def self.listable_display_includes
-      [:categories, {game_companies: :company}, :primary_image, :descriptions]
+      [:categories, {game_companies: :company}, :primary_image]
     end
 
     def self.generated_list_class

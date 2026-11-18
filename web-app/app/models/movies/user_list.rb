@@ -64,7 +64,7 @@ module Movies
     end
 
     def self.listable_display_includes
-      [:primary_image, :descriptions]
+      [:primary_image]
     end
   end
 end

@@ -3,11 +3,15 @@
   table_layout = UserLists::Show::ItemComponent.table_layout?(
     listable_class: @list.class.listable_class, view_mode: @view_mode
   )
-  # Only listables with covers/descriptions get the list/grid view modes; songs
-  # are always tabular, so the switcher is hidden for them.
+  # Only listables with covers get the grid/table view modes; songs are always
+  # tabular, so the switcher is hidden for them.
   show_view_switcher = UserLists::Show::ItemComponent.card_capable?(@list.class.listable_class)
   show_completed = @list.completed_on_enabled?
-  ranking_sort = (@sort == "ranking") ? "ranking" : nil
+  # "position" is the default, so it stays out of the URL.
+  sort_param = (@sort == "position") ? nil : @sort
+  sort_options = [["Your order", nil]]
+  sort_options << ["Recently added", "added"]
+  sort_options << ["Ranking", "ranking"] if @ranking_available
 %>
 
 <div class="container mx-auto px-4 py-8" data-controller="user-list-completion">
@@ -29,17 +33,15 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-x-6 gap-y-3" data-testid="list-toolbar">
-      <% if @ranking_available %>
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</span>
-          <div class="join">
-            <%= link_to "Position", my_list_path(@list, view_mode: @view_mode),
-                  class: "join-item btn btn-sm #{(@sort == "position") ? "btn-primary" : "btn-outline"}" %>
-            <%= link_to "Ranking", my_list_path(@list, sort: "ranking", view_mode: @view_mode),
-                  class: "join-item btn btn-sm #{(@sort == "ranking") ? "btn-primary" : "btn-outline"}" %>
-          </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</span>
+        <div class="join">
+          <% sort_options.each do |label, value| %>
+            <%= link_to label, my_list_path(@list, view_mode: @view_mode, sort: value),
+                  class: "join-item btn btn-sm #{(sort_param == value) ? "btn-primary" : "btn-outline"}" %>
+          <% end %>
         </div>
-      <% end %>
+      </div>
 
       <% if show_view_switcher %>
         <div class="flex items-center gap-2">
@@ -47,7 +49,7 @@
           <div class="join">
             <% UserList::VIEW_MODE_LABELS.each do |mode, label| %>
               <%= link_to label,
-                    my_list_path(@list, view_mode: mode, sort: ranking_sort),
+                    my_list_path(@list, view_mode: mode, sort: sort_param),
                     class: "join-item btn btn-sm #{(@view_mode == mode) ? "btn-primary" : "btn-outline"}" %>
             <% end %>
           </div>
@@ -56,7 +58,7 @@
 
       <div class="ml-auto">
         <%= render CsvExports::DownloadButtonComponent.new(
-              export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
+              export_path: my_list_path(@list, format: :csv, view_mode: @view_mode, sort: sort_param),
               noun: "items",
               capped: false
             ) %>
@@ -65,6 +67,7 @@
   </div>
 
   <% if @owner %>
+    <%= render UserLists::FavoritesNoteComponent.new(user_list: @list) %>
     <%= render UserLists::Show::AddItemComponent.new(list: @list) %>
   <% end %>
 
@@ -105,8 +108,7 @@
           </table>
         </div>
       <% else %>
-        <% container_class = (@view_mode == "grid_view") ? UserLists::Show::ItemComponent.grid_container_class(@list.class.listable_class) : "space-y-6" %>
-        <div class="<%= container_class %>">
+        <div class="<%= UserLists::Show::ItemComponent.grid_container_class(@list.class.listable_class) %>">
           <% @items.each_with_index do |item, index| %>
             <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed) %>
           <% end %>

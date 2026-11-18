@@ -74,7 +74,7 @@ class UserListItemsController < ApplicationController
       render turbo_stream: [
         turbo_stream.replace(
           helpers.dom_id(item, :completion),
-          UserLists::CompletionDateComponent.new(item: item, variant: params[:variant] || "table", editable: true)
+          UserLists::CompletionDateComponent.new(item: result.data[:item], variant: params[:variant] || "table", editable: true)
         ),
         turbo_stream.append("toast-region", Toast::MessageComponent.new(message: completion_message(result)))
       ]

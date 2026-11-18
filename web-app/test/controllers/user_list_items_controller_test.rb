@@ -593,6 +593,7 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, %(turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(item, :completion)}")
     assert_includes response.body, 'target="toast-region"'
+    assert_includes response.body, "Mar 3, 2026", "the replaced cell shows the new date, not the stale one"
     assert_equal Date.new(2026, 3, 3), item.reload.completed_on
   end
 

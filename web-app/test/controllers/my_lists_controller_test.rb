@@ -187,10 +187,8 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
   test "grid view renders for a songs list (tabular fallback)" do
     sign_in_as(@user, stub_auth: true)
-    %w[grid_view].each do |mode|
-      get my_list_path(user_lists(:regular_user_music_songs_favorites), view_mode: mode)
-      assert_response :success, "songs view_mode #{mode} failed"
-    end
+    get my_list_path(user_lists(:regular_user_music_songs_favorites), view_mode: "grid_view")
+    assert_response :success
   end
 
   test "games list renders both view modes on the games domain" do
@@ -290,6 +288,32 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_favorites, view_mode: "table_view")
     assert_response :success
+    assert_equal [
+      music_albums(:dark_side_of_the_moon).id,
+      music_albums(:abbey_road).id,
+      music_albums(:thriller).id
+    ], rendered_listable_ids(@albums_favorites)
+  end
+
+  test "sort=added lists the newest item first" do
+    user_list_items(:regular_user_fav_album_2).update_column(:created_at, 1.hour.from_now)
+
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites, view_mode: "table_view", sort: "added")
+    assert_response :success
+
+    assert_equal [
+      music_albums(:abbey_road).id,
+      music_albums(:thriller).id,
+      music_albums(:dark_side_of_the_moon).id
+    ], rendered_listable_ids(@albums_favorites)
+  end
+
+  test "an unknown sort falls back to position" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites, view_mode: "table_view", sort: "bogus")
+    assert_response :success
+
     assert_equal [
       music_albums(:dark_side_of_the_moon).id,
       music_albums(:abbey_road).id,

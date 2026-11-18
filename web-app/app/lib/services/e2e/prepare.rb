@@ -26,6 +26,7 @@ module Services
       EXCLUDED_REVIEW_SLUGS = %w[headlong-hall the-great-gatsby room-for-murder].freeze
       PUBLIC_LIST_NAME = "E2E Public Books"
       PRIVATE_LIST_NAME = "E2E Private Books"
+      CREATED_LIST_PREFIX = "E2E Created List "
       COMP_NOTE = "Playwright member account (bin/rails e2e:prepare)"
       # The catalog rows specs assume survive a refresh (famous books keep
       # their slugs). Checked last, so a renamed slug fails in one line here
@@ -209,6 +210,8 @@ module Services
         ::Books::UserList.where(user: user).find_each { |list| list.user_list_items.each(&:destroy!) }
 
         ::Books::UserList.where(user: user, name: [PUBLIC_LIST_NAME, PRIVATE_LIST_NAME]).find_each(&:destroy!)
+        # my-lists.spec.ts creates lists from the dashboard; there is no delete UI to clean up with.
+        ::Books::UserList.where(user: user).where("name LIKE ?", "#{CREATED_LIST_PREFIX}%").find_each(&:destroy!)
 
         books = ::Books::Book.where(book_kind: :standalone).order(:id).limit(3).to_a
         raise SeedError, "only #{books.size} standalone books available; the E2E lists need 3" if books.size < 3

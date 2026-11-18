@@ -94,6 +94,16 @@ module Services
         assert_equal @user, public_list.user
       end
 
+      test "removes lists the dashboard E2E created" do
+        created = ::Books::UserList.create!(user: @user, name: "#{Prepare::CREATED_LIST_PREFIX}123", list_type: :custom)
+        kept = ::Books::UserList.create!(user: @user, name: "Reading club", list_type: :custom)
+
+        prepare
+
+        assert_not ::Books::UserList.exists?(created.id)
+        assert ::Books::UserList.exists?(kept.id)
+      end
+
       test "empties the account's default lists but leaves other users' lists alone" do
         stray = ::Books::UserList.find_by!(user: @user, list_type: :read)
         stray.user_list_items.create!(listable: books_books(:war_and_peace))

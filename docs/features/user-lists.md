@@ -242,7 +242,7 @@ Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. 
 
 ## My Lists Read Surface (02 Phase A)
 
-A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashboard and a `/my/lists/:id` show page with three view modes, position-vs-ranking sorting, and CSV download. Everything here is **read-only**; the write surface is Phase B (`user-lists-02f`).
+A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashboard and a `/my/lists/:id` show page with two view modes (Grid and Table), three sorts, and CSV download. The dashboard can create custom lists and the list page can edit finish dates in place; the rest of the write surface (edit, reorder, remove, delete) is Phase B (`user-lists-02f`).
 
 ### Routing & Layout
 
@@ -284,29 +284,48 @@ See `docs/specs/completed/books-migration-01-id-range-reservation.md` for the fu
 
 ### Dashboard (`index`)
 
-Lists the current user's lists for `Current.domain` (music shows **both** album and song lists), **defaults first** (in subclass then `list_type` order) then custom lists. Item counts come from a single grouped query (`UserListItem.where(...).group(:user_list_id).count`), never a per-row count. Default lists are auto-created at signup, so there is no zero-state. Each list renders as a `UserLists::Dashboard::ListCardComponent` (name, count, `list_type_icons` icon or "Custom" tag, public/private badge).
+Lists the current user's lists for `Current.domain` (music shows **both** album and song lists), **defaults first** (in subclass then `list_type` order) then custom lists. Item counts come from a single grouped query (`UserListItem.where(...).group(:user_list_id).count`), never a per-row count. Default lists are auto-created at signup, so there is no zero-state. Each list renders as a `UserLists::Dashboard::ListCardComponent` (name, count, `list_type_icons` icon or "Custom" tag, public/private badge, and "Counts toward the site rankings" on a generating Favorites list).
+
+**Creating a list.** The "+ New list" button opens `UserLists::Dashboard::NewListDialogComponent`, which posts to `MyListsController#create`. The controller resolves the requested `type` against the current domain's subclasses and calls `Services::UserLists::CreateList`; success redirects (303) to the new list, failure renders the errors into the dialog as a Turbo Stream. The dialog closes and resets itself on `turbo:before-cache`, so Back never restores it open. The same service backs the JSON API and the Add-to-List modal's "Create a new list", so name rules (`Services::UserLists::ListRules`) are shared.
 
 ### Show (`show`)
 
 Loads the list via `UserList.where(type: UserList.subclasses_for(Current.domain).map(&:name)).visible_to(current_user).find` — scoped to the current domain's STI subclasses, with visibility (owner or public) delegated to `visible_to` (see "Public list viewing (direct link)" below). A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; a private list belonging to someone else 404s the same way, hiding existence either way. It then renders the list's items in the persisted `view_mode`:
 
-- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`, `Books::CardComponent`) in a responsive grid. This is the default for new lists.
-- **`list_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games, books).
-- **`table_view`** — a single generic DaisyUI `<table>` row shared across listables.
+- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`, `Books::CardComponent`) in a responsive grid. This is the default for new lists. A finished date shows as a quiet line under the card.
+- **`table_view`** — a single generic DaisyUI `<table>` row shared across listables, with a "Finished"/"Listened"/"Played" column (`UserList#completion_label`) when the list supports completion dates.
 
-`UserLists::Show::ItemComponent` unwraps `item.listable` and dispatches: card-capable listables render the list row (default) or the domain card (grid); songs render the rich `Music::Songs::ListItemComponent` row inside a table; anything else renders the generic table row. Its `self.table_layout?(listable_class:, view_mode:)` class method tells the show view which wrapper (`<table>` vs stacked `<div>` vs grid) to render — lists are homogeneous, so it's computed once.
+The old List view is retired: `view_mode` integer 0 is unused and a migration moved every list on it to grid.
 
-**Songs are table-only.** Songs have no covers and (in practice) no descriptions, so they have no list/grid view; the view-mode switcher is hidden for them (`ItemComponent.card_capable?` is false) and they always render the song table. Sorting and CSV still apply.
+`UserLists::Show::ItemComponent` unwraps `item.listable` and dispatches: card-capable listables render the domain card (grid); songs render the rich `Music::Songs::ListItemComponent` row inside a table; anything else renders the generic table row. Its `self.table_layout?(listable_class:, view_mode:)` class method tells the show view which wrapper (`<table>` vs grid) to render — lists are homogeneous, so it's computed once.
 
-Switching `?view_mode=` persists the choice on the list (`update!`). Items eager-load each listable's display associations (e.g. albums → `:artists, :categories, :primary_image`) to stay N+1-free; `belongs_to :user_list` sets `inverse_of` so per-item `completed_on_enabled?` checks don't re-query. Pagy paginates at `limit: 100` (Pagy 43 auto-detects array vs relation and preserves `sort`/`view_mode` in page links). New lists default to `grid_view`; the 2026-08-02 migration moved every list still holding the old list-view default onto it.
+**Songs are table-only.** Songs have no covers, so they have no grid view; the view-mode switcher is hidden for them (`ItemComponent.card_capable?` is false) and they always render the song table. Sorting and CSV still apply.
 
-### Sorting (position vs ranking)
+Switching `?view_mode=` persists the choice on the list (`update!`). Items eager-load each listable's display associations (e.g. albums → `:artists, :categories, :primary_image`; descriptions are not preloaded because no view shows them) to stay N+1-free; `belongs_to :user_list` sets `inverse_of` so per-item `completed_on_enabled?` checks don't re-query. Pagy paginates at `limit: 100` (Pagy 43 auto-detects array vs relation and preserves `sort`/`view_mode` in page links). New lists default to `grid_view`; the 2026-08-02 migration moved every list still holding the old list-view default onto it.
 
-`?sort=position` (default) orders by `UserListItem#position`. `?sort=ranking` orders by the listable's primary ranking configuration, resolved once via `list.class.ranking_configuration_class&.default_primary`. Only the list's own `listable_id`s are looked up against `RankedItem` (`item_id`/`rank`); unranked items sort last. If the subclass has no `ranking_configuration_class` **or** no primary config exists (unseeded env), the Ranking option is hidden and a direct `?sort=ranking` degrades to `position` — never a 500.
+### Sorting (your order, recently added, ranking)
 
-### `completed_on` (read-only in Phase A)
+The toolbar offers **Your order**, **Recently added** and **Ranking**:
 
-Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`, books `[:read]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
+- `?sort=position` (default, and the fallback for any unknown value) orders by `UserListItem#position`.
+- `?sort=added` orders by `user_list_items.created_at DESC, id DESC`, newest first. It uses `reorder` because the `has_many :user_list_items` association already carries `order(:position)`.
+- `?sort=ranking` orders by the listable's primary ranking configuration, resolved once via `list.class.ranking_configuration_class&.default_primary`. Only the list's own `listable_id`s are looked up against `RankedItem` (`item_id`/`rank`); unranked items sort last. If the subclass has no `ranking_configuration_class` **or** no primary config exists (unseeded env), the Ranking option is hidden and a direct `?sort=ranking` degrades to `position` — never a 500.
+
+The view-mode links and the CSV link carry the current sort, and CSV follows it.
+
+### Shared list services
+
+List-level writes live in `app/lib/services/user_lists/` and are shared by every caller (web controllers, the Add-to-List modal, the JSON API): `CreateList`, `UpdateList`, `DeleteList` and the name/description limits in `ListRules`, alongside the item services (`AddItem`, `RemoveItem`, `MoveItem`, `UpdateCompletion`, ...). They return `Services::UserLists::MutationResult` and run writes under `OwnerMutation`, which serializes an owner's writes on the user row.
+
+### Favorites note
+
+A Favorites list that feeds a generated ranking (`UserList#counts_toward_rankings?`) shows `UserLists::FavoritesNoteComponent` above the add box for its owner: "Your Favorites count toward the site rankings. Put them in order and the %{noun} near the top count for more." The noun comes from `UserList#listable_noun`. The component renders nothing for other lists.
+
+### `completed_on`
+
+Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`, books `[:read]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display, and `completion_label` names it (Finished, Listened, Played, Beaten, Watched; "Completed" otherwise).
+
+`UserLists::CompletionDateComponent` renders the date. In the table it shows as `Mar 3, 2026` (or `Add date`), and for the owner it is a button (`aria-label` "Edit finished date for <title>") that opens the shared completion dialog. The dialog is a Turbo form; `UserListItemsController#update_completion` answers a Turbo Stream that replaces the date cell (rendered from the updated item the service returns, not the stale loaded one) and appends a `Toast::MessageComponent`. Saving never navigates, reloads or moves `window.scrollY`; every non-2xx answer to a Turbo request is also a toast stream. JSON and plain HTML callers keep the redirect.
 
 ### CSV export
 
@@ -459,7 +478,7 @@ Members read and edit their books lists over REST and MCP (`docs/features/public
 - **Cache lag.** An API write sets no `tg_state_mark` cookie, so the browser's cached list state can lag up to an hour. `/my/lists` is immediate.
 
 ## What's Not Yet Implemented
-- Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`). The public API already renames, deletes and reorders books lists (see "Library API"); the web UI for those is still to come.
+- Write/management UI — edit, drag-and-drop reorder, remove items, delete list — Phase B (`user-lists-02f`). Creating a list and editing finish dates are done. The public API already renames, deletes and reorders books lists (see "Library API"); the web UI for those is still to come.
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
   the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books

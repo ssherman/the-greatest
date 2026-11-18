@@ -75,9 +75,10 @@ class MyListsController < ApplicationController
   # GET /my/lists/:id(.csv)
   # Read view for the owner, or any viewer (including anonymous) when the list
   # is public; UserList.visible_to 404s everything else. Renders items in the
-  # persisted view_mode, ordered by position (default) or by the listable's
-  # primary ranking configuration (?sort=ranking, unranked last, degrades to
-  # position when no config). CSV is unpaginated and follows the current sort.
+  # persisted view_mode, ordered by position (default), by when each item was
+  # added (?sort=added, newest first) or by the listable's primary ranking
+  # configuration (?sort=ranking, unranked last, degrades to position when no
+  # config). An unknown sort is position. CSV is unpaginated and follows the sort.
   def show
     # Scoped to the current domain's subclasses so a list from another domain
     # (e.g. a games list opened on the music host) 404s rather than rendering in
@@ -91,7 +92,7 @@ class MyListsController < ApplicationController
 
     @ranking_config = @list.class.ranking_configuration_class&.default_primary
     @ranking_available = @ranking_config.present?
-    @sort = (params[:sort] == "ranking" && @ranking_available) ? "ranking" : "position"
+    @sort = resolve_sort
 
     persist_view_mode
     @view_mode = if @owner
@@ -100,8 +101,9 @@ class MyListsController < ApplicationController
       params[:view_mode].presence_in(UserList.view_modes.keys) || @list.view_mode
     end
 
-    scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
+    scope = @list.user_list_items.includes(listable: @list.class.listable_display_includes)
     scope = @list.class.catalog_items(scope) unless @owner
+    scope = (@sort == "added") ? scope.reorder(created_at: :desc, id: :desc) : scope.ordered
     collection = (@sort == "ranking") ? ranking_sorted(scope.to_a) : scope
 
     respond_to do |format|
@@ -156,6 +158,14 @@ class MyListsController < ApplicationController
     requested = params[:view_mode]
     return if requested.blank? || !UserList.view_modes.key?(requested)
     @list.update!(view_mode: requested) unless @list.view_mode == requested
+  end
+
+  def resolve_sort
+    case params[:sort]
+    when "added" then "added"
+    when "ranking" then @ranking_available ? "ranking" : "position"
+    else "position"
+    end
   end
 
   # Orders the list's items by the listable's primary ranking, unranked last.
