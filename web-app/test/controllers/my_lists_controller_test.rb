@@ -705,6 +705,24 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_select "#edit-list-rows"
   end
 
+  test "edit shows a default list's name as the heading with a Built-in badge" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(user_lists(:regular_user_books_read))
+    assert_select "h1", text: /Books I've Read/
+    assert_select ".badge", text: /Built-in/
+    assert_select "form#delete-list-form", count: 0
+  end
+
+  test "edit shows a custom list's name as the heading, no badge, and the delete form" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_select "h1", text: /My Desert Island Picks/
+    assert_select ".badge", text: /Built-in/, count: 0
+    assert_select "form#delete-list-form"
+  end
+
   test "edit signed out redirects" do
     get edit_my_list_path(@custom_albums)
     assert_response :redirect

@@ -22,6 +22,7 @@ Only icons actually referenced in the codebase live here. Currently:
 | `gamepad-2` | `Games::UserList.list_type_icons[:currently_playing]` |
 | `headphones` | `Music::Albums::UserList.list_type_icons[:listened]` |
 | `heart` | `*::UserList.list_type_icons[:favorites]` |
+| `lock` | `my_lists/edit` Built-in badge |
 | `plus` | `UserLists::CardWidgetComponent` button |
 | `star` | `Reviews::StarsComponent` and `Reviews::HistogramComponent` |
 | `trophy` | `Games::UserList.list_type_icons[:beaten]` |

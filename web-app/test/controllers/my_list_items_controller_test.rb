@@ -147,10 +147,10 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     delete my_list_item_path(@list, @second), as: :turbo_stream
-    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "2 items"
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "2 albums"
 
     post restore_my_list_item_path(@list), params: {listable_id: @second.listable_id, position: 2}, as: :turbo_stream
-    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "3 items"
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "3 albums"
   end
 
   test "destroy escapes the title in the toast" do

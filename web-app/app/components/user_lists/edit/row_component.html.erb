@@ -4,7 +4,7 @@
      data-item-id="<%= item.id %>"
      tabindex="-1"
      data-page="<%= page %>">
-  <span class="badge badge-neutral shrink-0" aria-label="Position <%= item.position %>"><%= item.position %></span>
+  <span class="badge badge-ghost shrink-0" aria-label="Position <%= item.position %>"><%= item.position %></span>
 
   <% if cover %>
     <%= image_tag rails_public_blob_url(cover.file), alt: "", loading: "lazy", decoding: "async", class: "h-14 w-10 shrink-0 rounded object-cover" %>
@@ -12,11 +12,13 @@
 
   <div class="min-w-0 grow">
     <p class="font-bold truncate"><%= title %></p>
-    <% if by_line.present? %>
-      <p class="text-sm text-base-content/70 truncate"><%= by_line %></p>
-    <% end %>
-    <% if completed_on_enabled? %>
-      <%= render UserLists::CompletionDateComponent.new(item: item, variant: :row) %>
+    <% if by_line.present? || completed_on_enabled? %>
+      <p class="text-sm text-base-content/70 truncate">
+        <%= by_line %>
+        <% if completed_on_enabled? %>
+          <%= " · " if by_line.present? %><%= render UserLists::CompletionDateComponent.new(item: item, variant: :row) %>
+        <% end %>
+      </p>
     <% end %>
   </div>
 

@@ -19,6 +19,13 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
     assert_text "Finished Jan 20, 2026"
   end
 
+  test "date sits on the by-line" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(UserLists::Edit::RowComponent.new(item: item))
+
+    assert_selector "p", text: /#{Regexp.escape(item.listable.book_authors.first.author.name)}\s*·\s*Finished Jan 20, 2026/m
+  end
+
   test "shows a faint placeholder when a completion list item has no date" do
     item = user_list_items(:regular_user_books_item_3)
     item.update!(completed_on: nil)
