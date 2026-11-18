@@ -18,12 +18,16 @@ module Services
       end
 
       test "every registered type answers the whole interface" do
-        assert_kind_of Array, Registry.types
+        assert_operator Registry.types.size, :>=, 1
         Registry.types.each do |type|
           assert_match ::Enrichment::KIND_FORMAT, type.kind
           assert_kind_of Integer, type.version
           assert type.label.present?
           assert_kind_of Hash, type.answer_schema
+          assert_equal type.answer_schema, type.reference["answer_schema"]
+          assert_operator type.target_class, :<, ApplicationRecord
+          assert_kind_of String, type.priority_sql
+          assert type.priority_sql.present?
         end
       end
 
