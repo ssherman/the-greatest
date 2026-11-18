@@ -341,12 +341,15 @@ Every attempt writes `last_attempt_outcome` and `last_attempt_at`.
 
 - "Usable" means a title and at least one ISBN-13. A page with no contributor is still `found`;
   the classifier holds it as `incomplete`.
-- **A good page is never replaced by a bad one.** The table above is for a listing that has
-  never been read. When a listing that is already `read` is fetched again (§6) and the attempt
-  is `blocked`, `unparseable`, `unavailable` or `fetcher_down`, its stored page, `outcome`,
-  facts and title are left as they were and it returns to `read`; only the `last_attempt_*`
-  columns change (and the gate is still blocked on `blocked`). This is the Goodreads rule that a
-  conclusive page is not overwritten.
+- **A good page is never replaced by a bad one.** The table above is for a listing whose page
+  has never been found. A listing is known to have been read by its `read_at`, which only a
+  `found` reading sets; its state cannot say so, because a listing being fetched again (§6) is
+  `pending` by then. When such a listing's attempt is `blocked`, `unparseable` or `unavailable`,
+  its stored page, `outcome`, facts and title are left as they were and it returns to `read`;
+  only the `last_attempt_*` columns change (and the gate is still blocked on `blocked`). This is
+  the Goodreads rule that a conclusive page is not overwritten. A `fetcher_down` attempt never
+  reached the site, so it changes nothing but `last_attempt_*`: the listing stays `pending` and
+  the sweep tries it again.
 - A re-read that comes back `not_found` sets the listing to `failed` with that outcome and
   leaves the title untouched. Acting on a withdrawn title is a non-goal here.
 - Blocked versus unparseable is the distinction that matters. Each strategy states how to
