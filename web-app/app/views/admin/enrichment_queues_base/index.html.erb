@@ -6,6 +6,13 @@
   <p class="text-sm text-base-content/70">
     Filling adds records that need this enrichment and have never been queued. A finished item is queued again only when the type's rules change or you re-queue it.
   </p>
+  <p class="text-sm" data-testid="research-via">
+    <% if @research_via == "queue" %>
+      Web searches are sent to these queues, not run (AI_RESEARCH_VIA=queue).
+    <% else %>
+      Web searches still run through the paid API (AI_RESEARCH_VIA=api). Set AI_RESEARCH_VIA=queue to send them here instead.
+    <% end %>
+  </p>
 
   <div class="overflow-x-auto">
     <table class="table bg-base-100">

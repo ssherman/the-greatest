@@ -78,6 +78,21 @@ Spec: `docs/superpowers/specs/2026-09-24-books-ai-enrichment-framework-design.md
    the description's `source_url`. `config.x.ai.research_daily_cap` bounds research runs per
    day, direct or fallback alike: a book past the knowledge cutoff with the cap already
    exhausted gets a `skipped` row and no call. Only the admin's force option bypasses the cap.
+   A skipped row spent no web search, so it does not count toward the cap (`Enrichment.against_research_cap`
+   leaves out skipped rows), and neither does a row an enrichment-queue worker wrote: its `facts["context"]` is
+   `queue` (the paid worker runs forced research on purpose, `docs/features/enrichment-queue.md`, "The paid worker").
+
+   **The shared record classes and the switch.** The answer half of both enrichers is a class the agent queue
+   reuses: `Services::Books::RecordBookFacts` (review the description, apply, write the `books.book_facts` row) for
+   `EnrichBook`, and `Services::Books::Authors::RecordAuthorFacts` for `EnrichAuthor`, so a paid row and an agent
+   row have one shape and one set of rules. Both enrichers take `context:` (the paid worker passes `"queue"`, recorded
+   as a ledger entry on every row they write) and `EnrichAuthor` takes `force_research:`. With
+   `config.x.ai.research_via` set to `queue` (ENV `AI_RESEARCH_VIA`, default `api`), neither enricher spends the
+   web search: each writes a skipped research row with reason `queued` and inserts a pending row in the
+   `books.book_facts` or `books.author_facts` queue when the type still needs the record, and a low-confidence
+   knowledge answer is held (recorded, not applied) while the record's queue row is still pending or claimed.
+   `Books::EnrichBookJob` does not count a skipped research row as "researched" when it tells the categorize run
+   whether to search. See `docs/features/enrichment-queue.md`, "The web-search switch".
 
 ## The ledger
 
@@ -178,7 +193,12 @@ from the origin backfill, not from their adopted run.
 Two research caps apply. Imports and admin runs spend `config.x.ai.research_daily_cap`, counted as
 `Enrichment.against_research_cap` as `EnrichBook` does (backfill origin research is excluded). The backfill spends its own
 `config.x.ai.categorize_backfill_research_daily_cap` (default 0), counted from research-mode `books.origin`
-rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap.
+rows created today whose `facts->>'context'` is `backfill`; backfill rows do not spend the shared cap. A skipped
+research row does not count toward `research_daily_cap`, and in `queue` mode (`config.x.ai.research_via`) the
+backfill never researches (`ResearchBudget.permitted?` is false): the judges defer the research to the
+enrichment queue (`deferred_reason: "queued"` on the knowledge row), and the paced backfill counts such a deferred
+row as done whatever its cap. Rows written by the queue's paid worker carry context `queue` and count toward neither
+cap.
 
 The answer half of a judgment (an answer in, the apply and the ledger row out) lives in `Services::Books::Origin::RecordAnswer`, shared by `Judge` and the enrichment queue's `books.origin` type, so a paid row and an agent row have the same shape and the same rules (fill blanks only, the confidence gates above).
 
