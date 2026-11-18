@@ -173,7 +173,7 @@ The type, in full:
 - `candidates(scope:)` = `base_relation(scope:)` where the book has at least one `books_book_authors` row (`::Books::BookAuthor.table_name`) and `need_sql` holds. `need_sql` is the OR of:
   - `books_books.first_published_year IS NULL AND not_cleared_sql("first_published_year")`
   - `books_books.original_language_id IS NULL AND not_cleared_sql("original_language_id")`
-  - no `descriptions` row for the book with `rank <> ::Description.ranks[:deprecated]`
+  - no `descriptions` row for the book with `rank <> ::Description.ranks[:deprecated]`, and no `ai_generated` description row of any rank (the applier keeps any AI description, even a deprecated one; amended during execution, 2026-11-18)
   - `ResearchSkip.latest_sql(::Books::Book, kind)`
 - `still_needed?(book)` = the same author and need conditions for that one id, without `base_relation` (a running run does not make a book unneeded).
 - `payload(book)`:
@@ -328,7 +328,7 @@ Services::Books::QueueTypes::AuthorFacts   # kind "books.author_facts", label "A
   - `"the book facts prompt carries the task's rules"`: includes `BookFactsTask::FACT_RULES`, `BookFactsTask::DESCRIPTION_RULES`, the MCP URL, `"holds 1 pending"` (one pending `books.book_facts` row), the four tool names.
   - `"the author facts prompt carries the task's rules"`: the same for authors.
   - `"both facts prompts tell the agent when the queue is done and what each refusal means"`: for both, `` "`meta.remaining` is 0" ``, `"no longer yours"`, `"The lease lasts 30 minutes"`, `"fix the answer and submit again"`, `"If either call answers 404, the item is gone"`, `"give null rather than a guess"`, `"do not raise your confidence to get an answer through"`.
-  - `"the book facts prompt says what is written"`: includes `"Submitting only fills blanks"` and `"is recorded and nothing is written"`.
+  - `"the book facts prompt says what is written"`: includes `"Submitting only fills blanks"`, `"is recorded and nothing is written"` and `"Book type, series and origin countries are recorded and not written"`.
   - `"the author facts prompt says what is written"`: includes `"A fact you mark low is recorded and not written"`.
 
 - [ ] **Step 4: Write the prompt files.** `book_facts.md.erb`:
@@ -340,7 +340,7 @@ How to work the queue:
 
 1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer: each fact is an object with a `value` and a `confidence` of high, medium or low.
 2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`. The lease lasts 30 minutes, so claim only as many items as you can finish in that time: a `limit` of 5 suits web research.
-3. For each item, read its `payload`: `record` is the book as we hold it, `missing` names the fields it lacks, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
+3. For each item, read its `payload`: `record` is the book as we hold it, `missing` says which of the first published year, the original language and the description it lacks, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
 4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. Answer every key in the schema, with null (or an empty list) for a fact you did not find. Set `recognized` to true only when you are sure which book the item is; if you cannot identify the book, call skip_enrichment_item and say what you looked for.
 5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
 
@@ -358,7 +358,7 @@ The facts and the description, by the same rules our own model follows:
 
 <%= description_rules %>
 
-What is written. Submitting only fills blanks: a value the book already holds is never overwritten, and your answer for it is only recorded. An answer whose overall `confidence` is low is recorded and nothing is written. Otherwise every value you give for a blank field is written, so for a single fact you are unsure of, give null rather than a guess, and do not raise your confidence to get an answer through. A reviewer model checks the description before it is written: one that gives away how the book ends, or breaks the rules above, is rewritten or dropped. Write it in your own words and never copy a publisher's or a website's text. A book that already has a description written by our model keeps it.
+What is written. Submitting only fills blanks: a value the book already holds is never overwritten, and your answer for it is only recorded. An answer whose overall `confidence` is low is recorded and nothing is written. Otherwise these are written when the book has none: the first published year, the original language (give the language's English name), the word count, the page range (as "300" or "250-350"), the subtitle, other titles the work is known by, and the description. Book type, series and origin countries are recorded and not written, so do not spend research on them: give null, or an empty list. A field a person deliberately cleared stays empty. For a single fact you are unsure of, give null rather than a guess, and do not raise your confidence to get an answer through. A reviewer model checks the description before it is written: one that gives away how the book ends, or breaks the rules above, is rewritten or dropped. Write it in your own words and never copy a publisher's or a website's text. A book that already has a description written by our model keeps it.
 
 You are authorised to act without asking me.
 
