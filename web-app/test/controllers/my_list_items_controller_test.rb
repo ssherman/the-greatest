@@ -147,10 +147,10 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     delete my_list_item_path(@list, @second), as: :turbo_stream
-    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "2 items"
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "2 albums"
 
     post restore_my_list_item_path(@list), params: {listable_id: @second.listable_id, position: 2}, as: :turbo_stream
-    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "3 items"
+    assert_select "turbo-stream[target=edit-list-rows] template [data-testid=item-count]", text: "3 albums"
   end
 
   test "destroy escapes the title in the toast" do
@@ -244,7 +244,20 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_rows_morphed
-    assert_select "[data-item-id]", count: 3
+    assert_select "[data-item-id][tabindex='-1']", count: 3
+  end
+
+  test "a move posted with page 2 re-renders page 2" do
+    sign_in_as(@user, stub_auth: true)
+
+    stub_const_limit(2) do
+      move(@first, 2, page: 2)
+    end
+
+    assert_response :success
+    assert_rows_morphed
+    assert_select "[data-item-id][data-page='2']", count: 1
+    assert_select "[data-item-id][data-page='1']", count: 0
   end
 
   test "rows in the stream are identical to the Edit page's rows" do

@@ -434,7 +434,7 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_nil item.reload.completed_on
-    assert_select "turbo-stream[action=replace][target=#{ActionView::RecordIdentifier.dom_id(item, :completion)}] template p.text-base-content\\/40", text: "No finished date"
+    assert_select "turbo-stream[action=replace][target=#{ActionView::RecordIdentifier.dom_id(item, :completion)}] template span.text-base-content\\/40", text: "No finished date"
   end
 
   test "setting a completion date invalidates goals for the new date" do

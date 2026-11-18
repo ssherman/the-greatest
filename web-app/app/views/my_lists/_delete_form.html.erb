@@ -1,0 +1,5 @@
+<%# The Delete button lives in the details card and submits this form via its form attribute.
+    The update stream replaces this form so the confirm copy carries the current name. %>
+<%= form_with url: my_list_path(list), method: :delete, id: "delete-list-form", class: "hidden",
+      data: {turbo_confirm: "Delete “#{list.name}”? This removes the list and all its items. It can't be undone."} do %>
+<% end %>

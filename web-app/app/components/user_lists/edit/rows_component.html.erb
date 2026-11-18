@@ -1,13 +1,14 @@
 <%# Chrome scroll anchoring would follow a moved row up or down the page; the page must stay put. %>
 <div id="edit-list-rows" class="flex flex-col gap-2 [overflow-anchor:none]">
-  <h2 class="mb-2 text-xl font-semibold" data-testid="item-count"><%= pluralize(pagy.count, "item") %></h2>
+  <div class="mb-2 flex items-center justify-between gap-3">
+    <h2 class="text-lg font-semibold" tabindex="-1" data-testid="item-count"><%= count_text %></h2>
+    <% if pagy.pages > 1 %>
+      <div><%== pagy.series_nav %></div>
+    <% end %>
+  </div>
   <% if pagy.count.zero? %>
     <p class="py-8 text-center text-base-content/70" data-testid="empty-list">No items in this list yet.</p>
   <% else %>
-    <% if pagy.pages > 1 %>
-      <div class="flex justify-center mb-2"><%== pagy.series_nav %></div>
-    <% end %>
-
     <%# Only the rows live in this container, so Sortable's indices match row order. %>
     <div class="flex flex-col gap-2" data-user-list-edit-target="rows">
       <% items.each do |item| %>

@@ -1,0 +1,24 @@
+<dialog id="position-dialog"
+        class="modal"
+        aria-labelledby="position-dialog-title"
+        data-user-list-position-target="dialog"
+        data-action="close->user-list-position#restoreFocus">
+  <div class="modal-box">
+    <h2 id="position-dialog-title" class="text-lg font-bold [overflow-wrap:anywhere]" data-user-list-position-target="title">Move item</h2>
+    <p class="text-sm text-base-content/70" data-user-list-position-target="current"></p>
+
+    <%= form_with url: "#", scope: :user_list_item, method: :patch,
+          data: {user_list_position_target: "form", action: "turbo:submit-end->user-list-position#submitted"} do |form| %>
+      <%= hidden_field_tag :page, page, id: nil, data: {user_list_position_target: "page"} %>
+      <label class="mt-4 block" for="position-dialog-input" data-user-list-position-target="label">New position (1–<%= item_count %>)</label>
+      <%= form.number_field :position, id: "position-dialog-input", min: 1, max: item_count, required: true, inputmode: "numeric",
+            class: "input mt-2 w-full", data: {user_list_position_target: "input"} %>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" data-action="user-list-position#cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Move</button>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

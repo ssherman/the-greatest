@@ -1,5 +1,14 @@
 <% content_for :page_title, "My Lists" %>
 
+<%# No public layout renders flash. This page is uncached and owner-only, so a
+    notice (e.g. "Deleted …") survives the redirect; Turbo runs this inline
+    stream on load and the toast lands in #toast-region. %>
+<% if flash[:notice].present? %>
+  <%= turbo_stream.append "toast-region" do %>
+    <%= render Toast::MessageComponent.new(message: flash[:notice]) %>
+  <% end %>
+<% end %>
+
 <div class="container mx-auto px-4 py-8">
   <div class="flex items-center justify-between gap-4 mb-6">
     <h1 class="text-3xl font-bold">My Lists</h1>

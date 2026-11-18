@@ -12,4 +12,10 @@ class UserLists::Edit::RowsComponent < ViewComponent::Base
   private
 
   attr_reader :user_list, :items, :pagy
+
+  # "2 books", "1 book": the list's own noun, not a generic "items".
+  def count_text
+    noun = (pagy.count == 1) ? user_list.class.listable_class.model_name.human.downcase : user_list.listable_noun
+    "#{pagy.count} #{noun}"
+  end
 end

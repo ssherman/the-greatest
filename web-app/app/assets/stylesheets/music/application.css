@@ -22,3 +22,11 @@
     border: 1px solid var(--color-base-300);
   }
 }
+
+/* Tailwind 4 resets buttons to the default cursor; daisyUI buttons and the
+   Edit page's menu items should show they are clickable. */
+@layer base {
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}

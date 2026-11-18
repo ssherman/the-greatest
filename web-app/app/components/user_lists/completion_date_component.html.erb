@@ -1,8 +1,8 @@
 <% if variant == :row %>
   <% if date.present? %>
-    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= formatted_date %></p>
+    <span id="<%= dom_id_value %>" class="text-base-content/60"><%= label %> <%= formatted_date %></span>
   <% else %>
-    <p id="<%= dom_id_value %>" class="text-sm text-base-content/40">No <%= label.downcase %> date</p>
+    <span id="<%= dom_id_value %>" class="text-base-content/40">No <%= label.downcase %> date</span>
   <% end %>
 <% elsif variant == :text %>
   <% if date.present? %>

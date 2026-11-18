@@ -55,7 +55,7 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     item.completed_on = nil
     render_inline(Component.new(item: item, variant: :row))
 
-    assert_selector "p[id='#{ActionView::RecordIdentifier.dom_id(item, :completion)}']", text: "No finished date"
+    assert_selector "span[id='#{ActionView::RecordIdentifier.dom_id(item, :completion)}']", text: "No finished date"
   end
 
   test "row variant shows the label and date when set" do

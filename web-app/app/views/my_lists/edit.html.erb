@@ -1,13 +1,19 @@
 <% content_for :page_title, "Edit #{@list.name} - My Lists" %>
 
-<div class="container mx-auto px-4 py-8" data-controller="user-list-completion user-list-edit"
+<div class="container mx-auto max-w-3xl px-4 py-8" data-controller="user-list-completion user-list-edit user-list-position"
+     data-user-list-position-url-value="<%= move_my_list_item_path(@list, "__ID__") %>"
      data-user-list-edit-move-url-value="<%= move_my_list_item_path(@list, "__ID__") %>"
      data-user-list-edit-page-value="<%= @pagy.page %>">
   <div class="mb-6">
     <%= link_to my_list_path(@list), class: "text-sm text-base-content/60 hover:text-primary", data: {testid: "back-to-list"} do %>
       ← Back to list
     <% end %>
-    <h1 class="text-3xl font-bold">Edit list</h1>
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="text-3xl font-bold [overflow-wrap:anywhere]"><span id="list-name-heading"><%= @list.name %></span></h1>
+      <% if @list.default? %>
+        <span class="badge badge-ghost gap-1"><%= icon "lock", library: "lucide", class: "size-3", aria_hidden: "true" %>Built-in</span>
+      <% end %>
+    </div>
   </div>
 
   <%= render UserLists::FavoritesNoteComponent.new(user_list: @list) %>
@@ -16,11 +22,10 @@
   <%= render UserLists::Edit::RowsComponent.new(user_list: @list, items: @items, pagy: @pagy) %>
 
   <% unless @list.default? %>
-    <div class="mt-10 border-t border-base-300 pt-6">
-      <%= button_to "Delete list", my_list_path(@list), method: :delete, class: "btn btn-error btn-outline",
-            form: {data: {turbo_confirm: "Delete “#{@list.name}”? This removes the list and all its items. It can't be undone."}} %>
-    </div>
+    <%= render "my_lists/delete_form", list: @list %>
   <% end %>
+
+  <%= render UserLists::Edit::PositionDialogComponent.new(user_list: @list, page: @pagy.page, item_count: @pagy.count) %>
 
   <% if @list.completed_on_enabled? %>
     <%= render UserLists::Show::CompletionDialogComponent.new %>
