@@ -32,7 +32,7 @@ class Books::EnrichBookJob
     # search, and the judge reads its researched book_facts row from the dossier.
     # When EnrichBook researched, the judge must not search the web again.
     options = {"context" => "admin"}
-    researched = Array(result.data[:enrichments]).any? { |row| row.mode.to_s == "research" }
+    researched = Array(result.data[:enrichments]).any? { |row| row.mode.to_s == "research" && !row.skipped? }
     options["book_facts_researched"] = true if researched
     ::Workflows::Books::BookCategorize.start(book, initiated_by: "enrich_book_job", options: options)
   end

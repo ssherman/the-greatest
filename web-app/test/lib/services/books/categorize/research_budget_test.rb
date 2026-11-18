@@ -41,6 +41,14 @@ module Services
           @book.enrichments.create!(kind: "books.categories", mode: :knowledge, outcome: :applied, facts: {"context" => "backfill"})
           assert ResearchBudget.permitted?(context: "backfill")
         end
+
+        test "queue mode permits nothing" do
+          Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(1000)
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(1000)
+          assert_not ResearchBudget.permitted?(context: "import")
+          assert_not ResearchBudget.permitted?(context: "backfill")
+        end
       end
     end
   end

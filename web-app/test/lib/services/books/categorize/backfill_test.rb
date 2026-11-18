@@ -296,6 +296,16 @@ module Services
           refute result.success?
           assert_equal ["unknown scope bogus; use one of origin_only, categories_only, all"], result.errors
         end
+
+        test "queue mode: a deferred row counts as done even when the backfill cap is above 0" do
+          deferred = book("Deferred")
+          origin_row(deferred, deferred_research: true)
+          Rails.application.config.x.ai.stubs(:categorize_backfill_research_daily_cap).returns(5)
+          assert_includes Backfill.candidates.pluck(:id), deferred.id
+
+          Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+          refute_includes Backfill.candidates.pluck(:id), deferred.id
+        end
       end
     end
   end

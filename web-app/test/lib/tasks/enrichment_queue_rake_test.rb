@@ -46,4 +46,80 @@ class EnrichmentQueueRakeTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { capture_io { @task.invoke(*args) } }
     end
   end
+
+  test "work queues one research job per claimable row up to the limit" do
+    EnrichmentQueueTestType.paid = true
+    books = [books_books(:war_and_peace), books_books(:crime_and_punishment), books_books(:got)]
+    books.each { |book| ::EnrichmentRequest.create!(enrichable: book, kind: "books.test_type", reason: "missing") }
+    work = Rake::Task["enrichment_queue:work"]
+    Sidekiq::Testing.fake! do
+      ::EnrichmentQueue::ResearchJob.clear
+      work.reenable
+      assert_output(/Queued 2 paid research job\(s\) for books.test_type \(3 claimable\)\. Each can make one research call \(a call can run more than one web search\)\./) { work.invoke("books.test_type", "2") }
+      assert_equal [["books.test_type"]] * 2, ::EnrichmentQueue::ResearchJob.jobs.map { |job| job["args"] }
+      ::EnrichmentQueue::ResearchJob.clear
+      work.reenable
+      assert_output(/Queued 3 paid research job\(s\)/) { work.invoke("books.test_type", "50") }
+      assert_equal 3, ::EnrichmentQueue::ResearchJob.jobs.size
+      ::EnrichmentQueue::ResearchJob.clear
+    end
+  end
+
+  test "work refuses to queue anything while the type's paid path is blocked" do
+    EnrichmentQueueTestType.paid = true
+    ::EnrichmentRequest.create!(enrichable: books_books(:war_and_peace), kind: "books.test_type", reason: "missing")
+    EnrichmentQueueTestType.stubs(:paid_research_blocker).returns("the judge is switched off")
+    ::EnrichmentQueue::ResearchJob.expects(:perform_async).never
+    work = Rake::Task["enrichment_queue:work"]
+    work.reenable
+
+    error = assert_raises(SystemExit) { assert_output(nil, /Not queued: the judge is switched off\./) { work.invoke("books.test_type", "5") } }
+    assert_equal 1, error.status
+  end
+
+  test "work for books.categories refuses while the judge is off and queues when it is on" do
+    Services::EnrichmentQueue::Registry.stubs(:types).returns([Services::Books::QueueTypes::Categories])
+    ::EnrichmentRequest.create!(enrichable: books_books(:war_and_peace), kind: "books.categories", reason: "missing")
+    work = Rake::Task["enrichment_queue:work"]
+    Sidekiq::Testing.fake! do
+      ::EnrichmentQueue::ResearchJob.clear
+      Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(false)
+      work.reenable
+      assert_raises(SystemExit) { capture_io { work.invoke("books.categories", "5") } }
+      assert_equal 0, ::EnrichmentQueue::ResearchJob.jobs.size
+
+      Rails.application.config.x.ai.stubs(:categories_judge_enabled).returns(true)
+      work.reenable
+      assert_output(/Queued 1 paid research job/) { work.invoke("books.categories", "5") }
+      assert_equal 1, ::EnrichmentQueue::ResearchJob.jobs.size
+      ::EnrichmentQueue::ResearchJob.clear
+    end
+  end
+
+  test "work queues once the type's paid path is no longer blocked" do
+    EnrichmentQueueTestType.paid = true
+    ::EnrichmentRequest.create!(enrichable: books_books(:war_and_peace), kind: "books.test_type", reason: "missing")
+    EnrichmentQueueTestType.stubs(:paid_research_blocker).returns(nil)
+    work = Rake::Task["enrichment_queue:work"]
+    work.reenable
+    Sidekiq::Testing.fake! do
+      ::EnrichmentQueue::ResearchJob.clear
+      assert_output(/Queued 1 paid research job/) { work.invoke("books.test_type", "5") }
+      assert_equal 1, ::EnrichmentQueue::ResearchJob.jobs.size
+      ::EnrichmentQueue::ResearchJob.clear
+    end
+  end
+
+  test "work aborts on an unknown kind, a missing or bad limit and a type without a paid path" do
+    ::EnrichmentQueue::ResearchJob.expects(:perform_async).never
+    work = Rake::Task["enrichment_queue:work"]
+    EnrichmentQueueTestType.paid = true
+    [["books.nope", "5"], ["books.test_type"], ["books.test_type", "0"], ["books.test_type", "many"]].each do |args|
+      work.reenable
+      assert_raises(SystemExit, args.inspect) { capture_io { work.invoke(*args) } }
+    end
+    EnrichmentQueueTestType.paid = false
+    work.reenable
+    assert_raises(SystemExit) { capture_io { work.invoke("books.test_type", "5") } }
+  end
 end

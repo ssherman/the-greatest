@@ -21,6 +21,7 @@ class Admin::EnrichmentQueuesBaseController < Admin::BaseController
 
   def index
     @types = types
+    @research_via = Rails.application.config.x.ai.research_via
     kinds = @types.map(&:kind)
     grouped = ::EnrichmentRequest.where(kind: kinds).group(:kind, :status).count
     @counts = kinds.index_with do |kind|

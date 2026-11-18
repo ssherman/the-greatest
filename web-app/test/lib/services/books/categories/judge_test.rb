@@ -269,6 +269,49 @@ module Services
           Apply.stubs(:call).returns(Apply::Result.new(success?: true, errors: [], data: applied_data(added: [])))
           assert_nil judge.data[:enrichments].sole.facts["choice_chat_id"]
         end
+
+        def queue_mode!
+          Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+        end
+
+        def categories_requests
+          ::EnrichmentRequest.where(enrichable: @book, kind: "books.categories")
+        end
+
+        test "queue mode: an unrecognized book is deferred to the queue" do
+          queue_mode!
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(100)
+          @book.category_items.where(category: ::Category.where(category_type: "genre")).destroy_all
+          stub_task({recognized: false, confidence: "low"})
+          rows = judge.data[:enrichments]
+          assert_equal ["knowledge"], rows.map(&:mode)
+          assert_equal [true, "queued"], rows.sole.facts.values_at("deferred_research", "deferred_reason")
+          assert_equal ["pending", "research_wanted"], [categories_requests.sole.status, categories_requests.sole.reason]
+        end
+
+        test "queue mode: an unrecognized book that already has a genre is deferred but not queued" do
+          queue_mode!
+          ::CategoryItem.find_or_create_by!(item: @book, category: @novels) { it.source = :ai }
+          stub_task({recognized: false, confidence: "low"})
+          row = judge.data[:enrichments].sole
+          assert_equal [true, "queued"], row.facts.values_at("deferred_research", "deferred_reason")
+          assert_equal 0, categories_requests.count
+        end
+
+        test "queue mode: force_research still researches" do
+          queue_mode!
+          stub_task({})
+          stub_pipeline
+          assert_equal ["research"], judge(force_research: true).data[:enrichments].map(&:mode)
+          assert_equal 0, categories_requests.count
+        end
+
+        test "rejudge is false for queue" do
+          stub_task({})
+          Mapper.stubs(:call).returns(mapped)
+          Apply.expects(:call).with(has_entry(rejudge: false)).returns(Apply::Result.new(success?: true, errors: [], data: applied_data))
+          Judge.call(book: @book, context: "queue")
+        end
       end
     end
   end

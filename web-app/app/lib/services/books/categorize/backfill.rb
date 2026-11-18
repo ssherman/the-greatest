@@ -12,7 +12,8 @@ module Services
       # A book is done (per kind: books.origin, books.categories) when its latest row ran the current prompt
       # version, did not fail or skip, and did not defer its research (a deferred
       # book counts as done while categorize_backfill_research_daily_cap is 0, since
-      # nothing could change its outcome). Books
+      # nothing could change its outcome, and in queue mode (research_via) whatever
+      # the cap, since the backfill never researches there and the queue owns it). Books
       # with a running books.book_enrichment run are left out: that import's
       # categorize step judges them. Order: ranked books by rank, then books
       # with no real country or, for the categories scopes, no genre beyond
@@ -106,8 +107,10 @@ module Services
             .where("enrichments.mode <> ? OR enrichments.outcome = ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied])
             .select("1")
           # A deferred book waits for research, which the cap at 0 never grants.
-          # Read at call time so raising the cap makes them candidates again.
-          if Rails.application.config.x.ai.categorize_backfill_research_daily_cap.to_i > 0
+          # Read at call time so raising the cap makes them candidates again. In queue
+          # mode the research is the queue's, so a deferred row is done whatever the cap.
+          if Rails.application.config.x.ai.categorize_backfill_research_daily_cap.to_i > 0 &&
+              !Services::EnrichmentQueue::ResearchRoute.queue?
             rows = rows.where("enrichments.facts->>'deferred_research' IS DISTINCT FROM 'true'")
           end
           rows

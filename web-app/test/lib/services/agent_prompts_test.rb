@@ -165,6 +165,59 @@ module Services
       assert_includes prompt, "recorded and not created"
     end
 
+    test "the book facts prompt carries the task's rules" do
+      book = ::Books::Book.create!(title: "Pending Facts")
+      ::EnrichmentRequest.create!(enrichable: book, kind: "books.book_facts", reason: "missing")
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::BookFacts)
+
+      assert_includes prompt, Services::Ai::Tasks::Books::BookFactsTask::FACT_RULES
+      assert_includes prompt, Services::Ai::Tasks::Books::BookFactsTask::DESCRIPTION_RULES
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "holds 1 pending"
+      %w[get_enrichment_queue claim_enrichment_items submit_enrichment_item skip_enrichment_item].each { assert_includes prompt, it }
+    end
+
+    test "the author facts prompt carries the task's rules" do
+      author = ::Books::Author.create!(name: "Pending Facts Author")
+      ::EnrichmentRequest.create!(enrichable: author, kind: "books.author_facts", reason: "missing")
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::AuthorFacts)
+
+      assert_includes prompt, Services::Ai::Tasks::Books::AuthorFactsTask::FACT_RULES
+      assert_includes prompt, Services::Ai::Tasks::Books::AuthorFactsTask::DESCRIPTION_RULES
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "holds 1 pending"
+      %w[get_enrichment_queue claim_enrichment_items submit_enrichment_item skip_enrichment_item].each { assert_includes prompt, it }
+    end
+
+    test "both facts prompts tell the agent when the queue is done and what each refusal means" do
+      [Services::Books::QueueTypes::BookFacts, Services::Books::QueueTypes::AuthorFacts].each do |type|
+        prompt = AgentPrompts.for_enrichment(type)
+
+        assert_includes prompt, "`meta.remaining` is 0", type.kind
+        assert_includes prompt, "no longer yours", type.kind
+        assert_includes prompt, "The lease lasts 30 minutes", type.kind
+        assert_includes prompt, "fix the answer and submit again", type.kind
+        assert_includes prompt, "If either call answers 404, the item is gone", type.kind
+        assert_includes prompt, "give null rather than a guess", type.kind
+        assert_includes prompt, "do not raise your confidence to get an answer through", type.kind
+      end
+    end
+
+    test "the book facts prompt says what is written" do
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::BookFacts)
+
+      assert_includes prompt, "Submitting only fills blanks"
+      assert_includes prompt, "is recorded and nothing is written"
+      assert_includes prompt, "Book type, series and origin countries are recorded and not written"
+      assert_includes prompt, "are added to the ones the book already holds"
+    end
+
+    test "the author facts prompt says what is written" do
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::AuthorFacts)
+
+      assert_includes prompt, "A fact you mark low is recorded and not written"
+    end
+
     test "the enrichment prompt's pending count is the pending rows of that kind only" do
       books = Array.new(3) { |i| ::Books::Book.create!(title: "Counted #{i}") }
       ::EnrichmentRequest.create!(enrichable: books[0], kind: "books.origin", reason: "missing")

@@ -14,6 +14,18 @@ test.describe("Books admin — enrichment queues", () => {
     expect(text).toContain("claim_enrichment_items");
   });
 
+  test("lists the book facts and author facts queues with their agent prompts", async ({ page }) => {
+    await page.goto("/admin/enrichment_queues");
+    for (const slug of ["book_facts", "author_facts"]) {
+      const row = page.getByTestId(`queue-row-${slug}`);
+      await expect(row).toBeVisible();
+      await expect(row.getByTestId(`copy-agent-prompt-${slug}`)).toBeVisible();
+      // The prompt is in a hidden textarea; read its value without pressing Copy or Fill.
+      const prompt = await row.locator('textarea[data-clipboard-copy-target="source"]').inputValue();
+      expect(prompt).toContain("claim_enrichment_items");
+    }
+  });
+
   test("opens a queue's items", async ({ page }) => {
     await page.goto("/admin/enrichment_queues");
     await page.getByRole("link", { name: "Book categories" }).click();

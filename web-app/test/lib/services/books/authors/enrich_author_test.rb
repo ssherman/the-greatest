@@ -361,6 +361,120 @@ module Services
           assert_equal [DESCRIPTION, "normal"], [row.content, row.rank]
           assert_equal "filled", rows.sole.facts["description"]["reason"]
         end
+
+        def queue_mode! = Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+
+        def author_requests = ::EnrichmentRequest.where(enrichable: @author, kind: "books.author_facts")
+
+        test "queue mode: an unrecognized knowledge run queues the research instead of running it" do
+          queue_mode!
+          expect_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+          result = EnrichAuthor.call(author: @author)
+
+          assert result.success?
+          assert_equal [%w[knowledge unrecognized], %w[research skipped]], rows.pluck(:mode, :outcome)
+          assert_equal "queued", rows.last.reason
+          request = author_requests.sole
+          assert_equal %w[pending research_wanted], [request.status, request.reason]
+        end
+
+        test "queue mode: a low-confidence guess is held for the agent" do
+          queue_mode!
+          expect_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+          EnrichAuthor.call(author: @author)
+
+          deferred, skipped = rows.to_a
+          assert_equal ["nothing_to_apply", "deferred"], [deferred.outcome, deferred.facts["birth_year"]["reason"]]
+          assert_nil @author.reload.birth_year
+          assert_equal "queued", skipped.reason
+          assert_equal 1, author_requests.count
+        end
+
+        test "queue mode: a low-confidence guess is applied when the author's queue row is already resolved" do
+          queue_mode!
+          ::EnrichmentRequest.create!(enrichable: @author, kind: "books.author_facts", reason: "missing", version: 1, priority: 1,
+            sources: [], status: :done, outcome: "applied", resolved_at: Time.current)
+          expect_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal [%w[knowledge applied], %w[research skipped]], rows.pluck(:mode, :outcome)
+          assert_equal 1901, @author.reload.birth_year
+          assert_equal ["done"], author_requests.map(&:status)
+        end
+
+        test "queue mode: a matched author is never queued" do
+          queue_mode!
+          stub_records(matched: true)
+          expect_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal [%w[knowledge unrecognized]], rows.pluck(:mode, :outcome)
+          assert_equal 0, author_requests.count
+        end
+
+        test "queue mode: a high-confidence knowledge run never looks at the queue" do
+          queue_mode!
+          ::Services::EnrichmentQueue::ResearchRoute.expects(:open_for?).never
+          expect_runs([:knowledge, success_result(facts)])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal [%w[knowledge applied]], rows.pluck(:mode, :outcome)
+        end
+
+        test "api mode: an exhausted budget queues nothing" do
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+          expect_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+          EnrichAuthor.call(author: @author)
+
+          assert_equal "budget_exhausted", rows.last.reason
+          assert_equal 0, ::EnrichmentRequest.count
+        end
+
+        test "force_research goes straight to research" do
+          @author.update!(birth_year: 1901, gender: :female)
+          @author.author_countries.create!(country: books_countries(:french))
+          @author.assign_description(source: :manual, content: "Written by hand.")
+          @author.save!
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+          queue_mode!
+          expect_runs([:research, success_result(facts)])
+
+          result = EnrichAuthor.call(author: @author, force_research: true)
+
+          assert_equal %w[research], result.data[:enrichments].map(&:mode)
+          assert_equal 0, author_requests.count
+        end
+
+        test "a placeholder is still skipped under force_research" do
+          ::Services::Ai::Tasks::Books::AuthorFactsTask.expects(:new).never
+          author = books_authors(:excluded_placeholder)
+
+          EnrichAuthor.call(author: author, force_research: true)
+
+          assert_equal [["skipped", "placeholder"]], author.enrichments.for_kind(EnrichAuthor::KIND).pluck(:outcome, :reason)
+        end
+
+        test "context is recorded on the row" do
+          expect_runs([:research, success_result(facts)])
+
+          row = EnrichAuthor.call(author: @author, force_research: true, context: "queue").data[:enrichments].sole
+
+          assert_equal({"value" => "queue", "applied" => false, "reason" => "input"}, row.facts["context"])
+        end
+
+        test "a failed forced run carries the context" do
+          expect_runs([:research, failure_result("search down")])
+
+          row = EnrichAuthor.call(author: @author, force_research: true, context: "queue").data[:enrichments].sole
+
+          assert_equal ["failed", "queue"], [row.outcome, row.facts.dig("context", "value")]
+        end
       end
     end
   end

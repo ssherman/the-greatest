@@ -20,6 +20,31 @@ module Services
           MIN_WORDS = 20
           MAX_WORDS = 110
 
+          # The rules the model follows, shared with the agent's Copy prompt
+          # (config/mcp/books/prompts/enrichment/author_facts.md.erb) so the two
+          # cannot drift. Changing either changes the paid system message.
+          FACT_RULES = <<~RULES.chomp.freeze
+            Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if neither the sources given nor your own knowledge tell you who this specific author is, and give an overall "confidence" for how well you know them. The Wikidata, library and Wikipedia sources below were matched to this author; prefer them to memory. When no source is given, the name may belong to several people: describe only the person who wrote the books listed. birth_year and death_year are years of the Common Era, and a year before the Common Era is reported as null; death_year is null for a living person. gender is male, female or non_binary. nationalities are English nationality adjectives such as "French" or "Japanese", one for each country the author was a citizen of.
+          RULES
+
+          DESCRIPTION_RULES = <<~RULES.chomp.freeze
+            Description rules.
+            - One paragraph of at most #{MAX_WORDS} words, sentences of varied length. Write only as much as the facts support: a few sentences, as few as #{MIN_WORDS} words, for an author little is known about. Never repeat a point to fill space.
+            - Say who the author is or was, when and where they lived and worked, what they write or wrote, and their best-known works named plainly. Name a literary movement only if one clearly applies.
+            - At most one major prize, stated plainly, such as "won the 1954 Nobel Prize in Literature". No other awards.
+            - Do not open with the author's name; the page shows it.
+            - For a living author, nothing about their personal life beyond what the sources state, and never a death year.
+            - No em dashes or double hyphens, no semicolons, no lists, no emoji, no quotation marks around titles.
+            - No marketing or judgment: no acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, one of the greatest, must-read, no sales figures.
+            - No meta narration such as "This author" or "Readers will". Open on the person.
+            - Never mention your sources, records or catalogs, or what is not known about the author. Leave out what you do not know.
+            - Plain words. Do not use: #{BannedWords.prose}.
+            - No "not X but Y" constructions. No ornamental triads of adjectives.
+            - Write in your own words and your own sentence structure. Use the Wikipedia text for facts only; never reuse its phrases.
+            - Only what you are sure of. Say less rather than guess. If you do not know who this author is well enough to describe them, set description to null.
+            - No citations, URLs, footnotes, or bracketed references inside any text field.
+          RULES
+
           def initialize(parent:, records:, mode: :knowledge, provider: nil, model: nil)
             @records = records
             super(parent: parent, mode: mode, provider: provider, model: model)
@@ -33,23 +58,9 @@ module Services
             <<~SYSTEM_MESSAGE
               You are a bibliographic researcher for a book catalog. You report facts about one author and write one short description of them.#{research_instruction}
 
-              Facts. For every fact give a value and a confidence of high, medium or low. Use null (or an empty list) when you do not know; never guess. Set "recognized" to false if neither the sources given nor your own knowledge tell you who this specific author is, and give an overall "confidence" for how well you know them. The Wikidata, library and Wikipedia sources below were matched to this author; prefer them to memory. When no source is given, the name may belong to several people: describe only the person who wrote the books listed. birth_year and death_year are years of the Common Era, and a year before the Common Era is reported as null; death_year is null for a living person. gender is male, female or non_binary. nationalities are English nationality adjectives such as "French" or "Japanese", one for each country the author was a citizen of.
+              #{FACT_RULES}
 
-              Description rules.
-              - One paragraph of at most #{MAX_WORDS} words, sentences of varied length. Write only as much as the facts support: a few sentences, as few as #{MIN_WORDS} words, for an author little is known about. Never repeat a point to fill space.
-              - Say who the author is or was, when and where they lived and worked, what they write or wrote, and their best-known works named plainly. Name a literary movement only if one clearly applies.
-              - At most one major prize, stated plainly, such as "won the 1954 Nobel Prize in Literature". No other awards.
-              - Do not open with the author's name; the page shows it.
-              - For a living author, nothing about their personal life beyond what the sources state, and never a death year.
-              - No em dashes or double hyphens, no semicolons, no lists, no emoji, no quotation marks around titles.
-              - No marketing or judgment: no acclaimed, bestselling, masterpiece, beloved, celebrated, legendary, one of the greatest, must-read, no sales figures.
-              - No meta narration such as "This author" or "Readers will". Open on the person.
-              - Never mention your sources, records or catalogs, or what is not known about the author. Leave out what you do not know.
-              - Plain words. Do not use: #{BannedWords.prose}.
-              - No "not X but Y" constructions. No ornamental triads of adjectives.
-              - Write in your own words and your own sentence structure. Use the Wikipedia text for facts only; never reuse its phrases.
-              - Only what you are sure of. Say less rather than guess. If you do not know who this author is well enough to describe them, set description to null.
-              - No citations, URLs, footnotes, or bracketed references inside any text field.
+              #{DESCRIPTION_RULES}
 
               Output only the JSON object described by the schema.
             SYSTEM_MESSAGE

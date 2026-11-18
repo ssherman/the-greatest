@@ -83,7 +83,7 @@
                   <% if request.resolved_via %>(<%= request.resolved_via.humanize.downcase %>)<% end %>
                   <div><%= l request.resolved_at, format: :short %></div>
                 <% elsif request.claimed? %>
-                  Claimed by <%= user_name(request.claimed_by) || "unknown" %>
+                  <%= request.claimed_by ? "Claimed by #{user_name(request.claimed_by) || "unknown"}" : "Claimed by the paid worker" %>
                 <% end %>
               </td>
               <td>

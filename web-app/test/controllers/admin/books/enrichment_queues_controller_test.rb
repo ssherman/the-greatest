@@ -38,6 +38,20 @@ module Admin
         assert_response :success
       end
 
+      test "index is 200 in queue mode" do
+        Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_enrichment_queues_path
+        assert_response :success
+      end
+
+      test "index is 200 in api mode" do
+        Rails.application.config.x.ai.stubs(:research_via).returns("api")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_enrichment_queues_path
+        assert_response :success
+      end
+
       test "index redirects unauthenticated users" do
         get admin_books_enrichment_queues_path
         assert_redirected_to books_root_path

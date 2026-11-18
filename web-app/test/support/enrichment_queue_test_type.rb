@@ -5,11 +5,13 @@
 # and set candidate_ids, needed and apply_result per test.
 class EnrichmentQueueTestType < Services::EnrichmentQueue::Type
   class << self
-    attr_accessor :candidate_ids, :needed, :apply_result
+    attr_accessor :candidate_ids, :needed, :apply_result, :paid, :research_result
 
     def reset!
       self.candidate_ids = []
       self.needed = true
+      self.paid = false
+      self.research_result = nil
       self.apply_result = Services::EnrichmentQueue::Type::Result.new(
         success?: true, data: {enrichment: nil, outcome: "applied"}, errors: []
       )
@@ -27,6 +29,8 @@ class EnrichmentQueueTestType < Services::EnrichmentQueue::Type
 
     def priority_sql = "books_books.id"
 
+    def priority_for(record) = record.id
+
     def still_needed?(record) = needed
 
     def payload(record) = {"book_id" => record.id}
@@ -38,6 +42,10 @@ class EnrichmentQueueTestType < Services::EnrichmentQueue::Type
     end
 
     def apply(request) = apply_result
+
+    def paid_research? = paid
+
+    def research(request) = research_result.respond_to?(:call) ? research_result.call(request) : research_result
   end
 
   reset!

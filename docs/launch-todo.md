@@ -118,11 +118,11 @@ second export on the same day reuses the day's file name and the trainer reports
    after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
 10. **Optional, manual: `bin/rails "books:categorize:backfill[all,all,weekly]" APPLY=1`**. It covers origin and
    categories; under `all` each book is planned with only the judgment it still lacks. Run it only after
-   section 14 step 2 (the definitions), step 3 (the categories judge switch) and step 7 (the origin backfill and the categories backfill, or one `[all,...]`
+   section 14 step 2 (the definitions), step 3 (the categories judge switch) and step 11 (the origin backfill and the categories backfill, or one `[all,...]`
    run) have been done once: `all` weekly before the categories backfill would plan the whole catalog for
    categories. It needs `APPLY=1` like those steps. Re-running it
    after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
-   research or a failure left undone (deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it). Books with a running import are left to their import. While the
+   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done, and gets a pending row in the origin or categories agent queue when it has no row in that queue yet and still has the gap). Books with a running import are left to their import. While the
    section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
    start after the backfill's last slot.
 
@@ -634,28 +634,78 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    Until then every import and every Goodreads-rebuild book gets a skipped `disabled` row in place of a judgment,
    and those books stay candidates for the backfill. Set it in the production env (SOPS secrets) and restart the
    web and worker processes. Do it before any categories run below; the origin backfill does not need it.
-4. **Origins through the agent queue** (`docs/features/enrichment-queue.md`). Do it after section 12's apply is
-   finished (it empties and deletes books) and after the author Wikidata enrichment (step 1; the payload shows author
-   nationalities). Fill the queue for the ranked books: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`, or
+4. **Send web searches to the agent queues.** Set `AI_RESEARCH_VIA=queue` in the production env (SOPS secrets) and restart
+   the web and worker processes, the way step 3 sets `BOOKS_CATEGORIES_JUDGE_ENABLED`
+   (`config.x.ai.research_via`, default `api`). From then on no enricher or judge spends a web search through the
+   API. Where one would have, the book and author enrichers write a skipped research row (reason `queued`), and the
+   origin and categories judges mark their knowledge row `deferred_research` with `deferred_reason: "queued"`.
+   A pending row in the matching agent queue (`books.book_facts`, `books.author_facts`, `books.origin`,
+   `books.categories`) is inserted only when the record has no row of that kind yet and the queue still needs the
+   record. The paced backfill stops researching too (raising its cap does nothing) and counts a book whose research
+   was deferred as done; a deferred book gets a pending row in the origin or categories queue when it has no row in that queue yet and still has the gap (step 12). The page
+   `/admin/enrichment_queues` says which mode is on. Do it before step 6, so the deferrals made from here on reach the
+   queues.
+   (`docs/features/enrichment-queue.md`, "The web-search switch".) Set it back to `api` to spend through the API again.
+5. **Book facts through the agent queue** (`docs/features/enrichment-queue.md`). Do it before the origins and categories
+   queues in steps 7 and 8: an agent's book facts row counts as web-verified evidence for the origin and categories
+   answers that follow. Do it after section 12's apply is finished (it empties and deletes books). Fill the queue for
+   the ranked books: `bin/rails "enrichment_queue:fill[books.book_facts,ranked]"`, or Fill on `/admin/enrichment_queues`
+   on the books host. It runs in Sidekiq; reload the page until the Pending count stops moving. Then Copy prompt on the
+   "Book facts" row, paste it into an agent connected to the admin MCP server, and let it run until the queue is empty
+   (a claim returns no items and `remaining` is 0). Its answers fill a missing first published year, original language
+   and description and are applied in the background, so check the page's Done and Failed counts afterwards; Re-queue
+   a failed row once the cause is fixed.
+6. **Author facts through the agent queue.** Do it before step 7: the origin payload shows author nationalities. An
+   author is offered when the newest `books.author_facts` row, leaving aside failed runs and agent answers that applied nothing, is a skipped research row (not a placeholder, no running
+   author run). Two groups qualify: authors already refused a web search for budget (`budget_exhausted`), which exist
+   whatever `AI_RESEARCH_VIA` is, and authors enriched in `queue` mode that no Wikidata or VIAF record matched and the
+   model did not know well (reason `queued`), which in practice are the authors imports create. The bulk author
+   enrichment (section 15 step 11) never researches, so it does not feed this queue and should not be re-run to fill it.
+   `bin/rails "enrichment_queue:fill[books.author_facts,ranked]"` (or Fill on the page), Copy prompt on the "Author
+   facts" row, paste it, and let it run to empty. Expect it to be small until imports have run in `queue` mode.
+7. **Origins through the agent queue** (`docs/features/enrichment-queue.md`). Do it after section 12's apply is
+   finished (it empties and deletes books), after the author Wikidata enrichment (step 1) and after steps 5 and 6
+   (the payload shows author nationalities and the web-verified book facts). Fill the queue for the ranked books: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`, or
    Fill on `/admin/enrichment_queues` on the books host. It runs in Sidekiq; reload the page until the Pending count
-   stops moving. Run the queues before you start the paced backfill in step 7: the backfill plans a run for every book up front, and a fill offers no book that has a running run, so once the backfill is planned a fill finds none of them until their runs finish. Then Copy prompt on the "Book origin" row, paste it into an agent connected to the admin MCP server,
+   stops moving. Run the queues before you start the paced backfill in step 11: the backfill plans a run for every book up front, and a fill offers no book that has a running run, so once the backfill is planned a fill finds none of them until their runs finish. Then Copy prompt on the "Book origin" row, paste it into an agent connected to the admin MCP server,
    and let it run until the queue is empty (a claim returns no items and `remaining` is 0). Sub-agents are fine.
    The agent's answers are applied in the background by a Sidekiq job, so check the page's Done and Failed counts
    afterwards; Re-queue a failed row once the cause is fixed.
-5. **Categories through the agent queue**, only after the definitions are written (step 2: the reference list the agent
+8. **Categories through the agent queue**, only after the definitions are written (step 2: the reference list the agent
    is sent contains them). The judge switch in step 3 does not matter here: an agent's answer applies either way.
    `bin/rails "enrichment_queue:fill[books.categories,ranked]"` (or Fill on the page), Copy prompt on the "Book
    categories" row, paste it, and let it run to empty.
-6. Read what the agents did, under the label `agent`: `bin/rails "books:origin:report[agent]"` and
+9. Read what the agents did, under the label `agent`: `bin/rails "books:origin:report[agent]"` and
    `bin/rails "books:categories:report[agent]"`, then the alias step `bin/rails "books:categories:add_aliases[agent]"`
-   (dry run first, then `APPLY=1`, as in step 8 below). Held answers stay for the paced backfill in step 7, which is
-   now the path for whatever is left: books the queue never reached, books an agent skipped, and books whose answer
-   was held.
-7. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
+   (dry run first, then `APPLY=1`, as in step 13 below). Held answers stay for the paced backfill in step 11, which is
+   now the path for whatever is left. With `AI_RESEARCH_VIA=queue` it never runs a web search; it gathers evidence and
+   judges from knowledge. For books the queue never reached, a judgment that is not enough defers research and queues the
+   book (`research_wanted`). For books an agent skipped, or whose agent answer was held or applied nothing, the evidence
+   (the Wikidata shortcut, a supported medium answer) can settle some of them; the rest are not queued again, because
+   their queue row is already closed (step 12 says how to reach them).
+10. **The paid worker, a second worker for rows still waiting (optional, spends money).** Use it for a queue, or the
+   rest of one, that you choose to pay for rather than give to an agent. It reaches only claimable rows: pending, or
+   claimed with an expired lease. An item an agent skipped is closed and is never claimed: to send it to the paid worker,
+   press Re-queue on its row on the admin page first, one row at a time (there is no bulk re-queue).
+   `bin/rails "enrichment_queue:work[books.origin,100]"` runs the paid research for up to 100 claimable
+   rows of the queue, one Sidekiq job per row, whatever `AI_RESEARCH_VIA` says and outside `research_daily_cap`. With
+   nothing claimable the task prints that it queued 0 jobs. Each job makes at most one research call (about 15 cents; a
+   call can run more than one search; an origin the stored Wikidata evidence settles spends none). The kind is any of the four
+   (`books.origin`, `books.categories`, `books.book_facts`, `books.author_facts`); the limit is required. Start with a
+   small limit and read the rows' outcomes on the page (Done, Failed, and `paid_research` in the "via" filter) before
+   a large one. For `books.categories` while the judge is off (step 3) the task refuses
+   ("Not queued: the categories judge is switched off") and queues nothing; a judge switched off after the jobs were
+   queued closes each remaining row Failed with "skipped: disabled" and spends nothing. A failed row is not retried by itself: Re-queue it on the page. A job killed
+   mid-run leaves its row claimed for 30 minutes; after that the row can be researched again. Read the rows under the
+   label `queue`: `bin/rails "books:origin:report[queue]"` and `bin/rails "books:categories:report[queue]"`.
+11. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
    to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
    catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
-   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised; books whose
-   judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. Until
+   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. With `AI_RESEARCH_VIA=api`, books whose
+   judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. With
+   `AI_RESEARCH_VIA=queue` (step 4) the backfill never researches whatever the cap, raising it does nothing, and a book
+   whose judgment deferred research counts as done and, when it has no row in the `books.origin` or `books.categories`
+   queue yet (and still has the gap), gets a pending one (step 12). Until
    WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
    judge works without it.
    Run the categories after the origins with `bin/rails "books:categorize:backfill[categories_only,all,categories-v1]"`
@@ -663,7 +713,16 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    serves both judgments, and each book is planned with only the judgment it still needs. The categories judge
    spends the same backfill research cap (`categorize_backfill_research_daily_cap`), which counts origin and
    categories research together.
-8. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
+12. **With `AI_RESEARCH_VIA=queue`, work the origin and categories queues again once the backfill has finished.** The
+   judges inserted a pending `books.origin` or `books.categories` row (reason `research_wanted`) for each book they
+   deferred that still had the gap and had no row in that queue yet; a book that already has a row there, in any status,
+   gets none. Copy prompt on the "Book origin" and "Book categories" rows again, or step 10's
+   `enrichment_queue:work`, to clear the pending ones. No fill is needed for those rows, though a fill does no harm.
+   Books an agent skipped, or whose agent answer was held or applied nothing, that the backfill did not settle are not
+   in that pending set: their rows are closed. To reach one, press Re-queue on its row on the admin page (the Skipped
+   tab, and the Done tab filtered to the outcome `nothing_to_apply` or `unrecognized`), then run an agent or `work` again. Re-queue is one
+   row at a time; there is no bulk re-queue.
+13. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
    label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The
    categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
    used that we do not list, each with the genre the judge said it means; add them as alternative names on existing
@@ -672,12 +731,12 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    would join (and skips a name an active genre already matches). Run it again with `APPLY=1`, and `NAMES=a,b` to add
    only the names you checked. `MIN=n` sets a minimum count. Aliases take effect for books judged after them; the next
    backfill pass uses them.
-9. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[<label>]"`, with
+14. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[<label>]"`, with
    `IDS=` and `APPLY=1`.
-10. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
+15. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
    support. `bin/rails "books:categories:restore_removals[<label>]"` prints how many links on how many books it would
    put back (it does not list them); with `APPLY=1` it restores them.
-11. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
+16. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
    origins changes `percentage_western` and so the western-canon penalty.
 
 ## 15. Local Wikidata (the service once; the re-check repeats after each refresh)

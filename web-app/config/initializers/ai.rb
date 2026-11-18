@@ -26,6 +26,15 @@ Rails.application.configure do
   # ignores this cap.
   config.x.ai.research_daily_cap = 50
 
+  # Where a would-be research (web search) run goes. "api" spends it through the
+  # API as above. "queue" never spends it: the enrichers write a skipped
+  # research row (reason "queued") and leave a pending row in the enrichment
+  # queue, where an AI agent does the research (docs/features/enrichment-queue.md).
+  # ENV: AI_RESEARCH_VIA.
+  # The test environment ignores the ENV (dotenv loads .env there too): tests pick the mode by stubbing.
+  config.x.ai.research_via =
+    (!Rails.env.test? && ENV["AI_RESEARCH_VIA"].to_s.strip.downcase == "queue") ? "queue" : "api"
+
   # The origin backfill's own research cap per UTC day, counted apart from
   # research_daily_cap so a backfill never starves imports of web searches.
   # 0 until the rehearsal has shown what a run costs; then it is raised.

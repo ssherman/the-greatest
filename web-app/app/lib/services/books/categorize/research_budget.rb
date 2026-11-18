@@ -10,6 +10,9 @@ module Services
         BACKFILL_KINDS = %w[books.origin books.categories].freeze
 
         def self.permitted?(context:)
+          # In queue mode the web search is the agent's job, never the API's.
+          return false if Services::EnrichmentQueue::ResearchRoute.queue?
+
           if context == "backfill"
             used = Enrichment.research.today.where(kind: BACKFILL_KINDS).where("facts->>'context' = 'backfill'").count
             used < Rails.application.config.x.ai.categorize_backfill_research_daily_cap

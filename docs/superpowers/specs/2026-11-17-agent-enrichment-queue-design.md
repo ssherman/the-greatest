@@ -239,8 +239,9 @@ cannot get there (amended during implementation, 2026-11-18). Nothing in the app
 held back, the queue row is still `done` (outcome `nothing_to_apply`), so no agent is handed that book again.
 But most books have no stored evidence yet, and the paced backfill gathers it and can settle a book the agent
 could only half answer (the Wikidata shortcut, a supported `medium`). So an agent ledger row that applied nothing
-does not count as done for the paced backfill: `Backfill.done_rows` leaves out rows with mode `agent` and outcome
-`nothing_to_apply`. An agent row that applied something does count. Such a row is also invisible as a "newer row":
+does not count as done for the paced backfill: `Backfill.done_rows` leaves out every agent row that is not
+`applied` (amended during planning, 2026-11-18; it named only outcome `nothing_to_apply`, which missed
+`unrecognized`). An agent row that applied something does count. Such a row is also invisible as a "newer row":
 a held agent answer leaves the book to the backfill only if the backfill has not judged it already, so it never
 displaces the paid pipeline's done row as the latest row and never makes the backfill repeat itself
 (amended during implementation, 2026-11-18).
@@ -381,25 +382,44 @@ The launch-todo steps go in section 14 and say:
 
 - Candidates: books missing a first published year, an original language or any description, where the field
   was not deliberately cleared (`cleared_fields`), plus books whose latest `books.book_facts` row is a research
-  skip.
+  skip. A book needs at least one author link to be a candidate, and "no description" means no description row
+  that is not deprecated (amended during planning, 2026-11-18). A book with an `ai_generated` description of any
+  rank also has no gap for this queue, and `still_needed?` does not require an author link, so a deferral for a
+  book whose links do not exist yet is still queued (amended during implementation, 2026-11-18).
 - Answer: the book facts task's response shape.
 - Submit: the path a research run takes today: the description review call (cheap), `DescriptionCheck`, then
-  `ApplyBookFacts`. Blanks only.
+  `ApplyBookFacts`. Blanks only. For an agent answer a description whose review call failed raises before anything
+  is written, so the apply job retries and the row ends `failed`; the paid path keeps recording `review_failed`
+  (amended during planning, 2026-11-18). An answer with overall `confidence` low is held: recorded with reason
+  `low_confidence`, nothing written (amended during planning, 2026-11-18). What an answer writes: year, original
+  language, word count, page range, subtitle and the description fill blanks, alternate titles are added to the ones the book holds; book type, series
+  and origin countries are only recorded (amended during implementation, 2026-11-18).
 
 **`books.author_facts`**
 
 - Candidates: authors whose latest `books.author_facts` row is a research skip.
-- Answer and submit: the author facts task's shape and `EnrichAuthor`'s apply half.
+- Answer and submit: the author facts task's shape and `EnrichAuthor`'s apply half, with the same strict review and
+  overall-low hold as book facts (amended during planning, 2026-11-18).
 
 **The switch.** `config.x.ai.research_via`, read from ENV `AI_RESEARCH_VIA`: `api` (today's behaviour, the default
 so a deploy changes nothing) or `queue`. With `queue`, every place that would have spent a web search
 (`EnrichBook`, `EnrichAuthor`, the origin and categories judges) instead records the deferral it records today
 when the budget is gone, with reason `queued`, and inserts a `pending` queue row with reason `research_wanted`.
 A record that already has a resolved row of that kind is not re-queued. The admin page's force-research checkbox
-still researches.
+still researches. A deferral inserts a row only when the type still needs the record, and a failed insert is
+logged and never fails the enrichment (amended during planning, 2026-11-18). A low-confidence guess for a record
+whose research is still owed to the queue is held, not applied, and is applied as today only when the record's
+queue row is already resolved (amended during planning, 2026-11-18). A skipped research row spent no search and
+does not count toward `research_daily_cap`, and `Books::EnrichBookJob` does not treat it as "researched"; in
+`queue` mode the paced backfill counts a deferred row as done whatever the backfill cap; the admin page says which
+mode is on (amended during planning, 2026-11-18).
 
-**The paid worker.** `bin/rails "enrichment_queue:work[type,limit]"` (limit required) claims rows and runs each
-type's `research` in Sidekiq: the existing research-mode run with `force_research`, unchanged. Rows end `done`
+**The paid worker.** `bin/rails "enrichment_queue:work[kind,limit]"` (limit required; the kind, for example
+`books.origin`, as `fill` takes it; amended during planning, 2026-11-18) runs one Sidekiq job per row, each job
+claiming its own row when it runs, with no retry (amended during planning, 2026-11-18). Each job runs the type's
+`research`: the enricher or judge called directly with `force_research` and context `queue` (label `queue` on the
+judges' rows), from stored evidence only, and the categories judge never removes a link in that context (rejudge
+off; amended during planning, 2026-11-18). Rows end `done`
 with `resolved_via: paid_research`. The limit is the cap: these runs are not stopped by `research_daily_cap` or
 the backfill cap, and their ledger rows must not count against either, or one `work[origin,100]` would stop web
 search for imports for the rest of the day. How the rows are marked so `Enrichment.against_research_cap` leaves

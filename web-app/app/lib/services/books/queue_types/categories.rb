@@ -56,6 +56,17 @@ module Services
             Services::Ai::Tasks::Books::BookCategoriesTask::ResponseSchema.to_json_schema.deep_stringify_keys
           end
 
+          def paid_research? = true
+
+          def paid_research_blocker
+            "the categories judge is switched off (BOOKS_CATEGORIES_JUDGE_ENABLED)" unless Rails.application.config.x.ai.categories_judge_enabled
+          end
+
+          def research(request)
+            result = Services::Books::Categories::Judge.call(book: request.enrichable, context: "queue", label: "queue", force_research: true)
+            ledger_result(result.data[:enrichments].last)
+          end
+
           def apply(request)
             book = request.enrichable
             row = Services::Books::Categories::RecordAnswer.call(

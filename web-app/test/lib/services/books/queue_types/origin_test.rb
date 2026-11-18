@@ -53,6 +53,16 @@ module Services
           assert_includes Type.candidates(scope: "all").pluck(:id), unranked.id
         end
 
+        test "priority_for is the rank, or the unranked constant, and ignores a running run" do
+          assert_equal Services::Books::QueueTypes::BookScope::UNRANKED_PRIORITY, Type.priority_for(@blank)
+          RankedItem.create!(item: @blank, ranking_configuration: ::Books::RankingConfiguration.default_primary, rank: 42, score: 1)
+          assert_equal 42, Type.priority_for(@blank)
+          WorkflowRun.create!(workflow: ::Workflows::Books::BookCategorize.workflow, definition_version: 1,
+            enrichable: @blank, status: :running, initiated_by: "test")
+          assert_equal 42, Type.priority_for(@blank)
+          assert_equal 42, Services::Books::QueueTypes::Categories.priority_for(@blank)
+        end
+
         test "still_needed? follows the data" do
           assert Type.still_needed?(@blank)
           assert_not Type.still_needed?(@placed)
@@ -135,6 +145,29 @@ module Services
           assert result.success?
           assert_equal 1, result.data[:inserted]
           assert_equal 17, ::EnrichmentRequest.find_by!(kind: "books.origin", enrichable: @blank).priority
+        end
+
+        test "paid_research? is true" do
+          assert Type.paid_research?
+        end
+
+        test "research runs the forced paid path and maps its row" do
+          record = ::Books::Book.create!(title: "Forced Origin")
+          request = ::EnrichmentRequest.new(enrichable: record, kind: Type.kind)
+          {
+            [:applied, nil, nil] => [true, "applied"],
+            [:failed, "model down", nil] => [false, nil],
+            [:skipped, nil, "disabled"] => [false, nil]
+          }.each do |(outcome, error, reason), (success, expected_outcome)|
+            row = record.enrichments.create!(kind: Type.kind, mode: :research, outcome: outcome, error: error, reason: reason, facts: {})
+            Services::Books::Origin::Judge.expects(:call).with(book: record, context: "queue", label: "queue", force_research: true).returns(Services::Books::Origin::Judge::Result.new(success?: outcome != :failed, data: {enrichments: [row]}, errors: []))
+
+            result = Type.research(request)
+
+            assert_equal success, result.success?, outcome
+            assert_equal expected_outcome, result.data[:outcome] if success
+            assert_equal [error || "skipped: disabled"], result.errors unless success
+          end
         end
       end
     end

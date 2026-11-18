@@ -161,6 +161,31 @@ module Services
             assert_includes text, "Author: Euripides (480 BCE–406 BCE)"
             assert_includes text, "First published (our record): 431 BCE"
           end
+
+          test "the system message sent to the model is byte-for-byte what it was in knowledge mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = BookFactsTask.new(parent: @book, mode: :knowledge, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "4e67e8a5a8684468f02c60acf49ad9b7cf5640b6616630939e66281b16dec807", Digest::SHA256.hexdigest(message)
+          end
+
+          test "the system message sent to the model is byte-for-byte what it was in research mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = BookFactsTask.new(parent: @book, mode: :research, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "fe30fbe275ba6de57dc98fcef7c49ec7d28a106fcd890f5b902849e09e508c89", Digest::SHA256.hexdigest(message)
+          end
+
+          test "the system message sent to the model is byte-for-byte what it was in sourced mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            page = ::Books::GoodreadsPage.new(title: "War and Peace", authors: [], original_publication_year: 1868, page_count: 1225, genres: [], description: nil)
+            chat = BookFactsTask.new(parent: @book, mode: :sourced, source: page, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "b6524ea34a1a86a2a47ba12b526ebfe42e257bcb5937491edc2aa3550fa5376f", Digest::SHA256.hexdigest(message)
+          end
         end
       end
     end

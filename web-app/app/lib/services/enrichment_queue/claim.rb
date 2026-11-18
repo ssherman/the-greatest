@@ -8,6 +8,9 @@ module Services
     # the rows say "claimed", and a concurrent claim skips them instead of
     # waiting or taking the same ones.
     #
+    # user is required but may be nil: the paid research worker passes nil, as it
+    # has no admin behind it. A caller must say so rather than forget it.
+    #
     # A row that is abandoned MAX_ATTEMPTS times (its lease expired each time)
     # is closed, and a row whose gap was filled meanwhile is closed too. Both
     # leave a hole in the batch, so up to MAX_PASSES passes top it up.
@@ -92,7 +95,7 @@ module Services
 
         ::EnrichmentRequest.where(id: rows.map(&:id)).update_all([
           "status = ?, lease_token = ?, lease_expires_at = ?, claimed_by_id = ?, attempts = attempts + 1, updated_at = ?",
-          ::EnrichmentRequest.statuses.fetch("claimed"), @token, @expires_at, @user.id, Time.current
+          ::EnrichmentRequest.statuses.fetch("claimed"), @token, @expires_at, @user&.id, Time.current
         ])
         rows.each(&:reload)
       end

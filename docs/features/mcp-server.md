@@ -230,14 +230,14 @@ Nothing applies on approval: the matching apply task acts on approved verdicts l
 The books enrichment queues (`/admin/enrichment_queues`) let an agent research and fill in records itself: it claims a batch, searches the web, and submits an answer that the server applies by the paid pipeline's own rules. Five admin tools work it. `Services::EnrichmentQueue::*` is shared by the REST controllers and the page. Full behaviour is in `docs/features/enrichment-queue.md`.
 
 - `list_enrichment_queues` (`books:admin:read`). Each queue type with its count per status.
-- `get_enrichment_queue` (`books:admin:read`). Path `type` (`origin` or `categories`). Status counts, outcome counts of `done` items and the type's `reference` (the answer schema, and for categories the genre and audience lists and the caps). Call it once per run.
+- `get_enrichment_queue` (`books:admin:read`). Path `type` (`origin`, `categories`, `book_facts` or `author_facts`). Status counts, outcome counts of `done` items and the type's `reference` (the answer schema, and for categories the genre and audience lists and the caps). Call it once per run.
 - `claim_enrichment_items` (`books:admin:write`). Body `{limit}` (1 to 25, default 10). Returns the items and `meta.lease_token`, `meta.lease_expires_at` and `meta.remaining`. The lease lasts 30 minutes. An empty batch with `remaining` above 0 is not the end: claim again.
 - `submit_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, answer, sources, note}`. Answers 202 with the status: the answer is applied in a background job, so the response does not say what was applied. A 409 means the lease is gone or the item was already answered (drop it); a 422 names what is wrong with the answer (fix it and resubmit).
 - `skip_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, reason}`. A skipped item is not handed out again.
 
 None is destructive, and the five are exempt from "dry run, then ask": the agent decides each item itself, as it does for the duplicate queue (`config/mcp/books/admin_usage.md`, "The enrichment queues"). Submitting fills blanks only and never overwrites a held value. Claim, submit and skip also need a token whose owner may change books.
 
-The page's Copy prompt per type (`config/mcp/books/prompts/enrichment/origin.md.erb` and `categories.md.erb`, rendered by `Services::AgentPrompts.for_enrichment`) carries the loop, the type's judgment rules (shared with the paid model through the task's `RULES` constant) and the confidence guidance. E2E: `e2e/tests/books/admin/enrichment-queues.spec.ts`.
+The page's Copy prompt per type (`config/mcp/books/prompts/enrichment/origin.md.erb`, `categories.md.erb`, `book_facts.md.erb` and `author_facts.md.erb`, rendered by `Services::AgentPrompts.for_enrichment`) carries the loop, the type's judgment rules (shared with the paid model through the task's `RULES`, or `FACT_RULES` and `DESCRIPTION_RULES`, constants) and the confidence guidance. E2E: `e2e/tests/books/admin/enrichment-queues.spec.ts`.
 
 ## Series
 

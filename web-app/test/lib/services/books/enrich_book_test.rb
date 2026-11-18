@@ -518,6 +518,199 @@ module Services
         assert row.failed?
         assert_equal "dup", row.error
       end
+
+      def queue_mode! = Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+
+      def book_facts_requests = ::EnrichmentRequest.where(enrichable: @book, kind: "books.book_facts")
+
+      test "queue mode: an unrecognized knowledge run queues the research instead of running it" do
+        queue_mode!
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        assert result.success?
+        knowledge, research = result.data[:enrichments]
+        assert_equal %w[knowledge unrecognized], [knowledge.mode, knowledge.outcome]
+        assert_equal %w[research skipped queued], [research.mode, research.outcome, research.reason]
+        request = book_facts_requests.sole
+        assert_equal %w[pending research_wanted], [request.status, request.reason]
+      end
+
+      test "queue mode: a low-confidence guess is held for the agent" do
+        queue_mode!
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, skipped = result.data[:enrichments]
+        assert_equal "nothing_to_apply", knowledge.outcome
+        assert_equal "deferred", knowledge.facts["first_published_year"]["reason"]
+        assert_nil @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal 1, book_facts_requests.count
+      end
+
+      test "queue mode: a low-confidence guess is held while the book's queue row is submitted" do
+        queue_mode!
+        ::EnrichmentRequest.create!(enrichable: @book, kind: "books.book_facts", reason: "missing", version: 1, priority: 1,
+          sources: [], status: :submitted, answer: {})
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, skipped = result.data[:enrichments]
+        assert_equal "nothing_to_apply", knowledge.outcome
+        assert_equal "deferred", knowledge.facts["first_published_year"]["reason"]
+        assert_nil @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal ["submitted"], book_facts_requests.map(&:status)
+      end
+
+      test "queue mode: a low-confidence guess is applied when the book's queue row is already resolved" do
+        queue_mode!
+        ::EnrichmentRequest.create!(enrichable: @book, kind: "books.book_facts", reason: "missing", version: 1, priority: 1,
+          sources: [], status: :done, outcome: "applied", resolved_at: Time.current)
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        knowledge, skipped = result.data[:enrichments]
+        assert knowledge.applied?
+        assert_equal 1999, @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal ["done"], book_facts_requests.map(&:status)
+      end
+
+      test "queue mode: a book at or past the cutoff is queued without a model call" do
+        queue_mode!
+        @book.update!(first_published_year: Rails.application.config.x.ai.knowledge_cutoff_year)
+        Services::Ai::Tasks::Books::BookFactsTask.expects(:new).never
+
+        result = EnrichBook.call(book: @book)
+
+        assert result.success?
+        row = result.data[:enrichments].sole
+        assert_equal %w[research skipped queued], [row.mode, row.outcome, row.reason]
+        assert_equal 1, book_facts_requests.count
+      end
+
+      test "queue mode: force_research still researches and queues nothing" do
+        queue_mode!
+        expect_facts_runs([:research, success_result(facts)])
+
+        result = EnrichBook.call(book: @book, force_research: true)
+
+        assert_equal %w[research], result.data[:enrichments].map(&:mode)
+        assert result.data[:enrichments].first.applied?
+        assert_equal 0, book_facts_requests.count
+      end
+
+      test "queue mode: an existing pending row is left as it is" do
+        queue_mode!
+        ::EnrichmentRequest.create!(enrichable: @book, kind: "books.book_facts", reason: "missing", version: 1, priority: 5, sources: [])
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+        EnrichBook.call(book: @book)
+
+        request = book_facts_requests.sole
+        assert_equal ["pending", "missing", 5], [request.status, request.reason, request.priority]
+      end
+
+      test "queue mode: a failed queue insert does not fail the run" do
+        queue_mode!
+        ::EnrichmentRequest.stubs(:insert_all).raises(ActiveRecord::StatementInvalid.new("boom"))
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        assert result.success?
+        assert_equal "queued", result.data[:enrichments].last.reason
+        assert_equal 0, book_facts_requests.count
+      end
+
+      test "queue mode: a book with only passed-in author names is skipped as queued and gets a queue row" do
+        queue_mode!
+        @book = ::Books::Book.create!(title: "No Author Link")
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+        result = EnrichBook.call(book: @book, author_names: ["Leo Tolstoy"])
+
+        assert result.success?
+        assert_equal "queued", result.data[:enrichments].last.reason
+        request = book_facts_requests.sole
+        assert_equal %w[pending research_wanted], [request.status, request.reason]
+      end
+
+      test "queue mode: a low-confidence guess for a book with only passed-in author names is held and queued" do
+        queue_mode!
+        @book = ::Books::Book.create!(title: "No Author Link")
+        expect_facts_runs([:knowledge, success_result(facts(confidence: "low"))])
+
+        result = EnrichBook.call(book: @book, author_names: ["Leo Tolstoy"])
+
+        knowledge, skipped = result.data[:enrichments]
+        assert_equal "nothing_to_apply", knowledge.outcome
+        assert_nil @book.reload.first_published_year
+        assert_equal "queued", skipped.reason
+        assert_equal 1, book_facts_requests.count
+      end
+
+      test "queue mode: a high-confidence knowledge run never looks at the queue" do
+        queue_mode!
+        Services::EnrichmentQueue::ResearchRoute.expects(:open_for?).never
+        expect_facts_runs([:knowledge, success_result(facts)])
+
+        result = EnrichBook.call(book: @book)
+
+        assert result.success?
+        assert_equal %w[knowledge], result.data[:enrichments].map(&:mode)
+      end
+
+      test "api mode: an exhausted budget queues nothing" do
+        Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+        expect_facts_runs([:knowledge, success_result(facts(recognized: false, confidence: "low"))])
+
+        result = EnrichBook.call(book: @book)
+
+        assert_equal "budget_exhausted", result.data[:enrichments].last.reason
+        assert_equal 0, ::EnrichmentRequest.count
+      end
+
+      test "context is recorded on the row and keeps it out of the import research cap" do
+        expect_facts_runs([:research, success_result(facts)])
+        queue_row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+        assert_equal({"value" => "queue", "applied" => false, "reason" => "input"}, queue_row.facts["context"])
+
+        other = ::Books::Book.create!(title: "Another Fresh Book")
+        other.book_authors.create!(author: books_authors(:tolstoy), position: 1)
+        task = mock
+        task.stubs(:call).returns(success_result(facts))
+        Services::Ai::Tasks::Books::BookFactsTask.expects(:new).with { |args| args[:parent] == other }.returns(task)
+        plain_row = EnrichBook.call(book: other, force_research: true).data[:enrichments].sole
+
+        scoped = Enrichment.against_research_cap
+        assert_not_includes scoped, queue_row
+        assert_includes scoped, plain_row
+        assert_not plain_row.facts.key?("context")
+      end
+
+      test "a failed forced run carries the context" do
+        expect_facts_runs([:research, failure_result("search down")])
+
+        row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+
+        assert_equal ["failed", {"value" => "queue", "applied" => false, "reason" => "input"}], [row.outcome, row.facts["context"]]
+      end
+
+      test "a run that raises after the model call carries the context" do
+        expect_facts_runs([:research, success_result(facts)])
+        RecordBookFacts.stubs(:call).raises("write failed")
+
+        row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+
+        assert_equal ["failed", "queue"], [row.outcome, row.facts.dig("context", "value")]
+      end
     end
   end
 end

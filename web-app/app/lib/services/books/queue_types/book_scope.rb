@@ -33,6 +33,14 @@ module Services
 
         def priority_sql = "COALESCE(ranked_items.rank, #{UNRANKED_PRIORITY})"
 
+        # One book's priority: its rank in the default primary ranking, else the
+        # unranked constant. Deliberately not base_relation: that leaves out a
+        # book with a running run, which still needs a priority.
+        def priority_for(book)
+          ::RankedItem.where(item_type: "Books::Book", item_id: book.id,
+            ranking_configuration_id: ::Books::RankingConfiguration.default_primary&.id).pick(:rank) || UNRANKED_PRIORITY
+        end
+
         # The record's latest ledger row of this kind, whatever its mode.
         def tried(book, kind)
           row = book.enrichments.where(kind: kind).order(:id).last
