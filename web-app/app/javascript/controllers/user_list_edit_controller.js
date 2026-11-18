@@ -13,6 +13,13 @@ export default class extends Controller {
   // (e.g. empty list -> populated) Stimulus reconnects the target and we rebind.
   rowsTargetConnected(element) {
     this.sortable?.destroy()
+    this.closeMenuOnSubmit = () => {
+      // daisyUI keeps the menu open while a button inside it holds focus, and
+      // morph keeps that focus on the moved row, so drop it when the form submits.
+      const active = document.activeElement
+      if (active?.closest?.(".dropdown")) active.blur()
+    }
+    element.addEventListener("turbo:submit-start", this.closeMenuOnSubmit)
     this.sortable = Sortable.create(element, {
       draggable: "[data-item-id]",
       handle: "[data-sortable-handle]",
@@ -27,7 +34,8 @@ export default class extends Controller {
     })
   }
 
-  rowsTargetDisconnected() {
+  rowsTargetDisconnected(element) {
+    element.removeEventListener("turbo:submit-start", this.closeMenuOnSubmit)
     this.sortable?.destroy()
     this.sortable = null
   }
@@ -38,6 +46,11 @@ export default class extends Controller {
   }
 
   async #submitMove(itemId, position) {
+    const failed = () => window.dispatchEvent(new CustomEvent("toast:show", {
+      detail: { type: "error", message: "Couldn't save that move. Reload the page to see your list." },
+    }))
+    // A second drop while this move is in flight would carry a stale position.
+    this.sortable?.option("disabled", true)
     const body = new URLSearchParams({ "user_list_item[position]": position, page: this.pageValue })
     try {
       const response = await fetch(this.moveUrlValue.replace("__ID__", itemId), {
@@ -48,12 +61,17 @@ export default class extends Controller {
         },
         body,
       })
-      // Whatever the status, the body morphs the list back to the truth.
-      Turbo.renderStreamMessage(await response.text())
+      const text = await response.text()
+      const isStream = (response.headers.get("Content-Type") || "").includes("turbo-stream") || text.includes("<turbo-stream")
+      if (!isStream) return failed()
+      // Whatever the status, a stream body morphs the list back to the truth.
+      window.Turbo.renderStreamMessage(text)
+      // Turbo renders stream elements after the next repaint; wait for them.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     } catch {
-      window.dispatchEvent(new CustomEvent("toast:show", {
-        detail: { type: "error", message: "Couldn't save that move. Reload the page to see your list." },
-      }))
+      failed()
+    } finally {
+      this.sortable?.option("disabled", false)
     }
   }
 }
