@@ -71,6 +71,9 @@ application.register("user-list-add-item", UserListAddItemController)
 import UserListCompletionController from "../controllers/user_list_completion_controller"
 application.register("user-list-completion", UserListCompletionController)
 
+import UserListEditController from "../controllers/user_list_edit_controller"
+application.register("user-list-edit", UserListEditController)
+
 import UserListModalController from "../controllers/user_list_modal_controller"
 application.register("user-list-modal", UserListModalController)
 
