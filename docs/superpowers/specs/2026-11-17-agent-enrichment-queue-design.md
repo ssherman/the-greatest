@@ -196,7 +196,7 @@ rows whose lease has expired, and marks them `claimed` with one `lease_token` fo
 - `attempts` counts claims. A row claimed three times without a submit or skip is closed as `skipped` with outcome
   `abandoned` instead of being handed out a fourth time, so one item an agent keeps choking on cannot keep a queue
   from ever reaching empty.
-- An empty batch with `remaining: 0` is how an agent knows to stop. A batch can also be empty while `remaining` is above 0 (every row picked was closed by the claim, or other agents hold the rest under leases), and the agent then claims again (amended during implementation, 2026-11-18).
+- An empty batch with `remaining: 0` is how an agent knows to stop. A batch can also be empty while `remaining` is above 0 (all passes closed every row they picked, or a concurrent claim had other rows locked and they still read as pending when `remaining` was counted), and the agent then claims again (amended during implementation, 2026-11-18).
 
 No sweeper job is needed: an expired lease is simply claimable again.
 

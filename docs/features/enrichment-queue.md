@@ -4,7 +4,7 @@ A queue that lets an AI agent do enrichment research itself. The agent connects 
 
 Why it exists: the paid research path (`gpt-6-astra` with `web_search`) is capped per day, and the origin and categories backfill is paced at one book every 8 seconds (about 15 days for the catalog, `docs/launch-todo.md` section 14). An agent on a subscription Shane already pays for has its own web search, works in parallel and costs nothing per call. The paid path stays; the two share the data and the ledger and see each other's work (see "The queue and the paced backfill").
 
-The engine knows nothing about books. A type is one class; books supplies two. Spec: `docs/superpowers/specs/2026-11-17-agent-enrichment-queue-design.md`. Plan and increments: `docs/superpowers/plans/2026-11-17-agent-enrichment-queue-increment-1.md`.
+The table, the services and the base admin controller know nothing about books; the API controllers, routes and navigation entry are per domain, and today only books has them. A type is one class; books supplies two. Spec: `docs/superpowers/specs/2026-11-17-agent-enrichment-queue-design.md`. Plan and increments: `docs/superpowers/plans/2026-11-17-agent-enrichment-queue-increment-1.md`.
 
 ## The table
 
@@ -40,11 +40,11 @@ Deleting a book or author deletes its rows. A merge moves the source's rows to t
 
 **Claim.** `Services::EnrichmentQueue::Claim` hands out 1 to 25 rows (default 10) in `(priority, id)` order under one `lease_token`, with a lease of 30 minutes (`EnrichmentRequest::LEASE`). It selects with `FOR UPDATE SKIP LOCKED` and marks the rows claimed in the same transaction, so parallel sub-agents never get the same row. Claimable means `pending` or `claimed` with an expired lease; no sweeper is needed. Each claim increments `attempts`. Per row: a row already claimed three times (`MAX_ATTEMPTS`) is closed as `skipped` / `abandoned`, so one item an agent keeps choking on cannot stop a queue reaching empty; a record that no longer exists has its row deleted; a record whose gap is already filled (`still_needed?`) is closed as `done` / `no_longer_needed`. Each closed row leaves a hole, so up to three passes top the batch up.
 
-**Submit.** `POST .../submit` with `lease_token`, `answer`, `sources` and an optional `note`. The request does not apply the answer: applying can call a model for several seconds, and several agents submit at once on web servers that also serve music and games. `Services::EnrichmentQueue::Submit` checks in a fixed order, so a wrong token is always a conflict even when the answer is also bad, then stores the answer and sources and moves the row to `submitted` in one conditional update (two concurrent submits cannot both win), queues `EnrichmentQueue::ApplyJob` and answers 202. Limits: `answer` at most 50,000 bytes of JSON, validated against the type's `answer_schema`; `note` at most 1,000 characters; `sources` 1 to 20 `http(s)` URLs of at most 2,000 characters.
+**Submit.** `POST .../submit` with `lease_token`, `answer`, `sources` and an optional `note`. The request does not apply the answer: applying can call a model for several seconds, and several agents submit at once on web servers that also serve music and games. `Services::EnrichmentQueue::Submit` checks in a fixed order, so a wrong token is a conflict even when the answer is also bad (but an `answer` that is not an object is a 400 from the controller before the service checks the token), then stores the answer and sources and moves the row to `submitted` in one conditional update (two concurrent submits cannot both win), queues `EnrichmentQueue::ApplyJob` and answers 202. Limits: `answer` at most 50,000 bytes of JSON, validated against the type's `answer_schema`; `note` at most 1,000 characters; `sources` 1 to 20 `http(s)` URLs of at most 2,000 characters.
 
 - **409**: the row is not claimed under that token (another batch re-claimed it, it was already closed, or the lease no longer matches). Nothing is written. The agent drops the item. An expired lease that nobody re-claimed is still accepted. A second submit with the same token on a row that is already `submitted` answers success and queues nothing, so a retry after a lost response is safe.
 - **422**: the answer, sources or note failed validation. The row stays claimed; the agent fixes the answer and sends it again.
-- **400**: the body is malformed (`lease_token` not a string, `answer` not an object, `sources` not an array of strings).
+- **400**: the body is malformed (not a JSON object, `lease_token` not a string, `answer` not an object, `sources` not an array of strings, `note` not a string). On claim, a `limit` that is not an integer from 1 to 25 is also a 400.
 - If queueing the job raises (Redis down), the row is put back to `claimed` and the error propagates, so the retry redoes the submit instead of being treated as a repeat.
 
 **Apply.** `ApplyJob` (Sidekiq, queue `low`, 3 retries) calls `Services::EnrichmentQueue::Apply`, which calls the type's `apply`, then sets the row `done` with the ledger row and its outcome. A failed apply raises, so Sidekiq retries it and the row stays `submitted`. When the retries run out the row becomes `failed` with the error. A failed attempt may write a failed ledger row each time, not only the last. A row whose record was deleted meanwhile is removed. While the type runs, `Current.acting_user` and `acting_via` carry the submitter, so code that records who acted (the ledger, mergers) sees them.
@@ -64,13 +64,13 @@ That is what prevents repeated work: a second agent run after more records arriv
 
 ## The stop signal
 
-The agent claims until done. A claim can return no items while `meta.remaining` is above 0: every row it picked was closed by the claim itself (abandoned, or no longer needed), or other agents hold the rest under leases that may expire. So the agent stops only when a claim returns no items and `remaining` is 0, and claims again otherwise. `remaining` counts claimable rows (pending, plus claimed with an expired lease). `submitted` rows are on their way to `done` and do not count.
+The agent claims until done. A claim can return no items while `meta.remaining` is above 0: all three passes closed every row they picked (abandoned, or no longer needed), or a concurrent claim had other rows locked (`SKIP LOCKED`) while `remaining` was counted, so they still read as pending. Rows under an unexpired lease are not claimable and are not counted. So the agent stops only when a claim returns no items and `remaining` is 0, and claims again otherwise. `remaining` counts claimable rows (pending, plus claimed with an expired lease). `submitted` rows are on their way to `done` and do not count.
 
 ## How an answer is applied
 
 The type hands the answer to the same code the paid judge uses: `Services::Books::Origin::RecordAnswer` and `Services::Books::Categories::RecordAnswer`. Each is the "answer in, ledger row out" half of the judge, extracted so the paid path and the agent path write rows of one shape. The rules are the judges' and are not loosened for agents:
 
-- **Confidence tiers.** `high` is written. `medium` is written only when evidence the catalogue already holds supports it (for categories, a held link, the description or a shelf name; for origin, the stored Wikidata, Wikipedia, WorldCat or web-verified facts agreeing with the country). `low` is recorded and held. The prompt tells the agent to say `high` only when a source states the fact and to give `low` to a guess.
+- **Confidence tiers.** `high` is written. `medium` is written only when evidence the catalogue already holds supports it (for categories, `Categories::Support#addition_sources`: the category's name or alias appears in the stored Wikidata, Wikipedia, WorldCat or Goodreads evidence, the book already holds the category, the name appears in the description, Wikipedia lead or plot or WorldCat summary, or in a Goodreads shelf name; for origin, `Origin::Apply#supported?`: the stored Wikidata country, the Wikipedia infobox country, or web-verified book facts naming the same country). `low` is recorded and held. The prompt tells the agent to say `high` only when a source states the fact and to give `low` to a guess.
 - **Blanks only.** Origin never overwrites a real country; a disagreeing high answer is recorded, not applied.
 - **Categories are never removed** (`rejudge: false`) and **never created**: an answer names existing categories by id (genres, audience) or by name resolved through the mapper (subjects, locations). A name the mapper cannot match is held, and the agent's `unlisted_genres` feed the alias report.
 - **`BOOKS_CATEGORIES_JUDGE_ENABLED` does not gate an agent's answer.** That switch gates the automatic judge. A submit is an explicit admin action and applies even while the judge is off.
@@ -112,7 +112,7 @@ Both live in `Services::Books::QueueTypes` and share `BookScope`: candidates are
 | Reference (sent once) | the answer schema | the answer schema, the closed genre and audience lists with `id`, `name` and definition, and the caps (genre, subject, location) |
 | Apply | `Origin::RecordAnswer` | `Categories::RecordAnswer`, `rejudge: false` |
 
-The payload for one item is the same for both: `book_id`, `record` (the dossier's view of the book: title, year, language, authors with years and nationalities, held countries, a trimmed description, and for categories the categories the book holds now with their sources), `evidence` (the stored Wikidata, Wikipedia, WorldCat, Goodreads and book-facts evidence when the book has it; nothing waits for evidence to be gathered) and `tried` (the latest ledger row of this kind, whatever its mode: mode, outcome, reason, confidence, answer).
+The payload for one item is the same for both: `book_id`, `record` (the dossier's view of the book: title, year, language, authors with years and nationalities, held countries, a trimmed description, and the categories the book holds now with their sources), `evidence` (the stored Wikidata, Wikipedia, WorldCat, Goodreads and book-facts evidence when the book has it; nothing waits for evidence to be gathered) and `tried` (the latest ledger row of this kind, whatever its mode: mode, outcome, reason, confidence, answer).
 
 Run categories only after the genre and audience definitions are written (`books:categories:write_definitions`, launch-todo section 14 step 2), since the reference list sends them.
 
@@ -128,7 +128,7 @@ Five admin API operations in `config/api/v1/admin_openapi.yaml`, each also an MC
 | `submit_enrichment_item` | `POST /api/v1/admin/enrichment_items/{id}/submit` | `books:admin:write` |
 | `skip_enrichment_item` | `POST /api/v1/admin/enrichment_items/{id}/skip` | `books:admin:write` |
 
-- `list` returns each type with its count per status. `get` adds the outcome counts of finished rows and the type's `reference`. It is separate from claim because the genre list is large and an agent needs it once, not with every batch. Because submit answers 202 and the agent never sees the apply result, these outcome counts are what the agent reports at the end of a run.
+- `list` returns each type with its count per status. `get` adds the outcome counts of `done` rows and the type's `reference`. It is separate from claim because the genre list is large and an agent needs it once, not with every batch. Because submit answers 202 and the agent never sees the apply result, these outcome counts are what the agent reports at the end of a run.
 - `claim` takes an optional `limit` (1 to 25, default 10) and returns the items (`id`, `kind`, `reason`, `attempts`, `payload`) with `meta.lease_token`, `meta.lease_expires_at` and `meta.remaining`.
 - Claim, submit and skip also require that the token's owner may change books (`Books::BookPolicy#update?`).
 - A row of another domain, or of a type no longer registered, is a 404.
@@ -157,11 +157,12 @@ E2E: `web-app/e2e/tests/books/admin/enrichment-queues.spec.ts` (page loads, Copy
 
 ## Adding a type
 
-1. Subclass `Services::EnrichmentQueue::Type` and implement its class methods: `kind` (`books.origin` form, matching `Enrichment::KIND_FORMAT`), `label`, `version`, `target_class`, `candidates(scope:)` (a relation), `priority_sql`, `still_needed?(record)`, `payload(record)`, `reference`, `answer_schema` and `apply(request)` (returns a Result with `data: {enrichment:, outcome:}`). `prompt_locals` is optional.
+1. Subclass `Services::EnrichmentQueue::Type` and implement its class methods: `kind` (`books.origin` form, matching `Enrichment::KIND_FORMAT`), `label`, `version` (an Integer: it is compared with the row's integer `version`), `target_class`, `candidates(scope:)` (a relation), `priority_sql`, `still_needed?(record)`, `payload(record)`, `reference` (a Hash that includes `"answer_schema"`), `answer_schema` and `apply(request)` (returns a Result with `data: {enrichment:, outcome:}`). `prompt_locals` is optional.
 2. Add the class name to `Services::EnrichmentQueue::Registry::TYPE_NAMES`.
 3. Add `config/mcp/<domain>/prompts/enrichment/<slug>.md.erb`.
 4. Make `apply` call code the paid path also uses, so the two cannot drift, and write the ledger row with mode `agent`, context and label `"agent"`.
-5. A new association on a record type needs a merger rule; `EnrichmentRequest.carry_over` already handles the queue's own rows.
+5. A type on a record class other than `Books::Book` or `Books::Author` needs `has_many :enrichment_requests, as: :enrichable, dependent: :delete_all` on that model and an `EnrichmentRequest.carry_over(source:, target:)` call in its merger. Only those two classes have them today.
+6. A type in another domain also needs that domain's API controllers (`EnrichmentQueueSupport::DOMAIN` is `"books"`), routes, an admin page subclass of `Admin::EnrichmentQueuesBaseController` and a navigation entry.
 
 Namespace warning: put books types in `Services::Books::QueueTypes`, not `Services::Books::EnrichmentQueue`. Inside `module Services::Books`, a bare `EnrichmentQueue::` would resolve to the wrong constant (and `Books::` inside `module Services` is `Services::Books::`). Root-anchor models and jobs: `::EnrichmentRequest`, `::EnrichmentQueue::ApplyJob`, `::Books::Book`.
 
