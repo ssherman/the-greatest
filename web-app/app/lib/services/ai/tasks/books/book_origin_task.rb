@@ -8,6 +8,32 @@ module Services
         class BookOriginTask < EnrichmentTask
           include DossierPromptHelpers
 
+          RULES = <<~RULES.chomp.freeze
+            Rules, in order:
+            1. Start from the original language the book was written in.
+            2. Then the author's primary nationality at the time the book was first published.
+            3. If the original language is a main language of the author's country, use that country.
+            4. If they disagree, the country associated with the original language wins.
+            5. For an author with several nationalities, use the one that matches the original language.
+            6. If the author's nationality changed over time, use the one at the time of first publication.
+            7. Use the book's setting or cultural context only when it agrees with the original language or the author's nationality.
+            8. Never a mixed nationality such as "Chinese American". Choose one.
+            9. Answer "Unknown" when you cannot determine a single nationality. It is better than a guess.
+            10. Answer "Multiple" only when no single answer is defensible after every rule above.
+
+            Evidence. The book's record and what outside sources say about it follow. Wikidata's country of origin and the Wikipedia infobox's country are strong evidence when they agree with the author and the language. Library publication places show where editions were printed, which is weak evidence: translations and foreign editions are published everywhere. An author marked as a placeholder is not a person: the book has no known author, so decide from the language and the sources. An author marked as a place name stands for a traditional or anonymous work from that place, and is strong evidence of origin.
+
+            Examples:
+            - "The Great Gatsby" by F. Scott Fitzgerald. Original language English; author American. Result: American.
+            - "One Hundred Years of Solitude" by Gabriel García Márquez. Spanish; Colombian. Result: Colombian.
+            - "Lolita" by Vladimir Nabokov. English; Russian-American. Result: American, because of the original language.
+            - "The Blind Assassin" by Margaret Atwood. English; Canadian. Result: Canadian.
+            - "Heart of Darkness" by Joseph Conrad. English; Polish-British. Result: British, from the original language and the author's adopted nationality.
+            - "One Thousand and One Nights". Arabic and Persian; no single author. Result: Multiple.
+            - "Ideas and Opinions" by Albert Einstein. Mostly German; German-Swiss-American. Result: German, from the original language and the author's nationality when he wrote it.
+            - "Haroun and the Sea of Stories" by Salman Rushdie. English; British-Indian. Result: British, from the original language and the author's citizenship.
+          RULES
+
           PROMPT_VERSION = 1
           WORLDCAT_PLACES = 5
 
@@ -26,29 +52,7 @@ module Services
             <<~SYSTEM_MESSAGE
               You decide the national origin of one book for a book catalog: the single country whose literature the book belongs to, given as one English nationality adjective such as "French", "Japanese" or "Brazilian".#{research_instruction}
 
-              Rules, in order:
-              1. Start from the original language the book was written in.
-              2. Then the author's primary nationality at the time the book was first published.
-              3. If the original language is a main language of the author's country, use that country.
-              4. If they disagree, the country associated with the original language wins.
-              5. For an author with several nationalities, use the one that matches the original language.
-              6. If the author's nationality changed over time, use the one at the time of first publication.
-              7. Use the book's setting or cultural context only when it agrees with the original language or the author's nationality.
-              8. Never a mixed nationality such as "Chinese American". Choose one.
-              9. Answer "Unknown" when you cannot determine a single nationality. It is better than a guess.
-              10. Answer "Multiple" only when no single answer is defensible after every rule above.
-
-              Evidence. The book's record and what outside sources say about it follow. Wikidata's country of origin and the Wikipedia infobox's country are strong evidence when they agree with the author and the language. Library publication places show where editions were printed, which is weak evidence: translations and foreign editions are published everywhere. An author marked as a placeholder is not a person: the book has no known author, so decide from the language and the sources. An author marked as a place name stands for a traditional or anonymous work from that place, and is strong evidence of origin.
-
-              Examples:
-              - "The Great Gatsby" by F. Scott Fitzgerald. Original language English; author American. Result: American.
-              - "One Hundred Years of Solitude" by Gabriel García Márquez. Spanish; Colombian. Result: Colombian.
-              - "Lolita" by Vladimir Nabokov. English; Russian-American. Result: American, because of the original language.
-              - "The Blind Assassin" by Margaret Atwood. English; Canadian. Result: Canadian.
-              - "Heart of Darkness" by Joseph Conrad. English; Polish-British. Result: British, from the original language and the author's adopted nationality.
-              - "One Thousand and One Nights". Arabic and Persian; no single author. Result: Multiple.
-              - "Ideas and Opinions" by Albert Einstein. Mostly German; German-Swiss-American. Result: German, from the original language and the author's nationality when he wrote it.
-              - "Haroun and the Sea of Stories" by Salman Rushdie. English; British-Indian. Result: British, from the original language and the author's citizenship.
+              #{RULES}
 
               Set "recognized" to false if you do not know this specific book. "original_language" is the language the book was written in, or null. "confidence" is high, medium or low for the nationality you give. "reason" is one short sentence naming the rule and the evidence that decided it. Output only the JSON object described by the schema.
             SYSTEM_MESSAGE

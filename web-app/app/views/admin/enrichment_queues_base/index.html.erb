@@ -1,0 +1,55 @@
+<%# web-app/app/views/admin/enrichment_queues_base/index.html.erb %>
+<% content_for :title, "Enrichment queues" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Enrichment queues</h1>
+  <p class="text-sm text-base-content/70">
+    Filling adds records that need this enrichment and have never been queued. A finished item is queued again only when the type's rules change or you re-queue it.
+  </p>
+
+  <div class="overflow-x-auto">
+    <table class="table bg-base-100">
+      <thead>
+        <tr>
+          <th>Queue</th>
+          <% ::Admin::EnrichmentQueuesBaseController::STATUSES.each do |status| %>
+            <th class="text-right"><%= status.humanize %></th>
+          <% end %>
+          <th>Prompt</th>
+          <th>Fill</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @types.each do |type| %>
+          <tr data-testid="queue-row-<%= type.slug %>">
+            <td class="font-medium"><%= link_to type.label, queue_path(type), class: "link" %></td>
+            <% ::Admin::EnrichmentQueuesBaseController::STATUSES.each do |status| %>
+              <td class="text-right" data-testid="count-<%= type.slug %>-<%= status %>"><%= @counts[type.kind][status] %></td>
+            <% end %>
+            <td>
+              <% if @prompts[type] %>
+                <div data-controller="clipboard-copy">
+                  <textarea hidden readonly data-clipboard-copy-target="source"><%= @prompts[type] %></textarea>
+                  <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+                          data-clipboard-copy-target="button" data-testid="copy-agent-prompt-<%= type.slug %>">Copy prompt</button>
+                </div>
+              <% end %>
+            </td>
+            <td>
+              <% if current_user_can_write? %>
+                <%= form_with url: fill_path(type), method: :post, class: "flex items-center gap-2" do |form| %>
+                  <%= form.label :scope, "Scope", for: "scope_#{type.slug}", class: "sr-only" %>
+                  <%= form.select :scope, options_for_select([["Ranked", "ranked"], ["All", "all"]]), {}, class: "select select-sm w-24", id: "scope_#{type.slug}" %>
+                  <%= form.label :limit, "Limit", for: "limit_#{type.slug}", class: "sr-only" %>
+                  <%= form.number_field :limit, min: 1, step: 1, placeholder: "No limit", class: "input input-sm w-24", id: "limit_#{type.slug}" %>
+                  <%= form.submit "Fill", class: "btn btn-sm btn-primary", data: {testid: "fill-#{type.slug}"} %>
+                <% end %>
+                <p class="mt-1 max-w-xs text-xs text-base-content/70">Limit takes the highest-priority records that need this enrichment, whether or not they are already queued, so repeating a fill with the same limit adds nothing.</p>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

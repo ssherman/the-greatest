@@ -11,7 +11,7 @@ module Services
       class Judge
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        KIND = "books.origin"
+        KIND = RecordAnswer::KIND
 
         def self.call(book:, context:, label: nil, research_allowed: true, force: false, force_research: false)
           new(book: book, context: context, label: label, research_allowed: research_allowed,
@@ -135,32 +135,16 @@ module Services
           answer = (task_result.data[:facts] || {}).to_h.symbolize_keys
           return [failed_row(mode, task_result, "empty response"), false] unless answer.key?(:nationality)
 
-          citations = Array(task_result.data[:citations])
-          confidence = confidence_for(answer[:confidence])
-          recognized = answer[:recognized]
-          unrecognized = recognized == false && !dossier.external? && !dossier.research_backed?
-          answer_facts = {"nationality" => answer[:nationality], "confidence" => answer[:confidence],
-                          "reason" => answer[:reason], "recognized" => recognized,
-                          "original_language" => answer[:original_language]}
-          facts = base_facts("judge").merge("answer" => answer_facts)
-
-          attributes = row_attributes(mode, chat).merge(recognized: recognized, confidence: confidence, citations: citations)
-          if unrecognized
-            attributes.merge!(outcome: :unrecognized, reason: "unrecognized", facts: facts)
-          else
-            applied = apply(answer[:nationality], answer[:confidence])
-            attributes.merge!(outcome: applied.data[:applied] ? :applied : :nothing_to_apply,
-              reason: applied.data[:reason], facts: facts.merge("origin" => applied.data.deep_stringify_keys))
-          end
-          needs = row_needs_research?(mode, confidence, unrecognized)
-          [book.enrichments.create!(attributes), needs]
+          row = RecordAnswer.call(book: book, dossier: dossier, answer: answer, mode: mode, context: context, label: label,
+            citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model)
+          [row, row_needs_research?(mode, row.confidence, row.unrecognized?)]
         rescue => e
           [book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message,
             facts: base_facts("judge"))), false]
         end
 
-        # Read before the row is written, so an error here is the failed row
-        # and the mode run still leaves exactly one.
+        # Read after RecordAnswer has written the answer row. A raise here
+        # reaches run's rescue, which adds a failed row beside the answer row.
         def row_needs_research?(mode, confidence, unrecognized)
           mode == :knowledge && !real_country? && (confidence == "low" || unrecognized)
         end
@@ -188,14 +172,7 @@ module Services
         end
 
         def base_facts(path)
-          {"prompt_version" => Services::Ai::Tasks::Books::BookOriginTask::PROMPT_VERSION, "context" => context,
-           "label" => label, "path" => path, "dossier" => dossier&.to_ledger, "answer" => nil, "origin" => nil,
-           "deferred_research" => false}
-        end
-
-        def confidence_for(value)
-          normalized = value.to_s.strip.downcase
-          Enrichment.confidences.key?(normalized) ? normalized : nil
+          RecordAnswer.base_facts(context: context, label: label, dossier: dossier, path: path)
         end
 
         def result

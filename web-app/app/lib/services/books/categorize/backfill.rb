@@ -88,12 +88,22 @@ module Services
 
         # Correlated on books_books.id (NOT EXISTS anti-joins, not NOT IN).
         def self.done_rows(kind, version)
+          # A newer agent row that applied nothing is invisible here: it must neither count as
+          # done nor displace the paid pipeline's judgment as the latest row.
+          newer_agent_unapplied = ActiveRecord::Base.sanitize_sql_array([
+            "newer.mode = ? AND newer.outcome IS DISTINCT FROM ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied]
+          ])
           rows = Enrichment.where(enrichable_type: "Books::Book", kind: kind)
             .where("enrichments.enrichable_id = books_books.id")
             .where("NOT EXISTS (SELECT 1 FROM enrichments newer WHERE newer.enrichable_type = enrichments.enrichable_type " \
-              "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id)")
+              "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id " \
+              "AND NOT (#{newer_agent_unapplied}))")
             .where("enrichments.facts->>'prompt_version' = ?", version.to_s)
             .where.not(outcome: [:failed, :skipped])
+            # An agent answered from its own web search, without the evidence the backfill
+            # gathers. Only an agent row that applied is done; one that applied nothing
+            # leaves the book for the backfill to try.
+            .where("enrichments.mode <> ? OR enrichments.outcome = ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied])
             .select("1")
           # A deferred book waits for research, which the cap at 0 never grants.
           # Read at call time so raising the cap makes them candidates again.

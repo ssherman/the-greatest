@@ -208,7 +208,7 @@ Identifier tools:
 - `add_book_identifier` and `add_author_identifier` (`books:admin:write`): stored with `source: admin`. An author's Wikidata or VIAF id added this way is authoritative: the resolvers accept it without name or year corroboration and enrichment re-runs. Re-adding one the author already holds from another source promotes it to admin (`promoted: true`). On a book, `source: admin` is provenance only: verification, the Goodreads replay and the import matcher may replace or ignore it. Refused if the author holds a different id of that type (remove it first) or the value was rejected for this author.
 - `remove_book_identifier` and `remove_author_identifier` (`books:admin:merge`): permanent. `open_library` and `worldcat` rows are verified evidence the Goodreads matcher reads. `RevertFacts` never deletes admin rows.
 
-Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 59 tools (the author tool `create_admin_author` in "Book authors", the series tools in "Series" and the description tools below, the book and author field tools in "Book and author field edits", the repair verdict tools in "Repair verdicts" and the book author tools in "Book authors" included).
+Who and how: `match_decisions.reviewed_via` (`admin_ui` or `api`) is stamped by `MatchDecision#review!` from `Current.acting_via`, including the reviews a reject cascades to. The page has a "Reviewed via" filter on reviewed decisions. The admin MCP document now has 64 tools (the five enrichment queue tools, `list_enrichment_queues`, `get_enrichment_queue`, `claim_enrichment_items`, `submit_enrichment_item` and `skip_enrichment_item`, the author tool `create_admin_author` in "Book authors", the series tools in "Series" and the description tools below, the book and author field tools in "Book and author field edits", the repair verdict tools in "Repair verdicts" and the book author tools in "Book authors" included).
 
 The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.erb`) carries the per-kind workflow and the house rules (placeholder and place authors are deliberate, translators are not authors, never link same-name different people). E2E: `e2e/tests/books/admin/match-decisions-copy-prompt.spec.ts`.
 
@@ -224,6 +224,20 @@ The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads re
 - `bulk_approve_repair_verdicts` (`books:admin:merge`). Body `{ids: [...]}`, 1 to 100.
 
 Nothing applies on approval: the matching apply task acts on approved verdicts later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds). The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
+
+## The enrichment queues
+
+The books enrichment queues (`/admin/enrichment_queues`) let an agent research and fill in records itself: it claims a batch, searches the web, and submits an answer that the server applies by the paid pipeline's own rules. Five admin tools work it. `Services::EnrichmentQueue::*` is shared by the REST controllers and the page. Full behaviour is in `docs/features/enrichment-queue.md`.
+
+- `list_enrichment_queues` (`books:admin:read`). Each queue type with its count per status.
+- `get_enrichment_queue` (`books:admin:read`). Path `type` (`origin` or `categories`). Status counts, outcome counts of `done` items and the type's `reference` (the answer schema, and for categories the genre and audience lists and the caps). Call it once per run.
+- `claim_enrichment_items` (`books:admin:write`). Body `{limit}` (1 to 25, default 10). Returns the items and `meta.lease_token`, `meta.lease_expires_at` and `meta.remaining`. The lease lasts 30 minutes. An empty batch with `remaining` above 0 is not the end: claim again.
+- `submit_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, answer, sources, note}`. Answers 202 with the status: the answer is applied in a background job, so the response does not say what was applied. A 409 means the lease is gone or the item was already answered (drop it); a 422 names what is wrong with the answer (fix it and resubmit).
+- `skip_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, reason}`. A skipped item is not handed out again.
+
+None is destructive, and the five are exempt from "dry run, then ask": the agent decides each item itself, as it does for the duplicate queue (`config/mcp/books/admin_usage.md`, "The enrichment queues"). Submitting fills blanks only and never overwrites a held value. Claim, submit and skip also need a token whose owner may change books.
+
+The page's Copy prompt per type (`config/mcp/books/prompts/enrichment/origin.md.erb` and `categories.md.erb`, rendered by `Services::AgentPrompts.for_enrichment`) carries the loop, the type's judgment rules (shared with the paid model through the task's `RULES` constant) and the confidence guidance. E2E: `e2e/tests/books/admin/enrichment-queues.spec.ts`.
 
 ## Series
 

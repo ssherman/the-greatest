@@ -200,6 +200,15 @@ module Books
         assert_equal @target.id, Enrichment.find(row.id).enrichable_id
       end
 
+      test "moves queue rows to the target" do
+        row = EnrichmentRequest.create!(enrichable: @source, kind: "books.origin", reason: "missing")
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target, row.reload.enrichable
+      end
+
       test "repoints decisions about the source author to the target, and leaves other decisions alone" do
         about_source = ::MatchDecision.create!(
           finder: "Services::Books::Authors::ResolveWikidata", subject: @source, record: nil,

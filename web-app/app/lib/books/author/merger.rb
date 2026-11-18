@@ -126,6 +126,7 @@ module Books
         merge_external_links
         merge_ai_chats
         merge_enrichments
+        merge_enrichment_requests
         merge_decision_subjects
         merge_images
         merge_category_items
@@ -184,6 +185,10 @@ module Books
 
       def merge_enrichments
         @stats[:enrichments] = source_author.enrichments.update_all(enrichable_id: target_author.id)
+      end
+
+      def merge_enrichment_requests
+        @stats[:enrichment_requests] = ::Services::EnrichmentQueue::CarryOver.call(source: source_author, target: target_author).data[:moved]
       end
 
       # Wikidata decisions name the author as their subject (record is nil), so
