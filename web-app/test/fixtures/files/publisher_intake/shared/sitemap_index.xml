@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic fixture: hand-written, not a real publisher's sitemap. -->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://example.test/sitemap-1.xml</loc><lastmod>2026-11-01</lastmod></sitemap>
+  <sitemap><loc>https://example.test/sitemap-2.xml</loc></sitemap>
+  <sitemap><loc>https://example.test/sitemap-3.xml.gz</loc></sitemap>
+</sitemapindex>

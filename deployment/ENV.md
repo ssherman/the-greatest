@@ -242,7 +242,7 @@ These variables are used by nginx's built-in template system for environment var
 
 #### SIDEKIQ_CONCURRENCY
 - **Description**: Threads for Sidekiq's main queues (`critical`, `default`, `low`, `author_chain`), read by
-  `config/sidekiq.yml`. The `serial`, `goodreads_fetch` and `evidence` capsules add one thread each on top.
+  `config/sidekiq.yml`. The `serial`, `goodreads_fetch`, `publisher_fetch` and `evidence` capsules add one thread each on top.
   The database pool (`config/database.yml`) grows to at least this plus 5, so every thread gets a connection.
 - **Required**: No
 - **Default**: `5`
@@ -256,6 +256,26 @@ These variables are used by nginx's built-in template system for environment var
 - **Required**: Yes in production, or the dashboard is unreachable
 - **Default**: none. If either is blank, every login is refused (`SidekiqWebAuth`) — the
   dashboard fails closed, never open
+
+### Publisher intake
+
+#### PUBLISHER_INTAKE_SOURCES
+- **Description**: Comma-separated catalog source keys the weekly publisher intake run reads (for example `hachette_us,macmillan_us`). Whitespace and duplicates are ignored.
+- **Required**: No
+- **Default**: empty, so the intake does nothing
+- **Used By**: web, worker (the admin screen's Enabled column is computed in the web process)
+
+#### PUBLISHER_INTAKE_FETCH_INTERVAL
+- **Description**: Seconds from one publisher page fetch start to the next. A value that is not a whole number falls back to the default and logs a warning.
+- **Required**: No
+- **Default**: `10`
+- **Used By**: worker
+
+#### PUBLISHER_INTAKE_DAILY_FETCH_CAP
+- **Description**: Publisher page fetches reserved per UTC day. A value that is not a whole number falls back to the default and logs a warning.
+- **Required**: No
+- **Default**: `2000`
+- **Used By**: web, worker (the admin screen shows the cap)
 
 ### Application Features
 

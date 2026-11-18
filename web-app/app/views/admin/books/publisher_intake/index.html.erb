@@ -1,0 +1,71 @@
+<% content_for :title, "Publisher Intake" %>
+
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-bold">Publisher Intake</h1>
+    <%= link_to "All titles", admin_books_publisher_titles_path, class: "btn btn-sm" %>
+  </div>
+  <p class="text-sm text-base-content/70">
+    What the weekly intake has collected from each publisher. Read-only: sources are switched on in settings, and runs are started from the rake tasks.
+  </p>
+
+  <% if @sources.empty? %>
+    <p class="text-center text-base-content/70 py-8">No sources are registered.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm bg-base-100" data-testid="source-table">
+        <thead>
+          <tr>
+            <th>Source</th><th>Enabled</th><th>Last run</th><th>Listings</th><th>Titles</th><th>Fetches today</th><th>Blocked until</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @sources.each do |source| %>
+            <% titles = source[:titles] %>
+            <tr data-testid="source-row" data-source="<%= source[:key] %>">
+              <td class="[overflow-wrap:anywhere]">
+                <%= link_to source[:name], admin_books_publisher_titles_path(source: source[:key]), class: "link" %>
+                <div class="text-xs text-base-content/60"><%= source[:key] %></div>
+                <% unless source[:registered] %><span class="badge badge-warning badge-sm">no strategy</span><% end %>
+              </td>
+              <td><%= source[:enabled] ? "Yes" : "No" %></td>
+              <td>
+                <% if source[:last_run] %>
+                  <% run = source[:last_run] %>
+                  <span class="badge badge-ghost badge-sm"><%= run[:status].to_s.humanize %></span>
+                  <span class="text-xs"><%= run[:kind].to_s.humanize %></span>
+                  <div class="text-xs text-base-content/60 whitespace-nowrap"><%= run[:started_at]&.strftime("%Y-%m-%d %H:%M") %></div>
+                <% else %>
+                  <span class="text-base-content/60">Never</span>
+                <% end %>
+              </td>
+              <td class="text-xs">
+                <% if source[:listings].empty? %>
+                  <span class="text-base-content/60">None</span>
+                <% else %>
+                  <% source[:listings].each do |state, count| %>
+                    <div><%= state.to_s.humanize %>: <%= count %></div>
+                  <% end %>
+                <% end %>
+              </td>
+              <td class="text-xs">
+                <div>Ready: <%= titles[:ready] %></div>
+                <% titles[:held].each do |reason, count| %>
+                  <div>Held, <%= reason.to_s.humanize.downcase %>: <%= count %></div>
+                <% end %>
+              </td>
+              <td class="whitespace-nowrap"><%= source[:fetches_today] %> of <%= source[:daily_cap] %></td>
+              <td class="whitespace-nowrap">
+                <% if source[:blocked_until] %>
+                  <%= source[:blocked_until].in_time_zone.strftime("%Y-%m-%d %H:%M") %>
+                <% else %>
+                  <span class="text-base-content/60">Not blocked</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</div>

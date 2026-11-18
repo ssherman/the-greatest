@@ -1,0 +1,39 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_publisher_intake_runs
+#
+#  id          :bigint           not null, primary key
+#  baseline    :boolean          default(FALSE), not null
+#  counts      :jsonb            not null
+#  error       :text
+#  finished_at :datetime
+#  kind        :integer          default("weekly"), not null
+#  source      :string           not null
+#  started_at  :datetime         not null
+#  status      :integer          default("running"), not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#
+# Indexes
+#
+#  index_books_publisher_intake_runs_on_source_and_started_at  (source,started_at)
+#
+finished_run:
+  source: hachette_us
+  kind: weekly
+  status: finished
+  baseline: false
+  started_at: 2026-11-10 06:00:00
+  finished_at: 2026-11-10 06:20:00
+  counts: {"requests": 12, "outstanding": 0, "listings_seen": 340, "listings_new": 5, "listings_changed": 2}
+
+failed_run:
+  source: macmillan_us
+  kind: manual
+  status: failed
+  baseline: true
+  started_at: 2026-11-11 06:00:00
+  finished_at: 2026-11-11 06:01:00
+  error: discovery source unavailable
