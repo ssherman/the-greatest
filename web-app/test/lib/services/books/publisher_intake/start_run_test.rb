@@ -111,6 +111,25 @@ module Services
           assert_equal({"requests" => 0, "outstanding" => 0}, run.counts)
           assert_empty @enqueued
         end
+
+        test "a source with a running run is refused, creating and enqueuing nothing" do
+          new_running_run
+
+          result = nil
+          assert_no_difference -> { ::Books::PublisherIntakeRun.count } do
+            result = start
+          end
+
+          refute_predicate result, :success?
+          assert_equal ["a run is already running for #{SOURCE}"], result.errors
+          assert_empty @enqueued
+        end
+
+        test "a running run of another source does not refuse" do
+          new_running_run(source: "removed_source")
+
+          assert_predicate start, :success?
+        end
       end
     end
   end

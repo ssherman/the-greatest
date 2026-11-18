@@ -70,6 +70,46 @@ module Services
           assert_predicate failed.reload, :state_failed?
           assert_predicate other.reload, :state_read?
         end
+
+        def failed_listing(outcome: :unavailable, attempted: 8.days.ago, source: SOURCE)
+          ::Books::PublisherListing.create!(source: source, url: "https://x.test/#{SecureRandom.hex(4)}", external_key: SecureRandom.hex(4),
+            state: :failed, attempts: 3, last_attempt_outcome: outcome, last_attempt_at: attempted, queued_at: 9.days.ago,
+            first_seen_at: 50.days.ago, last_seen_at: 1.day.ago)
+        end
+
+        test "a listing that failed unavailable more than 7 days ago goes back to pending with its attempts reset" do
+          failed = failed_listing
+
+          result = queue
+
+          failed.reload
+          assert_equal 1, result.data[:revived]
+          assert_equal 0, result.data[:queued]
+          assert_predicate failed, :state_pending?
+          assert_equal 0, failed.attempts
+          assert_nil failed.queued_at
+        end
+
+        test "a listing that failed unavailable 6 days ago is left failed" do
+          failed = failed_listing(attempted: 6.days.ago)
+
+          assert_equal 0, queue.data[:revived]
+          assert_predicate failed.reload, :state_failed?
+        end
+
+        test "a not found listing is never revived" do
+          failed = failed_listing(outcome: :not_found, attempted: 90.days.ago)
+
+          assert_equal 0, queue.data[:revived]
+          assert_predicate failed.reload, :state_failed?
+        end
+
+        test "a failed listing of another source is left alone" do
+          failed = failed_listing(source: "removed_source")
+
+          assert_equal 0, queue.data[:revived]
+          assert_predicate failed.reload, :state_failed?
+        end
       end
     end
   end

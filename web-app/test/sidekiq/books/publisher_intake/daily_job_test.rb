@@ -77,6 +77,13 @@ class Books::PublisherIntake::DailyJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "a refused start does not stop the job" do
+    Services::Books::PublisherIntake::StartRun.stubs(:call)
+      .returns(Services::Books::PublisherIntake::StartRun::Result.new(success?: false, data: {}, errors: ["a run is already running"]))
+
+    assert_nothing_raised { Books::PublisherIntake::DailyJob.new.perform }
+  end
+
   test "a failed run yesterday does not stop today's run" do
     run_row(status: :failed, started_at: 1.day.ago, finished_at: 1.day.ago)
 

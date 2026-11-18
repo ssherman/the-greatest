@@ -64,9 +64,9 @@ class Books::PublisherIntake::DiscoveryRequestJobTest < ActiveSupport::TestCase
     assert_predicate @run, :status_running?
   end
 
-  test "an unavailable fetch is queued again with the next attempt" do
+  test "an unavailable fetch is queued again a minute later with the next attempt" do
     @client.stubs(:fetch).raises(PageFetcher::Exceptions::TimeoutError, "slow")
-    Job.expects(:perform_async).with(@run.id, @request.to_h, false, 2)
+    Job.expects(:perform_in).with(60, @run.id, @request.to_h, false, 2)
 
     Job.new.perform(@run.id, @request.to_h, true, 1)
   end

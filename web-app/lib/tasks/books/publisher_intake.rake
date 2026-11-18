@@ -7,7 +7,10 @@ namespace :books do
       strategy = Books::PublisherIntake::Sources.fetch(args[:source])
       abort "unknown source #{args[:source].inspect}; registered: #{Books::PublisherIntake::Sources.registry.keys.join(", ")}" if strategy.nil?
 
-      run = Services::Books::PublisherIntake::StartRun.call(source: strategy, kind: :manual).data[:run]
+      started = Services::Books::PublisherIntake::StartRun.call(source: strategy, kind: :manual)
+      abort started.errors.join(", ") unless started.success?
+
+      run = started.data[:run]
       puts "started run #{run.id} for #{strategy.key}: #{run.counts["requests"]} requests, status #{run.status}"
     end
 

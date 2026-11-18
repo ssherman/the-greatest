@@ -9,6 +9,9 @@ class Books::PublisherIntake::DiscoveryRequestJob
 
   sidekiq_options queue: :publisher_fetch, retry: 2
 
+  # A fetcher failure is tried again after this long, so the three attempts span two minutes.
+  RETRY_DELAY = 60
+
   def perform(run_id, request_hash, due = false, attempt = 1)
     run = ::Books::PublisherIntakeRun.find_by(id: run_id)
     return if run.nil?
@@ -19,7 +22,7 @@ class Books::PublisherIntake::DiscoveryRequestJob
     when :wait then self.class.perform_in(data[:wait], run_id, request_hash, true, attempt)
     # Nothing was reserved, so the later attempt must reserve its own turn.
     when :refused then self.class.perform_in(data[:wait], run_id, request_hash, false, attempt)
-    when :retry then self.class.perform_async(run_id, request_hash, false, attempt + 1)
+    when :retry then self.class.perform_in(RETRY_DELAY, run_id, request_hash, false, attempt + 1)
     when :done then complete(run, request, data[:requests])
     end
   end

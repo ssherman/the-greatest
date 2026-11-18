@@ -12,6 +12,9 @@ module Services
       # any job is enqueued, because each DiscoveryRequestJob decrements
       # counts["outstanding"] and finishes the run at zero.
       #
+      # A source with a run already running is refused: a failed Result, nothing
+      # created and nothing enqueued.
+      #
       # data: {run:}
       class StartRun
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
@@ -26,6 +29,10 @@ module Services
         end
 
         def call
+          if ::Books::PublisherIntakeRun.status_running.exists?(source: @source.key)
+            return Result.new(success?: false, data: {}, errors: ["a run is already running for #{@source.key}"])
+          end
+
           finished = ::Books::PublisherIntakeRun.where(source: @source.key, status: :finished)
           last_finished = finished.order(:started_at, :id).last
           first_run = last_finished.nil?
