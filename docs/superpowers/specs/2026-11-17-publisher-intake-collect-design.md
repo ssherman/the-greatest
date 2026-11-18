@@ -412,11 +412,14 @@ After each read, shared code sets `status` and `hold_reason`. First match wins:
    - the title or subtitle (never the series name) matches
      `Services::Books::Verification::EditionCheck::SET_WORDS`, **not counting** a match that is
      only one of the series-name words in `Services::Books::AmazonBookCheck::SERIES_NAME_WORDS`
-     (`trilogy`, `collection`, `volumes`, `complete series`);
+     (`trilogy`, `collection`, `volumes`, `complete series`), and not counting a match that is
+     a number, a space and "book" or "books" ("1001 Books…"), since a title that counts books is
+     a book; the hyphenated form ("3-Book") still counts;
    - the title matches `Services::Books::AmazonBookCheck::NUMBER_RANGE` ("#1-3").
 
-   So "Box Set", "Omnibus", "3-Book", "Books 1-3" hold; "A Collection of Essays" and "The
-   Tolstoy Trilogy" do not. Those two constants are the vocabulary; do not write a second list.
+   So "Box Set", "Omnibus", "3-Book", "Books 1-3" hold; "A Collection of Essays", "The Tolstoy
+   Trilogy" and "1001 Books You Must Read Before You Die" do not. Those constants are the
+   vocabulary; do not write a second list.
    A held title is skipped by "create", so a false hold loses a real book, while a false pass
    only lets a three-in-one volume through as a book.
 
