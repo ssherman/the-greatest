@@ -11,7 +11,7 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 59, expected.size
+      assert_equal 64, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
@@ -19,7 +19,8 @@ module Mcp
       expected = %w[search_admin_books search_admin_authors search_admin_categories create_admin_category
         get_admin_category update_admin_category delete_admin_category merge_categories merge_book
         merge_author tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict approve_repair_verdict reject_repair_verdict correct_repair_verdict bulk_approve_repair_verdicts get_book_identifiers get_author_identifiers get_book_descriptions get_author_descriptions get_admin_book get_admin_author create_admin_author list_admin_series get_admin_series create_admin_series update_admin_series delete_admin_series merge_admin_series add_series_book update_series_book remove_series_book update_book update_author add_book_description add_author_description update_description set_preferred_description delete_description find_by_identifier add_book_identifier add_author_identifier remove_book_identifier remove_author_identifier review_match_decision reject_match_decision_link
-        merge_duplicate_candidate dismiss_duplicate_candidate]
+        merge_duplicate_candidate dismiss_duplicate_candidate list_enrichment_queues get_enrichment_queue
+        claim_enrichment_items submit_enrichment_item skip_enrichment_item]
 
       assert_equal expected.sort, catalog.operations.map(&:tool_name).sort
     end
@@ -52,6 +53,23 @@ module Mcp
 
       merge = tool_named("merge_categories")
       assert_equal [:body, :body], [merge.arguments["source_ids"].location, merge.arguments["dry_run"].location]
+    end
+
+    test "submit_enrichment_item takes the answer as an object and is strict only at the top level" do
+      schema = tool_named("submit_enrichment_item").input_schema
+
+      assert_equal false, schema["additionalProperties"]
+      assert_equal "object", schema.dig("properties", "answer", "type")
+      assert_equal true, schema.dig("properties", "answer", "additionalProperties")
+      assert_equal %w[answer id lease_token sources], schema["required"].sort
+    end
+
+    test "the enrichment tools tell the model what ends a queue and what a 409 means" do
+      assert_match(/only when `data` is empty and `meta.remaining` is 0/, tool_named("claim_enrichment_items").description)
+      assert_match(/claim again/, tool_named("claim_enrichment_items").description)
+      %w[submit_enrichment_item skip_enrichment_item].each do |name|
+        assert_match(/no longer yours to answer/, tool_named(name).description, name)
+      end
     end
 
     test "merge and delete descriptions tell the model to dry-run first" do

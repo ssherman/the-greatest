@@ -6,8 +6,8 @@ module Api
   class McpAdminControllerTest < ActionDispatch::IntegrationTest
     include McpRpcHelpers
 
-    READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict get_book_identifiers get_author_identifiers find_by_identifier get_book_descriptions get_author_descriptions get_admin_book get_admin_author list_admin_series get_admin_series].freeze
-    WRITE_TOOLS = %w[create_admin_author create_admin_category update_admin_category tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author create_admin_series update_admin_series add_series_book update_series_book remove_series_book dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict].freeze
+    READ_TOOLS = %w[search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict get_book_identifiers get_author_identifiers find_by_identifier get_book_descriptions get_author_descriptions get_admin_book get_admin_author list_admin_series get_admin_series list_enrichment_queues get_enrichment_queue].freeze
+    WRITE_TOOLS = %w[create_admin_author create_admin_category update_admin_category tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author create_admin_series update_admin_series add_series_book update_series_book remove_series_book dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict claim_enrichment_items submit_enrichment_item skip_enrichment_item].freeze
     MERGE_TOOLS = %w[delete_admin_category delete_admin_series merge_admin_series merge_categories merge_book merge_author merge_duplicate_candidate reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts].freeze
     DESTRUCTIVE_TOOLS = %w[delete_admin_series merge_admin_series remove_series_book merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author remove_book_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts].freeze
 
@@ -55,10 +55,10 @@ module Api
       assert_equal %w[remove_book_author remove_series_book untag_author untag_book], destructive_names(tools).sort
     end
 
-    test "a merge token lists all fifty-nine tools" do
+    test "a merge token lists all sixty-four tools" do
       tools = listed_tools(ApiTokenSecrets::ADMIN)
 
-      assert_equal 59, tools.size
+      assert_equal 64, tools.size
       assert_equal (READ_TOOLS + WRITE_TOOLS + MERGE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
       assert_equal DESTRUCTIVE_TOOLS.sort, destructive_names(tools).sort
     end
@@ -236,6 +236,25 @@ module Api
 
       assert_equal false, json.dig("result", "isError"), json.to_s
       assert_nil child.reload.parent_id
+    end
+
+    test "an agent can claim an enrichment item and submit a nested answer through the tools" do
+      book = ::Books::Book.create!(title: "Countryless Via MCP")
+      row = ::EnrichmentRequest.create!(enrichable: book, kind: "books.origin", reason: "missing")
+
+      call_tool("claim_enrichment_items", {type: "origin", limit: 1}, token: ApiTokenSecrets::ADMIN)
+      claimed = tool_text
+      assert_equal [row.id], claimed["data"].map { |item| item["id"] }
+
+      answer = {"recognized" => true, "original_language" => "Japanese", "nationality" => "Japanese", "confidence" => "high", "reason" => "Stated by a source"}
+      call_tool("submit_enrichment_item", {id: row.id, lease_token: claimed["meta"]["lease_token"], answer: answer, sources: ["https://example.org/a"]},
+        token: ApiTokenSecrets::ADMIN)
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal "submitted", tool_text.dig("data", "status")
+      assert_equal "done", row.reload.status
+      assert_equal answer, row.answer
+      assert_equal ["Japanese"], book.countries.reload.pluck(:name)
     end
 
     test "the modern lifecycle is stateless" do

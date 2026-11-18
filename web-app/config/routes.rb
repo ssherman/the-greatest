@@ -749,6 +749,11 @@ Rails.application.routes.draw do
             post "repair_verdicts/:id/approve", to: "repair_verdicts#approve", constraints: {id: /\d+/}
             post "repair_verdicts/:id/reject", to: "repair_verdicts#reject", constraints: {id: /\d+/}
             post "repair_verdicts/:id/correct", to: "repair_verdicts#correct", constraints: {id: /\d+/}
+            get "enrichment_queues", to: "enrichment_queues#index"
+            get "enrichment_queues/:type", to: "enrichment_queues#show", constraints: {type: /[a-z_]+/}
+            post "enrichment_queues/:type/claims", to: "enrichment_queues#claim", constraints: {type: /[a-z_]+/}
+            post "enrichment_items/:id/submit", to: "enrichment_items#submit", constraints: {id: /\d+/}
+            post "enrichment_items/:id/skip", to: "enrichment_items#skip", constraints: {id: /\d+/}
             get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
             get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
             get "identifiers", to: "identifiers#lookup"

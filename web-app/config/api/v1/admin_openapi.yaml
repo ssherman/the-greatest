@@ -1184,6 +1184,239 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/enrichment_queues:
+    x-domain: books
+    get:
+      operationId: listEnrichmentQueues
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: List the enrichment queues
+      description: |
+        Every enrichment queue type with its `type` (the slug used in the other enrichment paths), kind, label, prompt version and the number of items in each status: pending, claimed, submitted, done, skipped and failed. A queue is empty when pending and claimed are both 0. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the enrichment queues: each type with how many items are pending, claimed, submitted, done, skipped and failed. A queue is empty when pending and claimed are both 0. Use the `type` value with the other enrichment tools.
+      responses:
+        "200":
+          description: The queue types, in a fixed order.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminEnrichmentQueueCollection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/enrichment_queues/{type}:
+    x-domain: books
+    get:
+      operationId: getEnrichmentQueue
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: Get an enrichment queue
+      description: |
+        One queue type: its status counts, the outcome counts of its finished items, and `reference`, the data an answer is written against (the JSON schema `answer_schema` and any closed list the answer must choose from). An unknown `type` is 404. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one queue `type` with its counts, the outcome counts of finished items, and `reference`: the JSON schema an answer must match (`answer_schema`) and any closed list the answer must choose from. Call it once before working a queue, and again at the end to report the counts.
+      parameters:
+        - $ref: "#/components/parameters/enrichment_type"
+      responses:
+        "200":
+          description: The queue with its counts, outcomes and reference.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminEnrichmentQueueDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/enrichment_queues/{type}/claims:
+    x-domain: books
+    post:
+      operationId: claimEnrichmentItems
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Claim enrichment items
+      description: |
+        Leases up to `limit` (1 to 25, default 10) pending items of the queue for 30 minutes, highest priority first, under one `lease_token`. Each item carries its integer `id`, `kind`, `reason`, the number of `attempts` and a `payload` (the record as we hold it, stored evidence and what the pipeline already tried). The lease token must be sent with every submit or skip for these items. `meta.remaining` counts the items still claimable. An unknown `type` is 404; a `limit` that is not an integer from 1 to 25 is 400. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Claims up to `limit` (1 to 25, default 10) pending items of queue `type` for 30 minutes and returns them, highest priority first. Each item has an integer `id` and a `payload`: the record as we hold it, any stored evidence, and what the pipeline already tried. `meta.lease_token` must be sent with every submit or skip for these items. Nobody else is given these items while the lease lasts; an item neither submitted nor skipped returns to the queue afterwards. The queue is done only when `data` is empty and `meta.remaining` is 0. If `data` is empty but `meta.remaining` is above 0, claim again. Research each item, then call submit_enrichment_item or skip_enrichment_item.
+      parameters:
+        - $ref: "#/components/parameters/enrichment_type"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminEnrichmentClaimRequest"
+      responses:
+        "200":
+          description: The claimed items and the lease.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminEnrichmentClaim"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/enrichment_items/{id}/submit:
+    x-domain: books
+    post:
+      operationId: submitEnrichmentItem
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Submit an enrichment answer
+      description: |
+        Stores the answer for a claimed item and queues it to be applied in the background, so the response (202) reports the item's status and not what was applied. Send the `lease_token` from the claim, an `answer` object matching the queue's `answer_schema`, `sources` (1 to 20 http or https URLs of at most 2,000 characters) and an optional `note` (up to 1,000 characters). The answer may be at most 50,000 bytes of JSON. A lease that is gone, or an item already answered, is 409; an answer, source list or note that fails validation is 422; a `lease_token` that is not a string, an `answer` that is not an object or `sources` that is not an array of strings is 400. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Submits the answer for claimed item `id`: `lease_token` from the claim, `answer` matching the queue's `answer_schema`, `sources` (1 to 20 URLs you actually used) and an optional `note`. The answer is applied in the background by the catalogue's own rules: it fills blanks only, never overwrites, and holds back anything below high confidence, so say high only when a source states the fact. A 422 names what is wrong with the answer; fix it and submit again. A 409 means the item is no longer yours to answer: another worker took the lease, or an earlier call of yours already went through. Either way, drop the item and move on. Returns the item's status, not what was applied.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminEnrichmentSubmitRequest"
+      responses:
+        "202":
+          description: The answer was accepted; it is applied in the background.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminEnrichmentItemStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/enrichment_items/{id}/skip:
+    x-domain: books
+    post:
+      operationId: skipEnrichmentItem
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Skip an enrichment item
+      description: |
+        Closes a claimed item without an answer. Send the `lease_token` from the claim and a `reason` of 1 to 500 characters saying what was looked for and why nothing could be settled; it is stored as the item's note. A skipped item is not handed out again. A lease that is gone, or an item already closed, is 409; a blank or over-long reason is 422. Requires `books:admin:write`, and the token's owner must be allowed to change books.
+      x-mcp:
+        description: >-
+          Closes claimed item `id` without an answer: `lease_token` and a `reason` (up to 500 characters) saying what you looked for and why nothing could be settled. A skipped item is not handed out again, so skip only after a real search. A 409 means the item is no longer yours to answer: another worker took the lease, or an earlier call of yours already went through. Either way, drop the item and move on.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminEnrichmentSkipRequest"
+      responses:
+        "200":
+          description: The item, now skipped.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminEnrichmentItemStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/books/{id}/identifiers:
     x-domain: books
     get:
@@ -3290,6 +3523,14 @@ components:
       schema:
         type: integer
         minimum: 1
+    enrichment_type:
+      name: type
+      in: path
+      required: true
+      description: The queue's `type`, from list_enrichment_queues.
+      schema:
+        type: string
+        pattern: "^[a-z_]+$"
     identifier_id:
       name: identifier_id
       in: path
@@ -4334,6 +4575,116 @@ components:
             skipped_ids:
               type: array
               items: {type: integer}
+    AdminEnrichmentQueue:
+      type: object
+      required: [type, kind, label, version, counts]
+      properties:
+        type: {type: string, description: "The queue's slug, used in the other enrichment paths."}
+        kind: {type: string}
+        label: {type: string}
+        version: {type: integer, description: "The prompt version the queue's items are written against."}
+        counts:
+          $ref: "#/components/schemas/AdminEnrichmentCounts"
+    AdminEnrichmentCounts:
+      type: object
+      description: The number of items in each status.
+      required: [pending, claimed, submitted, done, skipped, failed]
+      properties:
+        pending: {type: integer}
+        claimed: {type: integer}
+        submitted: {type: integer}
+        done: {type: integer}
+        skipped: {type: integer}
+        failed: {type: integer}
+    AdminEnrichmentQueueCollection:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminEnrichmentQueue"
+    AdminEnrichmentQueueDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: "#/components/schemas/AdminEnrichmentQueue"
+            - type: object
+              required: [outcomes, reference]
+              properties:
+                outcomes:
+                  type: object
+                  description: The number of finished items by outcome.
+                  additionalProperties: {type: integer}
+                reference:
+                  type: object
+                  additionalProperties: true
+                  description: What an answer is written against, including `answer_schema` (a JSON schema).
+    AdminEnrichmentItem:
+      type: object
+      required: [id, kind, reason, attempts, payload]
+      properties:
+        id: {type: integer}
+        kind: {type: string}
+        reason: {type: string}
+        attempts: {type: integer}
+        payload:
+          type: object
+          additionalProperties: true
+          description: The record as we hold it, stored evidence and what the pipeline already tried.
+    AdminEnrichmentClaim:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminEnrichmentItem"
+        meta:
+          type: object
+          required: [lease_token, lease_expires_at, remaining]
+          properties:
+            lease_token: {type: [string, "null"], description: Null when nothing was claimed.}
+            lease_expires_at: {type: [string, "null"], format: date-time}
+            remaining: {type: integer, description: The items still claimable in this queue.}
+    AdminEnrichmentItemStatus:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id: {type: integer}
+            status: {type: string, enum: [pending, claimed, submitted, done, skipped, failed]}
+    AdminEnrichmentClaimRequest:
+      type: object
+      properties:
+        limit: {type: integer, minimum: 1, maximum: 25, default: 10, description: How many items to claim.}
+    AdminEnrichmentSubmitRequest:
+      type: object
+      required: [lease_token, answer, sources]
+      properties:
+        lease_token: {type: string, description: The `meta.lease_token` of the claim that returned this item.}
+        answer:
+          type: object
+          additionalProperties: true
+          description: The answer, matching the queue's `answer_schema`.
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: {type: string, maxLength: 2000}
+          description: The http or https URLs the answer rests on.
+        note: {type: string, maxLength: 1000, description: Anything the reviewer should know.}
+    AdminEnrichmentSkipRequest:
+      type: object
+      required: [lease_token, reason]
+      properties:
+        lease_token: {type: string, description: The `meta.lease_token` of the claim that returned this item.}
+        reason: {type: string, minLength: 1, maxLength: 500, description: What was looked for and why nothing could be settled.}
     AdminDescription:
       type: object
       required: [id, kind, locale, rank, source, source_name, source_url, license, content, retrieved_at, created_at, updated_at]

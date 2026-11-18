@@ -403,7 +403,81 @@ module Api
           ["DELETE", "/api/v1/admin/series/{id}", "422"] => -> { delete series_path(books_series(:junk_deleted).id), headers: bearer(MERGE) },
           ["DELETE", "/api/v1/admin/series/{id}", "429"] => -> { with_exhausted_limit { delete series_path, headers: bearer(MERGE) } }
         }
+      ).merge(
+        {
+          ["GET", "/api/v1/admin/enrichment_queues", "200"] => -> { get "/api/v1/admin/enrichment_queues", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/enrichment_queues", "401"] => -> { get "/api/v1/admin/enrichment_queues" },
+          ["GET", "/api/v1/admin/enrichment_queues", "403"] => -> { get "/api/v1/admin/enrichment_queues", headers: bearer(MEMBER) },
+          ["GET", "/api/v1/admin/enrichment_queues", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/enrichment_queues", headers: bearer(READ) } },
+          ["GET", "/api/v1/admin/enrichment_queues/{type}", "200"] => -> { get "/api/v1/admin/enrichment_queues/origin", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/enrichment_queues/{type}", "401"] => -> { get "/api/v1/admin/enrichment_queues/origin" },
+          ["GET", "/api/v1/admin/enrichment_queues/{type}", "403"] => -> { get "/api/v1/admin/enrichment_queues/origin", headers: bearer(MEMBER) },
+          ["GET", "/api/v1/admin/enrichment_queues/{type}", "404"] => -> { get "/api/v1/admin/enrichment_queues/nope", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/enrichment_queues/{type}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/enrichment_queues/origin", headers: bearer(READ) } },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "200"] => -> {
+            enrichment_row
+            post "/api/v1/admin/enrichment_queues/origin/claims", params: {limit: 1}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "400"] => -> { post "/api/v1/admin/enrichment_queues/origin/claims", params: {limit: 26}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "401"] => -> { post "/api/v1/admin/enrichment_queues/origin/claims", as: :json },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "403"] => -> { post "/api/v1/admin/enrichment_queues/origin/claims", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "404"] => -> { post "/api/v1/admin/enrichment_queues/nope/claims", as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/enrichment_queues/{type}/claims", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/enrichment_queues/origin/claims", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "202"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/submit", params: enrichment_submission(token), as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "400"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/submit", params: enrichment_submission(token).merge(answer: "x"), as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "401"] => -> { post "/api/v1/admin/enrichment_items/1/submit", as: :json },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "403"] => -> { post "/api/v1/admin/enrichment_items/1/submit", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "404"] => -> { post "/api/v1/admin/enrichment_items/999999999/submit", params: enrichment_submission("t"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "409"] => -> {
+            row, = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/submit", params: enrichment_submission("not-the-token"), as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "422"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/submit", params: enrichment_submission(token).merge(sources: []), as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/submit", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/enrichment_items/1/submit", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "200"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/skip", params: {lease_token: token, reason: "Nothing found"}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "400"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/skip", params: {lease_token: token, reason: 5}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "401"] => -> { post "/api/v1/admin/enrichment_items/1/skip", as: :json },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "403"] => -> { post "/api/v1/admin/enrichment_items/1/skip", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "404"] => -> { post "/api/v1/admin/enrichment_items/999999999/skip", params: {lease_token: "t", reason: "r"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "409"] => -> {
+            row, = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/skip", params: {lease_token: "not-the-token", reason: "r"}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "422"] => -> {
+            row, token = enrichment_row
+            post "/api/v1/admin/enrichment_items/#{row.id}/skip", params: {lease_token: token, reason: " "}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/enrichment_items/1/skip", as: :json, headers: bearer(MERGE) } }
+        }
       ).freeze
+
+      # A countryless book with a pending books.origin row, claimed under a fresh lease: [row, lease_token].
+      def enrichment_row
+        book = ::Books::Book.create!(title: "Coverage Countryless")
+        row = ::EnrichmentRequest.create!(enrichable: book, kind: "books.origin", reason: "missing")
+        token = Services::EnrichmentQueue::Claim.call(kind: "books.origin", user: users(:admin_user), limit: 25).data[:lease_token]
+        [row, token]
+      end
+
+      def enrichment_submission(token)
+        {lease_token: token, sources: ["https://example.org/a"],
+         answer: {recognized: true, original_language: "Japanese", nationality: "Japanese", confidence: "high", reason: "Stated by a source"}}
+      end
 
       def series_path(id = books_series(:asoiaf).id) = "/api/v1/admin/series/#{id}"
 

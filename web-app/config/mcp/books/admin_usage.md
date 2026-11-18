@@ -40,6 +40,10 @@ A real `merge_categories` can fail part way and answer with `merged`, `failed` a
 
 `untag_book` and `untag_author` remove a category link. They have no dry run, so state which category you are removing from which book or author and confirm with the user before calling. Untagging is not an undo of tagging: if the book or author already had the category, `tag_book` or `tag_author` changed nothing, and untagging afterwards would delete a link that existed before, with its original source. Check the `source` of the links a tag returned before you untag. Tagging again restores a removed link but records its source as `admin`, so the original source is lost. A link inferred from a more specific location cannot be removed directly; the error names the location to remove instead.
 
+## The enrichment queues
+
+`list_enrichment_queues`, `get_enrichment_queue`, `claim_enrichment_items`, `submit_enrichment_item` and `skip_enrichment_item` work a queue of records that need research. You decide each item yourself; do not ask before submitting or skipping. Submitting never overwrites a value the catalogue holds. Work only the items you claimed, and send their `lease_token` back.
+
 ## Creating and editing categories
 
 Before `create_admin_category`, search with `search_admin_categories` to check the name is free: an active category of the same type that already uses the name, or an alias, refuses it. `category_type` is one of genre, location, subject, theme or audience.
