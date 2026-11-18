@@ -6,6 +6,7 @@ module Books
     module Sources
       REGISTRY = {
         "hachette_us" => Sources::HachetteUs,
+        "macmillan_us" => Sources::MacmillanUs,
         "penguin_random_house_us" => Sources::PenguinRandomHouseUs
       }.freeze
 
