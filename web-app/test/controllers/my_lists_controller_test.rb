@@ -824,6 +824,13 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, response.body.scan("Counts toward the site rankings").size
   end
 
+  test "a Pundit denial on a non-stream action keeps the HTML redirect" do
+    sign_in_as(@user, stub_auth: true)
+    UserListPolicy.any_instance.stubs(:show?).returns(false)
+    get my_list_path(@albums_favorites)
+    assert_response :redirect
+  end
+
   test "dashboard offers the new list dialog" do
     sign_in_as(@user, stub_auth: true)
     get my_lists_path

@@ -14,6 +14,9 @@ class UserLists::Dashboard::NewListDialogComponentTest < ViewComponent::TestCase
     assert_selector "input[name='user_list[name]'][maxlength='100'][required]"
     assert_selector "textarea[name='user_list[description]'][maxlength='1000']"
     assert_selector "#new-list-errors[role='alert']"
+    assert_selector "input[name='user_list[name]'][aria-label='Name']"
+    assert_selector "textarea[aria-label='Description (optional)']"
+    assert_selector "select[aria-label='List of']"
   end
 
   test "hides and pre-fills the type when the domain has one type" do

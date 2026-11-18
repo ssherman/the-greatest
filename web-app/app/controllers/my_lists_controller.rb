@@ -134,7 +134,7 @@ class MyListsController < ApplicationController
   end
 
   def stream_forbidden(exception)
-    return user_not_authorized(exception) unless stream_action?
+    return user_not_authorized unless stream_action?
     render turbo_stream: [], status: :forbidden
   end
 

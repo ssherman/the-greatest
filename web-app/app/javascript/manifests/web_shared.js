@@ -23,6 +23,8 @@ application.register("contact--form", Contact__FormController)
 
 import CsvExportController from "../controllers/csv_export_controller"
 application.register("csv-export", CsvExportController)
+import NewListDialogController from "../controllers/new_list_dialog_controller"
+application.register("new-list-dialog", NewListDialogController)
 
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
