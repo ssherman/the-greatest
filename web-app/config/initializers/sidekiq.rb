@@ -25,6 +25,12 @@ Sidekiq.configure_server do |config|
     cap.queues = %w[goodreads_fetch]
   end
 
+  # Publisher intake page fetches, one at a time, paced by the intake's own gate.
+  config.capsule("publisher_fetch") do |cap|
+    cap.concurrency = 1
+    cap.queues = %w[publisher_fetch]
+  end
+
   # Evidence gathering (Wikidata, Wikipedia, WorldCat), one step at a time. Every
   # Wikimedia request shares a 1 request/second pace, so steps running in parallel
   # lose their slot, give up and restart from scratch. A single file lane lets each
