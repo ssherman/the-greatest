@@ -138,6 +138,13 @@ module Services
           assert_not dossier.external?
         end
 
+        test "research_backed? counts a recognized agent-mode row and not an unrecognized one" do
+          facts_row(mode: :agent, recognized: false, outcome: :unrecognized)
+          assert_not Dossier.build(book: @book).research_backed?
+          facts_row(mode: :agent, recognized: true)
+          assert Dossier.build(book: @book).research_backed?
+        end
+
         test "to_ledger trims the Wikipedia lead" do
           evidence("wikipedia" => {"title" => "T", "lead" => "y" * 1500, "infobox" => {}})
           ledger = Dossier.build(book: @book).to_ledger

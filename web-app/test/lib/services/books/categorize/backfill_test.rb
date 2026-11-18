@@ -35,8 +35,8 @@ module Services
           ::Books::Country.find_or_create_by!(name: name) { it.slug = name.parameterize }
         end
 
-        def origin_row(book, outcome: :applied, **facts)
-          book.enrichments.create!(kind: "books.origin", outcome: outcome,
+        def origin_row(book, outcome: :applied, mode: :knowledge, **facts)
+          book.enrichments.create!(kind: "books.origin", outcome: outcome, mode: mode,
             facts: {"prompt_version" => 1, "context" => "backfill"}.merge(facts.stringify_keys))
         end
 
@@ -50,6 +50,32 @@ module Services
         test "leaves out books done under the current prompt version" do
           origin_row(@american)
           refute_includes Backfill.candidates.pluck(:id), @american.id
+        end
+
+        test "an agent row that applied counts as done" do
+          origin_row(@american, mode: :agent)
+          refute_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
+        test "an agent row that applied nothing does not count as done" do
+          %i[nothing_to_apply unrecognized].each do |outcome|
+            @american.enrichments.where(kind: "books.origin").delete_all
+            origin_row(@american, mode: :agent, outcome: outcome)
+            assert_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id, outcome.to_s
+          end
+        end
+
+        test "a knowledge row that applied nothing still counts as done" do
+          origin_row(@american, mode: :knowledge, outcome: :nothing_to_apply)
+          refute_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
+        test "an agent categories row that applied nothing leaves the book a candidate, an applied one does not" do
+          categories_row(@american, mode: :agent, outcome: :nothing_to_apply)
+          assert_includes Backfill.candidates(scope: "categories_only").pluck(:id), @american.id
+          @american.enrichments.where(kind: "books.categories").delete_all
+          categories_row(@american, mode: :agent)
+          refute_includes Backfill.candidates(scope: "categories_only").pluck(:id), @american.id
         end
 
         test "a deferred book is left out at cap 0 and included once the cap is above 0" do
@@ -146,8 +172,8 @@ module Services
           assert_equal 1, result.data[:planned]
         end
 
-        def categories_row(book, outcome: :applied, **facts)
-          book.enrichments.create!(kind: "books.categories", outcome: outcome,
+        def categories_row(book, outcome: :applied, mode: :knowledge, **facts)
+          book.enrichments.create!(kind: "books.categories", outcome: outcome, mode: mode,
             facts: {"prompt_version" => Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "context" => "backfill"}.merge(facts.stringify_keys))
         end
 

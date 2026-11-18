@@ -143,7 +143,7 @@ module Services
         # book. Its answer then counts as evidence for the judge, though it is
         # not external in the Wikidata/Wikipedia/WorldCat sense.
         def research_backed?
-          book_facts.present? && book_facts["mode"] == "research" && book_facts["recognized"] == true
+          book_facts.present? && ::Enrichment::WEB_VERIFIED_MODES.include?(book_facts["mode"]) && book_facts["recognized"] == true
         end
 
         # The held countries that are real, in the order the record lists them.

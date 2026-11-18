@@ -94,6 +94,10 @@ module Services
               "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id)")
             .where("enrichments.facts->>'prompt_version' = ?", version.to_s)
             .where.not(outcome: [:failed, :skipped])
+            # An agent answered from its own web search, without the evidence the backfill
+            # gathers. Only an agent row that applied is done; one that applied nothing
+            # leaves the book for the backfill to try.
+            .where("enrichments.mode <> ? OR enrichments.outcome = ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied])
             .select("1")
           # A deferred book waits for research, which the cap at 0 never grants.
           # Read at call time so raising the cap makes them candidates again.
