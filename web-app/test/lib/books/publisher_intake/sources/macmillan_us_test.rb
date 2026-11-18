@@ -76,7 +76,7 @@ module Books
         def formats(reading) = reading.facts[:formats].map { |f| f.values_at(:isbn13, :format, :format_label) }
 
         test "identity" do
-          assert_equal ["macmillan_us", "Macmillan", 1, true],
+          assert_equal ["macmillan_us", "Macmillan", 2, true],
             [@source.key, @source.name, @source.parser_version, @source.baseline_on_first_run?]
           assert_equal MacmillanUs, Sources.registry["macmillan_us"]
         end
@@ -217,7 +217,7 @@ module Books
           assert_equal ["Young Adult"], facts[:genres]
           assert_equal "13-18", facts[:age_range]
           assert_equal Date.new(2026, 11, 10), facts[:on_sale_on]
-          assert_equal "9781250369550", facts[:source_key]
+          assert_nil facts[:source_key]
           assert_equal "https://mpd-biblio-covers.imgix.net/9781250369550.jpg", facts[:cover_url]
           assert_includes facts[:description], "Cursed with eternity"
           assert_includes facts[:description], "\n"
@@ -328,7 +328,7 @@ module Books
           html = fixture_text("boxed_set_no_pages.html.gz")
           without_json = html.gsub(%r{<script type="application/ld\+json">.*?</script>}m, "")
           reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "9780000000002", signal: nil), page: page(without_json))
-          assert_equal "9781250466631", reading.facts[:source_key]
+          assert_equal "9781250466631", reading.facts[:formats].first[:isbn13]
 
           without_details = without_json.sub("9781250466631</p>", "</p>")
           reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "9781250466631", signal: nil), page: page(without_details))

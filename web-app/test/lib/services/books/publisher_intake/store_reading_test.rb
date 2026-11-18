@@ -185,6 +185,20 @@ module Services
           assert_equal [ISBN_A], by_isbn.reload.isbn13s
         end
 
+        test "a format read later lands on the existing title" do
+          first = new_listing(key: ISBN_A)
+          existing = store(first, found(facts(formats: [format_for(ISBN_A), format_for(ISBN_B)]))).data[:title]
+          assert_nil existing.source_key
+          later = new_listing(key: ISBN_C)
+
+          assert_no_difference -> { ::Books::PublisherTitle.count } do
+            store(later, found(facts(formats: [format_for(ISBN_B), format_for(ISBN_C)])))
+          end
+
+          assert_equal [ISBN_A, ISBN_B, ISBN_C].sort, existing.reload.isbn13s.sort
+          assert_equal existing, later.reload.publisher_title
+        end
+
         test "a new source key makes a new title even when isbns overlap another" do
           ::Books::PublisherTitle.create!(source: "hachette_us", source_key: "wk-1", isbn13s: [ISBN_A], title: "Old")
 

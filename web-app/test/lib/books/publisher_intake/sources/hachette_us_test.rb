@@ -49,7 +49,7 @@ module Books
         def formats(reading) = reading.facts[:formats].map { |f| f.values_at(:isbn13, :format, :format_label) }
 
         test "identity" do
-          assert_equal ["hachette_us", "Hachette Book Group", 1, false],
+          assert_equal ["hachette_us", "Hachette Book Group", 2, false],
             [@source.key, @source.name, @source.parser_version, @source.baseline_on_first_run?]
           assert_equal HachetteUs, Sources.registry["hachette_us"]
         end
@@ -179,7 +179,7 @@ module Books
           assert_equal ["Orbit", "Hachette Book Group", nil], [facts[:imprint_name], facts[:publisher_name], facts[:language]]
           assert_equal %w[Epic Fantasy Fiction], facts[:genres]
           assert_equal "https://www.hachettebookgroup.com/wp-content/uploads/2026/11/9780316564861.jpg", facts[:cover_url]
-          assert_equal [Date.new(2026, 11, 17), "9780316564861"], [facts[:on_sale_on], facts[:source_key]]
+          assert_equal [Date.new(2026, 11, 17), nil], [facts[:on_sale_on], facts[:source_key]]
           assert_includes facts[:description], "Andrea Stewart is one of the best fantasy writers"
           assert_equal [
             ["9780316564861", "hardcover", "Hardcover"],

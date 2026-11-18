@@ -7,7 +7,7 @@ module Books
       # REST API (one record per ISBN); a product page is read from its JSON-LD
       # node plus the format list and the details the page shows.
       class HachetteUs < Base
-        VERSION = 1
+        VERSION = 2
 
         ENDPOINT = "https://www.hachettebookgroup.com/wp-json/wp/v2/hbg-title"
         PER_PAGE = 100
@@ -164,8 +164,7 @@ module Books
             age_range: nil,
             description: clean(node["description"]).presence,
             cover_url: cover_from(node),
-            on_sale_on: released,
-            source_key: own_isbn
+            on_sale_on: released
           }
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
         end

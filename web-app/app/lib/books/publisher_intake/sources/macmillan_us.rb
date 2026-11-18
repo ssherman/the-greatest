@@ -38,7 +38,7 @@ module Books
       #   site's meta tags is unparseable, not a title with empty facts. A
       #   page with no credited creator is read, with no contributors.
       class MacmillanUs < Base
-        VERSION = 1
+        VERSION = 2
 
         SITE = "https://us.macmillan.com"
         PUBLISHER = "Macmillan"
@@ -210,8 +210,7 @@ module Books
             age_range: info["Age Range"]&.text&.squish.presence,
             description: paragraphs(doc.at_css(".book-details__description")),
             cover_url: cover_from(book, doc),
-            on_sale_on: on_sale,
-            source_key: own_isbn
+            on_sale_on: on_sale
           }
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
         end
