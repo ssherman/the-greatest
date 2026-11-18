@@ -263,7 +263,7 @@ These variables are used by nginx's built-in template system for environment var
 - **Description**: Comma-separated catalog source keys the weekly publisher intake run reads (for example `hachette_us,macmillan_us`). Whitespace and duplicates are ignored.
 - **Required**: No
 - **Default**: empty, so the intake does nothing
-- **Used By**: worker
+- **Used By**: web, worker (the admin screen's Enabled column is computed in the web process)
 
 #### PUBLISHER_INTAKE_FETCH_INTERVAL
 - **Description**: Seconds from one publisher page fetch start to the next. A value that is not a whole number falls back to the default and logs a warning.
@@ -275,7 +275,7 @@ These variables are used by nginx's built-in template system for environment var
 - **Description**: Publisher page fetches reserved per UTC day. A value that is not a whole number falls back to the default and logs a warning.
 - **Required**: No
 - **Default**: `2000`
-- **Used By**: worker
+- **Used By**: web, worker (the admin screen shows the cap)
 
 ### Application Features
 

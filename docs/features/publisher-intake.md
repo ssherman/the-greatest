@@ -10,8 +10,9 @@ are fetched through the page fetcher (`docs/features/page-fetcher-service.md`).
 
 It **collects**. It reads publisher pages and stores facts in three tables of its own. It writes
 nothing to the catalog: no book, edition, author, identifier, category or description is created or
-changed. Turning held titles into books is a later design ("create"). There is no public page, and
-a publisher's description and page HTML are never shown on the site or written to a log.
+changed. Turning stored titles into books is a later design ("create"). There is no public page, and
+a publisher's page HTML is never shown on the site or written to a log, and a description is never
+shown publicly (the admin detail page does show it).
 
 Every genre is in scope, manga, comics and children's books included. Four kinds of title are
 stored but held back (`status: held`): untitled placeholders, box sets and bundles, products that
@@ -52,23 +53,27 @@ All three are namespaced `Books::`.
 
 A page that was just read finds its title by the publisher's own key when the source has one (the
 Penguin Random House work id), otherwise by an overlap between the page's ISBNs and a title of the
-same source. That is what makes three Macmillan listings (hardcover, ebook, audio) one title. Titles
+same source. Hachette and Macmillan have no id for the work, so their titles match by shared ISBN:
+that is what makes three Macmillan listings (hardcover, ebook, audio) one title, and a format page
+read on its own a week later lands on the title that already holds its ISBNs. Titles
 are never merged: when a page overlaps two titles, the one sharing the most ISBNs (the older on a
 tie) is used and a warning names both. A re-read replaces the facts and unions the ISBNs.
 
 ## How a run works
 
 - **Starting runs.** `Books::PublisherIntake::DailyJob` runs daily. For each enabled source it
-  starts a `weekly` run when the source has no `running` run and its latest *finished* run started
-  seven or more days ago. So runs are weekly, not every eight days. A failed run does not count, so
-  a failure is retried the next day. A run still `running` after three days is failed, so a run
-  whose jobs were lost cannot hold its source.
+  starts a `weekly` run when the source has no `running` run and no finished run that started
+  within the last seven calendar days. The comparison is by calendar day on the run's start, so runs
+  come every seven days however long a run took. A failed run does not count, so a failure is
+  retried the next day. A manual run (`run[source]`) is refused while the source has a `running`
+  run. A run still `running` after three days is failed, on a day when at least one source is
+  enabled, so a run whose jobs were lost cannot hold its source.
 - **Discovery.** One Sidekiq job per discovery request (`DiscoveryRequestJob`). It takes its turn at
   the source's gate, fetches, hands the response to the strategy's `parse_discovery`, records the
   listings, and enqueues a job for each further request (the children of a sitemap index, the next
   API page). When none is outstanding the run is `finished`. A gate that asks it to wait, or is
   closed (daily cap spent, source blocked), reschedules it; an unavailable fetch is retried up to
-  `fetch_attempts` and then fails the run; a response the strategy cannot parse fails the run at
+  `fetch_attempts` times, a minute apart, and then fails the run; a response the strategy cannot parse fails the run at
   once, because the source's format changed and a person has to look. A failed run keeps the
   listings it recorded, and the next run uses the same `since`.
 - **What discovery does with a listing.** A new URL on a baseline run is stored as `baseline`. A new
@@ -80,13 +85,18 @@ tie) is used and a warning names both. A re-read replaces the facts and unions t
   reads, so a listing left pending for any reason (blocked, unparseable, refused, fetcher down) is
   picked up again. A listing whose last attempt was unparseable waits a day.
 - **Reading.** `ReadListingJob` takes its turn at the gate, fetches, calls `parse_listing`, and
-  stores the result. A job the gate refuses ends; the sweep queues the listing again later.
+  stores the result. A job the gate refuses ends; the sweep queues the listing again later. A
+  listing that was never read and fails `fetch_attempts` unavailable attempts in a row is `failed`;
+  the daily job returns it to `pending` once that attempt is more than seven days old, so a short
+  publisher outage does not lose the listings tried during it. A `not_found` listing is never
+  revived.
 - **Pacing.** A job never sleeps. It asks the gate for a turn and, when told to wait, reschedules
   itself for that moment with a flag saying its turn is reserved. There is one gate per source, so
   a block on one publisher leaves the others running, built on the same gate logic as Goodreads
-  fetching, with its own Redis key and limits. All intake jobs run on one Sidekiq capsule,
-  `publisher_fetch`, with concurrency 1, because the gate's read-then-write is only correct with a
-  single thread. Intake builds its page fetcher client with its own circuit breaker, so an intake
+  fetching, with its own Redis key and limits. The two fetch jobs
+  (`DiscoveryRequestJob` and `ReadListingJob`) run on one Sidekiq capsule, `publisher_fetch`, with
+  concurrency 1, because the gate's read-then-write is only correct with a single thread;
+  `DailyJob` and `SweepJob` run on the `low` queue. Intake builds its page fetcher client with its own circuit breaker, so an intake
   failure cannot pause Goodreads fetching.
 - **The first run.** "First run" means every run of a source until one finishes, so a first run
   that fails partway is followed by another baseline run, not a normal one. Dated sources
@@ -106,7 +116,10 @@ A `read` listing returns to `pending` when discovery sees a different `signal` f
 was last read more than 28 days ago and either its title is held as `placeholder` or `incomplete`
 (a signal does not change when a publisher fills in a title), or its source offers no signal and its
 title's on-sale date is in the future or missing. The daily job does this before starting runs.
-Titles whose on-sale date has passed are not re-read.
+Held `placeholder` and `incomplete` titles are re-read whatever their on-sale date; other titles
+whose on-sale date has passed are not re-read. A failed re-read of a listing that was read before
+(blocked, unparseable, unavailable) returns it to `read` with its facts as they were: that re-read
+is dropped until it is next due, not retried.
 
 ## Outcomes
 
@@ -165,16 +178,20 @@ picked up by a later run once it is inside).
 1. **Write the strategy** under `app/lib/books/publisher_intake/sources/`, subclassing
    `Sources::Base`. A strategy never fetches, stores or enqueues. It defines `key`, `name`,
    `VERSION`, and:
-   - `discovery_requests(since:)`: the `Request`s to start with. A request has a `kind` (`:file` goes
-     through the fetcher's file route, `:page` through the page route), a `url`, and a small
-     JSON-serializable `context` hash returned to `parse_discovery`, so it can tell a sitemap index
-     from a child file or carry a page number.
+   - `discovery_requests(since:)`: the `Request`s to start with, built with `Request.file(url,
+     context:)` (the fetcher's file route) or `Request.page(url, ...)` (the page route); do not
+     write a `kind:` symbol. `context` is a small JSON-serializable hash returned to
+     `parse_discovery`, so it can tell a sitemap index from a child file or carry a page number.
    - `parse_discovery(request:, response:)`: returns a `Discovery` with an outcome, the
      `ListingRef`s found (`url`, `external_key`, `signal`) and any further requests.
    - `listing_request(listing)` and `parse_listing(listing:, page:)`: the request for a listing and a
      `Reading` of what came back: an outcome, `facts` (a hash keyed by the `Books::PublisherTitle`
      columns) and `sibling_keys`, the ISBNs of other formats the page listed, whose pending
-     listings become `covered`.
+     listings become `covered`. Start `parse_listing` with `status_outcome(page.status)` and return
+     `:blocked` when the page is not the site's own (check its `<title>`). Each entry of `formats`
+     is a hash with symbol keys `:isbn13, :format, :format_label, :on_sale_on, :pages,
+     :price_cents, :currency`. Set `source_key` in the facts only when the site has an id for the
+     work (Penguin Random House); without one, titles match by shared ISBN.
    - `baseline_on_first_run?` (true for list-comparison sources) and `seed_requests` (first run
      only), when the source needs them.
    Shared helpers cover the common parts: a sitemap reader (index or URL set, gzipped or not), a
@@ -211,10 +228,10 @@ value logs and falls back, and never stops boot.
 | horizon, days | | 365 |
 | stuck run after, days | | 3 |
 
-An unknown key in `PUBLISHER_INTAKE_SOURCES` is logged and ignored. The env vars are read on the
-Sidekiq side; `deployment/ENV.md` lists them. Enabling a source in production is that one variable.
-The page fetcher must be running an image that answers `POST /fetch_file`, and the Penguin Random
-House year sitemap (about 6 MB) must stay under the fetcher's file size cap.
+An unknown key in `PUBLISHER_INTAKE_SOURCES` is logged and ignored. The env vars are read in
+both the web process (the admin screen) and the Sidekiq process; `deployment/ENV.md` lists them.
+Enabling a source in production is that one variable. The page fetcher must be running an image
+that answers `POST /fetch_file`, and the sitemap files must stay under the fetcher's file size cap.
 
 ## Rake tasks
 
@@ -222,7 +239,7 @@ All under `books:publisher_intake`. A task that can fetch needs the page fetcher
 
 | Task | What it does |
 |---|---|
-| `run[source]` | Starts a manual run for one source now |
+| `run[source]` | Starts a manual run for one source now. The source must be enabled, and the task refuses while that source has a `running` run |
 | `release_baseline[source,limit]` | Moves up to `limit` baseline listings to `pending`, highest key first |
 | `reparse[source]` | Reads stored pages older than the current parser version again, fetching nothing, and promotes unparseable ones that now read |
 | `rehearse[source,limit,max_discovery_requests]` | Development only. Runs discovery into a manual run, then reads up to `limit` pending listings, synchronously, one line per fetch, no page content printed. It waits the fetch interval between fetches, uses no gate and counts nothing against the cap |
@@ -232,7 +249,7 @@ All under `books:publisher_intake`. A task that can fetch needs the page fetcher
 A rehearsal stopped by `max_discovery_requests` is saved as `failed` on purpose: a cut-short run must
 never count as a source's finished first run. A rehearsal writes additive rows to the three intake
 tables and stores pages on local disk in development; in development, point `PAGE_FETCHER_SERVICE_URL`
-at a local fetcher and blank the storage bucket variable first, because a development environment
+at a local fetcher and blank `PRIVATE_IMPORTS_STORAGE_BUCKET` first, because a development environment
 file may point at shared services.
 
 ## Admin screen
@@ -258,7 +275,9 @@ interval: 13 requests per source.
 | `macmillan_us` | 3 (index, two seed collections) | 40 | 10 | 10 `found` | none | 9.4 | `failed` (stopped at the cap, as designed) |
 
 In every source all ten titles read with a title, at least one contributor and at least one ISBN-13.
-Medians cover the sitemap, API and page fetches together; a discovery request took 4 to 10 seconds
+Penguin Random House's 16,800 entries are 9,785 listings because the next year's file repeats
+entries the current year's file already has, with the same dates (checked 2026-11-18: 7,015 of
+7,015 repeated, none with a different date). Medians cover the sitemap, API and page fetches together; a discovery request took 4 to 10 seconds
 and a page 7 to 13. No page was blocked or unparseable. Counts that hold only for that day: Hachette's
 277 listings are the records in its lookback window after three API pages, and ten of them were
 marked `covered` by siblings of the ten read; Macmillan's 40 are the first 20 listings of each seed
@@ -284,9 +303,13 @@ collection (see Known gaps).
   on-sale date is the earliest format date, and each format keeps its own date.
 - **A parser that raises, or a page whose shape changed,** shows as `unparseable` rows on the admin
   screen. It never blocks the source. Re-parsing stored pages after a parser fix needs no new fetch.
-- **Run cadence:** a source's run starts when its latest finished run started seven or more days
-  ago.
+- **Hachette's first run** asks for records added in the last 14 months, so an upcoming title added
+  earlier and not modified since is missed.
+- **Hachette** has no check for a "not found" page served with status 200; it reads as `unparseable`.
+- **One fetch thread serves all sources,** so with three sources enabled each gets about a third of
+  it. When a source's queue falls more than an hour behind, the sweep queues a listing a second
+  time, which spends a daily-cap turn without a second fetch.
 - **Nothing here writes to the catalog** (books, editions, authors, identifiers). Creating catalog
-  records from held titles is a later design.
+  records from stored titles is a later design.
 - A publisher withdrawing a title is not detected: `last_seen_at` records when a listing was last
   seen and nothing acts on it.
