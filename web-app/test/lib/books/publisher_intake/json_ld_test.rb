@@ -33,6 +33,12 @@ module Books
         assert_equal ["Multi Type", "Hardcover Edition", "Paperback Edition"], nodes.map { |n| n["name"] }
       end
 
+      test "a script with a duplicate object key is kept and the last value wins" do
+        nodes = JsonLd.nodes(script('{"@type":"Book","name":"A","name":"B"}'), types: ["Book"])
+
+        assert_equal ["B"], nodes.map { |n| n["name"] }
+      end
+
       test "no JSON-LD gives an empty array" do
         assert_equal [], JsonLd.nodes("<html><body>Nothing</body></html>", types: ["Book"])
       end

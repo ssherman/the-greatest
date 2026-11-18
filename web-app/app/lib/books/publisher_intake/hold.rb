@@ -10,6 +10,7 @@ module Books
       CONTRIBUTOR_PLACEHOLDER = /\A(to be confirmed|tbc|tbd|author to be announced)\z/i
       NON_BOOK_FORMAT = /\b(calendar|journal|notebook|planner|cards?|deck|puzzle|stationery|sticker|toy|kit|poster|game)\b/i
       SET_FORMAT = /\b(box(ed)?[\s-]?set|bundle)\b/i
+      BOOK_COUNT = /\A\d+\s+books?\z/i
       ENGLISH = /\A(en|eng|english)\z|\Aen-/i
 
       def self.call(facts)
@@ -53,6 +54,8 @@ module Books
 
         text = "#{facts[:title]} #{facts[:subtitle]}"
         words = text.to_enum(:scan, Services::Books::Verification::EditionCheck::SET_WORDS).map { Regexp.last_match(0).downcase }
+        # "1001 Books You Must Read" counts books; titles that count books are books.
+        words.reject! { |word| word.match?(BOOK_COUNT) }
         (words - Services::Books::AmazonBookCheck::SERIES_NAME_WORDS).any?
       end
 

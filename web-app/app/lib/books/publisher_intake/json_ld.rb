@@ -9,7 +9,7 @@ module Books
         wanted = Array(types).map(&:to_s)
         found = []
         Nokogiri::HTML(html.to_s).css('script[type="application/ld+json"]').each do |script|
-          walk(JSON.parse(script.text), wanted, found)
+          walk(JSON.parse(script.text, allow_duplicate_key: true), wanted, found)
         rescue JSON::ParserError
           next
         end

@@ -96,6 +96,22 @@ module Books
         assert_equal [:held, :set], Hold.call(facts(title: "Saga #1-3"))
       end
 
+      test "titles that count books with a space are ready" do
+        assert_equal [:ready, nil], Hold.call(facts(title: "1001 Books You Must Read Before You Die"))
+        assert_equal [:ready, nil], Hold.call(facts(title: "10 Books That Screwed Up the World"))
+      end
+
+      test "hyphenated book counts and box-set words still hold" do
+        assert_equal [:held, :set], Hold.call(facts(title: "The Hunger Games 3-Book Collection"))
+        assert_equal [:held, :set], Hold.call(facts(title: "The 7-Book Box Set"))
+        assert_equal [:held, :set], Hold.call(facts(title: "The 4 Books of Something Box Set"))
+      end
+
+      test "omnibus titles are sets" do
+        assert_equal [:held, :set], Hold.call(facts(title: "Omnibus"))
+        assert_equal [:held, :set], Hold.call(facts(title: "The Complete Omnibus Edition"))
+      end
+
       test "a set word in the subtitle is a set" do
         assert_equal [:held, :set], Hold.call(facts(subtitle: "The Omnibus"))
       end
