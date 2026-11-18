@@ -93,7 +93,7 @@ module Services
         # after another worker closed the row.
         Apply.any_instance.stubs(:acquire_lock).with { |connection|
           row.update_columns(status: ::EnrichmentRequest.statuses.fetch("done"), outcome: "applied")
-          connection.select_value("SELECT pg_try_advisory_lock(hashtext($1))", "test lock", ["#{Apply::LOCK_NAMESPACE}:#{row.id}"])
+          connection.select_value("SELECT pg_try_advisory_lock(hashtext('#{Apply::LOCK_NAMESPACE}'), $1::integer)", "test lock", [row.id])
         }.returns(true)
         EnrichmentQueueTestType.expects(:apply).never
         assert Apply.call(request_id: @row.id).success?
@@ -102,11 +102,15 @@ module Services
 
       test "the advisory lock is held while the type applies and released after a success" do
         held = nil
-        EnrichmentQueueTestType.stubs(:apply).with { |_| held = advisory_lock_count }.returns(
+        held_objid = nil
+        EnrichmentQueueTestType.stubs(:apply).with { |_|
+          held = advisory_lock_count
+          held_objid = advisory_lock_objids
+        }.returns(
           Result.new(success?: true, data: {enrichment: nil, outcome: "applied"}, errors: [])
         )
         Apply.call(request_id: @row.id)
-        assert_equal [1, 0], [held, advisory_lock_count]
+        assert_equal [1, [@row.id], 0], [held, held_objid, advisory_lock_count]
       end
 
       test "the advisory lock is released after the type raises" do
@@ -130,18 +134,62 @@ module Services
         assert_equal ["done", "applied"], [@row.reload.status, @row.outcome]
       end
 
-      test "a row moved to failed while the type applies stays failed and the call is a no-op" do
+      test "a successful apply wins over a concurrent fail!: the row ends done with the outcome, the ledger row and no error" do
         row = @row
+        ledger = ::Enrichment.create!(enrichable: row.enrichable, kind: "books.test_type", mode: :knowledge, outcome: :applied, facts: {})
         EnrichmentQueueTestType.stubs(:apply).with { |_| Apply.fail!(request_id: row.id, error: "gave up") }.returns(
+          Result.new(success?: true, data: {enrichment: ledger, outcome: "applied"}, errors: [])
+        )
+        assert Apply.call(request_id: @row.id).success?
+        @row.reload
+        assert_equal ["done", "applied", ledger.id, nil], [@row.status, @row.outcome, @row.enrichment_id, @row.error]
+      end
+
+      test "a row re-queued to pending while the type applies stays pending and the call is a no-op" do
+        row = @row
+        EnrichmentQueueTestType.stubs(:apply).with { |_| row.update_columns(status: ::EnrichmentRequest.statuses.fetch("pending")) }.returns(
           Result.new(success?: true, data: {enrichment: nil, outcome: "applied"}, errors: [])
         )
         result = Apply.call(request_id: @row.id)
         assert result.success?
         assert_nil result.data
-        assert_equal ["failed", nil], [@row.reload.status, @row.outcome]
+        assert_equal ["pending", nil], [@row.reload.status, @row.outcome]
+      end
+
+      test "when the unlock raises the result is still returned and the connection is dropped to free the lock" do
+        connection = ::EnrichmentRequest.connection
+        Apply.any_instance.stubs(:unlock).raises(RuntimeError, "unlock failed")
+        # Stubbed: really dropping the test's single transactional connection would end the test's transaction.
+        connection.expects(:disconnect!).once
+        begin
+          assert Apply.call(request_id: @row.id).success?
+          assert @row.reload.done?
+        ensure
+          # The stubbed unlock never ran, so release the real lock by hand.
+          connection.uncached { connection.select_value("SELECT pg_advisory_unlock(hashtext('#{Apply::LOCK_NAMESPACE}'), $1::integer)", "test unlock", [@row.id]) }
+        end
+      end
+
+      test "when the acquire raises the error propagates and the release is still attempted" do
+        Apply.any_instance.stubs(:acquire_lock).raises(RuntimeError, "interrupted")
+        Apply.any_instance.expects(:unlock).once.returns(true)
+        assert_raises(RuntimeError) { Apply.call(request_id: @row.id) }
+      end
+
+      test "when the lock is not granted the release is not attempted" do
+        Apply.any_instance.stubs(:acquire_lock).returns(false)
+        Apply.any_instance.expects(:unlock).never
+        Apply.call(request_id: @row.id)
       end
 
       private
+
+      def advisory_lock_objids
+        connection = ::EnrichmentRequest.connection
+        connection.uncached do
+          connection.select_values("SELECT objid FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()").map(&:to_i)
+        end
+      end
 
       def advisory_lock_count
         connection = ::EnrichmentRequest.connection

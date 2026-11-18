@@ -3,7 +3,7 @@ module Services
     # Moves source's queue rows to target for a merge. A row follows only when
     # target has no row of that kind; the source's duplicate is deleted. The
     # survivor's history wins: if it still has a gap and no row, the next fill
-    # re-queues it. Returns the count moved.
+    # re-queues it. Returns a Result whose data[:moved] is the count moved.
     class CarryOver
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
