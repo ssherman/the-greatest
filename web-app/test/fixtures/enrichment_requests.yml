@@ -1,0 +1,44 @@
+# == Schema Information
+#
+# Table name: enrichment_requests
+#
+#  id               :bigint           not null, primary key
+#  answer           :jsonb
+#  attempts         :integer          default(0), not null
+#  enrichable_type  :string           not null
+#  error            :text
+#  fingerprint      :string
+#  kind             :string           not null
+#  lease_expires_at :datetime
+#  lease_token      :string
+#  note             :text
+#  outcome          :string
+#  priority         :integer          default(1000000), not null
+#  reason           :string           not null
+#  resolved_at      :datetime
+#  resolved_via     :integer
+#  sources          :jsonb            not null
+#  status           :integer          default(0), not null
+#  version          :integer          default(1), not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  claimed_by_id    :bigint
+#  enrichable_id    :bigint           not null
+#  enrichment_id    :bigint
+#  resolved_by_id   :bigint
+#
+# Indexes
+#
+#  idx_on_kind_status_priority_id_ac9b960249          (kind,status,priority,id)
+#  index_enrichment_requests_on_claimed_by_id         (claimed_by_id)
+#  index_enrichment_requests_on_enrichment_id         (enrichment_id)
+#  index_enrichment_requests_on_resolved_by_id        (resolved_by_id)
+#  index_enrichment_requests_one_per_record_and_kind  (enrichable_type,enrichable_id,kind) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (claimed_by_id => users.id) ON DELETE => nullify
+#  fk_rails_...  (enrichment_id => enrichments.id) ON DELETE => nullify
+#  fk_rails_...  (resolved_by_id => users.id) ON DELETE => nullify
+#
+{}

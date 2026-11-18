@@ -139,6 +139,7 @@ module Books
         merge_external_links
         merge_ai_chats
         merge_enrichments
+        merge_enrichment_requests
         merge_images
         merge_identifiers
         merge_book_countries
@@ -188,6 +189,10 @@ module Books
 
       def merge_enrichments
         @stats[:enrichments] = source_book.enrichments.update_all(enrichable_id: target_book.id)
+      end
+
+      def merge_enrichment_requests
+        @stats[:enrichment_requests] = ::EnrichmentRequest.carry_over(source: source_book, target: target_book)
       end
 
       def merge_images
