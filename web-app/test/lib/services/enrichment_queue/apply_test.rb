@@ -79,6 +79,76 @@ module Services
         assert_raises(RuntimeError) { Apply.call(request_id: @row.id) }
         assert_equal [nil, "admin_ui"], [Current.acting_user, Current.acting_via]
       end
+
+      test "when another worker holds the lock the type is not called, the row stays submitted, and the result is a success" do
+        Apply.any_instance.stubs(:acquire_lock).returns(false)
+        EnrichmentQueueTestType.expects(:apply).never
+        assert Apply.call(request_id: @row.id).success?
+        assert @row.reload.submitted?
+      end
+
+      test "the row is read after the lock: one closed in the meantime is a no-op" do
+        row = @row
+        # Stands in for the lock being taken (really taken, so the release has something to release),
+        # after another worker closed the row.
+        Apply.any_instance.stubs(:acquire_lock).with { |connection|
+          row.update_columns(status: ::EnrichmentRequest.statuses.fetch("done"), outcome: "applied")
+          connection.select_value("SELECT pg_try_advisory_lock(hashtext($1))", "test lock", ["#{Apply::LOCK_NAMESPACE}:#{row.id}"])
+        }.returns(true)
+        EnrichmentQueueTestType.expects(:apply).never
+        assert Apply.call(request_id: @row.id).success?
+        assert_equal ["done", "applied"], [@row.reload.status, @row.outcome]
+      end
+
+      test "the advisory lock is held while the type applies and released after a success" do
+        held = nil
+        EnrichmentQueueTestType.stubs(:apply).with { |_| held = advisory_lock_count }.returns(
+          Result.new(success?: true, data: {enrichment: nil, outcome: "applied"}, errors: [])
+        )
+        Apply.call(request_id: @row.id)
+        assert_equal [1, 0], [held, advisory_lock_count]
+      end
+
+      test "the advisory lock is released after the type raises" do
+        EnrichmentQueueTestType.stubs(:apply).raises(RuntimeError, "boom")
+        assert_raises(RuntimeError) { Apply.call(request_id: @row.id) }
+        assert_equal 0, advisory_lock_count
+      end
+
+      test "the advisory lock is released after Apply::Failed" do
+        EnrichmentQueueTestType.apply_result = Result.new(success?: false, data: nil, errors: ["chooser failed"])
+        assert_raises(Apply::Failed) { Apply.call(request_id: @row.id) }
+        assert_equal 0, advisory_lock_count
+      end
+
+      test "a second call for a row the first finished does not call the type or change the outcome" do
+        EnrichmentQueueTestType.apply_result = Result.new(success?: true, data: {enrichment: nil, outcome: "applied"}, errors: [])
+        Apply.call(request_id: @row.id)
+        EnrichmentQueueTestType.apply_result = Result.new(success?: true, data: {enrichment: nil, outcome: "nothing_to_apply"}, errors: [])
+        EnrichmentQueueTestType.expects(:apply).never
+        assert Apply.call(request_id: @row.id).success?
+        assert_equal ["done", "applied"], [@row.reload.status, @row.outcome]
+      end
+
+      test "a row moved to failed while the type applies stays failed and the call is a no-op" do
+        row = @row
+        EnrichmentQueueTestType.stubs(:apply).with { |_| Apply.fail!(request_id: row.id, error: "gave up") }.returns(
+          Result.new(success?: true, data: {enrichment: nil, outcome: "applied"}, errors: [])
+        )
+        result = Apply.call(request_id: @row.id)
+        assert result.success?
+        assert_nil result.data
+        assert_equal ["failed", nil], [@row.reload.status, @row.outcome]
+      end
+
+      private
+
+      def advisory_lock_count
+        connection = ::EnrichmentRequest.connection
+        connection.uncached do
+          connection.select_value("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()").to_i
+        end
+      end
     end
   end
 end

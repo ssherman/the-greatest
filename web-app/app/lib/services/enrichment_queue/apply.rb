@@ -4,6 +4,17 @@ module Services
     # apply raises Failed, so Sidekiq retries it and the row stays submitted;
     # when retries run out the job calls fail!.
     #
+    # One apply attempt per request at a time. A stale submitted row can have two
+    # jobs (Retry apply while the first still waits in the queue, or a Sidekiq
+    # redelivery); unguarded, both would call the type, and the second, finding
+    # the field filled, would overwrite the first's `applied` with
+    # `nothing_to_apply`. So the attempt holds a Postgres advisory lock on the
+    # request. It is session-level, not transaction-level: the type's apply can
+    # call a model over HTTP for seconds, and that must not sit in one long
+    # transaction. A session lock is also released by Postgres if the worker dies,
+    # so a crash cannot leave a request locked. One connection is pinned for the
+    # whole attempt so the lock and the unlock are on the same session.
+    #
     # The type may reach code (mergers, the ledger) that records who acted, so
     # Current carries the submitter's identity while it runs and is restored
     # afterwards, even if the type raises.
@@ -13,6 +24,7 @@ module Services
       class Failed < StandardError; end
 
       MAX_ERROR = 1_000
+      LOCK_NAMESPACE = "enrichment_request_apply"
 
       def self.call(request_id:)
         new(request_id).call
@@ -31,6 +43,23 @@ module Services
       end
 
       def call
+        ::EnrichmentRequest.with_connection do |connection|
+          # Another worker is applying this request: its job finishes or retries.
+          return noop unless acquire_lock(connection)
+
+          begin
+            apply_locked
+          ensure
+            release_lock(connection)
+          end
+        end
+      end
+
+      private
+
+      def apply_locked
+        # Read after the lock, not before: a row another worker already closed
+        # while this job waited is a no-op.
         request = ::EnrichmentRequest.find_by(id: @request_id)
         return noop unless request&.submitted?
 
@@ -42,14 +71,36 @@ module Services
         result = with_acting(request) { Registry.fetch(request.kind).apply(request) }
         raise Failed, "apply failed for request #{request.id}: #{Array(result.errors).join("; ")}" unless result.success?
 
-        request.update!(status: :done, outcome: result.data[:outcome], enrichment: result.data[:enrichment],
-          lease_token: nil, lease_expires_at: nil)
-        Result.new(success?: true, data: {request: request}, errors: [])
+        # Guarded: a concurrent fail! or re-queue that moved the row wins.
+        closed = ::EnrichmentRequest.where(id: request.id, status: ::EnrichmentRequest.statuses.fetch("submitted"))
+          .update_all(status: ::EnrichmentRequest.statuses.fetch("done"), outcome: result.data[:outcome],
+            enrichment_id: result.data[:enrichment]&.id, lease_token: nil, lease_expires_at: nil, updated_at: Time.current)
+        return noop if closed.zero?
+
+        Result.new(success?: true, data: {request: request.reload}, errors: [])
       end
 
-      private
-
       def noop = Result.new(success?: true, data: nil, errors: [])
+
+      # The only place that takes the lock (tests stub it). Uncached: inside the
+      # Rails executor select_value is answered from the query cache, so a repeated
+      # lock or unlock would never reach the server.
+      def acquire_lock(connection) = lock_query(connection, "pg_try_advisory_lock")
+
+      # Never raises: it runs in an ensure and must not mask the apply's own error.
+      def release_lock(connection)
+        return if lock_query(connection, "pg_advisory_unlock")
+
+        ::Rails.logger.warn("EnrichmentQueue::Apply #{@request_id}: advisory lock was already lost")
+      rescue => e
+        ::Rails.logger.warn("EnrichmentQueue::Apply #{@request_id}: releasing the advisory lock failed: #{e.class}: #{e.message}")
+      end
+
+      def lock_query(connection, function)
+        connection.uncached do
+          connection.select_value("SELECT #{function}(hashtext($1))", "EnrichmentQueue::Apply lock", ["#{LOCK_NAMESPACE}:#{@request_id}"])
+        end
+      end
 
       def with_acting(request)
         previous = [Current.acting_user, Current.acting_via]
