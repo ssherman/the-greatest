@@ -443,23 +443,23 @@ class Books::PublisherIntake::DiscoveryRequestJob   # sidekiq_options queue: :pu
 1. `:skipped` unless the listing is `pending` and its source is in `Sources.enabled`.
 2. `GateTurn.call(gate: gate_for(source), due:)`. `:refused` → return `:refused` (the listing stays pending; clear `queued_at`). `:wait` → return `:wait` with the wait.
 3. Fetch `strategy.listing_request(listing)`. `:fetcher_down` → record `last_attempt_outcome` fetcher_down, clear `queued_at`, return `:done`. `:unavailable` → `StoreReading` with an unavailable reading.
-4. Otherwise `strategy.parse_listing(listing:, page:)` → `StoreReading`.
+4. Otherwise `strategy.parse_listing(listing:, page:)` → `StoreReading`. A parser that raises is an `:unparseable` reading, logged by error class only.
 5. `GateTurn.after_fetch(gate:, outcome:)` (blocks the gate on `:blocked` only).
 
 **`RunDiscoveryRequest`**, per spec §3's discovery table:
 1. `:skipped` unless the run is `running` and its source is enabled.
-2. Gate turn. `:wait` → `:wait`. `:refused` → `:wait` with `gate.reopens_at - now` (at least 60 s).
+2. Gate turn. `:wait` → `:wait`. `:refused` → `:refused` with `gate.reopens_at - now` (at least 60 s). A refusal reserved nothing, so it is kept distinct from a wait: the job reschedules it with `due = false`.
 3. Fetch. `:fetcher_down` or `:unavailable` → `:retry` while `attempt < settings.fetch_attempts`, else fail the run (`status` failed, `error` naming the request URL and the outcome, `finished_at`).
 4. `strategy.parse_discovery(request:, response:)`:
    - `:ok` → `RecordDiscovery.call(run:, listings:, seed: request.context["seed"] == true)`; return the follow-up requests.
-   - `:blocked` → `gate.block!`; `:wait` with `gate.reopens_at - now`.
+   - `:blocked` → `gate.block!`; `:refused` with `gate.reopens_at - now`.
    - `:unavailable` → as step 3.
-   - `:unparseable` → fail the run at once.
+   - `:unparseable`, or the parser raising → fail the run at once. A parser that raises is logged by error class only, never by message.
 5. `GateTurn.after_fetch` is not used here; step 4 blocks explicitly.
 
 **Jobs:**
 - `ReadListingJob`: `:wait` → `self.class.perform_in(wait, listing_id, true)`; everything else ends.
-- `DiscoveryRequestJob`: `:wait` → `perform_in(wait, run_id, request_hash, true, attempt)`; `:retry` → `perform_async(run_id, request_hash, false, attempt + 1)`; `:done` → under `run.with_lock`: add the follow-ups to `counts["requests"]` and `counts["outstanding"]`, enqueue one job each (carrying `"seed" => true` in the context when the parent had it), then decrement `outstanding`; when it reaches 0 the run is `finished` with `finished_at`.
+- `DiscoveryRequestJob`: `:wait` → `perform_in(wait, run_id, request_hash, true, attempt)`; `:refused` → `perform_in(wait, run_id, request_hash, false, attempt)`; `:retry` → `perform_async(run_id, request_hash, false, attempt + 1)`; `:done` → under `run.with_lock`: add the follow-ups to `counts["requests"]` and `counts["outstanding"]`, enqueue one job each (carrying `"seed" => true` in the context when the parent had it), then decrement `outstanding`; when it reaches 0 the run is `finished` with `finished_at`.
 
 - [ ] **Step 1: Write the failing tests.** Stub `Books::PublisherIntake.client` with a Mocha mock and register a small test strategy in the registry for the duration of a test (restore it in `teardown`). Stub `perform_in` in job tests. Required cases:
 
