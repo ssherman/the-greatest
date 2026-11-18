@@ -1,5 +1,5 @@
 ---
-# Threads for the queues below (the serial, goodreads_fetch and evidence capsules in
+# Threads for the queues below (the serial, goodreads_fetch, publisher_fetch and evidence capsules in
 # config/initializers/sidekiq.rb add one thread each). Set per environment; raise it for
 # a bulk run whose jobs mostly wait on a remote API, such as the Goodreads re-import.
 :concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 5).to_i %>

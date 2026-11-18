@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- HAND-BUILT from a real sitemap-works-2026.xml: real URLs and the real file's layout, trimmed to eight entries. The 1976 date and the 2026-10-17 date are edited in; the entry without a lastmod has it removed; the 2079 date and the root-page entry are as the site had them. -->
+<urlset xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/743565/the-collateral-heart-by-jeffery-deaver/</loc>
+		<lastmod>2026-11-17T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/855221/los-propios-dioses--the-gods-themselves-by-isaac-asimov/</loc>
+		<lastmod>2026-12-08T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/839216/killing-me--killing-you-vol-3-by-imomushi-narita/</loc>
+		<lastmod>2026-11-17T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/2519/starfighters-of-adumar-star-wars-legends-wraith-squadron-by-aaron-allston/</loc>
+		<lastmod>1976-08-03T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/859986/go-dog-go-tote-bag-by-out-of-print/</loc>
+		<lastmod>2079-01-02T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/863063/my-favorite-vtuber-is-scary-irl-025-by-riyo-yorima/</loc>
+		<lastmod>2026-10-17T00:00:00+00:00</lastmod>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/books/3325/the-tale-of-peter-rabbit-by-beatrix-potter-illustrated-by-cyndy-szekeres/</loc>
+		<changefreq>weekly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://www.penguinrandomhouse.com/</loc>
+		<lastmod>2026-11-18T04:46:57+00:00</lastmod>
+		<changefreq>daily</changefreq>
+		<priority>1.0</priority>
+	</url>
+</urlset>

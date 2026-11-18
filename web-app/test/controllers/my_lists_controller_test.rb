@@ -705,6 +705,24 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_select "#edit-list-rows"
   end
 
+  test "edit shows a default list's name as the heading with a Built-in badge" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(user_lists(:regular_user_books_read))
+    assert_select "h1", text: /Books I've Read/
+    assert_select ".badge", text: /Built-in/
+    assert_select "form#delete-list-form", count: 0
+  end
+
+  test "edit shows a custom list's name as the heading, no badge, and the delete form" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_select "h1", text: /My Desert Island Picks/
+    assert_select ".badge", text: /Built-in/, count: 0
+    assert_select "form#delete-list-form"
+  end
+
   test "edit signed out redirects" do
     get edit_my_list_path(@custom_albums)
     assert_response :redirect
@@ -803,6 +821,16 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[data-turbo-confirm]", 0
   end
 
+  test "update refreshes the heading and the delete confirm with the new, escaped name" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "Fish & <i>Chips</i>"}}, as: :turbo_stream
+    assert_response :success
+
+    assert_select "turbo-stream[action=update][target=list-name-heading] template", text: "Fish & <i>Chips</i>"
+    assert_select "turbo-stream[action=update][target=list-name-heading] template i", count: 0
+    assert_select "turbo-stream[action=replace][target=delete-list-form] template form#delete-list-form[data-turbo-confirm*=?]", "Fish & <i>Chips</i>"
+  end
+
   test "update renames a custom list" do
     sign_in_as(@user, stub_auth: true)
     patch my_list_path(@custom_albums), params: {user_list: {name: "  Island Picks  ", description: "", public: "0"}}, as: :turbo_stream
@@ -877,6 +905,26 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_response :see_other
     assert_redirected_to my_lists_path
+  end
+
+  # The dashboard is uncached and owner-only, so the flash survives the
+  # redirect; the page turns it into a toast with an inline turbo-stream.
+  test "destroy confirms on the dashboard with an escaped toast naming the list" do
+    sign_in_as(@user, stub_auth: true)
+    @custom_albums.update!(name: "Fish & <i>Chips</i>")
+
+    delete my_list_path(@custom_albums)
+    follow_redirect!
+
+    assert_response :success
+    assert_select "turbo-stream[action=append][target=toast-region] template", count: 1 do |template|
+      html = template.first.inner_html
+      assert_includes html, "Deleted “Fish &amp; &lt;i&gt;Chips&lt;/i&gt;”"
+      assert_not_includes html, "<i>Chips</i>"
+    end
+
+    get my_lists_path
+    assert_select "turbo-stream[target=toast-region]", count: 0
   end
 
   test "destroy refuses a default list with 422 and keeps it" do

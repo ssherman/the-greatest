@@ -32,6 +32,23 @@ export default class extends Controller {
     this.element.querySelectorAll(`[data-action~="user-list-completion#open"][data-item-id="${this.itemId}"]`)
       .forEach((opener) => { opener.dataset.completedOn = this.dateTarget.value })
     this.dialogTarget.close()
+    this.restoreFocusAfterRender()
+  }
+
+  // Turbo renders the stream after a repaint, which is after close() has already
+  // restored focus, and that render replaces a table cell's opener. Look again
+  // once it has run.
+  restoreFocusAfterRender() {
+    const handler = (event) => {
+      document.removeEventListener("turbo:before-stream-render", handler)
+      const render = event.detail.render
+      event.detail.render = async (stream) => {
+        await render(stream)
+        requestAnimationFrame(() => this.restoreFocus())
+      }
+    }
+    document.addEventListener("turbo:before-stream-render", handler)
+    setTimeout(() => document.removeEventListener("turbo:before-stream-render", handler), 2000)
   }
 
   cancel() {
@@ -49,7 +66,7 @@ export default class extends Controller {
     if (!opener) return
     // Refocusing a button inside the daisyUI menu would pop it open again.
     const dropdown = opener.closest(".dropdown")
-    if (dropdown) dropdown.closest("[data-item-id]")?.focus()
-    else opener.focus()
+    if (dropdown) dropdown.closest("[data-item-id]")?.focus({ preventScroll: true })
+    else opener.focus({ preventScroll: true })
   }
 }

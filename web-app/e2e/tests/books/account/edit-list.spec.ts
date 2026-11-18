@@ -8,16 +8,34 @@ const FAVORITES = 'My Favorite Books';
 const MIN_ITEMS = 11;
 
 function rows(page: Page): Locator {
-  return page.locator('#edit-list-rows [data-item-id]');
+  return page.locator("#edit-list-rows [data-item-id][tabindex='-1']");
 }
 
 async function titles(page: Page): Promise<string[]> {
   return (await rows(page).locator('p.font-bold').allInnerTexts()).map((title) => title.trim());
 }
 
+// Title of the row holding focus, or null when focus is anywhere else (e.g. <body>).
+async function activeItemTitle(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el?.matches("[data-item-id][tabindex='-1']")) return null;
+    return el.querySelector('p.font-bold')?.textContent?.trim() ?? null;
+  });
+}
+
+// data-item-id of the row holding focus, or null when focus is anywhere else.
+async function activeItemId(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el?.matches("[data-item-id][tabindex='-1']")) return null;
+    return el.dataset.itemId ?? null;
+  });
+}
+
 async function itemCount(page: Page): Promise<number> {
   const text = await page.getByTestId('item-count').innerText();
-  return Number(text.match(/^(\d+) items?$/)![1]);
+  return Number(text.match(/^(\d+) books?$/)![1]);
 }
 
 async function openEditPage(page: Page, listName: string): Promise<void> {
@@ -25,7 +43,7 @@ async function openEditPage(page: Page, listName: string): Promise<void> {
   await page.getByTestId('my-lists-dashboard').getByTestId('user-list-card').filter({ hasText: listName }).click();
   await expect(page.getByRole('heading', { name: listName, level: 1 })).toBeVisible();
   await page.getByTestId('edit-list').click();
-  await expect(page.getByRole('heading', { name: 'Edit list', level: 1 })).toBeVisible();
+  await expect(page.locator('#list-name-heading')).toHaveText(listName);
 }
 
 // e2e:prepare removes lists with this prefix on the next run.
@@ -114,9 +132,12 @@ test.describe('Books Edit list page', () => {
     expect(scrollBefore).toBeGreaterThan(0);
     const urlBefore = page.url();
 
-    const input = page.getByLabel(`Move ${moving} to position`);
-    await input.fill('2');
-    await input.locator('xpath=ancestor::form').getByRole('button', { name: 'Move' }).click();
+    await rows(page).filter({ hasText: moving }).getByRole('button', { name: 'Move to position…' }).click();
+    const dialog = page.locator('dialog#position-dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel(/New position/).fill('2');
+    await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+    await expect(dialog).toBeHidden();
 
     await expect.poll(() => titles(page)).toEqual(expectedAfterMove(before, 7, 1));
     expect(page.url()).toBe(urlBefore);
@@ -133,7 +154,49 @@ test.describe('Books Edit list page', () => {
     await expect.poll(() => titles(page)).toEqual(expectedAfterMove(before, 4, 0));
     // The menu must close, not follow the moved row.
     await expect(rows(page).first().getByRole('button', { name: 'Move to top' })).toBeHidden();
+    // Focus lands on the moved row, not <body>.
+    await expect.poll(() => activeItemTitle(page)).toBe(moving);
   });
+
+  test('menu buttons show a pointer cursor', async ({ page }) => {
+    await openEditPage(page, EDIT_LIST);
+    const moving = (await titles(page))[2];
+    await openRowMenu(page, moving);
+    const button = rows(page).nth(2).getByRole('button', { name: 'Move to top' });
+    expect(await button.evaluate((el) => getComputedStyle(el).cursor)).toBe('pointer');
+  });
+
+  for (const dismiss of ['Escape', 'Cancel']) {
+    test(`${dismiss} closes the position dialog without moving, and focus returns to the row`, async ({ page }) => {
+      await openEditPage(page, EDIT_LIST);
+      const before = await titles(page);
+      const moving = before[5];
+      const movingId = await rows(page).nth(5).getAttribute('data-item-id');
+      // Any request to the move endpoint counts. Turbo submits the dialog's form
+      // as POST with _method=patch, so filtering on PATCH would see nothing.
+      const moveRequests: string[] = [];
+      page.on('request', (r) => {
+        if (r.url().includes('/position')) moveRequests.push(`${r.method()} ${r.url()}`);
+      });
+
+      await openRowMenu(page, moving);
+      await rows(page).nth(5).getByRole('button', { name: 'Move to position…' }).click();
+      const dialog = page.locator('dialog#position-dialog');
+      await expect(dialog).toBeVisible();
+      await dialog.getByLabel(/New position/).fill('1');
+
+      if (dismiss === 'Escape') await page.keyboard.press('Escape');
+      else await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+      await expect(dialog).toBeHidden();
+      await expect.poll(() => activeItemId(page)).toBe(movingId);
+      // Read the stored order, not the DOM: a stray submit's morph could land
+      // after an immediate DOM read.
+      await page.reload();
+      expect(moveRequests).toEqual([]);
+      expect(await titles(page)).toEqual(before);
+    });
+  }
 
   test('Remove then Undo returns the book to its place and the count to what it was', async ({ page }) => {
     await openEditPage(page, EDIT_LIST);
@@ -219,6 +282,7 @@ test.describe('Books Edit list page', () => {
     await expect(page).toHaveURL(/\/my\/lists$/);
     await expect(page.getByTestId('my-lists-dashboard')).toBeVisible();
     await expect(page.getByTestId('my-lists-dashboard').getByText(name)).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: `Deleted “${name}”` })).toBeVisible();
   });
 });
 
@@ -234,5 +298,41 @@ test.describe('Books Edit list page on a phone', () => {
     await rows(page).nth(3).getByRole('button', { name: 'Move to top' }).tap();
     await expect.poll(() => titles(page)).toEqual(expectedAfterMove(before, 3, 0));
     // Touch dragging itself is not exercised: Playwright has no touch-drag primitive for SortableJS.
+  });
+
+  test('the finished date stays fully visible on a Read-list row', async ({ page }) => {
+    const book = { path: '/book/headlong-hall', title: 'Headlong Hall' };
+    await page.goto(book.path);
+    await page.getByRole('button', { name: /^(Add to list|On \d+ lists?)$/ }).first().click();
+    const widget = page.getByRole('dialog').filter({ hasText: 'Your lists' });
+    const checkbox = widget.getByRole('checkbox', { name: READ_LIST, exact: true });
+    await expect(checkbox).toBeVisible();
+    await checkbox.check();
+    await expect(checkbox).toBeEnabled();
+    await expect(checkbox).toBeChecked();
+
+    try {
+      await openEditPage(page, READ_LIST);
+      const row = rows(page).filter({ hasText: book.title });
+      await expect(row).toHaveCount(1);
+      await openRowMenu(page, book.title);
+      await row.getByRole('button', { name: /^Set finished date/ }).tap();
+      const dialog = page.getByRole('dialog', { name: `Edit completion date for ${book.title}` });
+      await dialog.getByLabel('Completion date').fill('2024-03-05');
+      await dialog.getByRole('button', { name: 'Save', exact: true }).tap();
+      await expect(dialog).not.toBeVisible();
+
+      const date = row.getByText(/Mar(ch)? 5, 2024/);
+      await expect(date).toBeVisible();
+      await expect(date).toBeInViewport({ ratio: 1 });
+      // Not clipped by its own by-line: the text is not wider than the box that holds it.
+      const clipped = await date.evaluate((el) => el.parentElement!.scrollWidth > el.parentElement!.clientWidth);
+      expect(clipped).toBe(false);
+    } finally {
+      await openEditPage(page, READ_LIST);
+      const leftover = page.getByRole('button', { name: `Remove ${book.title}`, exact: true });
+      if (await leftover.count()) await leftover.tap();
+      await expect(leftover).toHaveCount(0);
+    }
   });
 });

@@ -113,7 +113,8 @@ module Admin
           {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_books_news_posts_path }},
           {label: "News Topics", icon: :category, path: -> { URL_HELPERS.admin_books_news_topics_path }},
           {label: "Rankings", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_configurations_path }},
-          {label: "Ranking Archives", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_archives_path }}
+          {label: "Ranking Archives", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_archives_path }},
+          {label: "Publisher Intake", icon: :list, path: -> { URL_HELPERS.admin_books_publisher_intake_path }}
         ]
       }
     }.freeze

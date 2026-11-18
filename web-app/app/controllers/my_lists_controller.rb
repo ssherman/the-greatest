@@ -143,10 +143,14 @@ class MyListsController < ApplicationController
     return render_details_errors(result.errors.to_sentence) unless result.success?
 
     mark_user_state_changed
-    render turbo_stream: [
+    streams = [
       turbo_stream.replace("list-details", UserLists::Edit::DetailsFormComponent.new(user_list: list)),
+      # A rename must reach the heading and the delete confirm copy, which sit outside #list-details.
+      turbo_stream.update("list-name-heading", ERB::Util.html_escape(list.name)),
       turbo_stream.append("toast-region", Toast::MessageComponent.new(message: "Saved"))
     ]
+    streams << turbo_stream.replace("delete-list-form", partial: "my_lists/delete_form", locals: {list: list}) unless list.default?
+    render turbo_stream: streams
   end
 
   # DELETE /my/lists/:id
@@ -158,6 +162,9 @@ class MyListsController < ApplicationController
     return render_stream_error(result.errors.to_sentence, :unprocessable_entity) unless result.success?
 
     mark_user_state_changed
+    # The dashboard turns this into a toast (my_lists/index.html.erb); no
+    # public layout renders flash.
+    flash[:notice] = "Deleted “#{list.name}”"
     redirect_to my_lists_path, status: :see_other
   end
 

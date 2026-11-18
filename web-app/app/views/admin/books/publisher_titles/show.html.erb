@@ -1,0 +1,93 @@
+<% content_for :title, @title.title.presence || "Publisher Title" %>
+
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-bold [overflow-wrap:anywhere]"><%= @title.title.presence || "Untitled" %></h1>
+    <%= link_to "Back to titles", admin_books_publisher_titles_path, class: "btn btn-sm" %>
+  </div>
+
+  <div class="flex flex-col gap-6 md:flex-row">
+    <% if @title.cover_url.to_s.start_with?("https://") %>
+      <%# Publisher content: shown only over https; we never fetch or store it. %>
+      <img src="<%= @title.cover_url %>" alt="Cover" class="w-40 self-start rounded" loading="lazy" referrerpolicy="no-referrer">
+    <% end %>
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[max-content_1fr] text-sm [overflow-wrap:anywhere]">
+      <% contributors = Array(@title.contributors).map { |c| c["role"].present? ? "#{c["name"]} (#{c["role"]})" : c["name"] }.join(", ") %>
+      <% [["Subtitle", @title.subtitle], ["Source", @title.source], ["Source key", @title.source_key],
+          ["Status", @title.status.humanize], ["Hold reason", @title.hold_reason&.humanize],
+          ["Contributors", contributors],
+          ["Imprint", @title.imprint_name], ["Publisher", @title.publisher_name], ["Language", @title.language],
+          ["On sale", @title.on_sale_on], ["Series", @title.series_name], ["Series position", @title.series_position],
+          ["Age range", @title.age_range], ["Genres", Array(@title.genres).join(", ")],
+          ["ISBN-13s", @title.isbn13s.join(", ")], ["First read", @title.first_read_at], ["Last read", @title.last_read_at],
+          ["Parser version", @title.parser_version]].each do |label, value| %>
+        <% next if value.blank? %>
+        <dt class="font-semibold"><%= label %></dt>
+        <dd><%= value %></dd>
+      <% end %>
+    </dl>
+  </div>
+
+  <section class="space-y-2">
+    <h2 class="text-xl font-semibold">Formats</h2>
+    <% if @title.formats.blank? %>
+      <p class="text-base-content/70">No formats stored.</p>
+    <% else %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100" data-testid="format-table">
+          <thead><tr><th>Format</th><th>ISBN-13</th><th>On sale</th><th>Pages</th><th>Price</th></tr></thead>
+          <tbody>
+            <% @title.formats.each do |fmt| %>
+              <tr>
+                <td><%= fmt["format_label"] || fmt["format"] %></td>
+                <td><%= fmt["isbn13"] %></td>
+                <td class="whitespace-nowrap"><%= fmt["on_sale_on"] %></td>
+                <td><%= fmt["pages"] %></td>
+                <td class="whitespace-nowrap">
+                  <% if fmt["price_cents"] %><%= number_with_precision(fmt["price_cents"].to_i / 100.0, precision: 2) %> <%= fmt["currency"] %><% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  </section>
+
+  <% if @title.description.present? %>
+    <section class="space-y-2">
+      <h2 class="text-xl font-semibold">Description</h2>
+      <%# Publisher copy: escaped first, so it renders as text and never as markup. %>
+      <div class="max-w-prose text-sm [overflow-wrap:anywhere]"><%= simple_format(h(@title.description), {}, sanitize: false) %></div>
+    </section>
+  <% end %>
+
+  <section class="space-y-2">
+    <h2 class="text-xl font-semibold">Listings</h2>
+    <% if @listings.empty? %>
+      <p class="text-base-content/70">No listings point at this title.</p>
+    <% else %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm bg-base-100" data-testid="listing-table">
+          <thead><tr><th>URL</th><th>State</th><th>Outcome</th><th>Last read</th></tr></thead>
+          <tbody>
+            <% @listings.each do |listing| %>
+              <tr>
+                <td class="[overflow-wrap:anywhere]">
+                  <% if listing.url.to_s.match?(%r{\Ahttps?://}i) %>
+                    <%= link_to listing.url, listing.url, class: "link", target: "_blank", rel: "noopener noreferrer" %>
+                  <% else %>
+                    <%= listing.url %>
+                  <% end %>
+                </td>
+                <td><%= listing.state.humanize %></td>
+                <td><%= listing.outcome&.humanize %></td>
+                <td class="whitespace-nowrap"><%= listing.read_at&.strftime("%Y-%m-%d %H:%M") %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  </section>
+</div>

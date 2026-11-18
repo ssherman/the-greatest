@@ -26,4 +26,23 @@ class UserLists::Edit::DetailsFormComponentTest < ViewComponent::TestCase
     assert_selector "input[type=checkbox][name='user_list[public]']"
     assert_button "Save"
   end
+
+  test "renders a toggle, not a checkbox, for public" do
+    render_inline(UserLists::Edit::DetailsFormComponent.new(user_list: user_lists(:regular_user_custom_albums)))
+
+    assert_selector "input[type=checkbox].toggle"
+    assert_no_selector "input[type=checkbox].checkbox"
+  end
+
+  test "custom list shows Delete list wired to delete-list-form" do
+    render_inline(UserLists::Edit::DetailsFormComponent.new(user_list: user_lists(:regular_user_custom_albums)))
+
+    assert_selector "button[form=delete-list-form]", text: "Delete list"
+  end
+
+  test "default list shows no Delete list" do
+    render_inline(UserLists::Edit::DetailsFormComponent.new(user_list: user_lists(:regular_user_music_albums_favorites)))
+
+    assert_no_text "Delete list"
+  end
 end

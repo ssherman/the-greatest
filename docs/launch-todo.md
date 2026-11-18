@@ -867,3 +867,51 @@ dimensions are known and at least 200, so these books get no thumbnail until the
 4. **Check.** Paste a ranked book link and a ranked game link into Discord. Both should show a small cover
    thumbnail. Discord cannot reach dev hostnames, so this can only be checked in production. Discord caches
    unfurls per URL, so test with a link you have not shared before.
+
+## 18. Switch publisher intake on (one source at a time)
+
+The weekly intake of publishers' new and upcoming titles ships switched off: nothing runs until
+`PUBLISHER_INTAKE_SOURCES` names a source. It writes only to its own three tables and reads pages
+through the page fetcher. Details: `docs/features/publisher-intake.md`.
+
+Steps marked "Shane runs with `!`" change production, so an agent does not run them.
+
+1. **Confirm the production fetcher answers `POST /fetch_file`.** The home-server fetcher must be
+   running an image built after the file-fetch work merged on 2026-11-18. Intake's sitemap and API
+   requests use that route and fail without it.
+2. **Enable the first source. Shane runs with `!`.** Set `PUBLISHER_INTAKE_SOURCES=hachette_us` in
+   the environment of both the web process and the Sidekiq process (`deployment/ENV.md`, "Publisher
+   intake": the admin screen reads it too) and restart both. Enabling a source is that one variable: the daily job (06:20 UTC) starts its first
+   run, and the sweep reads what it finds every ten minutes. `PUBLISHER_INTAKE_FETCH_INTERVAL` and
+   `PUBLISHER_INTAKE_DAILY_FETCH_CAP` stay at their defaults (10 seconds, 2,000 a day).
+3. **Watch the first run.** Open `/admin/publisher_intake` (or run `bin/rails
+   books:publisher_intake:status`): the run's status, listings by state, titles ready and held by
+   reason, and today's fetches against the cap. Look at a few titles. `unparseable` listings mean the
+   site's markup differs from what the parser expects: run
+   `bin/rails "books:publisher_intake:reparse[<source>]"` after a parser fix, no new fetch needed.
+   A blocked source shows "blocked until" and resumes by itself.
+4. **Add Penguin Random House. Shane runs with `!`.** Its first run is about 10,000 reads, roughly
+   five days at the default cap, so add it only after the first source looks right. Set
+   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us` for the web and Sidekiq processes
+   and restart both. A sitemap file over the fetcher's file size cap shows on the run as
+   `unavailable`; the size reason is only in the log. The remedy is raising the fetcher's
+   `FETCHER_MAX_FILE_BYTES`.
+5. **Add Macmillan. Shane runs with `!`.** Set
+   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us` for the web and
+   Sidekiq processes and restart both. Its first run only reads the first 20 titles of its "Coming
+   Soon" and "New Releases" collections; every other already-listed title is held as `baseline`.
+   Its product sitemap files were not measured in the rehearsal, and discovery writes one row per
+   URL, so watch the first (baseline) run's duration.
+6. **Release Macmillan's baseline titles after its first run finishes. Shane runs with `!`.** Once
+   `status` shows its last run `finished`, run
+   `bin/rails "books:publisher_intake:release_baseline[macmillan_us,<limit>]"`, highest ISBN first,
+   in slices small enough for the daily cap. This step repeats: each call releases at most `limit`
+   more, so run it again until `status` shows no `baseline` listings you want read. Titles that
+   appear after the first run are read without it.
+7. **To stop a source. Shane runs with `!`.** Remove its key from `PUBLISHER_INTAKE_SOURCES` for
+   both processes and restart both; jobs already queued for it then skip without fetching. A run
+   the switched-off source left `running` is failed by the three-day rule on the next day when
+   some other source is still enabled; with none enabled the daily job does nothing, so that run
+   stays `running` until a source is enabled again.
+8. **Nothing here touches the catalog.** Creating books from stored titles is a later design; until
+   then the tables only grow, in the private imports storage.
