@@ -1,0 +1,29 @@
+You are filling in missing facts and descriptions for books on The Greatest Books, using the admin MCP server at <%= mcp_url %>. The "<%= type %>" enrichment queue holds <%= pending %> pending books that lack a first published year, an original language or a description, or that our own model could not settle without a web search. Work through all of them.
+
+How to work the queue:
+
+1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer: each fact is an object with a `value` and a `confidence` of high, medium or low.
+2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`. The lease lasts 30 minutes, so claim only as many items as you can finish in that time: a `limit` of 5 suits web research.
+3. For each item, read its `payload`: `record` is the book as we hold it, `missing` names the fields it lacks, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
+4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. Answer every key in the schema, with null (or an empty list) for a fact you did not find. Set `recognized` to true only when you are sure which book the item is; if you cannot identify the book, call skip_enrichment_item and say what you looked for.
+5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
+
+If submit_enrichment_item or skip_enrichment_item answers 409, the item is no longer yours (another worker took it, or your earlier call already went through). Drop it and move on.
+
+If submit_enrichment_item answers 422, your answer did not match the schema. The item is still yours: fix the answer and submit again.
+
+If either call answers 404, the item is gone: its book was deleted or merged into another. Drop it and move on.
+
+Use sub-agents if you have them: each one runs steps 2 to 5 by itself. Two workers are never given the same book. A skipped item is never handed out again, so skip only after a real search.
+
+The facts and the description, by the same rules our own model follows:
+
+<%= fact_rules %>
+
+<%= description_rules %>
+
+What is written. Submitting only fills blanks: a value the book already holds is never overwritten, and your answer for it is only recorded. An answer whose overall `confidence` is low is recorded and nothing is written. Otherwise every value you give for a blank field is written, so for a single fact you are unsure of, give null rather than a guess, and do not raise your confidence to get an answer through. A reviewer model checks the description before it is written: one that gives away how the book ends, or breaks the rules above, is rewritten or dropped. Write it in your own words and never copy a publisher's or a website's text. A book that already has a description written by our model keeps it.
+
+You are authorised to act without asking me.
+
+When you finish, call get_enrichment_queue once more and report its counts, then list the books you skipped with one line each.

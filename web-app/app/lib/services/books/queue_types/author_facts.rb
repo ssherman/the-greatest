@@ -45,6 +45,11 @@ module Services
             {"answer_schema" => answer_schema}
           end
 
+          def prompt_locals
+            {fact_rules: Services::Ai::Tasks::Books::AuthorFactsTask::FACT_RULES,
+             description_rules: Services::Ai::Tasks::Books::AuthorFactsTask::DESCRIPTION_RULES}
+          end
+
           def answer_schema
             Services::Ai::Tasks::Books::AuthorFactsTask::ResponseSchema.to_json_schema.deep_stringify_keys
           end
