@@ -16,6 +16,13 @@ module Services
       # title through any later attempt that is not a good page: a good page is
       # never replaced by a bad one. Only last_attempt_* moves.
       #
+      # reparse: true is for re-reading the page already stored (Reparse): nothing
+      # was fetched, so the stored page, last_attempt_*, queued_at and the
+      # state of an already-read listing stay as they are. A found reading
+      # stores its title and facts (a never-read listing becomes read, with
+      # read_at the time its page was fetched); any other outcome only stamps
+      # parser_version.
+      #
       # data: {outcome:, title:}. outcome is the one that was applied, which is
       # :unparseable when a :found reading had no title or no usable ISBN-13.
       class StoreReading
@@ -27,11 +34,12 @@ module Services
           description cover_url].freeze
         ARRAY_FACTS = %i[contributors genres].freeze
 
-        def self.call(listing:, reading:, page:, parser_version:)
-          new(listing: listing, reading: reading, page: page, parser_version: parser_version).call
+        def self.call(listing:, reading:, page:, parser_version:, reparse: false)
+          new(listing: listing, reading: reading, page: page, parser_version: parser_version, reparse: reparse).call
         end
 
-        def initialize(listing:, reading:, page:, parser_version:)
+        def initialize(listing:, reading:, page:, parser_version:, reparse: false)
+          @reparse = reparse
           @listing = listing
           @reading = reading
           @page = page
@@ -49,16 +57,25 @@ module Services
 
           title = nil
           ::Books::PublisherListing.transaction do
-            @listing.last_attempt_outcome = outcome
-            @listing.last_attempt_at = @now
-            @listing.queued_at = nil
-            title = apply(outcome)
+            unless @reparse
+              @listing.last_attempt_outcome = outcome
+              @listing.last_attempt_at = @now
+              @listing.queued_at = nil
+            end
+            title = @reparse ? apply_reparse(outcome) : apply(outcome)
             @listing.save!
           end
           Result.new(success?: true, data: {outcome: outcome, title: title}, errors: [])
         end
 
         private
+
+        def apply_reparse(outcome)
+          return store_found if outcome == :found
+
+          @listing.parser_version = @parser_version
+          nil
+        end
 
         def apply(outcome)
           case outcome
@@ -71,9 +88,17 @@ module Services
 
         def store_found
           title = upsert_title
-          @listing.assign_attributes(state: :read, outcome: :found, http_status: @page&.status,
-            parser_version: @parser_version, read_at: @now, attempts: 0, publisher_title: title)
-          attach_page
+          if @reparse
+            # The page was fetched at last_attempt_at; an already-read listing keeps its read_at and state.
+            @listing.assign_attributes(outcome: :found, parser_version: @parser_version, publisher_title: title)
+            unless @was_read
+              @listing.assign_attributes(state: :read, read_at: @listing.last_attempt_at || @now, attempts: 0)
+            end
+          else
+            @listing.assign_attributes(state: :read, outcome: :found, http_status: @page&.status,
+              parser_version: @parser_version, read_at: @now, attempts: 0, publisher_title: title)
+            attach_page
+          end
           cover_siblings(title)
           title
         end

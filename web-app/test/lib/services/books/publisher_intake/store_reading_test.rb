@@ -416,6 +416,55 @@ module Services
           assert_equal "<p>newer</p>", stored_html(listing)
         end
 
+        test "reparse stores a found reading without replacing the page or touching the last attempt" do
+          listing = new_listing
+          store(listing, found)
+          listing.reload.update!(last_attempt_at: 3.days.ago, queued_at: nil)
+          before = listing.reload.slice(:state, :read_at, :last_attempt_outcome, :last_attempt_at, :queued_at)
+
+          result = StoreReading.call(listing: listing, reading: found(facts(title: "Retitled")), page: fetched("<p>other</p>"),
+            parser_version: 5, reparse: true)
+
+          listing.reload
+          assert_equal "Retitled", result.data[:title].title
+          assert_equal 5, listing.parser_version
+          assert_equal before, listing.slice(:state, :read_at, :last_attempt_outcome, :last_attempt_at, :queued_at)
+          assert_equal HTML, stored_html(listing)
+        end
+
+        test "reparse of a never-read listing makes it read with read_at at its last attempt" do
+          fetched_at = 2.days.ago.change(usec: 0)
+          listing = new_listing(outcome: :unparseable, last_attempt_at: fetched_at)
+
+          StoreReading.call(listing: listing, reading: found, page: fetched, parser_version: 5, reparse: true)
+
+          listing.reload
+          assert listing.state_read?
+          assert listing.outcome_found?
+          assert_equal fetched_at, listing.read_at
+          assert_not_nil listing.publisher_title
+        end
+
+        test "reparse of a never-read listing with no last attempt uses now" do
+          freeze_time do
+            listing = new_listing(outcome: :unparseable)
+            StoreReading.call(listing: listing, reading: found, page: fetched, parser_version: 5, reparse: true)
+
+            assert_equal Time.current, listing.reload.read_at
+          end
+        end
+
+        test "reparse of an unusable reading only stamps parser_version" do
+          listing = new_listing(outcome: :unparseable, last_attempt_at: 1.day.ago)
+          before = listing.reload.slice(:state, :outcome, :read_at, :last_attempt_at, :queued_at)
+
+          StoreReading.call(listing: listing, reading: outcome(:unparseable), page: fetched, parser_version: 5, reparse: true)
+
+          listing.reload
+          assert_equal 5, listing.parser_version
+          assert_equal before, listing.slice(:state, :outcome, :read_at, :last_attempt_at, :queued_at)
+        end
+
         test "nothing is written to books, editions, authors or identifiers" do
           listing = new_listing
           assert_no_difference [-> { ::Books::Book.count }, -> { ::Books::Edition.count }, -> { ::Books::Author.count }, -> { ::Identifier.count }] do
