@@ -45,7 +45,9 @@ module Services
         def stored_page
           html = Zlib.gunzip(@listing.html.download).force_encoding(Encoding::UTF_8)
           status = @listing.http_status || 200
-          PageFetcher::Page.new(url: @listing.url, final_url: @listing.url, status: status, title: nil, html: html,
+          # Strategies check the page's own <title> for the site's name, so it is rebuilt from the stored HTML.
+          title = Nokogiri::HTML(html).at_css("title")&.text&.squish
+          PageFetcher::Page.new(url: @listing.url, final_url: @listing.url, status: status, title: title, html: html,
             selector_found: true, elapsed_ms: 0, fetched_at: @listing.last_attempt_at || @listing.read_at || Time.current)
         end
 
