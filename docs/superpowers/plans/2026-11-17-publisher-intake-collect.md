@@ -358,7 +358,7 @@ Services::Books::PublisherIntake::StoreReading.call(listing:, reading:, page:, p
 
 New rows get `first_seen_at` and `last_seen_at` = now, `external_key` and `signal` from the ref. A ref with a blank URL is skipped. The same URL twice in one call is handled once.
 
-**`StoreReading` rules** (spec §4), where "was read" means `listing.state_read?` before the call:
+**`StoreReading` rules** (spec §4), where "was read" means `listing.read_at.present?`: its page was found at least once. (Not `state_read?`: a listing being fetched again has already been moved back to `pending`.)
 
 | `reading.outcome` | Was read? | Listing after | Stored |
 |---|---|---|---|
