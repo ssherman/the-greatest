@@ -10,7 +10,7 @@ module Services
     class EnrichBook
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-      KIND = "books.book_facts"
+      KIND = RecordBookFacts::KIND
 
       def self.call(book:, force_research: false, author_names: nil, goodreads_page: nil)
         new(book: book, force_research: force_research, author_names: author_names, goodreads_page: goodreads_page).call
@@ -99,48 +99,11 @@ module Services
         chat = task_result.ai_chat
         citations = Array(task_result.data[:citations])
 
-        confidence = confidence_for(facts[:confidence])
-
-        if facts[:recognized] == false
-          return book.enrichments.create!(
-            row_attributes(mode, chat).merge(
-              outcome: :unrecognized,
-              recognized: false,
-              confidence: confidence,
-              facts: unapplied_facts(facts, reason: "unrecognized"),
-              citations: citations
-            )
-          )
-        end
-
-        # A low-confidence knowledge answer is a guess about to be checked by
-        # the paid research run. Applying it first would leave research able
-        # only to fill blanks, so its facts are recorded and deferred; research
-        # applies what it verifies. When the budget is gone and research will
-        # not run, the guess is the best we have and is applied as usual.
-        if mode == :knowledge && confidence == "low" && !budget_exhausted?
-          return book.enrichments.create!(
-            row_attributes(mode, chat).merge(
-              outcome: :nothing_to_apply,
-              recognized: true,
-              confidence: confidence,
-              facts: unapplied_facts(facts, reason: "deferred"),
-              citations: citations
-            )
-          )
-        end
-
-        description = description_for(facts.dig(:description, :value), mode)
-        applied = ApplyBookFacts.call(book: book, facts: facts, citations: citations, description: description)
-
-        book.enrichments.create!(
-          row_attributes(mode, chat).merge(
-            outcome: applied.data[:applied].any? ? :applied : :nothing_to_apply,
-            recognized: facts[:recognized],
-            confidence: confidence,
-            facts: applied.data[:facts],
-            citations: citations
-          )
+        RecordBookFacts.call(
+          book: book, facts: facts, mode: mode, citations: citations,
+          ai_chat: chat, provider: chat&.provider, model: chat&.model,
+          author_names: author_names, goodreads_page: goodreads_page,
+          hold_low_confidence: ("deferred" if mode == :knowledge && !budget_exhausted?)
         )
       rescue => e
         # Anything past this point that raises (a unique-index race between
@@ -168,77 +131,6 @@ module Services
 
       def skip(reason, mode:)
         book.enrichments.create!(kind: KIND, mode: mode, outcome: :skipped, reason: reason)
-      end
-
-      def confidence_for(value)
-        normalized = value.to_s.strip.downcase
-        Enrichment.confidences.key?(normalized) ? normalized : nil
-      end
-
-      # Every fact recorded, none applied: "unrecognized" when the model did
-      # not know the book and was guessing, "deferred" when a low-confidence
-      # answer is about to be checked by research.
-      def unapplied_facts(facts, reason:)
-        facts.except(:recognized, :confidence).to_h do |name, fact|
-          entry = fact.is_a?(Hash) ? {"value" => fact[:value], "confidence" => fact[:confidence]} : {"value" => fact, "confidence" => nil}
-          [name.to_s, entry.merge("applied" => false, "reason" => reason)]
-        end
-      end
-
-      # nil when there is no description to review or apply. When the book
-      # already has an ai_generated description, the applier would record
-      # already_set regardless, so the review call (123k of 158k production
-      # books carry a legacy AI description) is skipped and that reason is
-      # reported directly.
-      def description_for(text, mode)
-        return nil if text.blank?
-        return {text: text, review: nil, reason: "already_set"} if book.descriptions.any? { |d| d.source == "ai_generated" }
-
-        review_description(text, mode)
-      end
-
-      # {text:, review:, reason:}; a reason means "do not write". The
-      # reviewer's verdict is binding: a reply with no spoilers verdict at
-      # all (an empty response) is review_failed, same as a call that
-      # errored outright; a spoiler flag or any style violation with no
-      # rewrite to fall back on is a rejection, not a pass-through of the
-      # text the reviewer just objected to. DescriptionCheck only covers the
-      # violations a regex can see, so it cannot stand in for the reviewer.
-      def review_description(text, mode)
-        review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text, author_names: author_names).call
-        return {text: text, review: nil, reason: "review_failed"} unless review.success?
-
-        data = review.data.deep_symbolize_keys
-        return {text: text, review: nil, reason: "review_failed"} if data[:spoilers].nil?
-
-        flagged = data[:spoilers] == true || Array(data[:style_violations]).any?
-        if flagged && data[:rewritten].blank?
-          check = DescriptionCheck.call(text)
-          return {text: check.data[:text], review: review_verdict(data, check), reason: "rejected"}
-        end
-
-        reviewed = data[:rewritten].presence || text
-        check = if mode == :sourced
-          DescriptionCheck.call(reviewed, source_text: goodreads_page.description, exempt_phrases: [book.title, *author_names])
-        else
-          DescriptionCheck.call(reviewed)
-        end
-
-        {
-          text: check.data[:text],
-          review: review_verdict(data, check),
-          reason: check.success? ? nil : "rejected"
-        }
-      end
-
-      def review_verdict(data, check)
-        {
-          "spoilers" => data[:spoilers],
-          "spoiler_notes" => data[:spoiler_notes],
-          "style_violations" => Array(data[:style_violations]),
-          "rewritten" => data[:rewritten].present?,
-          "check_errors" => check.errors
-        }
       end
 
       def result
