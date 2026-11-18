@@ -5,7 +5,8 @@ module Books
     # The registry of publisher strategies, by key.
     module Sources
       REGISTRY = {
-        "hachette_us" => Sources::HachetteUs
+        "hachette_us" => Sources::HachetteUs,
+        "penguin_random_house_us" => Sources::PenguinRandomHouseUs
       }.freeze
 
       def self.registry = REGISTRY
