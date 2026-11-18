@@ -8,9 +8,9 @@
       ← Back to list
     <% end %>
     <div class="flex flex-wrap items-center gap-3">
-      <h1 class="text-3xl font-bold"><%= @list.name %></h1>
+      <h1 class="text-3xl font-bold"><span id="list-name-heading"><%= @list.name %></span></h1>
       <% if @list.default? %>
-        <span class="badge badge-ghost gap-1"><%= icon "lock", library: "lucide", class: "size-3" %>Built-in</span>
+        <span class="badge badge-ghost gap-1"><%= icon "lock", library: "lucide", class: "size-3", aria_hidden: "true" %>Built-in</span>
       <% end %>
     </div>
   </div>
@@ -21,10 +21,7 @@
   <%= render UserLists::Edit::RowsComponent.new(user_list: @list, items: @items, pagy: @pagy) %>
 
   <% unless @list.default? %>
-    <%# The Delete button lives in the details card and submits this form via its form attribute. %>
-    <%= form_with url: my_list_path(@list), method: :delete, id: "delete-list-form", class: "hidden",
-          data: {turbo_confirm: "Delete “#{@list.name}”? This removes the list and all its items. It can't be undone."} do %>
-    <% end %>
+    <%= render "my_lists/delete_form", list: @list %>
   <% end %>
 
   <% if @list.completed_on_enabled? %>

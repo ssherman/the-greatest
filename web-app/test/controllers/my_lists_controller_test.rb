@@ -821,6 +821,16 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[data-turbo-confirm]", 0
   end
 
+  test "update refreshes the heading and the delete confirm with the new, escaped name" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "Fish & <i>Chips</i>"}}, as: :turbo_stream
+    assert_response :success
+
+    assert_select "turbo-stream[action=update][target=list-name-heading] template", text: "Fish & <i>Chips</i>"
+    assert_select "turbo-stream[action=update][target=list-name-heading] template i", count: 0
+    assert_select "turbo-stream[action=replace][target=delete-list-form] template form#delete-list-form[data-turbo-confirm*=?]", "Fish & <i>Chips</i>"
+  end
+
   test "update renames a custom list" do
     sign_in_as(@user, stub_auth: true)
     patch my_list_path(@custom_albums), params: {user_list: {name: "  Island Picks  ", description: "", public: "0"}}, as: :turbo_stream
