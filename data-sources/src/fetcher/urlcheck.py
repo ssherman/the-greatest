@@ -73,6 +73,14 @@ def parse(url: str) -> Target:
     return Target(url=url, host=host)
 
 
+def origin(url: str) -> tuple[str, str, int]:
+    """(scheme, lowercased host, effective port). Raises InvalidUrl as parse() does."""
+    parse(url)
+    parts = urlsplit(url)
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    return (parts.scheme, (parts.hostname or "").lower(), port)
+
+
 def _forbidden_host_char(host: str) -> str | None:
     """The first WHATWG forbidden host code point in `host`, or None."""
     for ch in host:

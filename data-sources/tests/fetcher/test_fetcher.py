@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import re
@@ -9,14 +10,31 @@ from fetcher import fetcher as fetcher_module
 from fetcher.browser import (
     BrowserError,
     DocumentResponse,
+    DownloadStarted,
+    FileResult,
     InvalidSelector,
     LaunchFailed,
     NavigationTimeout,
     UpstreamUnreachable,
 )
-from fetcher.fetcher import LAUNCH_HANG_S, Fetcher, FetchError, FetchRequest
+from fetcher.fetcher import (
+    LAUNCH_HANG_S,
+    Fetcher,
+    FetchError,
+    FetchRequest,
+    FileFetchRequest,
+)
 from fetcher.settings import Settings
-from tests.fetcher.fakes import PAGE_HTML, PAGE_URL, FakeBrowser, Script, resolver
+from tests.fetcher.fakes import (
+    FILE_BODY,
+    FILE_URL,
+    PAGE_HTML,
+    PAGE_URL,
+    ROBOTS_URL,
+    FakeBrowser,
+    Script,
+    resolver,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -48,6 +66,17 @@ async def fetch_error(fetcher, url=PAGE_URL, **kwargs) -> FetchError:
     with pytest.raises(FetchError) as caught:
         await fetcher.fetch(FetchRequest(url=url, **kwargs))
     return caught.value
+
+
+async def file_error(fetcher, url=FILE_URL, **kwargs) -> FetchError:
+    with pytest.raises(FetchError) as caught:
+        await fetcher.fetch_file(FileFetchRequest(url=url, **kwargs))
+    return caught.value
+
+
+def file_script(**overrides) -> Script:
+    overrides.setdefault("responses", [DocumentResponse(ROBOTS_URL, 200)])
+    return Script(**overrides)
 
 
 def failing_launch():
@@ -512,3 +541,295 @@ async def test_start_and_stop_drive_the_browser_backend():
     assert browser.started
     await fetcher.stop()
     assert browser.stopped
+
+
+# ------------------------------------------------------------------ the file
+
+PRIVATE_HOP = [DocumentResponse(FILE_URL, 200, redirect_chain=("http://intranet.example/x",))]
+REJECTED = FileResult(outcome="rejected", detail="NetworkError when attempting to fetch resource.")
+
+
+async def test_a_file_fetch_returns_the_bytes_and_closes_its_browser():
+    fetcher, browser, _ = build(file_script())
+
+    result = await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    assert (
+        result.url,
+        result.final_url,
+        result.status,
+        result.content_type,
+        result.body,
+        result.size_bytes,
+    ) == (FILE_URL, FILE_URL, 200, "application/octet-stream", FILE_BODY, len(FILE_BODY))
+    assert result.elapsed_ms >= 0
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", result.fetched_at)
+    [session] = browser.sessions
+    assert session.closed
+
+
+async def test_the_page_loaded_first_defaults_to_robots_txt_on_the_files_origin():
+    url = "https://books.example/sitemap_products_1.xml?from=1&to=2#x"
+    fetcher, browser, _ = build(file_script())
+
+    await fetcher.fetch_file(FileFetchRequest(url=url))
+
+    session = browser.sessions[0]
+    assert session.goto_calls[0][:2] == ("https://books.example/robots.txt", "load")
+    assert session.file_calls == [(url, 10_485_760)]
+
+
+async def test_a_given_page_url_is_loaded_instead():
+    fetcher, browser, _ = build(file_script())
+
+    await fetcher.fetch_file(FileFetchRequest(url=FILE_URL, page_url="https://books.example/about"))
+
+    assert browser.sessions[0].goto_calls[0][0] == "https://books.example/about"
+
+
+async def test_a_page_url_on_another_origin_is_refused_before_any_launch():
+    fetcher, browser, _ = build(file_script())
+
+    error = await file_error(fetcher, page_url="https://other.example/robots.txt")
+
+    assert (error.code, error.http_status) == ("invalid_url", 400)
+    assert browser.sessions == []
+
+
+async def test_a_page_url_spelled_differently_is_the_same_origin():
+    url = "https://Books.example:443/a.gz"
+    script = file_script(
+        responses=[DocumentResponse("https://books.example/robots.txt", 200)],
+        file_result=FileResult(
+            outcome="ok", status=200, final_url=url, body=FILE_BODY, size_bytes=len(FILE_BODY)
+        ),
+        file_responses=[DocumentResponse(url, 200)],
+    )
+    fetcher, _, _ = build(script)
+
+    result = await fetcher.fetch_file(
+        FileFetchRequest(url=url, page_url="https://books.example/robots.txt")
+    )
+
+    assert result.body == FILE_BODY
+
+
+async def test_a_page_load_that_lands_on_another_origin_is_invalid_url():
+    script = file_script(
+        responses=[
+            DocumentResponse(
+                "https://www.books.example/robots.txt", 200, redirect_chain=(ROBOTS_URL,)
+            )
+        ]
+    )
+    fetcher, browser, _ = build(script)
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("invalid_url", 400)
+    assert "https://www.books.example" in error.detail
+    assert browser.sessions[0].file_calls == []
+
+
+async def test_a_page_load_that_becomes_a_download_is_invalid_url():
+    fetcher, _, _ = build(file_script(goto_error=DownloadStarted("Download is starting")))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("invalid_url", 400)
+    assert "page_url" in error.detail
+
+
+async def test_a_404_for_the_page_does_not_stop_the_file_fetch():
+    fetcher, _, _ = build(file_script(responses=[DocumentResponse(ROBOTS_URL, 404)]))
+
+    result = await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    assert result.body == FILE_BODY
+
+
+async def test_a_site_403_for_the_file_is_data_not_an_error():
+    challenge = b"<html>Just a moment...</html>"
+    forbidden = FileResult(
+        outcome="ok",
+        status=403,
+        final_url=FILE_URL,
+        content_type="text/html",
+        body=challenge,
+        size_bytes=len(challenge),
+    )
+    fetcher, _, _ = build(file_script(file_result=forbidden))
+
+    result = await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    assert (result.status, result.body) == (403, challenge)
+
+
+async def test_an_empty_file_is_a_successful_fetch():
+    empty = FileResult(outcome="ok", status=200, final_url=FILE_URL, body=b"", size_bytes=0)
+    fetcher, _, _ = build(file_script(file_result=empty))
+
+    result = await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    assert (result.body, result.size_bytes) == (b"", 0)
+
+
+@pytest.mark.parametrize(
+    ("file_result", "cap", "size"),
+    [
+        (
+            FileResult(outcome="too_large", status=200, final_url=FILE_URL, size_bytes=11_000_000),
+            10_485_760,
+            11_000_000,
+        ),
+        (
+            FileResult(
+                outcome="ok", status=200, final_url=FILE_URL, body=b"123456789", size_bytes=9
+            ),
+            8,
+            9,
+        ),
+    ],
+)
+async def test_a_declared_or_actual_size_over_the_cap_is_file_too_large(file_result, cap, size):
+    settings = Settings(max_file_bytes=cap, host_interval_ms=0)
+    fetcher, _, _ = build(file_script(file_result=file_result), settings=settings)
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("file_too_large", 502)
+    assert str(size) in error.detail and str(cap) in error.detail
+
+
+async def test_a_rejected_request_is_upstream_unreachable():
+    fetcher, _, _ = build(file_script(file_result=REJECTED, file_responses=[]))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert "NetworkError when attempting to fetch resource." in error.detail
+
+
+async def test_a_file_redirect_through_a_private_address_returns_no_bytes():
+    fetcher, _, _ = build(file_script(file_responses=PRIVATE_HOP))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("invalid_url", 400)
+
+
+async def test_a_private_hop_wins_over_a_rejected_request():
+    fetcher, _, _ = build(file_script(file_result=REJECTED, file_responses=PRIVATE_HOP))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("invalid_url", 400)
+
+
+async def test_a_file_hop_that_no_longer_resolves_is_upstream_unreachable():
+    hop = [DocumentResponse(FILE_URL, 200, redirect_chain=("http://gone.example/x",))]
+    fetcher, _, _ = build(file_script(file_responses=hop))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+
+
+async def test_a_success_with_no_recorded_file_response_fails_closed():
+    fetcher, _, _ = build(file_script(file_responses=[]))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("browser_error", 502)
+
+
+async def test_the_file_request_goes_through_the_address_filter():
+    script = file_script(file_requests=[("http://intranet.example/a.gz", "fetch", False)])
+    fetcher, browser, _ = build(script)
+
+    await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    assert ("http://intranet.example/a.gz", False) in browser.sessions[0].filter_decisions
+
+
+async def test_the_budget_running_out_during_the_download_names_the_stage():
+    fetcher, _, _ = build(file_script(file_delay_s=5))
+
+    error = await file_error(fetcher, timeout_ms=1000)
+
+    assert (error.code, error.http_status) == ("navigation_timeout", 504)
+    assert error.detail.endswith("downloading the file")
+
+
+async def test_a_page_navigating_away_is_upstream_unreachable_for_the_file():
+    message = "the page navigated away while the file was being requested"
+    fetcher, _, _ = build(file_script(file_result=UpstreamUnreachable(message)))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("upstream_unreachable", 502)
+    assert message in error.detail
+
+
+async def test_a_failing_page_script_is_a_browser_error_for_the_file():
+    fetcher, _, _ = build(file_script(file_result=BrowserError("boom")))
+
+    error = await file_error(fetcher)
+
+    assert (error.code, error.http_status) == ("browser_error", 502)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        file_script(file_result=BrowserError("boom")),
+        file_script(file_result=REJECTED, file_responses=[]),
+        file_script(file_responses=PRIVATE_HOP),
+        file_script(file_responses=[]),
+        file_script(goto_error=DownloadStarted("Download is starting")),
+        file_script(responses=[DocumentResponse("https://www.books.example/robots.txt", 200)]),
+        file_script(
+            file_result=FileResult(
+                outcome="too_large", status=200, final_url=FILE_URL, size_bytes=11_000_000
+            )
+        ),
+    ],
+)
+async def test_the_browser_is_closed_on_every_file_failure_path(script):
+    fetcher, browser, _ = build(script)
+    await file_error(fetcher)
+    assert browser.sessions[0].closed
+
+
+async def test_file_fetches_share_the_health_counters():
+    fetcher, _, _ = build(file_script(), file_script(file_responses=[]))
+
+    await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+    await file_error(fetcher)
+
+    assert fetcher.health()["fetches"] == {"ok": 1, "failed": 1, "in_flight": 0}
+
+
+async def test_a_file_fetch_logs_one_line_and_never_the_body(caplog):
+    fetcher, _, _ = build(file_script())
+    with caplog.at_level(logging.INFO, logger="fetcher"):
+        await fetcher.fetch_file(FileFetchRequest(url=FILE_URL))
+
+    [line] = [json.loads(r.getMessage()) for r in caplog.records if r.name == "fetcher"]
+    assert (line["event"], line["outcome"], line["size_bytes"]) == (
+        "fetch_file",
+        "ok",
+        len(FILE_BODY),
+    )
+    text = " ".join(r.getMessage() for r in caplog.records)
+    assert FILE_BODY.decode("latin-1") not in text
+    assert base64.b64encode(FILE_BODY).decode() not in text
+
+
+async def test_a_page_fetch_log_line_keeps_its_keys(caplog):
+    fetcher, _, _ = build()
+    with caplog.at_level(logging.INFO, logger="fetcher"):
+        await fetcher.fetch(FetchRequest(url=PAGE_URL))
+
+    [line] = [json.loads(r.getMessage()) for r in caplog.records if r.name == "fetcher"]
+    assert set(line) == {"event", "host", "outcome", "status", "elapsed_ms", "launch_ms", "waited"}

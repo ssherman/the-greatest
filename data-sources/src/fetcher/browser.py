@@ -11,6 +11,7 @@ imports camoufox, but only at build time, not while the service is running.)
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import functools
 import importlib.metadata
@@ -18,6 +19,7 @@ import json
 import logging
 import os
 import time
+import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -55,6 +57,10 @@ class BrowserError(BrowserFailure):
     """Anything else the browser raised."""
 
 
+class DownloadStarted(BrowserError):
+    """Navigation turned into a download: the URL is not a displayable page."""
+
+
 @dataclass(frozen=True)
 class DocumentResponse:
     """One main-frame document response. `redirect_chain` holds the URLs of the
@@ -63,6 +69,19 @@ class DocumentResponse:
     url: str
     status: int
     redirect_chain: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FileResult:
+    """What the in-page request for a file came to."""
+
+    outcome: Literal["ok", "too_large", "rejected"]
+    status: int | None = None  # the site's status; None when rejected
+    final_url: str | None = None  # None when rejected
+    content_type: str | None = None  # None when the site sent no Content-Type
+    body: bytes = b""  # filled only when outcome == "ok"
+    size_bytes: int | None = None  # actual size (ok), declared or actual size (too_large)
+    detail: str = ""  # the rejection's message (rejected)
 
 
 class BrowserSession(Protocol):
@@ -78,6 +97,10 @@ class BrowserSession(Protocol):
     async def title(self) -> str: ...
 
     def document_responses(self) -> list[DocumentResponse]: ...
+
+    async def fetch_file(self, url: str, max_bytes: int) -> FileResult: ...
+
+    def file_responses(self) -> list[DocumentResponse]: ...
 
     async def close(self) -> None: ...
 
@@ -153,7 +176,83 @@ def translate_playwright_error(exc: BaseException) -> BrowserFailure:
             return InvalidSelector(_first_line(exc))
         if any(marker in text for marker in UPSTREAM_ERROR_MARKERS):
             return UpstreamUnreachable(_first_line(exc))
+    if "Download is starting" in text:
+        return DownloadStarted(_first_line(exc))
     return BrowserError(_first_line(exc))
+
+
+# Runs inside a page on the file's own site, so the request is same-origin and
+# carries the page's cookies. Blob + FileReader, not Uint8Array / fromCharCode /
+# btoa: that variant fails inside Camoufox with a cross-world permission error.
+FILE_FETCH_SCRIPT = """
+async ([url, maxBytes]) => {
+  let response;
+  try {
+    response = await fetch(url, {credentials: "include"});
+  } catch (error) {
+    return {outcome: "rejected", detail: String((error && error.message) || error)};
+  }
+  const meta = {
+    status: response.status,
+    final_url: response.url,
+    content_type: response.headers.get("content-type"),
+  };
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return {...meta, outcome: "too_large", size_bytes: declared};
+  }
+  let blob;
+  try {
+    blob = await response.blob();
+  } catch (error) {
+    return {outcome: "rejected", detail: String((error && error.message) || error)};
+  }
+  if (blob.size > maxBytes) {
+    return {...meta, outcome: "too_large", size_bytes: blob.size};
+  }
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  const text = String(dataUrl);
+  const comma = text.lastIndexOf(",");
+  return {...meta, outcome: "ok", size_bytes: blob.size, body_base64: comma < 0 ? "" : text.slice(comma + 1)};
+}
+"""  # noqa: E501 -- the page script is kept verbatim
+
+
+_NAVIGATED_AWAY_MARKERS = (
+    "Execution context was destroyed",
+    "most likely because of a navigation",
+    "Frame was detached",
+)
+
+
+def _file_result(answer: Any) -> FileResult:
+    """Decode the page script's answer; anything off-shape is a BrowserError."""
+    if not isinstance(answer, dict):
+        raise BrowserError("the file request returned an unexpected answer")
+    outcome = answer.get("outcome")
+    try:
+        if outcome == "rejected":
+            return FileResult(outcome="rejected", detail=str(answer.get("detail") or ""))
+        if outcome not in ("ok", "too_large"):
+            raise BrowserError("the file request returned an unexpected outcome")
+        body = b""
+        if outcome == "ok":
+            body = base64.b64decode(answer["body_base64"], validate=True)
+        return FileResult(
+            outcome=outcome,
+            status=answer["status"],
+            final_url=answer["final_url"],
+            content_type=answer.get("content_type"),
+            body=body,
+            size_bytes=answer["size_bytes"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BrowserError("the file request returned an unexpected answer") from exc
 
 
 log = logging.getLogger("fetcher")
@@ -314,24 +413,32 @@ class CamoufoxSession:
         self._browser = browser
         self._page = page
         self._responses: list[DocumentResponse] = []
+        self._file_responses: list[DocumentResponse] = []
+        self._file_url: str | None = None
 
     def record_response(self, response: Any) -> None:
         """Keep every main-frame document response with its redirect chain; the
-        fetcher takes `status` from the last one (spec §2)."""
+        fetcher takes `status` from the last one (spec §2). A response to the
+        in-page file request (any hop, including 3xx) goes in its own list."""
         try:
             request = response.request
-            if not request.is_navigation_request() or response.frame != self._page.main_frame:
-                return
             chain: list[str] = []
             earlier = request.redirected_from
+            first = request
             while earlier is not None:
                 chain.append(earlier.url)
+                first = earlier
                 earlier = earlier.redirected_from
-            self._responses.append(
-                DocumentResponse(
-                    url=response.url, status=response.status, redirect_chain=tuple(reversed(chain))
-                )
+            document = DocumentResponse(
+                url=response.url, status=response.status, redirect_chain=tuple(reversed(chain))
             )
+            if request.is_navigation_request() and response.frame == self._page.main_frame:
+                self._responses.append(document)
+            elif (
+                self._file_url is not None
+                and urllib.parse.urldefrag(first.url).url == self._file_url
+            ):
+                self._file_responses.append(document)
         except Exception:
             # A response for a frame being torn down; there is nothing to record.
             log.debug("response skipped", exc_info=True)
@@ -384,6 +491,29 @@ class CamoufoxSession:
 
     def document_responses(self) -> list[DocumentResponse]:
         return list(self._responses)
+
+    async def fetch_file(self, url: str, max_bytes: int) -> FileResult:
+        self._file_responses = []
+        try:
+            # The browser reports request URLs in its canonical form (lowercase
+            # host, default port dropped, escapes, punycode), so match on that
+            # form, stored before the file request so its responses are caught.
+            self._file_url = await self._page.evaluate(
+                "u => { const parsed = new URL(u); parsed.hash = ''; return parsed.href; }", url
+            )
+            answer = await self._page.evaluate(FILE_FETCH_SCRIPT, [url, max_bytes])
+        except Exception as exc:
+            # A challenge page can reload itself while the request is pending; that is
+            # one site's behaviour, not a browser fault (which would trip the breaker).
+            if any(marker in str(exc) for marker in _NAVIGATED_AWAY_MARKERS):
+                raise UpstreamUnreachable(
+                    "the page navigated away while the file was being requested"
+                ) from exc
+            raise translate_playwright_error(exc) from exc
+        return _file_result(answer)
+
+    def file_responses(self) -> list[DocumentResponse]:
+        return list(self._file_responses)
 
     async def close(self) -> None:
         await _close_quietly(self._browser)

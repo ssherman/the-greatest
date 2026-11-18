@@ -1,4 +1,4 @@
-"""Request and response bodies for POST /fetch (spec §2).
+"""Request and response bodies for POST /fetch and POST /fetch_file (spec §2).
 
 No `from __future__ import annotations` here or in routes.py: FastAPI must see
 real classes, and the request model is built per app so that its timeout
@@ -27,6 +27,19 @@ def fetch_request_model(settings: Settings) -> type[BaseModel]:
     return FetchRequestBody
 
 
+def fetch_file_request_model(settings: Settings) -> type[BaseModel]:
+    class FileFetchRequestBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        url: str = Field(min_length=1, max_length=8192)
+        page_url: str | None = Field(default=None, min_length=1, max_length=8192)
+        timeout_ms: int = Field(
+            default=settings.default_timeout_ms, ge=MIN_TIMEOUT_MS, le=settings.max_timeout_ms
+        )
+
+    return FileFetchRequestBody
+
+
 class FetchResponseBody(BaseModel):
     url: str
     final_url: str
@@ -34,6 +47,17 @@ class FetchResponseBody(BaseModel):
     title: str
     html: str
     selector_found: bool | None
+    elapsed_ms: int
+    fetched_at: str
+
+
+class FileFetchResponseBody(BaseModel):
+    url: str
+    final_url: str
+    status: int
+    content_type: str | None
+    body_base64: str  # standard base64 with padding
+    size_bytes: int
     elapsed_ms: int
     fetched_at: str
 

@@ -1,6 +1,7 @@
 """The page fetcher service (spec: 2026-09-26-page-fetcher-service-design.md).
 
-URL in, rendered HTML out. A pure function of the request: no cache, no state
+URL in, rendered HTML out (POST /fetch), or a file's bytes as base64
+(POST /fetch_file). A pure function of the request: no cache, no state
 between calls, one fresh browser per fetch.
 """
 

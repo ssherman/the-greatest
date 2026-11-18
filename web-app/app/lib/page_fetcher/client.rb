@@ -6,11 +6,12 @@ require "json"
 module PageFetcher
   # HTTP client for the page fetcher service in data-sources/ (spec:
   # docs/superpowers/specs/2026-09-26-page-fetcher-service-design.md, §5).
-  # One endpoint, so one class holds the HTTP, the breaker and the error
-  # mapping. Nothing here knows a browser exists.
+  # Two endpoints (/fetch for rendered pages, /fetch_file for raw bytes), so
+  # one class holds the HTTP, the breaker and the error mapping they share.
+  # Nothing here knows a browser exists.
   class Client
     # Service error codes that describe the site, not the service (spec §2).
-    UPSTREAM_ERROR_CODES = %w[upstream_unreachable html_too_large].freeze
+    UPSTREAM_ERROR_CODES = %w[upstream_unreachable html_too_large file_too_large].freeze
     # The service answers within the fetch budget plus its 5 s browser-close
     # limit; the rest is margin, so Rails never abandons a fetch in progress.
     READ_TIMEOUT_PADDING = 10
@@ -32,21 +33,19 @@ module PageFetcher
     def fetch(url, wait_until: "load", wait_for_selector: nil, timeout_ms: 30_000)
       body = {url: url, wait_until: wait_until, timeout_ms: timeout_ms}
       body[:wait_for_selector] = wait_for_selector if wait_for_selector.present?
-      read_timeout = timeout_ms / 1000.0 + READ_TIMEOUT_PADDING
 
-      outcome = nil
-      breaker.call { outcome = classify(post(body, read_timeout)) }
-      raise outcome[:error] if outcome[:error]
+      perform("/fetch", body, timeout_ms) { |response_body| parse_page(response_body) }
+    end
 
-      outcome[:page]
-    rescue Books::OpenLibrary::Exceptions::CircuitOpenError => e
-      raise Exceptions::CircuitOpenError, e.message
-    rescue Faraday::TimeoutError => e
-      raise Exceptions::TimeoutError.new("Request timed out", e)
-    rescue Faraday::ConnectionFailed => e
-      raise Exceptions::NetworkError.new("Connection failed: #{e.message}", e)
-    rescue Faraday::Error => e
-      raise Exceptions::NetworkError.new("Network error: #{e.message}", e)
+    # The file's bytes as the site sent them, not rendered. Pacing and retries
+    # are the caller's job, as for #fetch.
+    # @return [PageFetcher::FileResponse]
+    # @raise [PageFetcher::Exceptions::Error] or a subclass, as #fetch
+    def fetch_file(url, page_url: nil, timeout_ms: 30_000)
+      body = {url: url, timeout_ms: timeout_ms}
+      body[:page_url] = page_url if page_url.present?
+
+      perform("/fetch_file", body, timeout_ms) { |response_body| parse_file(response_body) }
     end
 
     private
@@ -71,8 +70,27 @@ module PageFetcher
       end
     end
 
-    def post(body, read_timeout)
-      connection.post("/fetch") do |req|
+    # Posts to the path inside the breaker; the block parses a 200 body.
+    def perform(path, body, timeout_ms, &parse)
+      read_timeout = timeout_ms / 1000.0 + READ_TIMEOUT_PADDING
+
+      outcome = nil
+      breaker.call { outcome = classify(post(path, body, read_timeout), &parse) }
+      raise outcome[:error] if outcome[:error]
+
+      outcome[:result]
+    rescue Books::OpenLibrary::Exceptions::CircuitOpenError => e
+      raise Exceptions::CircuitOpenError, e.message
+    rescue Faraday::TimeoutError => e
+      raise Exceptions::TimeoutError.new("Request timed out", e)
+    rescue Faraday::ConnectionFailed => e
+      raise Exceptions::NetworkError.new("Connection failed: #{e.message}", e)
+    rescue Faraday::Error => e
+      raise Exceptions::NetworkError.new("Network error: #{e.message}", e)
+    end
+
+    def post(path, body, read_timeout)
+      connection.post(path) do |req|
         req.headers["Content-Type"] = "application/json"
         req.body = body.to_json
         req.options.timeout = read_timeout
@@ -83,10 +101,10 @@ module PageFetcher
     # (a 5xx other than an upstream code, an unparseable body); returns
     # everything else, so a caller bug (4xx) or a dead site (UpstreamError)
     # finishes the block normally and never trips the breaker.
-    def classify(response)
+    def classify(response, &parse)
       case response.status
       when 200..299
-        {page: parse_page(response.body)}
+        {result: parse.call(response.body)}
       when 400..499
         {error: http_error(Exceptions::ClientError, response)}
       when 500..599
@@ -130,6 +148,18 @@ module PageFetcher
       raise Exceptions::ParseError.new("The fetch response is not JSON", nil)
     rescue KeyError, ArgumentError => e
       raise Exceptions::ParseError.new("Failed to parse the fetch response: #{e.message}", nil)
+    end
+
+    # As parse_page: the body is the file, so it never goes on the exception.
+    def parse_file(body)
+      parsed = JSON.parse(body)
+      raise Exceptions::ParseError.new("The fetch_file response is not a JSON object", nil) unless parsed.is_a?(Hash)
+
+      FileResponse.from_response(parsed)
+    rescue JSON::ParserError
+      raise Exceptions::ParseError.new("The fetch_file response is not JSON", nil)
+    rescue KeyError, ArgumentError => e
+      raise Exceptions::ParseError.new("Failed to parse the fetch_file response: #{e.message}", nil)
     end
   end
 end

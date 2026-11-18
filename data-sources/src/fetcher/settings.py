@@ -30,6 +30,7 @@ class Settings:
     host_interval_ms: int = 2000
     max_launch_failures: int = 3
     max_html_bytes: int = 5_242_880
+    max_file_bytes: int = 10_485_760
     default_timeout_ms: int = 30_000
     max_timeout_ms: int = 60_000
     locale: str = "en-US"
@@ -47,6 +48,7 @@ class Settings:
                 env, "FETCHER_MAX_LAUNCH_FAILURES", cls.max_launch_failures, 1
             ),
             max_html_bytes=_int(env, "FETCHER_MAX_HTML_BYTES", cls.max_html_bytes, 1),
+            max_file_bytes=_int(env, "FETCHER_MAX_FILE_BYTES", cls.max_file_bytes, 1),
             default_timeout_ms=_int(
                 env, "FETCHER_DEFAULT_TIMEOUT_MS", cls.default_timeout_ms, MIN_TIMEOUT_MS
             ),

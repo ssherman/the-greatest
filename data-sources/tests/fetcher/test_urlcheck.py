@@ -7,6 +7,7 @@ from fetcher.urlcheck import (
     InvalidUrl,
     Unresolvable,
     is_public,
+    origin,
     parse,
     system_resolver,
 )
@@ -191,3 +192,29 @@ async def test_ip_literals_in_any_encoding_are_refused(url):
 async def test_a_label_too_long_to_encode_is_invalid_without_any_lookup():
     with pytest.raises(InvalidUrl):
         await HostChecker(system_resolver).check("http://" + "a" * 64 + ".example/")
+
+
+# ------------------------------------------------------------------ origin
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("https://Example.com:443/a.gz", "https://example.com/robots.txt"),
+        ("http://example.com:80/x", "http://EXAMPLE.com/"),
+    ],
+)
+def test_origin_ignores_case_and_default_ports(a, b):
+    assert origin(a) == origin(b)
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("https://example.com/", "http://example.com/"),
+        ("https://example.com/", "https://www.example.com/"),
+        ("https://example.com/", "https://example.com:8443/"),
+    ],
+)
+def test_origin_tells_scheme_host_and_port_apart(a, b):
+    assert origin(a) != origin(b)
