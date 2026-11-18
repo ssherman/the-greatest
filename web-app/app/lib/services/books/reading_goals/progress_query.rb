@@ -43,7 +43,7 @@ module Services
 
           items = list.user_list_items
             .where(listable_type: "Books::Book", completed_on: goal.starts_on..goal.ends_on)
-            .includes(listable: ::Books::UserList.listable_display_includes + [{primary_image: {file_attachment: :blob}}])
+            .includes(listable: ::Books::UserList.listable_display_includes)
             .reorder(completed_on: :desc, id: :desc)
 
           catalog_only ? ::Books::UserList.catalog_items(items) : items

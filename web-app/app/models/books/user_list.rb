@@ -69,7 +69,7 @@ module Books
     end
 
     def self.listable_display_includes
-      [{book_authors: :author}, :categories, :primary_image]
+      [{book_authors: :author}, :categories, {primary_image: {file_attachment: :blob}}]
     end
 
     def self.catalog_items(scope)

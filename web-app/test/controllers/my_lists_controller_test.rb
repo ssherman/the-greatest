@@ -729,6 +729,29 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes @controller.view_assigns["items"].map(&:id), item.id
   end
 
+  test "edit preloads cover images, so attachment queries do not grow with row count" do
+    sign_in_as(@user, stub_auth: true)
+    path = Rails.root.join("test/fixtures/files/test_image.png")
+    albums = [:dark_side_of_the_moon, :wish_you_were_here, :animals, :abbey_road, :thriller].map { |name| music_albums(name) }
+    albums.each do |album|
+      image = Image.new(parent: album, primary: true)
+      image.file.attach(io: File.open(path), filename: "cover.png", content_type: "image/png")
+      image.save!
+    end
+    storage_queries = ->(log) { log.count { |sql| sql.include?("active_storage_attachments") || sql.include?("active_storage_blobs") } }
+
+    albums.first(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    two_row_log = capture_sql { get edit_my_list_path(@custom_albums) }
+    assert_response :success
+
+    albums.drop(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    ActiveRecord::Base.connection.clear_query_cache
+    five_row_log = capture_sql { get edit_my_list_path(@custom_albums) }
+    assert_response :success
+
+    assert_equal storage_queries.call(two_row_log), storage_queries.call(five_row_log)
+  end
+
   test "edit renders a songs list" do
     sign_in_as(@user, stub_auth: true)
     get edit_my_list_path(user_lists(:regular_user_music_songs_favorites))

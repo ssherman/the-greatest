@@ -65,7 +65,7 @@ module Music
       end
 
       def self.listable_display_includes
-        [:artists, :categories, :primary_image]
+        [:artists, :categories, {primary_image: {file_attachment: :blob}}]
       end
 
       def self.generated_list_class
