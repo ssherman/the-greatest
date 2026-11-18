@@ -2,6 +2,7 @@
      class="flex items-center gap-3 rounded-box bg-base-100 p-2 shadow-sm"
      data-position="<%= item.position %>"
      data-item-id="<%= item.id %>"
+     tabindex="-1"
      data-page="<%= page %>">
   <span class="badge badge-neutral shrink-0" aria-label="Position <%= item.position %>"><%= item.position %></span>
 
@@ -15,11 +16,7 @@
       <p class="text-sm text-base-content/70 truncate"><%= by_line %></p>
     <% end %>
     <% if completed_on_enabled? %>
-      <% if item.completed_on %>
-        <%= render UserLists::CompletionDateComponent.new(item: item, variant: :text) %>
-      <% else %>
-        <p id="<%= dom_id(item, :completion) %>" class="text-sm text-base-content/40">No <%= user_list.completion_label.downcase %> date</p>
-      <% end %>
+      <%= render UserLists::CompletionDateComponent.new(item: item, variant: :row) %>
     <% end %>
   </div>
 
@@ -43,7 +40,7 @@
         <li>
           <button type="button"
                   data-action="user-list-completion#open"
-                  data-variant="text"
+                  data-variant="row"
                   data-item-id="<%= item.id %>"
                   data-item-title="<%= title %>"
                   data-completed-on="<%= item.completed_on&.iso8601 %>">Set <%= user_list.completion_label.downcase %> date…</button>

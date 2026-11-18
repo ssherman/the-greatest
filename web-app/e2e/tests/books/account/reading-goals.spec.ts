@@ -99,7 +99,7 @@ async function visitReadList(page: Page): Promise<void> {
 }
 
 function completionTrigger(page: Page, title: string): Locator {
-  return page.getByRole('button', { name: `Edit finished date for ${title}`, exact: true });
+  return page.getByRole('button', { name: new RegExp(`^Finished date for ${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: `) });
 }
 
 async function completionDialog(page: Page, title: string): Promise<{ dialog: Locator; trigger: Locator; input: Locator }> {

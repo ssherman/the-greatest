@@ -426,6 +426,17 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 
+  test "clearing a date from the Edit page row brings the placeholder back" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: ""}, variant: "row"}, as: :turbo_stream
+
+    assert_response :success
+    assert_nil item.reload.completed_on
+    assert_select "turbo-stream[action=replace][target=#{ActionView::RecordIdentifier.dom_id(item, :completion)}] template p.text-base-content\\/40", text: "No finished date"
+  end
+
   test "setting a completion date invalidates goals for the new date" do
     item = user_list_items(:regular_user_books_item_3)
     item.update!(completed_on: nil)

@@ -131,7 +131,8 @@ test.describe('Books Edit list page', () => {
     await openRowMenu(page, moving);
     await rows(page).nth(4).getByRole('button', { name: 'Move to top' }).click();
     await expect.poll(() => titles(page)).toEqual(expectedAfterMove(before, 4, 0));
-
+    // The menu must close, not follow the moved row.
+    await expect(rows(page).first().getByRole('button', { name: 'Move to top' })).toBeHidden();
   });
 
   test('Remove then Undo returns the book to its place and the count to what it was', async ({ page }) => {

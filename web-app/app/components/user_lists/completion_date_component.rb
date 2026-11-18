@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
-# A list item's finish date. :text is the quiet line under a grid card; :table
+# A list item's finish date. :text is the quiet line under a grid card; :row is the Edit
+# page line (a faint "No ... date" placeholder when blank); :table
 # is the table cell, with an edit trigger for the owner. The root id lets a
 # Turbo Stream replace it in place after an edit.
 class UserLists::CompletionDateComponent < ViewComponent::Base
-  VARIANTS = %i[text table].freeze
+  VARIANTS = %i[text table row].freeze
 
   def initialize(item:, variant: :table, editable: false)
     @item = item

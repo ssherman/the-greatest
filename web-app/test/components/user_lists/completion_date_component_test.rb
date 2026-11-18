@@ -10,7 +10,7 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     item.completed_on = nil
     render_inline(Component.new(item: item, variant: :table, editable: true))
 
-    assert_selector "button.link[aria-label='Edit finished date for #{item.listable.title}'][data-variant='table']", text: "Add date"
+    assert_selector "button.link[aria-label='Finished date for #{item.listable.title}: Add date'][data-variant='table']", text: "Add date"
   end
 
   test "table variant shows the date on the trigger" do
@@ -41,6 +41,29 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     render_inline(Component.new(item: item, variant: :text))
 
     assert_no_text(/\S/)
+  end
+
+  test "the date trigger's accessible name includes its visible date" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(Component.new(item: item, variant: :table, editable: true))
+
+    assert_selector "button[aria-label='Finished date for #{item.listable.title}: Jan 20, 2026']", text: "Jan 20, 2026"
+  end
+
+  test "row variant shows the placeholder without a date" do
+    item = user_list_items(:regular_user_books_item_3)
+    item.completed_on = nil
+    render_inline(Component.new(item: item, variant: :row))
+
+    assert_selector "p[id='#{ActionView::RecordIdentifier.dom_id(item, :completion)}']", text: "No finished date"
+  end
+
+  test "row variant shows the label and date when set" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(Component.new(item: item, variant: "row"))
+
+    assert_text "Finished Jan 20, 2026"
+    assert_no_text "No finished date"
   end
 
   test "an unknown variant falls back to table" do

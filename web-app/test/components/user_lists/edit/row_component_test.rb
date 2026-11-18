@@ -61,10 +61,10 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
     assert_no_selector "[data-action='user-list-completion#open']"
   end
 
-  test "a completion list offers a Set date opener with the text variant" do
+  test "a completion list offers a Set date opener with the row variant" do
     item = user_list_items(:regular_user_books_item_3)
     render_inline(UserLists::Edit::RowComponent.new(item: item))
 
-    assert_selector "button[data-action='user-list-completion#open'][data-variant=text][data-completed-on='2026-01-20']", text: "Set finished date…"
+    assert_selector "button[data-action='user-list-completion#open'][data-variant=row][data-completed-on='2026-01-20']", text: "Set finished date…"
   end
 end
