@@ -41,6 +41,23 @@ module Services
             assert_equal @survivor, MergedBook.call(first)
           end
 
+          test "a pair survivor later merged away again resolves through its redirect, not back through the pair" do
+            kept, folded = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: kept, item_b_id: folded, status: :merged, source: :ai)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: @survivor.id)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: kept, to_id: @survivor.id)
+
+            assert_equal @survivor, MergedBook.call(kept)
+            assert_equal @survivor, MergedBook.call(folded)
+          end
+
+          test "a merged pair with no redirect is still followed" do
+            gone_id, = gone_ids(1)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: @survivor.id, item_b_id: gone_id, status: :merged, source: :ai)
+
+            assert_equal @survivor, MergedBook.call(gone_id)
+          end
+
           test "a deleted mixed book's redirect points at a guess and is not followed" do
             gone_id, = gone_ids(1)
             ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{gone_id}", decided_by: :rule, status: :approved,

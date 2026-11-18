@@ -7,9 +7,9 @@ module Services
         # The book a verdict's id names now. It is the book itself, or, when the
         # book was merged away, the book it ended up merged into. The merge is
         # found through an approved merge_books verdict (which records the
-        # direction), else through a merged duplicate pair, where the other half
-        # is the target, else through the record_redirects row every merge
-        # writes. That last edge is the only one an admin merge of two books that
+        # direction), else through the record_redirects row every merge writes,
+        # else through a merged duplicate pair, where the other half is the
+        # target. The redirect is the only edge an admin merge of two books that
         # were never a duplicate pair leaves (merge_book in the admin UI, API or
         # MCP). A deleted mixed book's redirect is the exception: it points at a
         # guess (the book most of its readers moved to), and moves and copies
@@ -40,11 +40,15 @@ module Services
               .order(:id).pick(Arel.sql("payload->>'target_id'"))
             return target.to_i if target
 
+            # The redirect before the pair: a redirect has a direction and is repointed when its target is merged
+            # in turn, while a pair only names both halves. A pair's survivor that was later merged away again
+            # would otherwise be sent back to the half that was folded into it, which is gone, and loop.
+            redirected = redirect_target(id)
+            return redirected if redirected
+
             pair = ::DuplicateCandidate.merged.where(item_type: "Books::Book")
               .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc).first
-            return ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id) if pair
-
-            redirect_target(id)
+            pair && ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id)
           end
 
           def self.redirect_target(id)
