@@ -25,8 +25,15 @@ module Books
       #   ISBN only, so only that format carries them.
       # - `:language` is always nil: no element of these pages states the
       #   edition's language (a translated novel says what it was translated
-      #   from, which is not the edition's language), and no series or
-      #   subtitle is shown apart from the title, so those are nil as well.
+      #   from, which is not the edition's language).
+      # - The series is read from the heading's own series link ("Orphan X
+      #   (Volume 12)"), never from the title. `:subtitle` is nil: the line the
+      #   page shows under the title on a series book ("An Orphan X Novel") is
+      #   a series tagline, and no other page shows a subtitle apart from the
+      #   title itself.
+      # - A page is read only when it shows its own markup (the creator line
+      #   and a format control); a page that keeps only the JSON-LD and the
+      #   site's meta tags is unparseable, not a title with empty facts.
       class MacmillanUs < Base
         VERSION = 1
 
@@ -34,8 +41,10 @@ module Books
         PUBLISHER = "Macmillan"
         PRODUCT_FILE = %r{sitemaps/sitemap-products\.\d+\.xml\.gz\z}
         PRODUCT_URL = %r{\Ahttps://us\.macmillan\.com/books/(97[89]\d{10})/}
+        NAME_SUFFIX = /\A(?:jr\.?|sr\.?|ph\.?d\.?|m\.?d\.?|esq\.?|ii|iii|iv|dds|mba)\z/i
         BOOK_PATH = %r{\A(?:https://us\.macmillan\.com)?/books/(97[89]\d{10})(?:/([^/?#]+))?}
         SITE_NAME = /Macmillan/i
+        SITE_URL = %r{\Ahttps://us\.macmillan\.com/}
         NOT_FOUND_TITLE = /\APage not found/i
         PLACEHOLDER_COVER = /lazyload|placeholder|no-?cover/i
         COLLECTIONS = %w[Coming%20Soon New%20Releases].freeze
@@ -80,7 +89,7 @@ module Books
         def seed_requests
           COLLECTIONS.map do |name|
             Request.page("#{SITE}/search?dFR[collections.list.name][0]=#{name}&searchType=products",
-              wait_for_selector: "a[href*='/books/97']", context: {"step" => "collection", "page" => 1})
+              wait_for_selector: ".book-grid__grid a[href*='/books/97']", context: {"step" => "collection", "page" => 1})
           end
         end
 
@@ -108,10 +117,10 @@ module Books
         def parse_listing(listing:, page:)
           outcome = status_outcome(page.status)
           return reading(outcome) if outcome
-          return reading(:not_found) if page.title.to_s.match?(NOT_FOUND_TITLE)
 
           doc = Nokogiri::HTML(page.html)
           return reading(:blocked) unless site_page?(page.title, doc)
+          return reading(:not_found) if page.title.to_s.match?(NOT_FOUND_TITLE)
 
           read_book(doc, listing)
         end
@@ -127,9 +136,14 @@ module Books
         end
 
         # A real book page's <title> is the book's title alone; the site's name
-        # is in og:site_name there, and in the <title> of its other pages.
+        # is in og:site_name there, and in the <title> of its other pages. Two
+        # more markers keep a page that loses the meta tag from reading as a
+        # block: the book heading block, and a JSON-LD Book url on the site.
         def site_page?(title, doc)
-          title.to_s.match?(SITE_NAME) || doc.at_css('meta[property="og:site_name"]')&.[]("content").to_s.match?(SITE_NAME)
+          title.to_s.match?(SITE_NAME) ||
+            doc.at_css('meta[property="og:site_name"]')&.[]("content").to_s.match?(SITE_NAME) ||
+            doc.at_css(".section-title--book-main").present? ||
+            JsonLd.nodes(doc.to_html, types: "Book").any? { |node| node["url"].to_s.match?(SITE_URL) }
         end
 
         def index_discovery(sitemap)
@@ -159,6 +173,10 @@ module Books
 
             seen[match[1]] ||= "#{SITE}/books/#{match[1]}/#{"#{match[2]}/" if match[2]}"
           end
+          # An empty grid is a renamed grid or a page filled by script too late,
+          # not an empty collection: it must not read as "nothing new".
+          return discovery(:unparseable) if seen.empty?
+
           discovery(:ok, seen.map { |isbn, url| ListingRef.new(url: url, external_key: isbn, signal: nil) })
         end
 
@@ -169,9 +187,10 @@ module Books
           own_isbn = Isbn.normalize(book&.dig("isbn").to_s) || Isbn.normalize(details["ISBN"]&.text.to_s) ||
             Isbn.normalize(listing.external_key.to_s)
           title = doc.at_css(".section-title--book-main h1")&.text&.squish.presence || book&.dig("name").to_s.squish.presence
-          return reading(:unparseable) if title.blank? || own_isbn.nil?
+          return reading(:unparseable) if title.blank? || own_isbn.nil? || !book_markup?(doc)
 
           on_sale = parse_date(info["On Sale"]&.text)
+          series = series_from(doc)
           formats = formats_from(doc, own_isbn, info, on_sale)
           facts = {
             title: title,
@@ -182,8 +201,8 @@ module Books
             publisher_name: PUBLISHER,
             language: nil,
             genres: genres_from(info["Genre"]),
-            series_name: nil,
-            series_position: nil,
+            series_name: series[:name],
+            series_position: series[:position],
             age_range: info["Age Range"]&.text&.squish.presence,
             description: paragraphs(doc.at_css(".book-details__description")),
             cover_url: cover_from(book, doc),
@@ -191,6 +210,21 @@ module Books
             source_key: own_isbn
           }
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
+        end
+
+        # The page's own markup: the creator line and a format control.
+        def book_markup?(doc)
+          doc.at_css(".section-title--book-main .section-title__creator").present? &&
+            (doc.at_css("select.book-formats-dropdown option[data-format-isbn]") || doc.at_css("div.select-input__el")).present?
+        end
+
+        # "Orphan X (Volume 12)" -> name "Orphan X", position "12" (a plain number only).
+        def series_from(doc)
+          text = doc.at_css(".section-title--book-main a[href^='/series/']")&.text.to_s.squish
+          return {} if text.blank?
+
+          name = text.sub(/\s*\(Volume[^)]*\)\z/i, "").squish
+          {name: name.presence, position: text[/\(Volume\s+(\d+)\)\z/i, 1]}
         end
 
         # label => the element holding its text, for the first row of each label.
@@ -254,14 +288,20 @@ module Books
           doc.css(".section-title--book-main .section-title__creator").flat_map do |line|
             copy = line.dup
             copy.css(".section-title__label").each(&:remove)
-            copy.text.split(";").map(&:squish).reject(&:blank?).filter_map { |segment| contributor(segment) }
+            copy.text.split(";").map(&:squish).reject(&:blank?).flat_map { |segment| contributor(segment) }
           end.uniq
         end
 
+        # Every name in a segment gets the segment's role. Co-authors are joined
+        # with " and " or ", "; a name suffix after a comma ("King, Jr.",
+        # "Rader, PhD") stays with its name.
         def contributor(segment)
           pattern, role = CONTRIBUTOR_ROLES.find { |regexp, _| segment.match?(regexp) }
-          name = pattern ? segment.sub(pattern, "").squish : segment
-          {name: name, role: role || "author"} if name.present?
+          names = (pattern ? segment.sub(pattern, "") : segment).squish.split(/\s+and\s+|,\s+/).map(&:squish)
+          names = names.each_with_object([]) do |part, joined|
+            (part.match?(NAME_SUFFIX) && joined.any?) ? joined[-1] = "#{joined.last}, #{part}" : joined << part
+          end
+          names.reject(&:blank?).map { |name| {name: name, role: role || "author"} }
         end
 
         # Paragraphs are separated by <br>, which has no text of its own.

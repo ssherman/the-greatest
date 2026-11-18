@@ -7,14 +7,16 @@ module Books
     module Sources
       # Real pages, cut by hand to what the parser reads (navigation, forms,
       # reviews, excerpts, author biographies and long copy removed, description
-      # paragraphs cut to a sentence): novel_three_formats, translated_novel,
+      # paragraphs cut to a sentence, descriptions to two one-sentence
+      # paragraphs): novel_three_formats, translated_novel,
       # picture_book_illustrator, boxed_set_no_pages, graphic_boxed_set,
-      # classic_two_formats and collection_coming_soon (the first five results
+      # classic_two_formats, series_novel_four_formats and collection_coming_soon (the first five results
       # of the "Coming Soon" collection, plus the two featured books the site's
       # menu carries). sitemap_index.xml and sitemap_products_urlset.xml.gz are
       # HAND-BUILT from the recorded shape of the real files (real URL layout,
       # a few children and six entries). synthetic_* pages are made up and say
-      # why in a comment; every other test body builds its markup inline from
+      # why in a comment (synthetic_json_ld_only copies the real JSON-LD and meta
+      # tags of novel_three_formats and drops the page markup); every other test body builds its markup inline from
       # structure seen on the real pages.
       class MacmillanUsTest < ActiveSupport::TestCase
         DIR = "publisher_intake/macmillan_us"
@@ -61,6 +63,14 @@ module Books
         def read(name, key = "1", **options)
           @source.parse_listing(listing: ListingRef.new(url: "u", external_key: key, signal: nil),
             page: page(fixture_text("#{name}.html.gz"), **options))
+        end
+
+        # The creator line is `;`-separated segments; reads a page whose line is `line`.
+        def creators(line)
+          html = fixture_text("novel_three_formats.html.gz")
+          html = html.sub(/(<span class="section-title__label[^>]*>Author:<\/span>)[^<]*/) { "#{$1} #{line} " }
+          reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(html))
+          reading.facts[:contributors].map { |c| [c[:name], c[:role]] }
         end
 
         def formats(reading) = reading.facts[:formats].map { |f| f.values_at(:isbn13, :format, :format_label) }
@@ -137,7 +147,7 @@ module Books
           requests = @source.seed_requests
 
           assert_equal [COMING_SOON, NEW_RELEASES], requests.map(&:url)
-          assert_equal [["page", "a[href*='/books/97']", {"step" => "collection", "page" => 1}]] * 2,
+          assert_equal [["page", ".book-grid__grid a[href*='/books/97']", {"step" => "collection", "page" => 1}]] * 2,
             requests.map { |r| [r.kind, r.wait_for_selector, r.context] }
         end
 
@@ -163,12 +173,23 @@ module Books
           end
         end
 
-        test "a collection page with no book links is ok and empty on the site, blocked off it" do
+        test "a collection page with no book links in its grid is unparseable, blocked off the site" do
           empty = collection("<html><head><title>Search - Macmillan Publishers</title></head><body></body></html>")
-          assert_equal [:ok, [], []], [empty.outcome, empty.listings, empty.requests]
+          assert_equal [:unparseable, [], []], [empty.outcome, empty.listings, empty.requests]
+
+          no_links = collection('<html><head><title>Search - Macmillan Publishers</title></head><body><div class="book-grid__grid"></div></body></html>')
+          assert_equal :unparseable, no_links.outcome
 
           wall = collection(fixture_text("synthetic_challenge.html"))
           assert_equal [:blocked, []], [wall.outcome, wall.listings]
+        end
+
+        test "a collection whose grid class was renamed is unparseable, not an empty collection" do
+          html = fixture_text("collection_coming_soon.html.gz")
+          assert_equal :ok, collection(html).outcome
+
+          renamed = html.gsub("book-grid__grid", "results-grid")
+          assert_equal [:unparseable, []], collection(renamed).then { |r| [r.outcome, r.listings] }
         end
 
         test "a collection answers its status when the site gave one" do
@@ -277,8 +298,9 @@ module Books
 
           assert_equal [["9781250449641", "hardcover", "Hardcover"]], formats(reading)
           assert_equal "First Second", reading.facts[:imprint_name]
-          assert_match(/\n/, reading.facts[:description])
-          assert_includes reading.facts[:description].lines.map(&:strip), "The InvestiGators are on the case...and in a slipcase!"
+          assert_equal ["With more than three million copies in print, John Patrick Green's goofy graphic novel series is a colossal comics hit!",
+            "Don your vest and get case-cracking with this deluxe boxed-set edition of InvestiGators, the New York Times-bestselling adventure series from John Patrick Green."],
+            reading.facts[:description].lines.map(&:strip).reject(&:blank?)
         end
 
         test "a two-format page lists the hardcover and the ebook, and its page count belongs to its own format" do
@@ -361,6 +383,91 @@ module Books
           assert_equal :not_found, @source.parse_listing(listing: ref, page: page("", title: "Page not found - Macmillan Publishers")).outcome
           assert_equal :blocked, @source.parse_listing(listing: ref, page: page("", status: 403, title: "x")).outcome
           assert_equal :unavailable, @source.parse_listing(listing: ref, page: page("", status: 503, title: "x")).outcome
+        end
+
+        test "a page that keeps only the JSON-LD and the site's meta tags is unparseable" do
+          html = fixture_text("synthetic_json_ld_only.html")
+          assert_includes html, '"@type":"Book"'
+          assert_includes html, "og:site_name"
+
+          reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(html))
+          assert_equal [:unparseable, {}], [reading.outcome, reading.facts]
+        end
+
+        test "a page with a creator line but no format control, or the reverse, is unparseable" do
+          html = fixture_text("picture_book_illustrator.html.gz")
+          no_format = html.gsub("select-input__el", "x-el")
+          no_creator = html.gsub("section-title__creator", "x-creator")
+
+          [no_format, no_creator].each do |markup|
+            reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(markup))
+            assert_equal :unparseable, reading.outcome
+          end
+        end
+
+        test "a real page that lost its og:site_name tag is still the site's own" do
+          html = fixture_text("novel_three_formats.html.gz").gsub(/<meta property="og:site_name"[^>]*>/, "")
+          refute_includes html, "og:site_name"
+
+          assert_equal :found, @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(html)).outcome
+          assert_equal :blocked, @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil),
+            page: page(fixture_text("synthetic_challenge.html"))).outcome
+        end
+
+        test "the site's own markers are the heading block or a JSON-LD url on the site" do
+          ref = ListingRef.new(url: "u", external_key: "1", signal: nil)
+          html = fixture_text("novel_three_formats.html.gz").gsub(/<meta property="og:site_name"[^>]*>/, "")
+
+          no_heading = html.gsub("section-title--book-main", "x-main")
+          assert_equal :unparseable, @source.parse_listing(listing: ref, page: page(no_heading)).outcome
+
+          foreign = no_heading.gsub("https://us.macmillan.com/", "https://elsewhere.example/")
+          assert_equal :blocked, @source.parse_listing(listing: ref, page: page(foreign)).outcome
+        end
+
+        test "a foreign page titled Page not found is blocked, not not-found" do
+          ref = ListingRef.new(url: "u", external_key: "1", signal: nil)
+
+          assert_equal :blocked, @source.parse_listing(listing: ref, page: page("<html><body>nope</body></html>", title: "Page not found")).outcome
+        end
+
+        test "co-authors joined by and, or by commas, become one contributor each" do
+          assert_equal [["Faridah Àbíké-Íyímídé", "author"], ["Adiba Jaigirdar", "author"]], creators("Faridah Àbíké-Íyímídé and Adiba Jaigirdar")
+          assert_equal [["A One", "author"], ["B Two", "author"], ["C Three", "author"]], creators("A One, B Two and C Three")
+          assert_equal [["Bill Martin Jr.", "author"], ["Eric Carle", "author"]], creators("Bill Martin Jr. and Eric Carle")
+        end
+
+        test "a name suffix stays with its name" do
+          assert_equal [["Martin Luther King, Jr.", "author"]], creators("Martin Luther King, Jr.")
+          assert_equal [["Sam Rader, PhD", "author"]], creators("Sam Rader, PhD")
+          assert_equal [["X One, MD", "author"], ["Y Two, Sr.", "author"], ["Z Three, III", "author"]], creators("X One, MD; Y Two, Sr.; Z Three, III")
+          assert_equal [["A One, Jr.", "author"], ["B Two", "author"]], creators("A One, Jr. and B Two")
+        end
+
+        test "every name in a role segment gets that segment's role" do
+          assert_equal [["A One", "author"], ["T One", "translator"], ["T Two", "translator"]],
+            creators("A One; Translated by T One and T Two")
+          assert_equal [["A One", "author"], ["I One", "illustrator"], ["I Two", "illustrator"]],
+            creators("A One; illustrated by I One, I Two")
+        end
+
+        test "a series page reads its series name and position from the heading's series link" do
+          reading = read("series_novel_four_formats", "9781250424853")
+
+          assert_equal ["Last Man Standing", nil, "Orphan X", "12"],
+            [reading.facts[:title], reading.facts[:subtitle], reading.facts[:series_name], reading.facts[:series_position]]
+          assert_equal [{name: "Gregg Hurwitz", role: "author"}], reading.facts[:contributors]
+          assert_equal [["9781250424853", "hardcover", "Hardcover"], ["9781250424860", "ebook", "e-Book"],
+            ["9781250482297", "other", "Compact Disc"], ["9781250482280", "audiobook", "Digital Audio"]], formats(reading)
+        end
+
+        test "a series link without a plain volume number has a name and no position, and a page without one has neither" do
+          html = fixture_text("series_novel_four_formats.html.gz")
+          odd = html.sub("Orphan X (Volume 12)", "Orphan X (Volume 1.5)")
+          reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(odd))
+          assert_equal ["Orphan X", nil], [reading.facts[:series_name], reading.facts[:series_position]]
+
+          assert_equal [nil, nil], read("novel_three_formats").facts.values_at(:series_name, :series_position)
         end
 
         test "every fixture is within the size limit" do
