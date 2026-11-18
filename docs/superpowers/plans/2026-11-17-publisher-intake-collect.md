@@ -459,7 +459,7 @@ class Books::PublisherIntake::DiscoveryRequestJob   # sidekiq_options queue: :pu
 
 **Jobs:**
 - `ReadListingJob`: `:wait` → `self.class.perform_in(wait, listing_id, true)`; everything else ends.
-- `DiscoveryRequestJob`: `:wait` → `perform_in(wait, run_id, request_hash, true, attempt)`; `:refused` → `perform_in(wait, run_id, request_hash, false, attempt)`; `:retry` → `perform_async(run_id, request_hash, false, attempt + 1)`; `:done` → under `run.with_lock`: add the follow-ups to `counts["requests"]` and `counts["outstanding"]`, enqueue one job each (carrying `"seed" => true` in the context when the parent had it), then decrement `outstanding`; when it reaches 0 the run is `finished` with `finished_at`.
+- `DiscoveryRequestJob`: `:wait` → `perform_in(wait, run_id, request_hash, true, attempt)`; `:refused` → `perform_in(wait, run_id, request_hash, false, attempt)`; `:retry` → `perform_in(60, run_id, request_hash, false, attempt + 1)`; `:done` → under `run.with_lock`: add the follow-ups to `counts["requests"]` and `counts["outstanding"]`, enqueue one job each (carrying `"seed" => true` in the context when the parent had it), then decrement `outstanding`; when it reaches 0 the run is `finished` with `finished_at`.
 
 - [ ] **Step 1: Write the failing tests.** Stub `Books::PublisherIntake.client` with a Mocha mock and register a small test strategy in the registry for the duration of a test (restore it in `teardown`). Stub `perform_in` in job tests. Required cases:
 
@@ -529,7 +529,7 @@ class Books::PublisherIntake::SweepJob   # queue: :low, retry: 2 ; def perform
 **`DailyJob#perform`:** return unless `Sources.enabled.any?`. Then, in order:
 1. Fail every `running` run whose `started_at` is more than `stuck_run_days` ago (`error: "no progress for 3 days"`), for any source.
 2. For each enabled source: `QueueRereads.call(source:)`.
-3. For each enabled source with no `running` run and no run with `finished_at` within `run_every_days`: `StartRun.call(source:)`.
+3. For each enabled source with no `running` run and no finished run that started within the last seven calendar days: `StartRun.call(source:)`.
 
 **`QueueRereads`** (spec §6): listings of the source in state `read` with `read_at` older than `reread_after_days`, whose title either is held as `placeholder` or `incomplete`, or (only when the listing's `signal` is nil) has `on_sale_on` nil or after today. They become `pending`.
 
@@ -553,8 +553,8 @@ test "a future-dated title is re-read only when its listing has no signal"
 test "a title already on sale, or read within 28 days, is left alone"
 # DailyJob
 test "does nothing when no source is enabled" do   # no run created, no query for runs
-test "starts a run for an enabled source with no finished run in the last 7 days"
-test "does not start a run while one is running, or within 7 days of a finished one"
+test "starts a run for an enabled source with no finished run that started in the last seven calendar days"
+test "does not start a run while one is running, or when a finished one started within the last seven calendar days"
 test "a failed run yesterday does not stop today's run"
 test "fails a run that has been running for more than 3 days"
 test "ignores rows of a source that is no longer registered or enabled" do   # Review Focus 5

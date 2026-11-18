@@ -24,15 +24,19 @@ class Books::PublisherIntake::DailyJob
 
   private
 
-  # Any source, enabled or not: a run whose jobs were lost must not stay running forever.
+  # Any source, enabled or not, but only on a day when at least one source is enabled (perform returns
+  # first otherwise): a run whose jobs were lost must not stay running forever.
   def fail_stuck_runs(days)
     ::Books::PublisherIntakeRun.status_running.where(started_at: ...days.days.ago)
       .update_all(status: ::Books::PublisherIntakeRun.statuses[:failed], finished_at: Time.current,
         error: "no progress for #{days} days", updated_at: Time.current)
   end
 
+  # Calendar days, not a rolling window: a run that started a week ago today is due again today, however
+  # long it took to finish and however many seconds its start trailed that day's check.
   def due_for_run?(source, run_every_days)
     runs = ::Books::PublisherIntakeRun.where(source: source.key)
-    !runs.status_running.exists? && !runs.status_finished.where(finished_at: run_every_days.days.ago..).exists?
+    !runs.status_running.exists? &&
+      !runs.status_finished.where(started_at: (run_every_days - 1).days.ago.beginning_of_day..).exists?
   end
 end

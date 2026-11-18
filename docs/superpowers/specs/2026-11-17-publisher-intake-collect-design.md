@@ -265,8 +265,8 @@ post-type name and a page parser.
 ## 3. Runs, jobs and pacing
 
 - **Starting runs.** One job is scheduled daily in `config/schedule.yml`. For each enabled
-  source it starts a `weekly` run when the source has no `running` run and no run that
-  **finished** within the last `run_every_days` (7). A failed run does not count, so a failure
+  source it starts a `weekly` run when the source has no `running` run and no
+  finished run that started within the last seven calendar days. A failed run does not count, so a failure
   is retried the next day, not the next week. The job returns at once when no source is
   enabled.
 - **Discovery.** One Sidekiq job per discovery request. It takes its turn at the gate, fetches,

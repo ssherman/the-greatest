@@ -23,12 +23,11 @@ class Books::PublisherIntake::DailyJobTest < ActiveSupport::TestCase
   end
 
   test "does nothing when no source is enabled" do
-    Books::PublisherIntake::Sources.stubs(:enabled).returns([])
-    Books::PublisherIntakeRun.expects(:where).never
-    Books::PublisherIntakeRun.expects(:create!).never
+    Books::PublisherIntake.settings.enabled_sources = []
+    Books::PublisherIntake.expects(:gate_for).never
     Services::Books::PublisherIntake::QueueRereads.expects(:call).never
 
-    Books::PublisherIntake::DailyJob.new.perform
+    assert_no_queries { Books::PublisherIntake::DailyJob.new.perform }
   end
 
   test "starts a run for an enabled source with no finished run in the last 7 days" do
@@ -53,6 +52,26 @@ class Books::PublisherIntake::DailyJobTest < ActiveSupport::TestCase
     end
 
     running.update!(status: :finished, finished_at: 2.days.ago)
+    assert_no_difference -> { runs.count } do
+      Books::PublisherIntake::DailyJob.new.perform
+    end
+  end
+
+  test "the cadence counts calendar days from the day a run started, not from when it finished" do
+    {"7 days ago plus 5 seconds" => 7.days.ago + 5.seconds, "7 days ago minus 5 seconds" => 7.days.ago - 5.seconds}.each do |label, started|
+      Books::PublisherIntakeRun.where(source: SOURCE).delete_all
+      run_row(status: :finished, started_at: started, finished_at: started + 6.hours)
+
+      assert_difference -> { runs.count }, 1 do
+        Books::PublisherIntake::DailyJob.new.perform
+      end
+      assert_predicate runs.order(:id).last, :status_running?, label
+    end
+  end
+
+  test "a run that started 6 days ago keeps the source from running again" do
+    run_row(status: :finished, started_at: 6.days.ago, finished_at: 6.days.ago + 1.hour)
+
     assert_no_difference -> { runs.count } do
       Books::PublisherIntake::DailyJob.new.perform
     end

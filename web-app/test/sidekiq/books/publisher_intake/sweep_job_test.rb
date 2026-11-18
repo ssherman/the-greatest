@@ -33,10 +33,12 @@ class Books::PublisherIntake::SweepJobTest < ActiveSupport::TestCase
   end
 
   test "does nothing when no source is enabled" do
-    Books::PublisherIntake::Sources.stubs(:enabled).returns([])
-    Books::PublisherListing.expects(:where).never
+    pending(first_seen_at: 1.day.ago)
+    Books::PublisherIntake.settings.enabled_sources = []
+    Books::PublisherIntake.expects(:gate_for).never
 
-    sweep
+    assert_no_queries { sweep }
+    assert_empty @queued
   end
 
   test "queues the oldest pending listings up to the batch size and stamps queued_at" do
