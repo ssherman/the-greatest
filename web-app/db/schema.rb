@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_18_053826) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -419,6 +419,76 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["query"], name: "index_books_goodreads_searches_on_query", unique: true
+  end
+
+  create_table "books_publisher_intake_runs", force: :cascade do |t|
+    t.string "source", null: false
+    t.integer "kind", default: 0, null: false
+    t.integer "status", default: 0, null: false
+    t.boolean "baseline", default: false, null: false
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.text "error"
+    t.jsonb "counts", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["source", "started_at"], name: "index_books_publisher_intake_runs_on_source_and_started_at"
+  end
+
+  create_table "books_publisher_listings", force: :cascade do |t|
+    t.string "source", null: false
+    t.string "url", null: false
+    t.string "external_key"
+    t.integer "state", default: 1, null: false
+    t.string "signal"
+    t.integer "outcome"
+    t.integer "http_status"
+    t.integer "parser_version"
+    t.integer "last_attempt_outcome"
+    t.datetime "last_attempt_at"
+    t.integer "attempts", default: 0, null: false
+    t.datetime "queued_at"
+    t.datetime "first_seen_at", null: false
+    t.datetime "last_seen_at", null: false
+    t.datetime "read_at"
+    t.bigint "publisher_title_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["publisher_title_id"], name: "index_books_publisher_listings_on_publisher_title_id"
+    t.index ["source", "external_key"], name: "index_books_publisher_listings_on_source_and_external_key"
+    t.index ["source", "state"], name: "index_books_publisher_listings_on_source_and_state"
+    t.index ["source", "url"], name: "index_books_publisher_listings_on_source_and_url", unique: true
+  end
+
+  create_table "books_publisher_titles", force: :cascade do |t|
+    t.string "source", null: false
+    t.string "source_key"
+    t.string "isbn13s", default: [], null: false, array: true
+    t.string "title"
+    t.string "subtitle"
+    t.jsonb "contributors", default: [], null: false
+    t.date "on_sale_on"
+    t.jsonb "formats", default: [], null: false
+    t.string "imprint_name"
+    t.string "publisher_name"
+    t.string "language"
+    t.jsonb "genres", default: [], null: false
+    t.string "series_name"
+    t.string "series_position"
+    t.string "age_range"
+    t.text "description"
+    t.string "cover_url"
+    t.integer "status", default: 0, null: false
+    t.integer "hold_reason"
+    t.datetime "first_read_at"
+    t.datetime "last_read_at"
+    t.integer "parser_version"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["isbn13s"], name: "index_books_publisher_titles_on_isbn13s", using: :gin
+    t.index ["on_sale_on"], name: "index_books_publisher_titles_on_on_sale_on"
+    t.index ["source", "source_key"], name: "index_books_publisher_titles_on_source_and_source_key", unique: true, where: "(source_key IS NOT NULL)"
+    t.index ["source", "status"], name: "index_books_publisher_titles_on_source_and_status"
   end
 
   create_table "books_reading_goals", force: :cascade do |t|
@@ -1819,6 +1889,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_15_021819) do
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
+  add_foreign_key "books_publisher_listings", "books_publisher_titles", column: "publisher_title_id", on_delete: :nullify
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_rebuild_book_surveys", "books_books", column: "book_id", on_delete: :cascade
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
