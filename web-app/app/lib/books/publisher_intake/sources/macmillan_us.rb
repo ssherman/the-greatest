@@ -27,13 +27,16 @@ module Books
       #   edition's language (a translated novel says what it was translated
       #   from, which is not the edition's language).
       # - The series is read from the heading's own series link ("Orphan X
-      #   (Volume 12)"), never from the title. `:subtitle` is nil: the line the
-      #   page shows under the title on a series book ("An Orphan X Novel") is
-      #   a series tagline, and no other page shows a subtitle apart from the
-      #   title itself.
-      # - A page is read only when it shows its own markup (the creator line
+      #   (Volume 12)"), never from the title. `:subtitle` is the text of the
+      #   `h2.section-title__sub-title` the page shows under the title ("A
+      #   Novel", "An Orphan X Novel", "Classic Oversized Hardcover", the
+      #   contents of a box); nil when the page has none. It is shown as the
+      #   page words it, tagline or not, so the hold rules see what a reader
+      #   sees.
+      # - A page is read only when it shows its own markup (the heading block
       #   and a format control); a page that keeps only the JSON-LD and the
-      #   site's meta tags is unparseable, not a title with empty facts.
+      #   site's meta tags is unparseable, not a title with empty facts. A
+      #   page with no credited creator is read, with no contributors.
       class MacmillanUs < Base
         VERSION = 1
 
@@ -42,6 +45,7 @@ module Books
         PRODUCT_FILE = %r{sitemaps/sitemap-products\.\d+\.xml\.gz\z}
         PRODUCT_URL = %r{\Ahttps://us\.macmillan\.com/books/(97[89]\d{10})/}
         NAME_SUFFIX = /\A(?:jr\.?|sr\.?|ph\.?d\.?|m\.?d\.?|esq\.?|ii|iii|iv|dds|mba)\z/i
+        ROMAN_NUMERAL = /\A[IVXLC]+\z/
         BOOK_PATH = %r{\A(?:https://us\.macmillan\.com)?/books/(97[89]\d{10})(?:/([^/?#]+))?}
         SITE_NAME = /Macmillan/i
         SITE_URL = %r{\Ahttps://us\.macmillan\.com/}
@@ -194,7 +198,7 @@ module Books
           formats = formats_from(doc, own_isbn, info, on_sale)
           facts = {
             title: title,
-            subtitle: nil,
+            subtitle: doc.at_css(".section-title--book-main h2.section-title__sub-title")&.text&.squish.presence,
             contributors: contributors_from(doc),
             formats: formats,
             imprint_name: details["Imprint Publisher"]&.text&.squish.presence,
@@ -212,9 +216,9 @@ module Books
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
         end
 
-        # The page's own markup: the creator line and a format control.
+        # The page's own markup: the heading block and a format control.
         def book_markup?(doc)
-          doc.at_css(".section-title--book-main .section-title__creator").present? &&
+          doc.at_css(".section-title--book-main").present? &&
             (doc.at_css("select.book-formats-dropdown option[data-format-isbn]") || doc.at_css("div.select-input__el")).present?
         end
 
@@ -292,14 +296,23 @@ module Books
           end.uniq
         end
 
+        # A part after a comma that is a credential or suffix, not a co-author:
+        # one word that is in the list, ends in a period, is a Roman numeral or
+        # has two or more capitals ("PsyD", "RD", "PhD"). A one-word co-author
+        # with a single capital ("Banksy") is a name.
+        def credential?(part)
+          part.match?(/\A\S+\z/) &&
+            (part.match?(NAME_SUFFIX) || part.end_with?(".") || part.match?(ROMAN_NUMERAL) || part.scan(/\p{Lu}/).size >= 2)
+        end
+
         # Every name in a segment gets the segment's role. Co-authors are joined
         # with " and " or ", "; a name suffix after a comma ("King, Jr.",
         # "Rader, PhD") stays with its name.
         def contributor(segment)
           pattern, role = CONTRIBUTOR_ROLES.find { |regexp, _| segment.match?(regexp) }
-          names = (pattern ? segment.sub(pattern, "") : segment).squish.split(/\s+and\s+|,\s+/).map(&:squish)
+          names = (pattern ? segment.sub(pattern, "") : segment).squish.split(/,?\s+and\s+|,\s+/).map(&:squish)
           names = names.each_with_object([]) do |part, joined|
-            (part.match?(NAME_SUFFIX) && joined.any?) ? joined[-1] = "#{joined.last}, #{part}" : joined << part
+            (credential?(part) && joined.any?) ? joined[-1] = "#{joined.last}, #{part}" : joined << part
           end
           names.reject(&:blank?).map { |name| {name: name, role: role || "author"} }
         end

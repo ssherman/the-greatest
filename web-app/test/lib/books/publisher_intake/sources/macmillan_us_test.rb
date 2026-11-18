@@ -394,15 +394,65 @@ module Books
           assert_equal [:unparseable, {}], [reading.outcome, reading.facts]
         end
 
-        test "a page with a creator line but no format control, or the reverse, is unparseable" do
-          html = fixture_text("picture_book_illustrator.html.gz")
-          no_format = html.gsub("select-input__el", "x-el")
-          no_creator = html.gsub("section-title__creator", "x-creator")
+        test "a page without its format control, or without its heading block, is unparseable" do
+          ref = ListingRef.new(url: "u", external_key: "1", signal: nil)
+          single = fixture_text("picture_book_illustrator.html.gz")
+          dropdown = fixture_text("novel_three_formats.html.gz")
 
-          [no_format, no_creator].each do |markup|
-            reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(markup))
-            assert_equal :unparseable, reading.outcome
+          [single.gsub("select-input__el", "x-el"), dropdown.gsub("book-formats-dropdown", "x-dropdown"),
+            single.gsub("section-title--book-main", "x-main")].each do |markup|
+            assert_equal :unparseable, @source.parse_listing(listing: ref, page: page(markup)).outcome
           end
+        end
+
+        test "a real page with no creator line is read with no contributors, and is held as incomplete" do
+          html = fixture_text("picture_book_illustrator.html.gz").gsub("section-title__creator", "x-creator")
+          reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(html))
+
+          assert_equal :found, reading.outcome
+          assert_equal [], reading.facts[:contributors]
+          assert_equal "Brown Bear, Brown Bear, What Do You See? The Collector's Edition", reading.facts[:title]
+          assert_equal [:held, :incomplete], Hold.call(reading.facts)
+        end
+
+        test "the subtitle is the text of the heading's sub-title h2, and nil when the page has none" do
+          assert_equal "A Novel", read("translated_novel").facts[:subtitle]
+          assert_equal "Classic Oversized Hardcover", read("picture_book_illustrator").facts[:subtitle]
+          assert_equal "An Orphan X Novel", read("series_novel_four_formats").facts[:subtitle]
+          assert_equal "Ants in Our P.A.N.T.S., Braver and Boulder, and Heist and Seek", read("graphic_boxed_set").facts[:subtitle]
+          assert_equal "(Greenwild, Greenwild: The City Beyond the Sea, Greenwild: The Forest in the Sky)", read("boxed_set_no_pages").facts[:subtitle]
+          assert_nil read("novel_three_formats").facts[:subtitle]
+          assert_nil read("classic_two_formats").facts[:subtitle]
+
+          blank = fixture_text("translated_novel.html.gz").sub(/(<h2 class="section-title__sub-title[^>]*>)[^<]*/, '\1  ')
+          assert_nil @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "1", signal: nil), page: page(blank)).facts[:subtitle]
+        end
+
+        test "the older real fixtures read the series their heading links, with no position" do
+          assert_equal ["Greenwild", nil], read("boxed_set_no_pages").facts.values_at(:series_name, :series_position)
+          assert_equal ["InvestiGators", nil], read("graphic_boxed_set").facts.values_at(:series_name, :series_position)
+          assert_equal ["Brown Bear and Friends", nil], read("picture_book_illustrator").facts.values_at(:series_name, :series_position)
+        end
+
+        test "the real fixtures keep their hold status" do
+          statuses = %w[novel_three_formats translated_novel picture_book_illustrator classic_two_formats series_novel_four_formats
+            boxed_set_no_pages graphic_boxed_set].to_h { |name| [name, Hold.call(read(name).facts)] }
+
+          assert_equal [:held, :set], statuses.delete("boxed_set_no_pages")
+          assert_equal [:held, :set], statuses.delete("graphic_boxed_set")
+          assert_equal [[:ready, nil]], statuses.values.uniq
+        end
+
+        test "an Oxford comma does not make a contributor out of the word and" do
+          assert_equal [["A One", "author"], ["B Two", "author"], ["C Three", "author"]], creators("A One, B Two, and C Three")
+          assert_equal [["A One, Jr.", "author"], ["B Two", "author"]], creators("A One, Jr., and B Two")
+        end
+
+        test "credentials outside the suffix list stay with their name, and a one-word co-author is a name" do
+          assert_equal [["X One, PsyD", "author"]], creators("X One, PsyD")
+          assert_equal [["Y Two, RD", "author"]], creators("Y Two, RD")
+          assert_equal [["X One, PhD, RN", "author"], ["Z Three", "author"]], creators("X One, PhD, RN and Z Three")
+          assert_equal [["A One", "author"], ["Banksy", "author"]], creators("A One, Banksy")
         end
 
         test "a real page that lost its og:site_name tag is still the site's own" do
@@ -454,7 +504,7 @@ module Books
         test "a series page reads its series name and position from the heading's series link" do
           reading = read("series_novel_four_formats", "9781250424853")
 
-          assert_equal ["Last Man Standing", nil, "Orphan X", "12"],
+          assert_equal ["Last Man Standing", "An Orphan X Novel", "Orphan X", "12"],
             [reading.facts[:title], reading.facts[:subtitle], reading.facts[:series_name], reading.facts[:series_position]]
           assert_equal [{name: "Gregg Hurwitz", role: "author"}], reading.facts[:contributors]
           assert_equal [["9781250424853", "hardcover", "Hardcover"], ["9781250424860", "ebook", "e-Book"],
