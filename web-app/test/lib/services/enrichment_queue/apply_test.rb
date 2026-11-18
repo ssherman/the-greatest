@@ -43,7 +43,8 @@ module Services
       test "a row whose record is gone is deleted and is a no-op" do
         book = ::Books::Book.create!(title: "Short lived")
         row = ::EnrichmentRequest.create!(enrichable: book, kind: "books.test_type", reason: "missing", status: :submitted, answer: {"value" => "x"})
-        book.destroy!
+        # Without callbacks: Book#destroy would delete the queue row too (dependent: :delete_all).
+        ::Books::Book.where(id: book.id).delete_all
         EnrichmentQueueTestType.expects(:apply).never
         assert Apply.call(request_id: row.id).success?
         assert_not ::EnrichmentRequest.exists?(row.id)

@@ -87,6 +87,26 @@ module Services
         assert @row.reload.claimed?
       end
 
+      test "when the job cannot be queued the row goes back to claimed and the error propagates" do
+        ::EnrichmentQueue::ApplyJob.stubs(:perform_async).raises(StandardError, "redis down")
+        assert_raises(StandardError) { submit }
+        @row.reload
+        assert_equal ["claimed", "lease-1", nil, [], nil, nil, nil, nil],
+          [@row.status, @row.lease_token, @row.answer, @row.sources, @row.note, @row.resolved_by_id, @row.resolved_via, @row.resolved_at]
+      end
+
+      test "a submit after a failed enqueue succeeds normally" do
+        ::EnrichmentQueue::ApplyJob.stubs(:perform_async).raises(StandardError, "redis down")
+        assert_raises(StandardError) { submit }
+        ::EnrichmentQueue::ApplyJob.unstub(:perform_async)
+        Sidekiq::Testing.fake! do
+          assert_difference -> { ::EnrichmentQueue::ApplyJob.jobs.size }, 1 do
+            assert submit(request: ::EnrichmentRequest.find(@row.id)).success?
+          end
+        end
+        assert @row.reload.submitted?
+      end
+
       test "an answer that is not a hash is invalid" do
         assert_equal :invalid, submit(answer: "x").errors.first[:code]
       end

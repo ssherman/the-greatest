@@ -48,7 +48,7 @@ module Services
             resolved_by_id: @user.id, resolved_via: ::EnrichmentRequest.resolved_via.fetch(@via), resolved_at: now, updated_at: now)
 
         if updated == 1
-          ::EnrichmentQueue::ApplyJob.perform_async(@request.id)
+          enqueue_or_revert
           return success(@request.reload)
         end
 
@@ -58,6 +58,20 @@ module Services
       end
 
       private
+
+      # If the job cannot be queued (Redis down) the row would sit submitted with
+      # nothing to apply it, and the agent's retry would be answered as an
+      # idempotent success. So put the row back to claimed and re-raise: the
+      # caller sees the failure and a retry redoes the submit.
+      def enqueue_or_revert
+        ::EnrichmentQueue::ApplyJob.perform_async(@request.id)
+      rescue
+        ::EnrichmentRequest
+          .where(id: @request.id, status: ::EnrichmentRequest.statuses.fetch("submitted"), lease_token: @lease_token)
+          .update_all(status: ::EnrichmentRequest.statuses.fetch("claimed"), answer: nil, sources: [], note: nil,
+            resolved_by_id: nil, resolved_via: nil, resolved_at: nil, updated_at: Time.current)
+        raise
+      end
 
       # nil when the row is claimed under our token (go on). A success when it is
       # already submitted under our token (the idempotent repeat). Otherwise a conflict.
