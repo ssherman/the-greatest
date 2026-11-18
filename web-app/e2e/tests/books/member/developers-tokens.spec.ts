@@ -141,7 +141,7 @@ test.describe('Books API tokens, as a member', () => {
     await page.goto('/developers/tokens');
 
     await page.getByLabel('Name').fill(TOKEN_NAME);
-    for (const scope of ['books:read', 'music:read', 'games:read']) {
+    for (const scope of ['books:read', 'books:library:read', 'music:read', 'games:read']) {
       await page.getByLabel(new RegExp(`^\\s*${scope}`)).uncheck();
     }
     await page.getByRole('button', { name: 'Create token' }).click();

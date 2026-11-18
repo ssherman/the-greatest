@@ -83,13 +83,36 @@ Spec: `docs/superpowers/specs/2026-11-15-discover-books-design.md`. `GET /api/v1
 
 Failures follow RFC 6750: 401 `WWW-Authenticate: Bearer` / `Bearer error="invalid_token"`; 403 `membership_required` (no challenge); 403 `Bearer error="insufficient_scope", scope="…"`.
 
-Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the three read scopes, and an expiry of never, 30, 90 or 365 days. Ten per account.
+Members mint tokens at `/developers/tokens`: a name (≤60 chars), any scope they are eligible for (the three reads and the two library scopes; admin scopes only for admins), and an expiry of never, 30, 90 or 365 days. Ten per account.
 
 A second kind of bearer token comes from the MCP server's OAuth sign-in (`docs/features/mcp-server.md`, "Signing in with OAuth"). It works only on `/api/mcp`: `Services::Api::Authenticator` ties it to that path, so on `/api/v1/*` it is a 401 `invalid_token`, with the same body and headers as any other bad token. The REST API keeps personal tokens as its only credential.
 
 ## Scopes
 
-`Api::Scopes` — `books:read`, `music:read`, `games:read` (plus the admin scopes under "Admin permissions"). Members may mint the three reads; service accounts get the read scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy (`x:write` implies `x:read`) is already honoured for when write scopes exist.
+`Api::Scopes` — `books:read`, `music:read`, `games:read`, `books:library:read`, `books:library:write` (see "Library (my lists)"), plus the admin scopes under "Admin permissions". Members may mint the three reads and the two library scopes; service accounts get the read and library scopes only (never an admin scope, even if the account holds an admin role). `Api::V1::<Domain>::BaseController` declares `require_scope`. Hierarchy is live: `books:library:write` implies `books:library:read`. A scope marked `writes` is never pre-ticked on the token form (nor are admin scopes).
+
+## Library (my lists)
+
+Spec: `docs/superpowers/specs/2026-11-16-library-api-design.md`. A member reads and edits their own book lists. Controllers are `Api::V1::Books::My::{Lists,ListBooks,BookLists}Controller`; all paths are in the public `openapi.yaml`.
+
+- **Scopes.** `books:library:read` reads; `books:library:write` writes and implies read. Both need membership (or a service account), like `books:read`. Admin scopes do not imply them. Personal tokens get them from the token page; OAuth offers them on `/api/mcp` (connecting still needs `books:read`).
+- **Addressing.** `{list}` is a list id or one of `favorites`, `read`, `reading`, `want_to_read`. Another member's list is a 404. Books are addressed by catalogue slug; a provisional book is unknown.
+- **Endpoints.**
+  - `GET /api/v1/my/lists`: default lists first, then custom ones. Creates missing default lists.
+  - `GET /api/v1/my/lists/{list}/books`: paged. `sort` is `position` (default), `added` or `completed_on` (`read` list only).
+  - `GET /api/v1/my/books/{slug}/lists`: which of my lists hold the book.
+  - `POST /api/v1/my/lists`: `name`, optional `description`, `public`, `books`. Always a custom list.
+  - `PATCH /api/v1/my/lists/{list}`: `name`, `description`, `public`. A default list's name is fixed (422).
+  - `DELETE /api/v1/my/lists/{list}`: custom lists only (422 on a default list). Removes the list's items in one statement. It does no reading-goal purge, because goals count only the `read` list.
+  - `POST /api/v1/my/lists/{list}/books`: `books` (1 to 50 slugs), optional `completed_on` (`read` list only, not in the future).
+  - `PATCH /api/v1/my/lists/{list}/books/{slug}`: `completed_on` and/or `position`. Position is the stored one, 1 to the item count including hidden provisional books, so visible positions can skip numbers. Setting it marks the list `manually_ordered`.
+  - `DELETE /api/v1/my/lists/{list}/books?books=…`: removes books. A book not on the list is a `not_present` no-op.
+- **Shapes.** The List shape has no `api_url`; `books_api_url` is the link to its books. Write results are one `{book, outcome}` per slug in request order (`added`, `moved`, `already_present`, `updated`, `removed`, `not_present`), plus `meta.list` and `meta.library_changes_remaining`.
+- **Rules.** Adding to `read` takes the book off `reading` and dates it today if it had no date. Batches are all or nothing: one unknown slug is a 404 naming every unknown slug, and any failure rolls the call back. Duplicate slugs in one request are collapsed.
+- **Budget.** `config.x.api.library_changes_per_day` (1,000), per user per UTC day, shared by all tokens. Each book a call names counts once, including books sent with list creation. List create, edit and delete, reads, the web UI and Goodreads imports cost nothing. The call reserves its whole count first; if that exceeds the budget it is a 429 `rate_limited` with `Retry-After` set to the next UTC midnight, and nothing changes. A call that fails otherwise releases its reserve.
+- **Caps.** Batch size `config.x.api.library_batch_max` (50). Custom lists per member `config.x.api.max_custom_lists` (500), API creation only. `name` is 1 to 100 characters, `description` up to 1,000.
+- **Errors.** 400 for a malformed body, a wrong type, a bad date or a batch outside 1 to 50. 404 for an unknown list or book. 422 (`unprocessable`, a code added with this feature) for a rule the request breaks. `invalid_parameter` now covers request bodies as well as query parameters.
+- **Known gaps.** The browser's cached list state (`/user_list_state`) can lag API writes by up to an hour; `/my/lists` is immediate. Provisional (not yet catalogued) books are left out of reads and `book_count`. Until the books cutover, the weekly legacy sync puts legacy-origin lists back to match legacy, which reverts API writes on them. The cutover is expected within days.
 
 ## Admin permissions
 

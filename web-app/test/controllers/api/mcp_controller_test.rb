@@ -71,6 +71,52 @@ module Api
       assert_equal [3, "random"], [tool_text.dig("meta", "seed"), tool_text.dig("meta", "order")]
     end
 
+    test "tools/list offers the library tools only to a token with books:library:read" do
+      rpc("tools/list")
+      assert_not_includes json.dig("result", "tools").map { |tool| tool["name"] }, "list_my_lists"
+
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY_READ)
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_includes names, "list_my_lists"
+      assert_includes names, "list_my_list_books"
+      assert_includes names, "list_my_book_lists"
+    end
+
+    test "tools/call list_my_list_books returns the member's list" do
+      call_tool("list_my_list_books", {list: "read"}, token: ApiTokenSecrets::LIBRARY_READ)
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [books_books(:clash).id], tool_text["data"].map { |row| row.dig("book", "id") }
+    end
+
+    test "tools/call add_my_list_books writes through the REST endpoint" do
+      slug = books_books(:got).slug
+      call_tool("add_my_list_books", {list: "want_to_read", books: [slug]}, token: ApiTokenSecrets::LIBRARY)
+
+      assert_equal false, json.dig("result", "isError")
+      assert_equal [{"book" => slug, "outcome" => "added"}], tool_text["data"]
+    end
+
+    test "remove_my_list_books is a destructive tool and add_my_list_books is not" do
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY)
+      tools = json.dig("result", "tools").index_by { |tool| tool["name"] }
+
+      assert_equal true, tools.fetch("remove_my_list_books").dig("annotations", "destructiveHint")
+      assert_equal false, tools.fetch("add_my_list_books").dig("annotations", "destructiveHint")
+    end
+
+    test "delete_my_list is destructive and create_my_list needs the write scope" do
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY)
+      tools = json.dig("result", "tools").index_by { |tool| tool["name"] }
+      assert_equal true, tools.fetch("delete_my_list").dig("annotations", "destructiveHint")
+      assert_equal false, tools.fetch("create_my_list").dig("annotations", "destructiveHint")
+      assert_includes tools.keys, "update_my_list"
+
+      rpc("tools/list", token: ApiTokenSecrets::LIBRARY_READ)
+      names = json.dig("result", "tools").map { |tool| tool["name"] }
+      assert_not_includes names, "create_my_list"
+    end
+
     test "tools/call get_book returns the REST body" do
       call_tool("get_book", {slug: @war_and_peace.slug})
       assert_response :success
@@ -197,7 +243,7 @@ module Api
 
       assert_response :unauthorized
       assert_equal "unauthenticated", json["code"]
-      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 
@@ -206,7 +252,7 @@ module Api
 
       assert_response :unauthorized
       assert_equal "invalid_token", json["code"]
-      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 
@@ -228,7 +274,7 @@ module Api
       rpc("tools/list", token: secret)
 
       assert_response :unauthorized
-      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 

@@ -134,33 +134,16 @@ class UserListItemsController < ApplicationController
     item.user_list.is_a?(Books::UserList) && item.user_list.read? && item.completed_on.nil?
   end
 
-  # SaveGoal and DestroyGoal use the same owner-first lock order before taking a
-  # reading-goal lock. Keeping the Task 3 mutation and post-write count capture
-  # inside this owner lock prevents another completion request from interleaving
-  # between them. The Sidekiq push is deliberately after with_lock returns.
+  # The owner lock and goal-cache invalidation live in OwnerMutation; music,
+  # games and movies writes still take no lock.
   def mutate_with_books_goal_invalidation(listable:, owner:)
     return yield unless listable.is_a?(Books::Book)
 
-    result = nil
-    urls = []
-    owner.with_lock do
+    Services::UserLists::OwnerMutation.call(owner: owner) do |tracker|
       result = yield
-      if result.success?
-        urls = Services::Books::ReadingGoals::CompletionChangeInvalidator.call(
-          user: owner,
-          old_completed_on: result.data[:old_completed_on],
-          new_completed_on: result.data[:new_completed_on],
-          enqueue: false
-        )
-      end
+      tracker.track(result)
+      result
     end
-
-    if urls.any?
-      ActiveRecord::Base.current_transaction.after_commit do
-        Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls)
-      end
-    end
-    result
   end
 
   def serialize_item(item)

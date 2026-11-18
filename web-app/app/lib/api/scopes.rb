@@ -18,7 +18,8 @@ module Api
   module Scopes
     class UnknownScope < StandardError; end
 
-    Scope = Struct.new(:name, :description, :admin, :implies, :eligible, keyword_init: true)
+    # `writes` marks a scope that changes data: the token form never pre-ticks one.
+    Scope = Struct.new(:name, :description, :admin, :writes, :implies, :eligible, keyword_init: true)
 
     READER = ->(user, member) { member || user.service? }
 
@@ -28,6 +29,21 @@ module Api
         description: "Read books and authors on The Greatest Books",
         admin: false,
         implies: [],
+        eligible: READER
+      ),
+      "books:library:read" => Scope.new(
+        name: "books:library:read",
+        description: "Read your book lists on The Greatest Books",
+        admin: false,
+        implies: [],
+        eligible: READER
+      ),
+      "books:library:write" => Scope.new(
+        name: "books:library:write",
+        writes: true,
+        description: "Add, move and remove books on your lists, and create, edit and delete your custom lists",
+        admin: false,
+        implies: ["books:library:read"],
         eligible: READER
       ),
       "music:read" => Scope.new(
@@ -53,6 +69,7 @@ module Api
       ),
       "books:admin:write" => Scope.new(
         name: "books:admin:write",
+        writes: true,
         description: "Create and edit book categories and tag books and authors",
         admin: true,
         implies: ["books:admin:read"],
@@ -60,6 +77,7 @@ module Api
       ),
       "books:admin:merge" => Scope.new(
         name: "books:admin:merge",
+        writes: true,
         description: "Merge books, authors and categories, and delete categories. Merging and deleting are permanent, and deleting a category removes every link to it. Includes create, edit and tag.",
         admin: true,
         implies: ["books:admin:write"],
@@ -80,6 +98,8 @@ module Api
     end
 
     def self.admin?(scope) = fetch(scope).admin
+
+    def self.writes?(scope) = fetch(scope).writes == true
 
     # Every scope this account may hold: those whose own rule passes, plus
     # everything those imply.

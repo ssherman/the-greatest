@@ -10,7 +10,7 @@ module Api
     end
 
     test "registers the admin scopes" do
-      assert_equal ["books:read", "music:read", "games:read", "books:admin:read", "books:admin:write", "books:admin:merge"], Scopes.all
+      assert_equal ["books:read", "books:library:read", "books:library:write", "music:read", "games:read", "books:admin:read", "books:admin:write", "books:admin:merge"], Scopes.all
       assert Scopes.admin?("books:admin:merge")
       refute Scopes.admin?("books:read")
     end
@@ -27,7 +27,7 @@ module Api
     end
 
     test "a member is eligible for the read scopes only" do
-      assert_equal ["books:read", "music:read", "games:read"], Scopes.eligible_for(users(:regular_user)).sort_by { Scopes.all.index(it) }
+      assert_equal ["books:read", "books:library:read", "books:library:write", "music:read", "games:read"], Scopes.eligible_for(users(:regular_user)).sort_by { Scopes.all.index(it) }
     end
 
     test "a non-member with no role is eligible for nothing" do
@@ -62,7 +62,7 @@ module Api
     end
 
     test "a service account gets the read scopes and no admin scope" do
-      assert_equal ["books:read", "music:read", "games:read"], Scopes.eligible_for(users(:agent_runner_service_account))
+      assert_equal ["books:read", "books:library:read", "books:library:write", "music:read", "games:read"], Scopes.eligible_for(users(:agent_runner_service_account))
     end
 
     test "a service account with a global admin role is still not eligible for admin scopes" do
@@ -147,6 +147,17 @@ module Api
 
     test "satisfies? ignores unknown granted scopes rather than raising" do
       refute Scopes.satisfies?(["nope:read"], "books:read")
+    end
+
+    test "library scopes are held by members and not by lapsed ones" do
+      library = ["books:library:read", "books:library:write"]
+      assert_equal library, Scopes.eligible_for(users(:regular_user)) & library
+      assert_equal [], Scopes.eligible_for(users(:user_with_expired_membership)) & library
+    end
+
+    test "library write covers library read, and admin merge does not" do
+      assert Scopes.satisfies?(["books:library:write"], "books:library:read")
+      assert_not Scopes.satisfies?(["books:admin:merge"], "books:library:read")
     end
   end
 end

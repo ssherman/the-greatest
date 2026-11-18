@@ -88,7 +88,7 @@ module Developers
       assert_select "form[action=?]", developers_tokens_path do
         assert_select "input[name='api_token[name]']", 1
         Api::Scopes.mintable_by(users(:editor_user)).each do |scope|
-          assert_select "input[type=checkbox][name='api_token[scopes][]'][value=?][checked]", scope, (Api::Scopes.admin?(scope) ? 0 : 1)
+          assert_select "input[type=checkbox][name='api_token[scopes][]'][value=?][checked]", scope, ((Api::Scopes.admin?(scope) || Api::Scopes.writes?(scope)) ? 0 : 1)
         end
         assert_select "input[type=checkbox][name='api_token[scopes][]']", Api::Scopes.mintable_by(users(:editor_user)).size
         assert_select "select[name='api_token[expires_in]'] option", 4
@@ -236,6 +236,16 @@ module Developers
       assert_select "input[type=checkbox][value='books:admin:merge'][checked]", 0
       assert_select "input[type=checkbox][value='books:admin:read'][checked]", 0
       assert_select "input[type=checkbox][value='books:read'][checked]", 1
+    end
+
+    test "the form never pre-ticks a scope that writes, but does pre-tick the library read" do
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get developers_tokens_path
+
+      assert_select "input[type=checkbox][value='books:library:write']", 1
+      assert_select "input[type=checkbox][value='books:library:write'][checked]", 0
+      assert_select "input[type=checkbox][value='books:library:read'][checked]", 1
     end
 
     test "an admin cannot create an admin-scoped token without an expiry" do

@@ -178,7 +178,7 @@ module Oauth
       assert_select "[data-testid=oauth-redirect-host]", text: "localhost:61000"
     end
 
-    test "an authorize request with no scope shows the approval screen and approves books:read" do
+    test "an authorize request with no scope shows the approval screen and approves every offered scope" do
       sign_in_as(@member, stub_auth: true)
 
       get "/oauth/authorize", params: authorize_params(scope: nil)
@@ -188,10 +188,10 @@ module Oauth
       post "/oauth/authorize", params: authorize_params(scope: nil)
       assert_redirected_to_client(CLAUDE_URI)
       grant = OauthAccessGrant.order(:id).last
-      assert_equal ["books:read"], grant.scopes.to_a
+      assert_equal ["books:read", "books:library:read", "books:library:write"], grant.scopes.to_a
     end
 
-    test "a member who asks only for offline_access sees the approval screen and is granted books:read" do
+    test "a member who asks only for offline_access sees the approval screen and is granted every offered scope" do
       sign_in_as(@member, stub_auth: true)
 
       get "/oauth/authorize", params: authorize_params(scope: "offline_access")
@@ -200,7 +200,7 @@ module Oauth
 
       post "/oauth/authorize", params: authorize_params(scope: "offline_access")
       assert_redirected_to_client(CLAUDE_URI)
-      assert_equal ["books:read"], OauthAccessGrant.order(:id).last.scopes.to_a
+      assert_equal ["books:read", "books:library:read", "books:library:write"], OauthAccessGrant.order(:id).last.scopes.to_a
     end
 
     # --- ineligible ---------------------------------------------------------

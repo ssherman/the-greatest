@@ -211,12 +211,10 @@ module Services
             ids
           end
 
-          # The book an id names now, as MergedBook finds it, except that a gone id with no merge edge also follows its
-          # record_redirects row. An admin merge of two books that were never a duplicate pair leaves only that row,
-          # and without it a row naming the merged-away book would not count as heading to the book its items moved
-          # to, so they would be swept. MergedBook itself does not follow redirects: a deleted mixed book's redirect
-          # points at a guess (its most-read book), and moves and copies must not send readers there. Here a redirect
-          # can only make more rows count as touching the book, which keeps items or makes the sweep wait.
+          # The book an id names now, as MergedBook finds it, except that a gone id with no merge edge also follows a
+          # deleted mixed book's redirect. MergedBook follows an admin merge's redirect but not that one: it points at
+          # a guess (the mixed book's most-read book), and moves and copies must not send readers there. Here a
+          # redirect can only make more rows count as touching the book, which keeps items or makes the sweep wait.
           def resolve(id, memo)
             return nil if id.nil?
 

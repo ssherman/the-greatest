@@ -69,8 +69,8 @@ except the order the user happened to add things in. The flag separates the two 
 
 The only consumer today is `Services::Lists::UserFavoritesTally` (see Generated Community Lists
 below), which splits a ballot's weight evenly across an unordered list and positionally down a
-manually ordered one. Nothing else reads it, and no UI writes it yet — Phase B's drag-and-drop
-reorder is what will set it directly.
+manually ordered one. Nothing else reads it, and the public API's `update_my_list_book` sets it when it moves a book. The web
+UI's drag-and-drop reorder (Phase B) will set it too.
 
 `Services::UserLists::BackfillManuallyOrdered` (`rake user_favorites_lists:backfill_manually_ordered`)
 recovers the flag for legacy-imported favorites lists by comparing each list's position order
@@ -448,8 +448,18 @@ alone would take the generated list with it.
 
 Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md`.
 
+## Library API
+
+Members read and edit their books lists over REST and MCP (`docs/features/public-api.md`, "Library (my lists)"; spec `docs/superpowers/specs/2026-11-16-library-api-design.md`).
+
+- **Shared write path.** `Services::UserLists::OwnerMutation` runs a mutation under the owner's row lock and enqueues one reading-goal purge after commit. The web `UserListItemsController` and the API both call it, so goal invalidation is identical. `AddItems`, `RemoveItems` and `UpdateItem` run a batch through the existing per-item services and are all or nothing (a `BatchFailed` rolls back the savepoint).
+- **`Services::UserLists::MoveItem.call(item:, to_position:)`** moves one item in a single UPDATE and counts hidden provisional items, so stored positions stay contiguous. A real move marks the list manually ordered; a move to the same position changes nothing.
+- **Limits.** 50 books per call, 1,000 book changes per user per UTC day (`Services::Api::LibraryBudget`), 500 custom lists (API creation only).
+- **Deleting a list** removes its items in one statement and does no reading-goal purge; goals count only the `read` list, which cannot be deleted.
+- **Cache lag.** An API write sets no `tg_state_mark` cookie, so the browser's cached list state can lag up to an hour. `/my/lists` is immediate.
+
 ## What's Not Yet Implemented
-- Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`).
+- Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`). The public API already renames, deletes and reorders books lists (see "Library API"); the web UI for those is still to come.
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
   the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books

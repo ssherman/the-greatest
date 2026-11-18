@@ -56,6 +56,14 @@ module Mcp
         assert_includes text.downcase, "cite"
       end
 
+      test "the instructions pin the library rules" do
+        text = Mcp::Sites::Books.instructions(:public)
+
+        assert_includes text, "confirm with the user before changing more than 25 books"
+        assert_includes text, "never fill a list from search results unless the user asked for exactly that"
+        assert_includes text, "adding to read takes the book off reading"
+      end
+
       test "the public texts are the files under config/mcp/books" do
         texts = Rails.root.join("config/mcp/books")
 
