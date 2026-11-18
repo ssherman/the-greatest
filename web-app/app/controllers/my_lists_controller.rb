@@ -162,6 +162,9 @@ class MyListsController < ApplicationController
     return render_stream_error(result.errors.to_sentence, :unprocessable_entity) unless result.success?
 
     mark_user_state_changed
+    # The dashboard turns this into a toast (my_lists/index.html.erb); no
+    # public layout renders flash.
+    flash[:notice] = "Deleted “#{list.name}”"
     redirect_to my_lists_path, status: :see_other
   end
 

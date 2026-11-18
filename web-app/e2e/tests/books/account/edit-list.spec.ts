@@ -172,9 +172,11 @@ test.describe('Books Edit list page', () => {
       const before = await titles(page);
       const moving = before[5];
       const movingId = await rows(page).nth(5).getAttribute('data-item-id');
-      const positionPatches: string[] = [];
+      // Any request to the move endpoint counts. Turbo submits the dialog's form
+      // as POST with _method=patch, so filtering on PATCH would see nothing.
+      const moveRequests: string[] = [];
       page.on('request', (r) => {
-        if (r.method() === 'PATCH' && r.url().includes('/position')) positionPatches.push(r.url());
+        if (r.url().includes('/position')) moveRequests.push(`${r.method()} ${r.url()}`);
       });
 
       await openRowMenu(page, moving);
@@ -188,7 +190,10 @@ test.describe('Books Edit list page', () => {
 
       await expect(dialog).toBeHidden();
       await expect.poll(() => activeItemId(page)).toBe(movingId);
-      expect(positionPatches).toEqual([]);
+      // Read the stored order, not the DOM: a stray submit's morph could land
+      // after an immediate DOM read.
+      await page.reload();
+      expect(moveRequests).toEqual([]);
       expect(await titles(page)).toEqual(before);
     });
   }
@@ -277,6 +282,7 @@ test.describe('Books Edit list page', () => {
     await expect(page).toHaveURL(/\/my\/lists$/);
     await expect(page.getByTestId('my-lists-dashboard')).toBeVisible();
     await expect(page.getByTestId('my-lists-dashboard').getByText(name)).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: `Deleted “${name}”` })).toBeVisible();
   });
 });
 

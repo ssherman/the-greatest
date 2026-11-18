@@ -907,6 +907,26 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to my_lists_path
   end
 
+  # The dashboard is uncached and owner-only, so the flash survives the
+  # redirect; the page turns it into a toast with an inline turbo-stream.
+  test "destroy confirms on the dashboard with an escaped toast naming the list" do
+    sign_in_as(@user, stub_auth: true)
+    @custom_albums.update!(name: "Fish & <i>Chips</i>")
+
+    delete my_list_path(@custom_albums)
+    follow_redirect!
+
+    assert_response :success
+    assert_select "turbo-stream[action=append][target=toast-region] template", count: 1 do |template|
+      html = template.first.inner_html
+      assert_includes html, "Deleted “Fish &amp; &lt;i&gt;Chips&lt;/i&gt;”"
+      assert_not_includes html, "<i>Chips</i>"
+    end
+
+    get my_lists_path
+    assert_select "turbo-stream[target=toast-region]", count: 0
+  end
+
   test "destroy refuses a default list with 422 and keeps it" do
     sign_in_as(@user, stub_auth: true)
     assert_no_difference -> { UserList.count } do
