@@ -87,22 +87,4 @@ class EnrichmentRequest < ApplicationRecord
   scope :claimable, -> { pending.or(claimed.where(lease_expires_at: ...Time.current)) }
   scope :open, -> { where(status: [:pending, :claimed]) }
   scope :resolved, -> { where(status: [:done, :skipped]) }
-
-  # Moves source's rows to target for a merge. A row follows only when target
-  # has no row of that kind; the target's row wins and the source's duplicate is
-  # deleted. Returns the count moved.
-  def self.carry_over(source:, target:)
-    taken = where(enrichable: target).pluck(:kind)
-    moved = 0
-    where(enrichable: source).find_each do |row|
-      if taken.include?(row.kind)
-        row.delete
-      else
-        row.update!(enrichable: target)
-        taken << row.kind
-        moved += 1
-      end
-    end
-    moved
-  end
 end

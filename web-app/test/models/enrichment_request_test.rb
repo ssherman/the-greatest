@@ -97,15 +97,4 @@ class EnrichmentRequestTest < ActiveSupport::TestCase
       row.lease_expires_at, row.claimed_by_id, row.resolved_by_id, row.resolved_via]
     assert_nil row.resolved_at
   end
-
-  test "carry_over moves the source's rows and drops one the target already has" do
-    source, target = books_books(:war_and_peace), books_books(:crime_and_punishment)
-    moved = EnrichmentRequest.create!(enrichable: source, kind: "books.origin", reason: "missing")
-    EnrichmentRequest.create!(enrichable: source, kind: "books.categories", reason: "missing")
-    kept = EnrichmentRequest.create!(enrichable: target, kind: "books.categories", reason: "missing", status: :done)
-    assert_equal 1, EnrichmentRequest.carry_over(source: source, target: target)
-    assert_equal target, moved.reload.enrichable
-    assert_equal [kept.id], EnrichmentRequest.where(enrichable: target, kind: "books.categories").pluck(:id)
-    assert_empty EnrichmentRequest.where(enrichable: source).to_a
-  end
 end

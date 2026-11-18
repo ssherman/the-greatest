@@ -188,7 +188,7 @@ module Books
       end
 
       def merge_enrichment_requests
-        @stats[:enrichment_requests] = ::EnrichmentRequest.carry_over(source: source_author, target: target_author)
+        @stats[:enrichment_requests] = ::Services::EnrichmentQueue::CarryOver.call(source: source_author, target: target_author).data[:moved]
       end
 
       # Wikidata decisions name the author as their subject (record is nil), so

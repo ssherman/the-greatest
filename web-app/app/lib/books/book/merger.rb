@@ -192,7 +192,7 @@ module Books
       end
 
       def merge_enrichment_requests
-        @stats[:enrichment_requests] = ::EnrichmentRequest.carry_over(source: source_book, target: target_book)
+        @stats[:enrichment_requests] = ::Services::EnrichmentQueue::CarryOver.call(source: source_book, target: target_book).data[:moved]
       end
 
       def merge_images

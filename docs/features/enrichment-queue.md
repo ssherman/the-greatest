@@ -10,7 +10,7 @@ The table, the services and the base admin controller know nothing about books; 
 
 `enrichment_requests`, model `EnrichmentRequest`: one row per record and type (`enrichable` is polymorphic, `kind` is the type, for example `books.origin`). A unique index on `(enrichable_type, enrichable_id, kind)` makes that a database fact, and `(kind, status, priority, id)` serves the claim. The row says what is wanted and who holds it. It is not the history: every applied answer is in the `enrichments` ledger, and `enrichment_id` points at the one that closed the row.
 
-Deleting a book or author deletes its rows. A merge moves the source's rows to the target (`EnrichmentRequest.carry_over`); where the target already has a row of that kind, the target's row stays and the source's is deleted.
+Deleting a book or author deletes its rows. A merge moves the source's rows to the target (`Services::EnrichmentQueue::CarryOver`); where the target already has a row of that kind, the target's row stays and the source's is deleted.
 
 | Status | Meaning | Leaves it by |
 |---|---|---|
@@ -165,7 +165,7 @@ E2E: `web-app/e2e/tests/books/admin/enrichment-queues.spec.ts` (page loads, Copy
 2. Add the class name to `Services::EnrichmentQueue::Registry::TYPE_NAMES`.
 3. Add `config/mcp/<domain>/prompts/enrichment/<slug>.md.erb`.
 4. Make `apply` call code the paid path also uses, so the two cannot drift, and write the ledger row with mode `agent`, context and label `"agent"`.
-5. A type on a record class other than `Books::Book` or `Books::Author` needs `has_many :enrichment_requests, as: :enrichable, dependent: :delete_all` on that model and an `EnrichmentRequest.carry_over(source:, target:)` call in its merger. Only those two classes have them today.
+5. A type on a record class other than `Books::Book` or `Books::Author` needs `has_many :enrichment_requests, as: :enrichable, dependent: :delete_all` on that model and a `Services::EnrichmentQueue::CarryOver.call(source:, target:)` call in its merger. Only those two classes have them today.
 6. A type in another domain also needs that domain's API controllers (`EnrichmentQueueSupport::DOMAIN` is `"books"`), routes, an admin page subclass of `Admin::EnrichmentQueuesBaseController` and a navigation entry.
 
 Namespace warning: put books types in `Services::Books::QueueTypes`, not `Services::Books::EnrichmentQueue`. Inside `module Services::Books`, a bare `EnrichmentQueue::` would resolve to the wrong constant (and `Books::` inside `module Services` is `Services::Books::`). Root-anchor models and jobs: `::EnrichmentRequest`, `::EnrichmentQueue::ApplyJob`, `::Books::Book`.
