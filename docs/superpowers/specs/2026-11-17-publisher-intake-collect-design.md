@@ -213,10 +213,12 @@ One title as one publisher describes it, with all its formats.
 
 ### `Books::PublisherIntakeRun` (`books_publisher_intake_runs`)
 
-One discovery pass for one source: `source`, `kind` (`weekly`, `seed`, `manual`), `status`
-(`running`, `finished`, `failed`), `started_at`, `finished_at`, `error`, and `counts` (jsonb:
-discovery requests made, listings seen, listings new, listings changed). Reading progress is
-not stored on the run; the admin screen derives it from listings and titles.
+One discovery pass for one source: `source`, `kind` (`weekly`, `manual`), `status`
+(`running`, `finished`, `failed`), `baseline` (whether this run stores new URLs as `baseline`,
+§5), `started_at`, `finished_at`, `error`, and `counts` (jsonb: discovery requests made and
+still outstanding, listings seen, listings new, listings changed). Seeding happens inside a
+source's first runs (§5), so there is no separate kind for it. Reading progress is not stored on
+the run; the admin screen derives it from listings and titles.
 
 ## 2. Strategy interface
 
