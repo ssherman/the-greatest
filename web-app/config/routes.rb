@@ -400,6 +400,7 @@ Rails.application.routes.draw do
   # serves HTML + CSV to the owner or any viewer when the list is public (404s
   # otherwise via UserList.visible_to).
   get "my/lists", to: "my_lists#index", as: :my_lists
+  post "my/lists", to: "my_lists#create"
   get "my/lists/:id", to: "my_lists#show", as: :my_list
   get "my/lists/:id/page/:page", to: "my_lists#show", as: :my_list_page, constraints: {page: /\d+/}
 

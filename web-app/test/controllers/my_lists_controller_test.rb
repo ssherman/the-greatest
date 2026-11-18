@@ -766,6 +766,71 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_no_frame_trapped_links my_list_path(@albums_favorites)
   end
 
+  # --- create ---
+
+  test "create makes a custom album list and redirects to it" do
+    sign_in_as(@user, stub_auth: true)
+    assert_difference -> { @user.user_lists.count }, 1 do
+      post my_lists_path, params: {user_list: {name: "  Road Trip ", description: "Loud", public: "1", type: "Music::Albums::UserList"}}
+    end
+    list = @user.user_lists.order(:id).last
+    assert_redirected_to my_list_path(list)
+    assert_response :see_other
+    assert_equal ["Road Trip", "Loud", true, "custom"], [list.name, list.description, list.public, list.list_type]
+    assert_instance_of Music::Albums::UserList, list
+  end
+
+  test "create on music requires a valid type" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      post my_lists_path, params: {user_list: {name: "X", type: "Games::UserList"}}
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "create with a blank name answers 422 as a turbo stream and creates nothing" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      post my_lists_path, params: {user_list: {name: "  ", type: "Music::Albums::UserList"}}
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, "new-list-errors"
+  end
+
+  test "create signed out answers 401 as a turbo stream" do
+    post my_lists_path, params: {user_list: {name: "X", type: "Music::Albums::UserList"}}, as: :turbo_stream
+    assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "create with an invalid CSRF token answers 422 as a turbo stream" do
+    sign_in_as(@user, stub_auth: true)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    post my_lists_path, params: {authenticity_token: "bogus", user_list: {name: "X", type: "Music::Albums::UserList"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "dashboard shows the rankings line on the favorites card only" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_equal 1, response.body.scan("Counts toward the site rankings").size
+  end
+
+  test "dashboard offers the new list dialog" do
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_select "dialog#new-list-dialog"
+    assert_select "dialog#new-list-dialog [maxlength='100'][name='user_list[name]']"
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page

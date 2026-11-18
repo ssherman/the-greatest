@@ -5,6 +5,8 @@
 # otherwise via UserList.visible_to). Never cached. Write actions
 # (create/edit/reorder/remove/delete) are Phase B (user-lists-02f).
 class MyListsController < ApplicationController
+  STREAM_ACTIONS = [:create].freeze
+
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
@@ -15,14 +17,23 @@ class MyListsController < ApplicationController
   # show is reachable anonymously for public lists; visibility is enforced by the
   # visible_to scope below, which 404s rather than redirecting.
   before_action :require_signed_in!, only: [:index]
+  before_action :require_signed_in_as_stream!, only: STREAM_ACTIONS
   before_action :prevent_caching
+
+  # Write actions are submitted by Turbo forms, so every non-2xx answer must be a
+  # Turbo Stream: an HTML error body on a non-2xx status replaces the whole page.
+  # Scoped by action so index/show keep ApplicationController's HTML handling.
+  rescue_from Pundit::NotAuthorizedError, with: :stream_forbidden
+  rescue_from ActiveRecord::RecordNotFound, with: :stream_not_found
+  rescue_from ActionController::InvalidAuthenticityToken, with: :stream_invalid_token
 
   # GET /my/lists
   # Per-domain dashboard: the signed-in user's lists for Current.domain, defaults
   # first (in subclass then list_type order) then custom, with item counts from a
   # single grouped query. Always renders (defaults are auto-created at signup).
   def index
-    types = UserList.subclasses_for(Current.domain).map(&:name)
+    @types = UserList.subclasses_for(Current.domain)
+    types = @types.map(&:name)
     lists = Services::UserLists::EnsureDefaults.call(
       user: current_user,
       domain: Current.domain,
@@ -36,6 +47,29 @@ class MyListsController < ApplicationController
     @user_lists =
       defaults.sort_by { |l| [types.index(l.type), l.list_type_before_type_cast] } +
       custom.sort_by { |l| l.name.downcase }
+  end
+
+  # POST /my/lists
+  # Creates a custom list from the dashboard dialog. type must be one of this
+  # domain's UserList subclasses. Success redirects (303) to the new list;
+  # failure renders the errors into the dialog as a Turbo Stream.
+  def create
+    attrs = params.fetch(:user_list, {}).permit(:name, :description, :public, :type)
+    klass = UserList.subclasses_for(Current.domain).find { |k| k.name == attrs[:type] }
+    return render_new_list_errors(["Choose a valid list type"]) if klass.nil?
+
+    result = Services::UserLists::CreateList.call(
+      user: current_user,
+      klass: klass,
+      name: attrs[:name],
+      description: attrs[:description].presence,
+      public: ActiveModel::Type::Boolean.new.cast(attrs[:public]) || false
+    )
+    if result.success?
+      redirect_to my_list_path(result.data[:list]), status: :see_other
+    else
+      render_new_list_errors(result.errors)
+    end
   end
 
   # GET /my/lists/:id(.csv)
@@ -83,6 +117,37 @@ class MyListsController < ApplicationController
   end
 
   private
+
+  def stream_action?
+    STREAM_ACTIONS.include?(action_name.to_sym)
+  end
+
+  def require_signed_in_as_stream!
+    return if current_user
+    render turbo_stream: turbo_stream.update("new-list-errors", "Sign in again to create a list"),
+      status: :unauthorized
+  end
+
+  def render_new_list_errors(errors)
+    render turbo_stream: turbo_stream.update("new-list-errors", errors.to_sentence),
+      status: :unprocessable_entity
+  end
+
+  def stream_forbidden(exception)
+    return user_not_authorized(exception) unless stream_action?
+    render turbo_stream: [], status: :forbidden
+  end
+
+  def stream_not_found(exception)
+    return render_not_found unless stream_action?
+    render turbo_stream: [], status: :not_found
+  end
+
+  def stream_invalid_token(exception)
+    raise exception unless stream_action?
+    render turbo_stream: turbo_stream.update("new-list-errors", "Your session expired. Reload the page and try again"),
+      status: :unprocessable_entity
+  end
 
   # Persist the view_mode when the owner switches it via the query param. A
   # non-owner's param changes only their own render (see #show).

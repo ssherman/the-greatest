@@ -1,7 +1,12 @@
 <% content_for :page_title, "My Lists" %>
 
 <div class="container mx-auto px-4 py-8">
-  <h1 class="text-3xl font-bold mb-6">My Lists</h1>
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <h1 class="text-3xl font-bold">My Lists</h1>
+    <button type="button" class="btn btn-primary btn-sm"
+            onclick="document.getElementById('new-list-dialog').showModal()"
+            data-testid="new-list-button">+ New list</button>
+  </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="my-lists-dashboard">
     <% @user_lists.each do |list| %>
@@ -12,3 +17,5 @@
     <% end %>
   </div>
 </div>
+
+<%= render UserLists::Dashboard::NewListDialogComponent.new(types: @types) %>
