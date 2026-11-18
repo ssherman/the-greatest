@@ -38,16 +38,17 @@ test.describe('Books My Lists', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'books');
   });
 
-  test('a list page offers all three view modes and switches between them', async ({ page }) => {
+  test('a list page offers the Grid and Table view modes and no List mode', async ({ page }) => {
     await page.goto('/my/lists');
     await page.getByTestId('my-lists-dashboard').getByText('My Favorite Books').click();
 
     const toolbar = page.getByTestId('list-toolbar');
     await expect(toolbar.getByRole('link', { name: 'Grid' })).toBeVisible();
     await expect(toolbar.getByRole('link', { name: 'Table' })).toBeVisible();
-    await toolbar.getByRole('link', { name: 'List' }).click();
+    await expect(toolbar.getByRole('link', { name: 'List' })).toHaveCount(0);
+    await toolbar.getByRole('link', { name: 'Table' }).click();
 
-    await expect(page).toHaveURL(/view_mode=list_view/);
+    await expect(page).toHaveURL(/view_mode=table_view/);
   });
 
   test('a list page offers a CSV download', async ({ page }) => {
@@ -90,7 +91,7 @@ test.describe('Books My Lists item links', () => {
   // The list lives inside a #list_items Turbo Frame. Without target="_top" the
   // click is scoped to that frame, the book page has no such frame, and Turbo
   // writes "Content missing" instead of navigating.
-  for (const [label, viewMode] of [['grid', 'grid_view'], ['list', 'list_view']] as const) {
+  for (const [label, viewMode] of [['grid', 'grid_view']] as const) {
     test(`a book title in ${label} view navigates to the book page`, async ({ page }) => {
       const publicListId = seed().lists.public_books;
       await page.goto(`/my/lists/${publicListId}?view_mode=${viewMode}`);

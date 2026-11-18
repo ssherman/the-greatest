@@ -62,13 +62,14 @@ class UserList < ApplicationRecord
   has_many :user_list_items, -> { order(:position) }, dependent: :destroy, inverse_of: :user_list
 
   # Enums
-  enum :view_mode, {list_view: 0, table_view: 1, grid_view: 2}, default: :grid_view
+  # Integer 0 (the retired List view) is deliberately unused; the remaining
+  # numbers must never change.
+  enum :view_mode, {table_view: 1, grid_view: 2}, default: :grid_view
 
   # Switcher order and copy. Declared here rather than in the view so the
   # default view mode can read first without reordering the enum's integers.
   VIEW_MODE_LABELS = {
     "grid_view" => "Grid",
-    "list_view" => "List",
     "table_view" => "Table"
   }.freeze
 

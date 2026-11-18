@@ -146,30 +146,20 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
   test "switching view_mode persists it on the list and re-renders" do
     sign_in_as(@user, stub_auth: true)
-    get my_list_path(@albums_favorites, view_mode: "list_view")
+    get my_list_path(@albums_favorites, view_mode: "table_view")
     assert_response :success
-    assert_equal "list_view", @albums_favorites.reload.view_mode
+    assert_equal "table_view", @albums_favorites.reload.view_mode
 
     # subsequent visit with no param renders the persisted mode
     get my_list_path(@albums_favorites)
-    assert_equal "list_view", @albums_favorites.reload.view_mode
+    assert_equal "table_view", @albums_favorites.reload.view_mode
   end
 
-  test "show renders each album's primary description in list_view" do
+  test "a list_view param falls back to the stored view mode and is not persisted" do
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_favorites, view_mode: "list_view")
     assert_response :success
-    assert_includes response.body, descriptions(:dark_side_ai).content
-  end
-
-  test "show preloads descriptions rather than querying per row in list_view" do
-    sign_in_as(@user, stub_auth: true)
-
-    assert_queries_match(/FROM "descriptions"/, count: 1) do
-      get my_list_path(@albums_favorites, view_mode: "list_view")
-    end
-
-    assert_response :success
+    assert_equal "grid_view", @albums_favorites.reload.view_mode
   end
 
   test "a list that has never had a view mode set lands on grid" do
@@ -181,9 +171,9 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "grid_view", @albums_favorites.reload.view_mode
   end
 
-  test "all three view modes render for an albums list" do
+  test "both view modes render for an albums list" do
     sign_in_as(@user, stub_auth: true)
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       get my_list_path(@albums_favorites, view_mode: mode)
       assert_response :success, "view_mode #{mode} failed"
     end
@@ -195,18 +185,18 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "default and grid views render for a songs list (tabular fallback)" do
+  test "grid view renders for a songs list (tabular fallback)" do
     sign_in_as(@user, stub_auth: true)
-    %w[list_view grid_view].each do |mode|
+    %w[grid_view].each do |mode|
       get my_list_path(user_lists(:regular_user_music_songs_favorites), view_mode: mode)
       assert_response :success, "songs view_mode #{mode} failed"
     end
   end
 
-  test "games list renders all three view modes on the games domain" do
+  test "games list renders both view modes on the games domain" do
     host! Rails.application.config.domains[:games]
     sign_in_as(@user, stub_auth: true)
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       get my_list_path(user_lists(:regular_user_games_favorites), view_mode: mode)
       assert_response :success, "games view_mode #{mode} failed"
     end
@@ -226,7 +216,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     item = user_list_items(:regular_user_books_item_3)
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       get my_list_path(list, view_mode: mode)
 
       assert_response :success
@@ -575,18 +565,18 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "a non-owner's view_mode param does not persist to the list" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
-    list.update!(public: true, view_mode: :list_view)
+    list.update!(public: true, view_mode: :table_view)
     sign_in_as(users(:admin_user), stub_auth: true)
 
     get my_list_path(list, view_mode: "grid_view")
     assert_response :success
-    assert_equal "list_view", list.reload.view_mode
+    assert_equal "table_view", list.reload.view_mode
   end
 
   test "an owner's view_mode param does persist" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
-    list.update!(view_mode: :list_view)
+    list.update!(view_mode: :table_view)
     sign_in_as(@user, stub_auth: true)
 
     get my_list_path(list, view_mode: "grid_view")
@@ -722,7 +712,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "no link in an albums list is trapped in the list_items frame" do
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(@albums_favorites, view_mode: mode)
     end
   end
@@ -730,7 +720,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "no link in a songs list is trapped in the list_items frame" do
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_music_songs_favorites), view_mode: mode
       )
@@ -741,7 +731,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_books_favorites), view_mode: mode
       )
@@ -752,7 +742,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:games]
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_games_favorites), view_mode: mode
       )

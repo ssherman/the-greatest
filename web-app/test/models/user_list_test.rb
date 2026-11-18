@@ -164,10 +164,8 @@ class UserListTest < ActiveSupport::TestCase
     assert list.reload.grid_view?
   end
 
-  test "list_view is still reachable and maps to zero" do
-    @list.update!(view_mode: :list_view)
-    assert @list.reload.list_view?
-    assert_equal 0, @list.reload.view_mode_before_type_cast
+  test "view_mode offers only grid_view and table_view" do
+    assert_equal %w[table_view grid_view], UserList.view_modes.keys
   end
 
   test "VIEW_MODE_LABELS covers exactly the enum's members" do

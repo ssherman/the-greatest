@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 class UserLists::Show::ItemComponent < ViewComponent::Base
-  include Music::DefaultHelper
-  include Games::DefaultHelper
-
   # Listables that have a dedicated card component (rendered as a <div> in
   # default/grid views). Everything else (songs, movies) renders as a <tr>
   # table row.
@@ -66,38 +63,6 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     when Games::Game then Games::CardComponent.new(game: listable)
     when Books::Book then Books::CardComponent.new(book: listable, rank: position, index: index)
     end
-  end
-
-  # --- List ("default") view row, for card-capable listables only ---
-
-  # Title rendered as a link to the listable's show page (domain helper).
-  def title_link
-    case listable
-    when Music::Album then link_to_album(listable, nil, class: "hover:text-primary")
-    when Games::Game then link_to_game(listable, nil, class: "hover:text-primary")
-    when Books::Book then link_to(listable.title, book_path(listable.slug), class: "hover:text-primary")
-    else title
-    end
-  end
-
-  def description
-    listable.try(:primary_description)&.content
-  end
-
-  def cover_image
-    listable.primary_image if listable.respond_to?(:primary_image)
-  end
-
-  def cover_aspect_class
-    case listable
-    when Books::Book then "aspect-[2/3]"
-    when Games::Game then "aspect-[3/4]"
-    else "aspect-square"
-    end
-  end
-
-  def completed_on_badge?
-    completed_on_column? && item.completed_on.present?
   end
 
   def completion_editable?
