@@ -16,24 +16,32 @@ class UserListsController < ApplicationController
     klass = resolve_list_class
     return if performed?
 
-    list = klass.new(
-      user: current_user,
-      name: list_attrs[:name],
-      description: list_attrs[:description],
-      public: ActiveModel::Type::Boolean.new.cast(list_attrs[:public]) || false,
-      list_type: :custom
-    )
     # Use the shared UserListPolicy regardless of STI subclass.
-    authorize list, :create?, policy_class: UserListPolicy
+    authorize klass.new(user: current_user, list_type: :custom), :create?, policy_class: UserListPolicy
 
+    list = nil
     item = nil
+    failure = nil
     ActiveRecord::Base.transaction do
-      list.save!
+      result = Services::UserLists::CreateList.call(
+        user: current_user,
+        klass: klass,
+        name: list_attrs[:name],
+        description: list_attrs[:description],
+        public: ActiveModel::Type::Boolean.new.cast(list_attrs[:public]) || false
+      )
+      unless result.success?
+        failure = result.errors
+        raise ActiveRecord::Rollback
+      end
+      list = result.data[:list]
       if list_attrs[:listable_id].present?
         listable = klass.listable_class.find(list_attrs[:listable_id])
         item = list.user_list_items.create!(listable: listable)
       end
     end
+
+    return render_create_failed(failure) if failure
 
     mark = mark_user_state_changed
     body = {user_list: serialize_list(list), state_mark: mark, state_mark_was: incoming_state_mark}
@@ -42,6 +50,12 @@ class UserListsController < ApplicationController
   end
 
   private
+
+  def render_create_failed(errors)
+    render json: {
+      error: {code: "validation_failed", message: errors.first, details: {name: errors}}
+    }, status: :unprocessable_entity
+  end
 
   def resolve_list_class
     type = list_attrs[:type].to_s

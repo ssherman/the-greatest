@@ -55,12 +55,16 @@ module Movies
       [:watched]
     end
 
+    def self.completion_labels
+      {watched: "Watched"}
+    end
+
     def self.ranking_configuration_class
       Movies::RankingConfiguration
     end
 
     def self.listable_display_includes
-      [:primary_image, :descriptions]
+      [:primary_image]
     end
   end
 end

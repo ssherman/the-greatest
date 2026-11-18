@@ -146,30 +146,20 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
   test "switching view_mode persists it on the list and re-renders" do
     sign_in_as(@user, stub_auth: true)
-    get my_list_path(@albums_favorites, view_mode: "list_view")
+    get my_list_path(@albums_favorites, view_mode: "table_view")
     assert_response :success
-    assert_equal "list_view", @albums_favorites.reload.view_mode
+    assert_equal "table_view", @albums_favorites.reload.view_mode
 
     # subsequent visit with no param renders the persisted mode
     get my_list_path(@albums_favorites)
-    assert_equal "list_view", @albums_favorites.reload.view_mode
+    assert_equal "table_view", @albums_favorites.reload.view_mode
   end
 
-  test "show renders each album's primary description in list_view" do
+  test "a list_view param falls back to the stored view mode and is not persisted" do
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_favorites, view_mode: "list_view")
     assert_response :success
-    assert_includes response.body, descriptions(:dark_side_ai).content
-  end
-
-  test "show preloads descriptions rather than querying per row in list_view" do
-    sign_in_as(@user, stub_auth: true)
-
-    assert_queries_match(/FROM "descriptions"/, count: 1) do
-      get my_list_path(@albums_favorites, view_mode: "list_view")
-    end
-
-    assert_response :success
+    assert_equal "grid_view", @albums_favorites.reload.view_mode
   end
 
   test "a list that has never had a view mode set lands on grid" do
@@ -181,9 +171,9 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "grid_view", @albums_favorites.reload.view_mode
   end
 
-  test "all three view modes render for an albums list" do
+  test "both view modes render for an albums list" do
     sign_in_as(@user, stub_auth: true)
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       get my_list_path(@albums_favorites, view_mode: mode)
       assert_response :success, "view_mode #{mode} failed"
     end
@@ -195,18 +185,16 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "default and grid views render for a songs list (tabular fallback)" do
+  test "grid view renders for a songs list (tabular fallback)" do
     sign_in_as(@user, stub_auth: true)
-    %w[list_view grid_view].each do |mode|
-      get my_list_path(user_lists(:regular_user_music_songs_favorites), view_mode: mode)
-      assert_response :success, "songs view_mode #{mode} failed"
-    end
+    get my_list_path(user_lists(:regular_user_music_songs_favorites), view_mode: "grid_view")
+    assert_response :success
   end
 
-  test "games list renders all three view modes on the games domain" do
+  test "games list renders both view modes on the games domain" do
     host! Rails.application.config.domains[:games]
     sign_in_as(@user, stub_auth: true)
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       get my_list_path(user_lists(:regular_user_games_favorites), view_mode: mode)
       assert_response :success, "games view_mode #{mode} failed"
     end
@@ -216,23 +204,24 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_listened, view_mode: "table_view")
     assert_response :success
-    assert_includes response.body, "Completed" # column header
-    assert_includes response.body, "February 01, 2026"
+    assert_includes response.body, "Listened" # column header
+    assert_includes response.body, "Feb 1, 2026"
   end
 
-  test "an owner can edit each Books Read completion date in every view mode" do
+  test "an owner edits Books Read completion dates from the table; the grid shows quiet text" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_read)
     item = user_list_items(:regular_user_books_item_3)
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
-      get my_list_path(list, view_mode: mode)
+    get my_list_path(list, view_mode: "table_view")
+    assert_response :success
+    assert_select "dialog#completion-date-dialog", count: 1
+    assert_select "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']", count: 1
 
-      assert_response :success
-      assert_select "dialog#completion-date-dialog", count: 1
-      assert_select "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']", count: 1
-    end
+    get my_list_path(list, view_mode: "grid_view")
+    assert_response :success
+    assert_select "button[data-action='user-list-completion#open']", count: 0
   end
 
   test "the completion-date controller scopes the read-list triggers and singleton dialog" do
@@ -241,7 +230,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     item = user_list_items(:regular_user_books_item_3)
     sign_in_as(@user, stub_auth: true)
 
-    get my_list_path(list)
+    get my_list_path(list, view_mode: "table_view")
 
     assert_response :success
     assert_select "[data-controller='user-list-completion']", count: 1 do
@@ -299,6 +288,32 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     get my_list_path(@albums_favorites, view_mode: "table_view")
     assert_response :success
+    assert_equal [
+      music_albums(:dark_side_of_the_moon).id,
+      music_albums(:abbey_road).id,
+      music_albums(:thriller).id
+    ], rendered_listable_ids(@albums_favorites)
+  end
+
+  test "sort=added lists the newest item first" do
+    user_list_items(:regular_user_fav_album_2).update_column(:created_at, 1.hour.from_now)
+
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites, view_mode: "table_view", sort: "added")
+    assert_response :success
+
+    assert_equal [
+      music_albums(:abbey_road).id,
+      music_albums(:thriller).id,
+      music_albums(:dark_side_of_the_moon).id
+    ], rendered_listable_ids(@albums_favorites)
+  end
+
+  test "an unknown sort falls back to position" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites, view_mode: "table_view", sort: "bogus")
+    assert_response :success
+
     assert_equal [
       music_albums(:dark_side_of_the_moon).id,
       music_albums(:abbey_road).id,
@@ -575,18 +590,18 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "a non-owner's view_mode param does not persist to the list" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
-    list.update!(public: true, view_mode: :list_view)
+    list.update!(public: true, view_mode: :table_view)
     sign_in_as(users(:admin_user), stub_auth: true)
 
     get my_list_path(list, view_mode: "grid_view")
     assert_response :success
-    assert_equal "list_view", list.reload.view_mode
+    assert_equal "table_view", list.reload.view_mode
   end
 
   test "an owner's view_mode param does persist" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
-    list.update!(view_mode: :list_view)
+    list.update!(view_mode: :table_view)
     sign_in_as(@user, stub_auth: true)
 
     get my_list_path(list, view_mode: "grid_view")
@@ -681,6 +696,218 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes @controller.view_assigns["items"].map(&:id), item.id
   end
 
+  # --- edit / update / destroy ---
+
+  test "edit renders for the owner" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_response :success
+    assert_select "#edit-list-rows"
+  end
+
+  test "edit signed out redirects" do
+    get edit_my_list_path(@custom_albums)
+    assert_response :redirect
+  end
+
+  test "edit 404s for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_response :not_found
+  end
+
+  test "edit shows provisional books to the owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    provisional = ::Books::Book.create!(title: "An Unapproved Import", provisional: true)
+    item = list.user_list_items.create!(listable: provisional)
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(list)
+
+    assert_response :success
+    assert_includes @controller.view_assigns["items"].map(&:id), item.id
+  end
+
+  test "edit preloads cover images, so attachment queries do not grow with row count" do
+    sign_in_as(@user, stub_auth: true)
+    path = Rails.root.join("test/fixtures/files/test_image.png")
+    albums = [:dark_side_of_the_moon, :wish_you_were_here, :animals, :abbey_road, :thriller].map { |name| music_albums(name) }
+    albums.each do |album|
+      image = Image.new(parent: album, primary: true)
+      image.file.attach(io: File.open(path), filename: "cover.png", content_type: "image/png")
+      image.save!
+    end
+    storage_queries = ->(log) { log.count { |sql| sql.include?("active_storage_attachments") || sql.include?("active_storage_blobs") } }
+
+    albums.first(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    two_row_log = capture_sql { get edit_my_list_path(@custom_albums) }
+    assert_response :success
+
+    albums.drop(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    ActiveRecord::Base.connection.clear_query_cache
+    five_row_log = capture_sql { get edit_my_list_path(@custom_albums) }
+    assert_response :success
+
+    assert_equal storage_queries.call(two_row_log), storage_queries.call(five_row_log)
+  end
+
+  test "show grid preloads cover images, so attachment queries do not grow with row count" do
+    sign_in_as(@user, stub_auth: true)
+    path = Rails.root.join("test/fixtures/files/test_image.png")
+    albums = [:dark_side_of_the_moon, :wish_you_were_here, :animals, :abbey_road, :thriller].map { |name| music_albums(name) }
+    albums.each do |album|
+      image = Image.new(parent: album, primary: true)
+      image.file.attach(io: File.open(path), filename: "cover.png", content_type: "image/png")
+      image.save!
+    end
+    storage_queries = ->(log) { log.count { |sql| sql.include?("active_storage_attachments") || sql.include?("active_storage_blobs") } }
+
+    albums.first(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    two_row_log = capture_sql { get my_list_path(@custom_albums, view_mode: "grid_view") }
+    assert_response :success
+
+    albums.drop(2).each { |album| @custom_albums.user_list_items.create!(listable: album) }
+    ActiveRecord::Base.connection.clear_query_cache
+    five_row_log = capture_sql { get my_list_path(@custom_albums, view_mode: "grid_view") }
+    assert_response :success
+
+    assert_equal storage_queries.call(two_row_log), storage_queries.call(five_row_log)
+  end
+
+  test "edit renders a songs list" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_music_songs_favorites))
+    assert_response :success
+  end
+
+  test "edit renders a games list" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_games_favorites))
+    assert_response :success
+  end
+
+  test "edit renders a books completion list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(user_lists(:regular_user_books_read))
+    assert_response :success
+  end
+
+  test "edit offers delete for a custom list only" do
+    sign_in_as(@user, stub_auth: true)
+    get edit_my_list_path(@custom_albums)
+    assert_select "form[data-turbo-confirm]", 1
+    get edit_my_list_path(@albums_favorites)
+    assert_select "form[data-turbo-confirm]", 0
+  end
+
+  test "update renames a custom list" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "  Island Picks  ", description: "", public: "0"}}, as: :turbo_stream
+    assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    @custom_albums.reload
+    assert_equal "Island Picks", @custom_albums.name
+    assert_nil @custom_albums.description
+    refute @custom_albums.public?
+  end
+
+  test "update with a blank name answers 422 as a turbo stream and keeps the name" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "  "}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, "list-details-errors"
+    assert_equal "My Desert Island Picks", @custom_albums.reload.name
+  end
+
+  test "update with an over-long description answers 422" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {description: "x" * 1001}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "Albums I'd take to a desert island", @custom_albums.reload.description
+  end
+
+  test "update refuses to rename a default list" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@albums_favorites), params: {user_list: {name: "Renamed"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal "Favorite Albums", @albums_favorites.reload.name
+  end
+
+  test "update saves a default list's description" do
+    sign_in_as(@user, stub_auth: true)
+    patch my_list_path(@albums_favorites), params: {user_list: {description: "My best"}}, as: :turbo_stream
+    assert_response :success
+    assert_equal "My best", @albums_favorites.reload.description
+  end
+
+  test "update 404s as a turbo stream for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    patch my_list_path(@custom_albums), params: {user_list: {name: "Mine now"}}, as: :turbo_stream
+    assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal "My Desert Island Picks", @custom_albums.reload.name
+  end
+
+  test "update signed out answers 401 as a turbo stream" do
+    patch my_list_path(@custom_albums), params: {user_list: {name: "X"}}, as: :turbo_stream
+    assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "update with an invalid CSRF token answers 422 as a turbo stream" do
+    sign_in_as(@user, stub_auth: true)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    patch my_list_path(@custom_albums), params: {authenticity_token: "bogus", user_list: {name: "X"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "destroy deletes a custom list and redirects to the dashboard" do
+    sign_in_as(@user, stub_auth: true)
+    assert_difference -> { UserList.count }, -1 do
+      delete my_list_path(@custom_albums)
+    end
+    assert_response :see_other
+    assert_redirected_to my_lists_path
+  end
+
+  test "destroy refuses a default list with 422 and keeps it" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      delete my_list_path(@albums_favorites), as: :turbo_stream
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "destroy 404s as a turbo stream for another user's list" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      delete my_list_path(@custom_albums), as: :turbo_stream
+    end
+    assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "show renders the Edit list link for the owner only" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@custom_albums)
+    assert_select "a[href=?]", edit_my_list_path(@custom_albums)
+
+    sign_in_as(users(:contractor_user), stub_auth: true)
+    get my_list_path(@custom_albums)
+    assert_response :success
+    assert_select "a[href=?]", edit_my_list_path(@custom_albums), 0
+  end
+
   # --- legacy /user_lists redirects ---
 
   test "legacy /user_lists index 301s to /my/lists" do
@@ -697,12 +924,12 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/my/lists"
   end
 
-  test "legacy /user_lists/:id/edit 301s to the read page" do
+  test "legacy /user_lists/:id/edit 301s to the edit page" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
     get "/user_lists/#{list.id}/edit"
     assert_response :moved_permanently
-    assert_redirected_to "/my/lists/#{list.id}"
+    assert_redirected_to "/my/lists/#{list.id}/edit"
   end
 
   test "the /user_lists/:id alias still resolves to the show action" do
@@ -722,7 +949,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "no link in an albums list is trapped in the list_items frame" do
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(@albums_favorites, view_mode: mode)
     end
   end
@@ -730,7 +957,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   test "no link in a songs list is trapped in the list_items frame" do
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_music_songs_favorites), view_mode: mode
       )
@@ -741,7 +968,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_books_favorites), view_mode: mode
       )
@@ -752,7 +979,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:games]
     sign_in_as(@user, stub_auth: true)
 
-    %w[list_view table_view grid_view].each do |mode|
+    %w[table_view grid_view].each do |mode|
       assert_no_frame_trapped_links my_list_path(
         user_lists(:regular_user_games_favorites), view_mode: mode
       )
@@ -774,6 +1001,78 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     assert_no_frame_trapped_links my_list_path(@albums_favorites)
+  end
+
+  # --- create ---
+
+  test "create makes a custom album list and redirects to it" do
+    sign_in_as(@user, stub_auth: true)
+    assert_difference -> { @user.user_lists.count }, 1 do
+      post my_lists_path, params: {user_list: {name: "  Road Trip ", description: "Loud", public: "1", type: "Music::Albums::UserList"}}
+    end
+    list = @user.user_lists.order(:id).last
+    assert_redirected_to my_list_path(list)
+    assert_response :see_other
+    assert_equal ["Road Trip", "Loud", true, "custom"], [list.name, list.description, list.public, list.list_type]
+    assert_instance_of Music::Albums::UserList, list
+  end
+
+  test "create on music requires a valid type" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      post my_lists_path, params: {user_list: {name: "X", type: "Games::UserList"}}
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "create with a blank name answers 422 as a turbo stream and creates nothing" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_difference -> { UserList.count } do
+      post my_lists_path, params: {user_list: {name: "  ", type: "Music::Albums::UserList"}}
+    end
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, "new-list-errors"
+  end
+
+  test "create signed out answers 401 as a turbo stream" do
+    post my_lists_path, params: {user_list: {name: "X", type: "Music::Albums::UserList"}}, as: :turbo_stream
+    assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  test "create with an invalid CSRF token answers 422 as a turbo stream" do
+    sign_in_as(@user, stub_auth: true)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    post my_lists_path, params: {authenticity_token: "bogus", user_list: {name: "X", type: "Music::Albums::UserList"}}, as: :turbo_stream
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "dashboard shows the rankings line on the favorites card only" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_equal 1, response.body.scan("Counts toward the site rankings").size
+  end
+
+  test "a Pundit denial on a non-stream action keeps the HTML redirect" do
+    sign_in_as(@user, stub_auth: true)
+    UserListPolicy.any_instance.stubs(:show?).returns(false)
+    get my_list_path(@albums_favorites)
+    assert_response :redirect
+  end
+
+  test "dashboard offers the new list dialog" do
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_select "dialog#new-list-dialog"
+    assert_select "dialog#new-list-dialog [maxlength='100'][name='user_list[name]']"
   end
 
   private

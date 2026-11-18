@@ -426,6 +426,17 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 
+  test "clearing a date from the Edit page row brings the placeholder back" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: ""}, variant: "row"}, as: :turbo_stream
+
+    assert_response :success
+    assert_nil item.reload.completed_on
+    assert_select "turbo-stream[action=replace][target=#{ActionView::RecordIdentifier.dom_id(item, :completion)}] template p.text-base-content\\/40", text: "No finished date"
+  end
+
   test "setting a completion date invalidates goals for the new date" do
     item = user_list_items(:regular_user_books_item_3)
     item.update!(completed_on: nil)
@@ -581,5 +592,84 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal "Completion date updated", flash[:notice]
     assert_equal Date.new(2025, 3, 4), item.reload.completed_on
+  end
+
+  test "update_completion as turbo stream replaces the date and appends a toast" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item),
+      params: {user_list_item: {completed_on: "2026-03-03"}, variant: "table"}, as: :turbo_stream
+
+    assert_response :success
+    assert_includes response.body, %(turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(item, :completion)}")
+    assert_includes response.body, 'target="toast-region"'
+    assert_includes response.body, "Mar 3, 2026", "the replaced cell shows the new date, not the stale one"
+    assert_equal Date.new(2026, 3, 3), item.reload.completed_on
+  end
+
+  test "update_completion as turbo stream with an invalid date answers 422 with an error toast" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+    original = item.completed_on
+
+    patch user_list_item_completion_path(item),
+      params: {user_list_item: {completed_on: "March 4, 2025"}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, 'target="toast-region"'
+    refute_includes response.body, 'action="replace"'
+    assert_equal original, item.reload.completed_on
+  end
+
+  test "turbo stream completion update answers 401 with a toast stream when signed out" do
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: "2026-03-03"}}, as: :turbo_stream
+
+    assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, 'target="toast-region"'
+  end
+
+  test "turbo stream completion update answers 404 with a toast stream for another user's item" do
+    other_read_list = Books::UserList.create!(
+      user: @other_user,
+      name: Books::UserList.default_list_name_for(:read),
+      list_type: :read
+    )
+    other_item = other_read_list.user_list_items.create!(listable: books_books(:cannery_row))
+    sign_in_as(@user, stub_auth: true)
+
+    patch user_list_item_completion_path(other_item), params: {user_list_item: {completed_on: "2026-03-03"}}, as: :turbo_stream
+
+    assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, 'target="toast-region"'
+  end
+
+  test "turbo stream completion update answers 422 with a toast stream on an invalid csrf token" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
+    patch user_list_item_completion_path(item),
+      params: {user_list_item: {completed_on: "2026-03-03"}, authenticity_token: "bogus"}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_includes response.body, 'target="toast-region"'
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "a JSON completion request for a missing item keeps the JSON 404 shape" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch user_list_item_completion_path(0), params: {user_list_item: {completed_on: "2026-03-03"}}, as: :json
+
+    assert_response :not_found
+    assert_equal "not_found", response.parsed_body.dig("error", "code")
   end
 end

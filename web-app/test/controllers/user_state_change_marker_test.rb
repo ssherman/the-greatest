@@ -93,6 +93,60 @@ class UserStateChangeMarkerTest < ActionDispatch::IntegrationTest
     assert cookies[:tg_state_mark].present?
   end
 
+  # The My Lists web writes change the same cached state the JSON writes do.
+  test "creating a list from the dashboard sets tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+
+    post my_lists_path, params: {user_list: {type: "Music::Albums::UserList", name: "Marked"}}
+
+    assert_response :see_other
+    assert cookies[:tg_state_mark].present?
+  end
+
+  test "renaming a list on the Edit page sets tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+    list = user_lists(:regular_user_custom_albums)
+
+    patch my_list_path(list), params: {user_list: {name: "Renamed"}}, as: :turbo_stream
+
+    assert_response :success
+    assert cookies[:tg_state_mark].present?
+  end
+
+  test "a refused rename sets no tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch my_list_path(@list), params: {user_list: {name: "Renamed"}}, as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_nil cookies[:tg_state_mark]
+  end
+
+  test "deleting a list sets tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+
+    delete my_list_path(user_lists(:regular_user_custom_albums))
+
+    assert_response :see_other
+    assert cookies[:tg_state_mark].present?
+  end
+
+  test "removing and restoring an item on the Edit page each set a new tg_state_mark" do
+    sign_in_as(@user, stub_auth: true)
+    item = @list.user_list_items.first
+    undo = {listable_id: item.listable_id, position: item.position, completed_on: "", page: 1}
+
+    delete my_list_item_path(@list, item_id: item.id), as: :turbo_stream
+    assert_response :success
+    removed = cookies[:tg_state_mark]
+    assert removed.present?
+
+    post restore_my_list_item_path(@list), params: undo, as: :turbo_stream
+    assert_response :success
+    assert cookies[:tg_state_mark].present?
+    assert_not_equal removed, cookies[:tg_state_mark]
+  end
+
   test "membership thanks sets tg_state_mark" do
     host! Rails.application.config.domains[:books]
     Services::Billing::ReconcileCustomer.stubs(:call)

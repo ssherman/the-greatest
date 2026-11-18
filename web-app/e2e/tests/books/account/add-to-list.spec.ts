@@ -20,8 +20,11 @@ test.describe('Books add-to-list widget', () => {
     const modal = page.locator('#user_list_modal');
     await expect(modal).toBeVisible();
     const row = modal.getByRole('checkbox').first();
+    // Reloading before the POST lands loses the add and fails the check below.
+    const added = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/items'));
     await row.check();
     await expect(row).toBeChecked();
+    await added;
     await page.keyboard.press('Escape');
 
     await page.reload();
@@ -33,7 +36,9 @@ test.describe('Books add-to-list widget', () => {
     // targeted by the "Add to list" name here — there is only one button on
     // the card, so an unqualified role lookup is unambiguous.
     await sameCard.getByRole('button').click();
+    const removed = page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes('/items'));
     await modal.getByRole('checkbox').first().uncheck();
+    await removed;
   });
 
   test('the widget on the book show page opens the modal', async ({ page }) => {

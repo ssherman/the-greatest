@@ -1,0 +1,26 @@
+<% if variant == :row %>
+  <% if date.present? %>
+    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= formatted_date %></p>
+  <% else %>
+    <p id="<%= dom_id_value %>" class="text-sm text-base-content/40">No <%= label.downcase %> date</p>
+  <% end %>
+<% elsif variant == :text %>
+  <% if date.present? %>
+    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= formatted_date %></p>
+  <% else %>
+    <span id="<%= dom_id_value %>"></span>
+  <% end %>
+<% elsif editable %>
+  <span id="<%= dom_id_value %>">
+    <button type="button"
+            class="link <%= "text-base-content/60" if date.blank? %>"
+            aria-label="<%= label.capitalize %> date for <%= title %>: <%= date ? formatted_date : "Add date" %>"
+            data-action="user-list-completion#open"
+            data-variant="table"
+            data-item-id="<%= item.id %>"
+            data-item-title="<%= title %>"
+            data-completed-on="<%= date&.iso8601 %>"><%= date ? formatted_date : "Add date" %></button>
+  </span>
+<% else %>
+  <span id="<%= dom_id_value %>" class="text-base-content/60"><%= (formatted_date if date) %></span>
+<% end %>

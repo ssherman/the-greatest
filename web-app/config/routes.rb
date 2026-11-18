@@ -400,8 +400,17 @@ Rails.application.routes.draw do
   # serves HTML + CSV to the owner or any viewer when the list is public (404s
   # otherwise via UserList.visible_to).
   get "my/lists", to: "my_lists#index", as: :my_lists
+  post "my/lists", to: "my_lists#create"
   get "my/lists/:id", to: "my_lists#show", as: :my_list
   get "my/lists/:id/page/:page", to: "my_lists#show", as: :my_list_page, constraints: {page: /\d+/}
+  get "my/lists/:id/edit", to: "my_lists#edit", as: :edit_my_list
+  get "my/lists/:id/edit/page/:page", to: "my_lists#edit", as: :edit_my_list_page, constraints: {page: /\d+/}
+  patch "my/lists/:id", to: "my_lists#update"
+  delete "my/lists/:id", to: "my_lists#destroy"
+  # Row writes on the Edit page; all answer Turbo Streams that morph the rows.
+  patch "my/lists/:id/items/:item_id/position", to: "my_list_items#move", as: :move_my_list_item
+  delete "my/lists/:id/items/:item_id", to: "my_list_items#destroy", as: :my_list_item
+  post "my/lists/:id/items/restore", to: "my_list_items#restore", as: :restore_my_list_item
 
   # My Reviews (personal ratings library) -- global, never cached, per-domain
   # layout resolved from Current.domain in the controller. 404s on a domain with
@@ -533,12 +542,12 @@ Rails.application.routes.draw do
   # any viewer when the list is public, per UserList.visible_to — so those URLs
   # keep working once books migrates onto this app. (The POST create and nested
   # item routes below are distinct verbs/paths and don't conflict.)
-  # The legacy site's index/new/edit have no equivalent here — the write surface
-  # is Phase B (user-lists-02f) — so they land on the read pages. `new` must be
+  # The legacy site's index/new have no equivalent here, so they land on the
+  # dashboard; edit lands on the Edit list page. `new` must be
   # declared before `:id` or the wildcard swallows it.
   get "user_lists", to: redirect("/my/lists", status: 301)
   get "user_lists/new", to: redirect("/my/lists", status: 301)
-  get "user_lists/:id/edit", to: redirect("/my/lists/%{id}", status: 301), constraints: {id: /\d+/}
+  get "user_lists/:id/edit", to: redirect("/my/lists/%{id}/edit", status: 301), constraints: {id: /\d+/}
   get "user_lists/:id", to: "my_lists#show", as: :user_list
   get "user_lists/:id/page/:page", to: "my_lists#show", as: :user_list_page, constraints: {page: /\d+/}
 

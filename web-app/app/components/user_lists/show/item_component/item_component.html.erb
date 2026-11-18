@@ -2,28 +2,15 @@
   <% if rich_song_row? %>
     <%= render Music::Songs::ListItemComponent.new(song: listable, show_index: position) %>
   <% else %>
-    <%# Generic table row shared across listables. Phase B adds the inline %>
-    <%# completed_on editor + row actions into the actions cell. %>
+    <%# Generic table row shared across listables. %>
     <tr class="hover" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
       <td class="text-center text-base-content/60"><%= position %></td>
       <td><span class="font-bold"><%= title %></span></td>
       <td class="text-base-content/70"><%= by_line %></td>
       <td class="text-base-content/60"><%= year %></td>
       <% if completed_on_column? %>
-        <td class="text-base-content/60">
-          <% if item.completed_on.present? %>
-            <span class="badge badge-ghost badge-sm"><%= item.completed_on.to_fs(:long) %></span>
-          <% end %>
-          <% if completion_editable? %>
-            <button type="button"
-                    class="btn btn-ghost btn-xs mt-1"
-                    data-action="user-list-completion#open"
-                    data-item-id="<%= item.id %>"
-                    data-item-title="<%= title %>"
-                    data-completed-on="<%= item.completed_on&.iso8601 %>">
-              Edit completion date for <%= title %>
-            </button>
-          <% end %>
+        <td>
+          <%= render UserLists::CompletionDateComponent.new(item: item, variant: :table, editable: completion_editable?) %>
         </td>
       <% end %>
       <td class="text-right" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
@@ -31,74 +18,13 @@
       </td>
     </tr>
   <% end %>
-<% elsif view_mode == "grid_view" %>
-  <% if completion_editable? %>
+<% else %>
+  <% if completed_on_column? %>
     <div class="flex flex-col gap-2">
       <%= render listable_card %>
-      <button type="button"
-              class="btn btn-ghost btn-sm self-start"
-              data-action="user-list-completion#open"
-              data-item-id="<%= item.id %>"
-              data-item-title="<%= title %>"
-              data-completed-on="<%= item.completed_on&.iso8601 %>">
-        Edit completion date for <%= title %>
-      </button>
+      <%= render UserLists::CompletionDateComponent.new(item: item, variant: :text) %>
     </div>
   <% else %>
     <%= render listable_card %>
   <% end %>
-<% else %>
-  <%# List ("default") view: number + title-by heading, thumbnail, description. %>
-  <div class="flex flex-col gap-2 border-b border-base-300 pb-6"
-       data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
-    <h2 class="text-2xl font-bold">
-      <span class="text-base-content/50"><%= position %>.</span>
-      <%= title_link %>
-      <% if by_line.present? %>
-        <span class="font-normal text-base-content/70">by <%= by_line %></span>
-      <% end %>
-    </h2>
-
-    <div class="flex gap-4">
-      <div class="shrink-0 w-20 sm:w-24">
-        <% if cover_image&.file&.attached? %>
-          <%= image_tag rails_public_blob_url(cover_image.file),
-                alt: title,
-                class: "rounded #{cover_aspect_class} w-full object-cover" %>
-        <% else %>
-          <div class="bg-base-200 rounded <%= cover_aspect_class %> w-full flex items-center justify-center">
-            <span class="text-xs text-base-content/50">No Image</span>
-          </div>
-        <% end %>
-      </div>
-
-      <div class="flex-1 min-w-0">
-        <% if description.present? %>
-          <p class="text-base-content/80 mb-2"><%= description %></p>
-        <% end %>
-
-        <p class="text-sm text-base-content/60">
-          <% if year %><%= year %><% end %>
-          <% if completed_on_badge? %>
-            · <span class="badge badge-ghost badge-sm">Completed <%= item.completed_on.to_fs(:long) %></span>
-          <% end %>
-        </p>
-
-        <% if completion_editable? %>
-          <button type="button"
-                  class="btn btn-ghost btn-sm mt-2"
-                  data-action="user-list-completion#open"
-                  data-item-id="<%= item.id %>"
-                  data-item-title="<%= title %>"
-                  data-completed-on="<%= item.completed_on&.iso8601 %>">
-            Edit completion date for <%= title %>
-          </button>
-        <% end %>
-
-        <div class="mt-3">
-          <%= render UserLists::CardWidgetComponent.new(listable: listable) %>
-        </div>
-      </div>
-    </div>
-  </div>
 <% end %>
