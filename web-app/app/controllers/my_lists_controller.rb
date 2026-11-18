@@ -67,6 +67,7 @@ class MyListsController < ApplicationController
       public: ActiveModel::Type::Boolean.new.cast(attrs[:public]) || false
     )
     if result.success?
+      mark_user_state_changed
       redirect_to my_list_path(result.data[:list]), status: :see_other
     else
       render_new_list_errors(result.errors)
@@ -141,6 +142,7 @@ class MyListsController < ApplicationController
     result = Services::UserLists::UpdateList.call(list: list, attrs: attrs)
     return render_details_errors(result.errors.to_sentence) unless result.success?
 
+    mark_user_state_changed
     render turbo_stream: [
       turbo_stream.replace("list-details", UserLists::Edit::DetailsFormComponent.new(user_list: list)),
       turbo_stream.append("toast-region", Toast::MessageComponent.new(message: "Saved"))
@@ -155,6 +157,7 @@ class MyListsController < ApplicationController
     result = Services::UserLists::DeleteList.call(list: list)
     return render_stream_error(result.errors.to_sentence, :unprocessable_entity) unless result.success?
 
+    mark_user_state_changed
     redirect_to my_lists_path, status: :see_other
   end
 

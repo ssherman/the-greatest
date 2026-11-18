@@ -19,6 +19,8 @@ class MyListItemsController < ApplicationController
   rescue_from ActionController::InvalidAuthenticityToken, with: :stream_invalid_token
 
   # PATCH /my/lists/:id/items/:item_id/position
+  # Sets no tg_state_mark: the browser's cached list state holds memberships,
+  # not positions, so a move leaves it accurate. Remove and restore do mark.
   def move
     item = @list.user_list_items.find(params[:item_id])
     position = parse_integer(item_params&.dig(:position))
@@ -46,6 +48,7 @@ class MyListItemsController < ApplicationController
     result = Services::UserLists::RemoveItems.call(user_list: @list, listables: [listable])
     return render_failure(result.errors, :unprocessable_entity) unless result.success?
 
+    mark_user_state_changed
     action = {label: "Undo", url: restore_my_list_item_path(@list), method: :post, params: undo}
     render_rows(toast("Removed #{title_of(listable)}", action: action, ttl: UNDO_TTL))
   end
@@ -64,6 +67,7 @@ class MyListItemsController < ApplicationController
     )
     return render_failure(result.errors, :unprocessable_entity) unless result.success?
 
+    mark_user_state_changed
     render_rows(toast("Restored #{title_of(listable)}"))
   end
 

@@ -284,8 +284,13 @@ in the app. The ✕ and ⋯ buttons get accessible names that include the title.
   still render. The edit page needs a sensible row for songs and albums as well as books and games.
 - daisyUI 5 / Tailwind 4 conventions apply. Turbo-frame trapped links apply: the list page's
   `list_items` frame has `target: "_top"`.
-- A dropped add-to-list widget state is self-healing: mutations touch the user, and
-  `user-list-state` refetches. Do not add localStorage poking.
+- The add-to-list widget's cached state (localStorage) is re-checked only when the
+  `tg_state_mark` cookie changes, or hourly. Touching the user does NOT invalidate it.
+  Every web write that changes lists or memberships (create, rename, delete, remove,
+  restore) must call `mark_user_state_changed`, as the JSON writes do. Moves change
+  only positions, which that state doesn't hold. Do not add localStorage poking.
+  (Corrected after PR #514's Codex review; the original text said touching the user
+  was enough.)
 - The existing E2E test `e2e/tests/books/account/reading-goals.spec.ts` targets the old "Edit
   completion date for &lt;title&gt;" button and dialog name. It must be updated to the new control.
 
