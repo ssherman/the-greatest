@@ -52,12 +52,16 @@ module Services
         assert_equal ["pending", "research_wanted", 1, @book.id, []], [row.status, row.reason, row.version, row.priority, row.sources]
       end
 
-      test "defer inserts nothing when a row of any status exists" do
-        request_with(:done)
+      ::EnrichmentRequest.statuses.each_key do |status|
+        test "defer inserts nothing when a #{status} row exists" do
+          existing = request_with(status)
+          before = [existing.status, existing.reason]
 
-        refute ResearchRoute.defer(kind: KIND, record: @book)
-        assert_equal 1, ::EnrichmentRequest.where(enrichable: @book, kind: KIND).count
-        assert ::EnrichmentRequest.find_by!(enrichable: @book, kind: KIND).done?
+          refute ResearchRoute.defer(kind: KIND, record: @book)
+          rows = ::EnrichmentRequest.where(enrichable: @book, kind: KIND)
+          assert_equal 1, rows.count
+          assert_equal before, [rows.sole.status, rows.sole.reason]
+        end
       end
 
       test "defer inserts nothing when the type no longer needs the record" do
@@ -70,7 +74,13 @@ module Services
       test "defer returns false and does not raise when the insert fails" do
         ::EnrichmentRequest.stubs(:insert_all).raises(ActiveRecord::StatementInvalid.new("boom"))
 
+        Rails.logger.expects(:error).with(regexp_matches(/event=enrichment_queue_defer_failed/))
+
         refute ResearchRoute.defer(kind: KIND, record: @book)
+      end
+
+      test "the test environment is always api unless a test stubs it" do
+        assert_equal "api", Rails.application.config.x.ai.research_via
       end
     end
   end

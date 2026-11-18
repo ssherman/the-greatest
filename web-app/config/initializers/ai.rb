@@ -31,7 +31,9 @@ Rails.application.configure do
   # research row (reason "queued") and leave a pending row in the enrichment
   # queue, where an AI agent does the research (docs/features/enrichment-queue.md).
   # ENV: AI_RESEARCH_VIA.
-  config.x.ai.research_via = (ENV["AI_RESEARCH_VIA"].to_s.strip.downcase == "queue") ? "queue" : "api"
+  # The test environment ignores the ENV (dotenv loads .env there too): tests pick the mode by stubbing.
+  config.x.ai.research_via =
+    (!Rails.env.test? && ENV["AI_RESEARCH_VIA"].to_s.strip.downcase == "queue") ? "queue" : "api"
 
   # The origin backfill's own research cap per UTC day, counted apart from
   # research_daily_cap so a backfill never starves imports of web searches.

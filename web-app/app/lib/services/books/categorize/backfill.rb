@@ -106,8 +106,10 @@ module Services
             .where("enrichments.mode <> ? OR enrichments.outcome = ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied])
             .select("1")
           # A deferred book waits for research, which the cap at 0 never grants.
-          # Read at call time so raising the cap makes them candidates again.
-          if Rails.application.config.x.ai.categorize_backfill_research_daily_cap.to_i > 0
+          # Read at call time so raising the cap makes them candidates again. In queue
+          # mode the research is the queue's, so a deferred row is done whatever the cap.
+          if Rails.application.config.x.ai.categorize_backfill_research_daily_cap.to_i > 0 &&
+              !Services::EnrichmentQueue::ResearchRoute.queue?
             rows = rows.where("enrichments.facts->>'deferred_research' IS DISTINCT FROM 'true'")
           end
           rows

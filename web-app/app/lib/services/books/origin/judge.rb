@@ -92,7 +92,14 @@ module Services
               deferred = true
             end
           end
-          row.update!(facts: row.facts.merge("deferred_research" => true)) if deferred
+          return unless deferred
+
+          # In queue mode the deferral is also handed to the enrichment queue, where an agent does the research.
+          queued = Services::EnrichmentQueue::ResearchRoute.queue?
+          marks = {"deferred_research" => true}
+          marks["deferred_reason"] = "queued" if queued
+          row.update!(facts: row.facts.merge(marks))
+          Services::EnrichmentQueue::ResearchRoute.defer(kind: KIND, record: book) if queued
         end
 
         def first_mode

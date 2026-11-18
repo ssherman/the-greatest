@@ -277,6 +277,60 @@ module Services
           assert_equal ["backfill", "run-1", "judge", 1], facts.values_at("context", "label", "path", "prompt_version")
           assert_equal "filled", facts.dig("origin", "reason")
         end
+
+        def queue_mode!
+          Rails.application.config.x.ai.stubs(:research_via).returns("queue")
+        end
+
+        def origin_requests(book = @book)
+          ::EnrichmentRequest.where(enrichable: book, kind: "books.origin")
+        end
+
+        test "queue mode: a weak knowledge answer is deferred to the queue, not researched" do
+          queue_mode!
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(100)
+          BookOriginTask.any_instance.expects(:call).once.returns(ok(nationality: "French", confidence: "low"))
+          rows = judge(context: "import").data[:enrichments]
+          assert_equal ["knowledge"], rows.map(&:mode)
+          assert_equal [true, "queued"], rows.sole.facts.values_at("deferred_research", "deferred_reason")
+          request = origin_requests.sole
+          assert_equal ["pending", "research_wanted"], [request.status, request.reason]
+        end
+
+        test "queue mode: force_research still researches and queues nothing" do
+          queue_mode!
+          stub_answer(nationality: "French", confidence: "high")
+          rows = judge(context: "admin", force_research: true).data[:enrichments]
+          assert_equal ["research"], rows.map(&:mode)
+          assert_equal 0, origin_requests.count
+        end
+
+        test "queue mode: a past-cutoff book whose answer was applied is deferred but not queued" do
+          queue_mode!
+          book = new_book("Brand New Queued", year: 2026)
+          stub_answer(nationality: "French", confidence: "high")
+          row = judge(book, context: "import").data[:enrichments].sole
+          assert_equal ["knowledge", "applied", true, "queued"], [row.mode, row.outcome, row.facts["deferred_research"], row.facts["deferred_reason"]]
+          assert_equal 0, origin_requests(book).count
+        end
+
+        test "queue mode: research not allowed means no deferral and no queue row" do
+          queue_mode!
+          stub_answer(nationality: "French", confidence: "low")
+          row = judge(context: "import", research_allowed: false).data[:enrichments].sole
+          assert_equal [nil, nil], row.facts.values_at("deferred_research", "deferred_reason").map { it.presence }
+          assert_equal 0, origin_requests.count
+        end
+
+        test "api mode: a deferral carries no deferred_reason and queues nothing" do
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+          stub_answer(nationality: "French", confidence: "low")
+          other = new_book("Api Deferred")
+          row = judge(other, context: "import").data[:enrichments].sole
+          assert_equal true, row.facts["deferred_research"]
+          assert_not row.facts.key?("deferred_reason")
+          assert_equal 0, origin_requests(other).count
+        end
       end
     end
   end
