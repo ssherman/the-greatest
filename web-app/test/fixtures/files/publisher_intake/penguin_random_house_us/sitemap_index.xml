@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<!-- HAND-BUILT from the real sitemap.xml: real child URLs and layout, six of its 100+ children. The works-2027 child is hand-added: the real index did not list one when this was captured. -->
+<!-- HAND-BUILT from the real sitemap.xml: real child URLs and layout, six of its 100+ children. The real index lists works files only up to the current year (2026 when captured); none for next year. -->
 <sitemapindex xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
 	<sitemap>
 		<loc>https://www.penguinrandomhouse.com/sitemap-cats.xml</loc>
 		<lastmod>2026-11-18T06:32:12+00:00</lastmod>
 	</sitemap>
 	<sitemap>
-		<loc>https://www.penguinrandomhouse.com/sitemap-works-2027.xml</loc>
+		<loc>https://www.penguinrandomhouse.com/sitemap-works-2024.xml</loc>
 		<lastmod>2026-11-18T06:32:12+00:00</lastmod>
 	</sitemap>
 	<sitemap>

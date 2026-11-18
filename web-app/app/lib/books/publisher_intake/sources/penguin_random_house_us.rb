@@ -13,10 +13,14 @@ module Books
       # format rows exactly, so formats are listed from it. Three JSON-LD facts
       # are NOT trusted:
       # - `inLanguage` reads "English" on a Spanish-language edition; the page's
-      #   Spanish genre ("Spanish Language Fiction") is the signal for Spanish.
+      #   Spanish genre ("Spanish Language Fiction") or the Spanish-language
+      #   publisher ("PRH Grupo Editorial") is the signal for Spanish.
       # - `bookFormat` is coarser than the page ("Large Print" is a Paperback;
       #   a board book is "https://schema.org/Board Book"), so the page's own
       #   format name is read first and `bookFormat` is the fallback.
+      # - Languages other than Spanish are NOT detected on this site: since
+      #   `inLanguage` cannot be trusted, a French or German edition reads as
+      #   English (or nil) here.
       # - `numberOfPages` is one figure for the work; each format row carries
       #   its own page count.
       class PenguinRandomHouseUs < Base
@@ -27,7 +31,8 @@ module Books
         WORKS_FILE = %r{/sitemap-works-(\d{4})\.xml\z}
         WORK_ID = %r{\Ahttps?://[^/]+/books/(\d+)/}
         SITE_TITLE = /PenguinRandomhouse\.com|Penguin Random House/i
-        NOT_FOUND_TITLE = /\APage Not Found/i
+        NOT_FOUND_TITLE = /\APage Not Found \| Penguin Random House\z/i
+        SPANISH_PUBLISHER = /\APRH Grupo Editorial\z/i
         SPANISH_GENRE = %r{\A/books/spanish-language}
         JSON_LD_PREFIX = %r{\Ahttps?://schema\.org/}
 
@@ -58,6 +63,9 @@ module Books
         end
 
         def parse_discovery(request:, response:)
+          # A works file for next year may simply not exist yet.
+          return discovery(:ok) if response.status == 404 && request.context["step"] == "works"
+
           outcome = status_outcome(response.status)
           return discovery(outcome) if outcome
 
@@ -96,14 +104,22 @@ module Books
 
         # The current year's file and each later year up to the horizon's. A
         # file for an earlier year holds only back-catalog, which the lookback
-        # window excludes anyway.
+        # window excludes anyway. The index lists files only up to the current
+        # year, yet next year's file exists unlisted, so it is requested too
+        # when the horizon reaches it (a 404 for it is handled as empty).
         def index_discovery(sitemap)
           last_year = (Date.current + ::Books::PublisherIntake.settings.horizon_days).year
+          years = []
           requests = sitemap.entries.filter_map do |entry|
             year = entry.loc[WORKS_FILE, 1]&.to_i
             next unless year&.between?(Date.current.year, last_year)
 
+            years << year
             Request.file(entry.loc, context: {"step" => "works"})
+          end
+          following = Date.current.year + 1
+          if following <= last_year && years.exclude?(following)
+            requests << Request.file("#{SITE}/sitemap-works-#{following}.xml", context: {"step" => "works"})
           end
           discovery(:ok, [], requests)
         end
@@ -135,10 +151,10 @@ module Books
             formats: formats,
             imprint_name: clean(book["publisherImprint"]).presence || rows.values.filter_map { |row| row[:imprint] }.first,
             publisher_name: PUBLISHER,
-            language: language_from(book, genres),
+            language: language_from(book, genres, doc),
             genres: genres.map { |link| link.text.squish }.reject(&:blank?),
-            series_name: clean(book.dig("isPartOf", "name")).presence,
-            series_position: doc.at_css("h3.series.show")&.text.to_s[/\ABook (\d+) of/i, 1],
+            series_name: clean(first_hash(book["isPartOf"])&.[]("name")).presence,
+            series_position: series_heading(doc, book)&.text.to_s[/\ABook (\d+) of/i, 1],
             age_range: doc.at_css("h3.age-range.show")&.text.to_s[/Age Range:\s*(.+)/i, 1]&.squish.presence ||
               clean(book["typicalAgeRange"]).presence,
             description: description_from(doc),
@@ -147,6 +163,15 @@ module Books
             source_key: doc.at_css("#tmpl-indc")&.[]("data-workid").to_s[/\A\d+\z/] || listing.external_key.to_s
           }
           reading(:found, facts)
+        end
+
+        # A JSON-LD value that may be one object or an array of them.
+        def first_hash(value) = Array.wrap(value).find { |item| item.is_a?(Hash) }
+
+        # The heading for the page's own ISBN; the visible one is the fallback.
+        def series_heading(doc, book)
+          isbn = Isbn.normalize(book["isbn"].to_s)
+          (isbn && doc.at_css(%(h3.series[class~="#{isbn}"]))) || doc.at_css("h3.series.show")
         end
 
         def clean(value) = CGI.unescapeHTML(value.is_a?(String) ? value : "").squish
@@ -178,7 +203,7 @@ module Books
 
         def formats_from(book, rows)
           own_isbn = Isbn.normalize(book["isbn"].to_s)
-          examples = Array(book["workExample"]).select { |example| example.is_a?(Hash) }.to_h do |example|
+          examples = Array.wrap(book["workExample"]).select { |example| example.is_a?(Hash) }.to_h do |example|
             [Isbn.normalize(example["isbn"].to_s), example]
           end
           examples[own_isbn] ||= {} if own_isbn
@@ -194,7 +219,8 @@ module Books
           json_format = example["bookFormat"].is_a?(String) ? example["bookFormat"].sub(JSON_LD_PREFIX, "").squish : nil
           json_format ||= book["bookFormat"].to_s.sub(JSON_LD_PREFIX, "").squish.presence if own
           label = row&.dig(:label) || json_format
-          offer = example.dig("potentialAction", "expectsAcceptanceOf")
+          action = example["potentialAction"]
+          offer = action["expectsAcceptanceOf"] if action.is_a?(Hash)
           price = [offer.is_a?(Hash) ? offer["Price"] : nil, row&.dig(:price)].map(&:to_s).find { |value| value.match?(/\A\d+(\.\d+)?\z/) }
           info = row&.dig(:info).to_s
           {
@@ -235,7 +261,7 @@ module Books
           end
           return from_page if from_page.any?
 
-          Array(book["author"]).filter_map do |person|
+          Array.wrap(book["author"]).filter_map do |person|
             name = clean(person.is_a?(Hash) ? person["name"] : person)
             {name: name, role: "author"} if name.present?
           end
@@ -243,21 +269,32 @@ module Books
 
         # The Spanish genre is the only language signal the page gives; see the
         # class comment on `inLanguage`.
-        def language_from(book, genres)
+        def language_from(book, genres, doc)
           return "Spanish" if genres.any? { |link| link["href"].to_s.match?(SPANISH_GENRE) }
+          return "Spanish" if book["publisher"].to_s.match?(SPANISH_PUBLISHER)
+          return "Spanish" if doc.css(".bookRow[division]").any? { |row| row["division"].to_s.match?(SPANISH_PUBLISHER) }
 
           clean(book["inLanguage"]).presence
         end
 
         # The full copy the page shows; og:description is a cut-off of it.
         def description_from(doc)
-          doc.at_css("#book-description-copy")&.text&.squish.presence ||
+          paragraphs(doc.at_css("#book-description-copy")).presence ||
             doc.at_css('meta[property="og:description"]')&.[]("content").to_s.squish.presence
+        end
+
+        # Paragraphs are separated by <br>, which has no text of its own.
+        def paragraphs(node)
+          return nil unless node
+
+          copy = node.dup
+          copy.css("br").each { |br| br.replace("\n") }
+          copy.text.split("\n").map(&:squish).reject(&:blank?).join("\n")
         end
 
         # A missing image is nil; a query string is dropped.
         def cover_from(book)
-          url = Array(book["image"]).first
+          url = Array.wrap(book["image"]).first
           url = url.is_a?(String) ? url.sub(/\?.*\z/, "").strip : ""
           url.presence
         end

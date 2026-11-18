@@ -65,26 +65,34 @@ module Books
           assert_equal requests.first.url, @source.discovery_requests(since: Time.current).first.url
         end
 
-        test "the index yields only this year's and the horizon year's works files" do
-          # today 2026-11-17 plus 365 days is 2027-11-17: the files for 2026 and 2027, not 2025, cats, auths or series
+        test "the index yields this year's works file and next year's, which the real index does not list" do
+          # today 2026-11-17: the listed 2026 file (not 2025, 2024, cats, auths or series), then 2027 added by us
           result = discover("index", fixture_text("sitemap_index.xml"))
 
           assert_equal :ok, result.outcome
           assert_empty result.listings
-          assert_equal ["#{SITE}/sitemap-works-2027.xml", "#{SITE}/sitemap-works-2026.xml"], result.requests.map(&:url)
+          assert_equal ["#{SITE}/sitemap-works-2026.xml", "#{SITE}/sitemap-works-2027.xml"], result.requests.map(&:url)
           assert_equal [["file", {"step" => "works"}]] * 2, result.requests.map { |r| [r.kind, r.context] }
         end
 
-        test "a works file for a year past the horizon is not followed" do
-          travel_to Time.utc(2026, 12, 31) do
-            urls = discover("index", fixture_text("sitemap_index.xml")).requests.map(&:url)
+        test "an index that lists next year's file does not get it requested twice, and a file past the horizon is not followed" do
+          index = <<~XML
+            <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <sitemap><loc>#{SITE}/sitemap-works-2026.xml</loc></sitemap>
+              <sitemap><loc>#{SITE}/sitemap-works-2027.xml</loc></sitemap>
+              <sitemap><loc>#{SITE}/sitemap-works-2028.xml</loc></sitemap>
+            </sitemapindex>
+          XML
 
-            assert_equal ["#{SITE}/sitemap-works-2027.xml", "#{SITE}/sitemap-works-2026.xml"], urls
-          end
-          travel_to Time.utc(2025, 1, 5) do
-            assert_equal ["#{SITE}/sitemap-works-2026.xml", "#{SITE}/sitemap-works-2025.xml"],
-              discover("index", fixture_text("sitemap_index.xml")).requests.map(&:url)
-          end
+          assert_equal ["#{SITE}/sitemap-works-2026.xml", "#{SITE}/sitemap-works-2027.xml"],
+            discover("index", index).requests.map(&:url)
+        end
+
+        test "a works file that is not there yet is ok and empty; a 403 on it is still blocked" do
+          missing = discover("works", "", status: 404)
+          assert_equal [:ok, [], []], [missing.outcome, missing.listings, missing.requests]
+
+          assert_equal :blocked, discover("works", "", status: 403).outcome
         end
 
         test "only works whose date is inside the window become listings" do
@@ -129,7 +137,7 @@ module Books
           assert_equal :unparseable, discover("works", "").outcome
           assert_equal :blocked, discover("index", "", status: 403).outcome
           assert_equal :unavailable, discover("works", "", status: 503).outcome
-          assert_equal :not_found, discover("works", "", status: 404).outcome
+          assert_equal :not_found, discover("index", "", status: 404).outcome
         end
 
         test "a sitemap kind that does not match the step is unparseable" do
@@ -327,6 +335,92 @@ module Books
           no_json_format = html.gsub(%r{"bookFormat":"[^"]*"}, '"bookFormat":"https://schema.org/Thing"')
             .gsub('format-name="Paperback"', 'format-name="Calendar"').gsub(">Paperback<", ">Calendar<")
           assert_equal "other", read_html(no_json_format).facts[:formats].first[:format]
+        end
+
+        test "a series given as an array or a string, and an action given as a string, do not lose the page" do
+          html = fixture_text("novel_four_formats.html.gz")
+          baseline = read_html(html).facts
+
+          as_array = read_html(mutate_book(html) { |book| book["isPartOf"] = ["junk", book["isPartOf"], {"name" => "Second"}] })
+          assert_equal [:found, "Lincoln Rhyme Novel"], [as_array.outcome, as_array.facts[:series_name]]
+
+          as_string = read_html(mutate_book(html) { |book| book["isPartOf"] = "Lincoln Rhyme Novel" })
+          assert_equal [:found, nil, baseline[:title]], [as_string.outcome, as_string.facts[:series_name], as_string.facts[:title]]
+
+          as_text = read_html(mutate_book(html) { |book| book["workExample"].each { |e| e["potentialAction"] = "read" } })
+          assert_equal :found, as_text.outcome
+          # prices fall back to the page's rows
+          assert_equal baseline[:formats].map { |f| f[:price_cents] }, as_text.facts[:formats].map { |f| f[:price_cents] }
+        end
+
+        test "an author given as one object, a string or an array of objects reads in every case" do
+          html = fixture_text("novel_four_formats.html.gz").sub(/<h2 class="contributors[^"]*show">.*?<\/h2>/m, "")
+          expected = [{name: "Jeffery Deaver", role: "author"}]
+
+          assert_equal expected, read_html(mutate_book(html) { |b| b["author"] = {"@type" => "Person", "name" => "Jeffery Deaver"} }).facts[:contributors]
+          assert_equal expected, read_html(mutate_book(html) { |b| b["author"] = "Jeffery Deaver" }).facts[:contributors]
+          assert_equal expected + [{name: "Other Person", role: "author"}],
+            read_html(mutate_book(html) { |b| b["author"] = [{"name" => "Jeffery Deaver"}, {"name" => "Other Person"}] }).facts[:contributors]
+        end
+
+        test "a workExample given as one object keeps its date and price" do
+          html = fixture_text("manga_single_format.html.gz")
+          # the date and price differ from what the page's row shows, so only the object itself can supply them
+          one = read_html(mutate_book(html) do |b|
+            example = b["workExample"].first
+            example["datePublished"] = "2026-12-31"
+            example["potentialAction"]["expectsAcceptanceOf"]["Price"] = 15.5
+            b["workExample"] = example
+          end)
+
+          assert_equal [[Date.new(2026, 12, 31), 1550]], one.facts[:formats].map { |f| f.values_at(:on_sale_on, :price_cents) }
+        end
+
+        test "the description keeps its paragraphs apart" do
+          description = read("novel_four_formats.html.gz", "743565").facts[:description]
+
+          assert_equal ["New York Times bestselling author Jeffery Deaver returns with a propulsive new thriller featuring forensic " \
+            "criminalist Lincoln Rhyme and detective Amelia Sachs (from The Bone Collector) as they investigate a series of arsons " \
+            "in New York City.",
+            "When a harrowing arson in Manhattan burns a building to the ground, Rhyme and Sachs are called to investigate, only to " \
+            "discover in the rubble a package of clues that teases where the perp will strike."], description.split("\n")
+        end
+
+        test "the series position is read from the heading for the page's own ISBN" do
+          assert_equal ["ESCUELA RARA, UNA", "3"], read("spanish_childrens.html.gz", "843286").facts.values_at(:series_name, :series_position)
+          assert_equal "3", read("manga_single_format.html.gz", "839216").facts[:series_position]
+        end
+
+        test "the Spanish publisher alone, or its division alone, reads as Spanish; with neither signal the language is not Spanish" do
+          html = fixture_text("manga_single_format.html.gz")
+          assert_equal "English", read_html(html).facts[:language]
+
+          publisher_only = mutate_book(html) { |b| b["publisher"] = "PRH Grupo Editorial" }
+          assert_equal "Spanish", read_html(publisher_only).facts[:language]
+
+          division_only = html.sub('division="Seven Seas Entertainment"', 'division="PRH Grupo Editorial"')
+          assert_equal "Spanish", read_html(division_only).facts[:language]
+
+          neither = mutate_book(html) { |b| b.delete("inLanguage") }
+          assert_nil read_html(neither).facts[:language]
+
+          no_signal = fixture_text("spanish_edition.html.gz").gsub("PRH Grupo Editorial", "Someone Else").gsub("/books/spanish-language-fiction", "/books/fiction")
+          assert_equal "English", read_html(no_signal).facts[:language]
+        end
+
+        test "a book whose own title begins with Page Not Found is found, only the site's own page is not" do
+          html = fixture_text("manga_single_format.html.gz")
+          titled = html.sub(%r{<title>.*?</title>}m, "<title>Page Not Found: A Novel by Someone | Penguin Random House</title>")
+
+          assert_equal :found, read_html(titled).outcome
+          assert_equal :not_found, read_html(html.sub(%r{<title>.*?</title>}m, "<title>Page Not Found | Penguin Random House</title>")).outcome
+        end
+
+        def mutate_book(html)
+          ld = html[%r{<script type="application/ld\+json">(.*?)</script>}m, 1]
+          data = JSON.parse(ld)
+          yield data["mainEntity"]
+          html.sub(ld) { JSON.generate(data) }
         end
 
         def read_html(html)

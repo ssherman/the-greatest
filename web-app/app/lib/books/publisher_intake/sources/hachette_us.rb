@@ -158,7 +158,7 @@ module Books
             imprint_name: clean(node.dig("brand", "name")).presence,
             publisher_name: PUBLISHER,
             language: language_from(formats, own_isbn),
-            genres: Array(node["genre"]).map { |genre| clean(genre) }.reject { |genre| genre.blank? || genre == "Genres" },
+            genres: Array.wrap(node["genre"]).map { |genre| clean(genre) }.reject { |genre| genre.blank? || genre == "Genres" },
             series_name: series_name(doc),
             series_position: nil,
             age_range: nil,
@@ -178,7 +178,7 @@ module Books
 
         # The site's stand-in image is not a cover.
         def cover_from(node)
-          url = Array(node["image"]).first.to_s.sub(/\?.*\z/, "")
+          url = Array.wrap(node["image"]).first.to_s.sub(/\?.*\z/, "")
           url.presence unless url.include?("missingbook")
         end
 
@@ -205,7 +205,7 @@ module Books
           end
           return from_page if from_page.any?
 
-          Array(node["author"]).filter_map do |person|
+          Array.wrap(node["author"]).filter_map do |person|
             name = clean(person.is_a?(Hash) ? person["name"] : person)
             {name: name, role: "author"} if name.present?
           end

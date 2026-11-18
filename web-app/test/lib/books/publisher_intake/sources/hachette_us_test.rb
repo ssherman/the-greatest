@@ -194,6 +194,17 @@ module Books
           assert_equal 1999, paperback[:price_cents]
         end
 
+        test "an author given as one JSON-LD object, not an array, still reads when the page lists no contributors" do
+          html = fixture_text("novel_four_formats.html.gz").sub("product-details__contributors", "x-contributors")
+            .sub('"author":[{"@type":"Person","name":"Andrea Stewart"}]', '"author":{"@type":"Person","name":"Andrea Stewart"}')
+          page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
+            html: html, selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+
+          reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
+
+          assert_equal [{name: "Andrea Stewart", role: "author"}], reading.facts[:contributors]
+        end
+
         test "the series title carries its series name and its subtitle" do
           series = read("series_novel.html.gz", "9780316129084")
           assert_equal "The Expanse", series.facts[:series_name]
