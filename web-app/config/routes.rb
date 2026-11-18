@@ -707,6 +707,19 @@ Rails.application.routes.draw do
           get "search/categories", to: "category_searches#index", as: :search_categories
           get "countries", to: "countries#index"
           get "languages", to: "languages#index"
+
+          # The token holder's own lists (library scopes), not a catalogue.
+          scope "my", module: :my, as: :my do
+            get "lists", to: "lists#index", as: :lists
+            post "lists", to: "lists#create"
+            patch "lists/:list", to: "lists#update"
+            delete "lists/:list", to: "lists#destroy"
+            get "lists/:list/books", to: "list_books#index", as: :list_books
+            post "lists/:list/books", to: "list_books#create"
+            patch "lists/:list/books/:slug", to: "list_books#update", as: :list_book
+            delete "lists/:list/books", to: "list_books#destroy"
+            get "books/:slug/lists", to: "book_lists#index", as: :book_lists
+          end
         end
 
         # Admin API: needs a books:admin:* scope. Its contract is

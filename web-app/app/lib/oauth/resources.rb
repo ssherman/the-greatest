@@ -16,11 +16,10 @@ module Oauth
   module Resources
     Resource = Struct.new(:key, :path, :admin, keyword_init: true) do
       # An admin resource offers every admin scope of the domain, in registry
-      # order; a member resource offers the domain's read scope.
+      # order; a member resource offers every non-admin scope of the domain
+      # (read, and for books the library scopes), in registry order.
       def scopes(domain)
-        return ["#{domain}:read"] unless admin
-
-        ::Api::Scopes.all.select { |scope| ::Api::Scopes.admin?(scope) && scope.start_with?("#{domain}:") }
+        ::Api::Scopes.all.select { |scope| ::Api::Scopes.admin?(scope) == admin && scope.start_with?("#{domain}:") }
       end
 
       def url(base_url) = base_url + path
@@ -66,7 +65,16 @@ module Oauth
       offered = resource.scopes(domain)
       asked = Array(requested) - ["offline_access"]
       asked = offered if asked.empty?
-      offered & asked & ::Api::Scopes.mintable_by(user)
+      mintable = ::Api::Scopes.mintable_by(user)
+      granted = offered & asked & mintable
+      # A library scope on a token that cannot connect is useless: the member
+      # endpoint needs the domain's read scope, so add it when they may hold it.
+      read = "#{domain}:read"
+      if !resource.admin && granted.any? { |scope| scope.start_with?("#{domain}:library:") } &&
+          !granted.include?(read) && mintable.include?(read)
+        granted = offered & (granted + [read])
+      end
+      granted
     end
 
     # What a connection's token may do right now: the connection's scopes cut

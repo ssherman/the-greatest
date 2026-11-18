@@ -96,6 +96,12 @@ The texts are read once when `Mcp::Sites::Books` loads, so editing one needs a r
 
 `app/lib/mcp/tool_directory.rb`. A list of every tool an endpoint can offer, with no principal: `Entry(name, title, description, destructive, composite)`, catalogue tools in catalogue order and then the site's composites. It exists so documentation pages, which render the same for every visitor, can list tools. It is built from the same catalogue and composites as the factory, so a page cannot drift from the endpoint. It is not a per-request listing. `/developers` uses it for its MCP section (books only; hosts whose catalogue is empty have none) and never lists the admin document.
 
+### Library tools
+
+Nine tools on the books member endpoint, generated from the `/api/v1/my/` operations: `list_my_lists`, `list_my_list_books`, `list_my_book_lists` (scope `books:library:read`) and `create_my_list`, `update_my_list`, `delete_my_list`, `add_my_list_books`, `update_my_list_book`, `remove_my_list_books` (`books:library:write`). `delete_my_list` and `remove_my_list_books` are marked destructive. The tool filter lists them only to a holder of the scope. Behaviour, budget and batch rules are in `docs/features/public-api.md`, "Library (my lists)". The books instructions carry one short paragraph telling the model to confirm large or destructive changes and to use default list names.
+
+**Existing OAuth connections keep the scopes they were granted.** A member who connected before the library tools shipped must disconnect and reconnect to get them.
+
 ## Dispatch
 
 `app/lib/mcp/dispatcher.rb`, `app/lib/api/dispatched_request.rb`, `app/lib/services/api/authenticator.rb`, `app/controllers/concerns/api/rate_limited.rb`.

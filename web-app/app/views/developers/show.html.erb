@@ -57,9 +57,9 @@ for item in response.json()["data"]:
     <ul>
       <li>Send it on every request as <code>Authorization: Bearer &lt;token&gt;</code>.</li>
       <li>Keep it out of code and out of version control. An environment variable is the usual place.</li>
-      <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>.</li>
+      <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>. Two more cover your own book lists: <code>books:library:read</code> and <code>books:library:write</code>.</li>
       <li>If a token leaks, revoke it at <%= link_to "/developers/tokens", developers_tokens_path %>. Anything using it gets a 401 from that moment.</li>
-      <li>A member's token only reads: it cannot sign in to the site or change anything.</li>
+      <li>A token cannot sign in to the site. It changes your book lists only if it holds <code>books:library:write</code>; every other scope only reads.</li>
     </ul>
 
     <h2 id="rate-limits">Rate limits</h2>
@@ -152,7 +152,12 @@ for item in response.json()["data"]:
       <p id="mcp-intro">
         This site also runs an MCP server, so an AI assistant such as Claude Code
         can read the rankings for you. Its address is
-        <code><%= @mcp_url %></code>.
+        <code><%= @mcp_url %></code>. With the <code>books:library:read</code>
+        scope it can also read your book lists, and with <code>books:library:write</code>
+        it can add, move and remove books and create, edit and delete your custom
+        lists. A connection made before the list tools existed has to be revoked at
+        <%= link_to "/developers/tokens", developers_tokens_path %> and connected
+        again to get them.
         <% if composites.empty? %>
           Each tool below is one of the endpoints above, answered with the same
           data and the same errors. The tools differ from the endpoints in two ways: results leave out
@@ -217,7 +222,8 @@ codex mcp login the-greatest-books</code></pre>
       <h3 id="mcp-with-token">With a token instead</h3>
       <p>
         It uses the same token as the REST API, and the token needs the
-        <code>books:read</code> scope.
+        <code>books:read</code> scope. Add <code>books:library:read</code> or
+        <code>books:library:write</code> for the list tools.
       </p>
       <p>To connect Claude Code with a token, run this once:</p>
 <pre id="mcp-command"><code>claude mcp add --transport http --scope user the-greatest-books <%= @mcp_url %> --header "Authorization: Bearer $THE_GREATEST_TOKEN"</code></pre>
@@ -295,10 +301,10 @@ codex mcp login the-greatest-books</code></pre>
               insufficient_scope: "The token lacks the scope this endpoint needs; the WWW-Authenticate header names it.",
               forbidden: "The account behind the token is not allowed to perform this action on this record.",
               not_found: "Nothing on this site has that slug or id.",
-              invalid_parameter: "A query parameter is out of range; detail says which.",
+              invalid_parameter: "A query parameter or request body field is missing, malformed or out of range; detail says which.",
               conflict: "The request names something another record already holds (an author creation with a Wikidata id another author has); detail says which.",
               unprocessable: "The request was understood but cannot be carried out; detail says why.",
-              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait.",
+              rate_limited: "A rate-limit window or the daily library change budget is exhausted; Retry-After says how long to wait.",
               search_unavailable: "Search is temporarily unavailable; retry shortly."
             }
           %>

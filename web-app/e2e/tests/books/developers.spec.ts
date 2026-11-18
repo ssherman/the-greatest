@@ -113,7 +113,8 @@ test.describe('Books API developer pages, signed out', () => {
     await expect(setup.getByRole('link')).toHaveAttribute('href', '#quick-start');
     await expect(setup).toContainText('claude mcp remove --scope user the-greatest-books');
 
-    await expect(page.getByText(/A member's token only reads/)).toBeVisible();
+    await expect(page.getByText(/A token cannot sign in to the site/)).toBeVisible();
+    await expect(intro).toContainText('A connection made before the list tools existed');
   });
 
   test('the MCP endpoint refuses a request without a token', async ({ page }) => {
@@ -126,6 +127,6 @@ test.describe('Books API developer pages, signed out', () => {
     const challenge = response.headers()['www-authenticate'];
     expect(challenge).toMatch(/^Bearer /);
     expect(challenge).toMatch(/resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
-    expect(challenge).toContain('scope="books:read"');
+    expect(challenge).toContain('scope="books:read books:library:read books:library:write"');
   });
 });

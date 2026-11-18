@@ -191,6 +191,82 @@ module Api
         ["GET", "/api/v1/discover/books", "503"] => lambda {
           ::Search::Books::Search::BookAdvanced.stubs(:call).raises(Faraday::ConnectionFailed, "down")
           get "/api/v1/discover/books", headers: bearer(ApiTokenSecrets::MEMBER)
+        },
+        ["GET", "/api/v1/my/lists", "200"] => -> { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists", "400"] => -> { get "/api/v1/my/lists?page=0", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists", "401"] => -> { get "/api/v1/my/lists" },
+        ["GET", "/api/v1/my/lists", "403"] => -> { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["POST", "/api/v1/my/lists", "201"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "400"] => -> { post "/api/v1/my/lists", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "401"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json },
+        ["POST", "/api/v1/my/lists", "403"] => -> { post "/api/v1/my/lists", params: {name: "Summer"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["POST", "/api/v1/my/lists", "404"] => -> { post "/api/v1/my/lists", params: {name: "Summer", books: ["no-such-book"]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "422"] => -> { post "/api/v1/my/lists", params: {name: "Summer", list_type: "read"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          post "/api/v1/my/lists", params: {name: "Summer", books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["PATCH", "/api/v1/my/lists/{list}", "200"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "400"] => -> { patch "/api/v1/my/lists/favorites", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "401"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json },
+        ["PATCH", "/api/v1/my/lists/{list}", "403"] => -> { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["PATCH", "/api/v1/my/lists/{list}", "404"] => -> { patch "/api/v1/my/lists/bogus", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "422"] => -> { patch "/api/v1/my/lists/favorites", params: {name: "Renamed"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}", "429"] => -> { with_exhausted_limit { patch "/api/v1/my/lists/favorites", params: {public: true}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) } },
+        ["DELETE", "/api/v1/my/lists/{list}", "200"] => lambda {
+          list = ::Books::UserList.create!(user: users(:regular_user), name: "Doomed", list_type: :custom)
+          delete "/api/v1/my/lists/#{list.id}", headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["DELETE", "/api/v1/my/lists/{list}", "401"] => -> { delete "/api/v1/my/lists/favorites" },
+        ["DELETE", "/api/v1/my/lists/{list}", "403"] => -> { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["DELETE", "/api/v1/my/lists/{list}", "404"] => -> { delete "/api/v1/my/lists/bogus", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}", "422"] => -> { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}", "429"] => -> { with_exhausted_limit { delete "/api/v1/my/lists/favorites", headers: bearer(ApiTokenSecrets::LIBRARY) } },
+        ["GET", "/api/v1/my/lists/{list}/books", "200"] => -> { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "400"] => -> { get "/api/v1/my/lists/read/books?sort=rank", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "401"] => -> { get "/api/v1/my/lists/read/books" },
+        ["GET", "/api/v1/my/lists/{list}/books", "403"] => -> { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/lists/{list}/books", "404"] => -> { get "/api/v1/my/lists/bogus/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/lists/{list}/books", "429"] => -> { with_exhausted_limit { get "/api/v1/my/lists/read/books", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["GET", "/api/v1/my/books/{slug}/lists", "200"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "400"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists?page=0", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "401"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists" },
+        ["GET", "/api/v1/my/books/{slug}/lists", "403"] => -> { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "404"] => -> { get "/api/v1/my/books/no-such-book/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["GET", "/api/v1/my/books/{slug}/lists", "429"] => -> { with_exhausted_limit { get "/api/v1/my/books/#{books_books(:war_and_peace).slug}/lists", headers: bearer(ApiTokenSecrets::LIBRARY_READ) } },
+        ["POST", "/api/v1/my/lists/{list}/books", "200"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "400"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: []}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "401"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json },
+        ["POST", "/api/v1/my/lists/{list}/books", "403"] => -> { post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["POST", "/api/v1/my/lists/{list}/books", "404"] => -> { post "/api/v1/my/lists/bogus/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "422"] => -> { post "/api/v1/my/lists/favorites/books", params: {books: [books_books(:war_and_peace).slug], completed_on: "2024-03-01"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["POST", "/api/v1/my/lists/{list}/books", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          post "/api/v1/my/lists/want_to_read/books", params: {books: [books_books(:war_and_peace).slug]}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "200"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {completed_on: "2024-03-01"}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "400"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "401"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "403"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "404"] => -> { patch "/api/v1/my/lists/bogus/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "422"] => -> { patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 99}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["PATCH", "/api/v1/my/lists/{list}/books/{slug}", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          patch "/api/v1/my/lists/read/books/#{books_books(:clash).slug}", params: {position: 1}, as: :json, headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "200"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "400"] => -> { delete "/api/v1/my/lists/want_to_read/books", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "401"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x" },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "403"] => -> { delete "/api/v1/my/lists/want_to_read/books?books=x", headers: bearer(ApiTokenSecrets::LIBRARY_READ) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "404"] => -> { delete "/api/v1/my/lists/bogus/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY) },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "422"] => lambda {
+          ::Services::UserLists::RemoveItems.stubs(:call).returns(::Services::UserLists::MutationResult.stale_item)
+          delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY)
+        },
+        ["DELETE", "/api/v1/my/lists/{list}/books", "429"] => lambda {
+          ::Services::Api::LibraryBudget.reserve(users(:regular_user), 1_000)
+          delete "/api/v1/my/lists/want_to_read/books?books=#{books_books(:war_and_peace).slug}", headers: bearer(ApiTokenSecrets::LIBRARY)
         }
       }.freeze
 

@@ -83,7 +83,7 @@ module Oauth
     def assert_mcp_refused(access_token)
       rpc("tools/list", token: access_token)
       assert_response :unauthorized
-      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read"),
+      assert_equal %(Bearer error="invalid_token", resource_metadata="#{RESOURCE_METADATA}", scope="books:read books:library:read books:library:write"),
         response.headers["WWW-Authenticate"]
     end
 
