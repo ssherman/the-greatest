@@ -1,0 +1,59 @@
+<% content_for :title, "Publisher Titles" %>
+
+<div class="space-y-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-bold">Publisher Titles</h1>
+    <%= link_to "Overview", admin_books_publisher_intake_path, class: "btn btn-sm" %>
+  </div>
+
+  <%= form_with url: admin_books_publisher_titles_path, method: :get, class: "flex flex-wrap items-end gap-3", data: {testid: "title-filters"} do |form| %>
+    <div>
+      <%= form.label :source, "Source", class: "label text-xs" %>
+      <%= form.select :source, options_for_select([["All", ""]] + source_options.map { |value| [value, value] }, params[:source]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :status, "Status", class: "label text-xs" %>
+      <%= form.select :status, options_for_select([["All", ""]] + Admin::Books::PublisherTitlesController::STATUSES.map { |value| [value.humanize, value] }, params[:status]), {}, class: "select select-sm" %>
+    </div>
+    <div>
+      <%= form.label :hold_reason, "Hold reason", class: "label text-xs" %>
+      <%= form.select :hold_reason, options_for_select([["All", ""]] + Admin::Books::PublisherTitlesController::HOLD_REASONS.map { |value| [value.humanize, value] }, params[:hold_reason]), {}, class: "select select-sm" %>
+    </div>
+    <%= form.submit "Filter", class: "btn btn-sm" %>
+    <%= link_to "Reset", admin_books_publisher_titles_path, class: "btn btn-sm btn-ghost" %>
+  <% end %>
+
+  <% if @titles.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm bg-base-100" data-testid="title-table">
+        <thead>
+          <tr><th>Title</th><th>Contributors</th><th>Imprint</th><th>On sale</th><th>Formats</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <% @titles.each do |title| %>
+            <tr data-testid="title-row" data-title-id="<%= title.id %>">
+              <td class="[overflow-wrap:anywhere]">
+                <%= link_to title.title.presence || "(untitled)", admin_books_publisher_title_path(title), class: "link" %>
+                <div class="text-xs text-base-content/60"><%= title.source %></div>
+              </td>
+              <td class="[overflow-wrap:anywhere]"><%= Array(title.contributors).filter_map { |c| c["name"] }.join(", ") %></td>
+              <td class="[overflow-wrap:anywhere]"><%= title.imprint_name %></td>
+              <td class="whitespace-nowrap"><%= title.on_sale_on %></td>
+              <td><%= Array(title.formats).filter_map { |f| f["format_label"] || f["format"] }.join(", ") %></td>
+              <td>
+                <span class="badge badge-ghost badge-sm"><%= title.status.humanize %></span>
+                <% if title.hold_reason %><span class="text-xs"><%= title.hold_reason.humanize.downcase %></span><% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 py-8">No titles match.</p>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="mt-4 flex justify-center"><%== @pagy.series_nav %></div>
+  <% end %>
+</div>

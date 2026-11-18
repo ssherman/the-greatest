@@ -1021,6 +1021,11 @@ Rails.application.routes.draw do
       # No new/create: archives are made by the monthly job and the admin
       # "archive now" action on the ranking configuration, never by a form.
       resources :ranking_archives, only: [:index, :show, :edit, :update, :destroy]
+
+      # Publisher intake (docs/superpowers/specs/2026-11-17-publisher-intake-collect-design.md §9):
+      # read-only. Rows are written by the intake jobs, never by a form.
+      get "publisher_intake", to: "publisher_intake#index", as: :publisher_intake
+      resources :publisher_titles, only: [:index, :show]
     end
 
     scope "(/rc/:ranking_configuration_id)" do
