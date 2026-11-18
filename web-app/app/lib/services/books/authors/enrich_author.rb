@@ -17,19 +17,22 @@ module Services
         KIND = RecordAuthorFacts::KIND
         HUMAN_SOURCES = %w[ai_generated manual].freeze
 
-        def self.call(author:, allow_research: true)
-          new(author: author, allow_research: allow_research).call
+        def self.call(author:, allow_research: true, force_research: false, context: nil)
+          new(author: author, allow_research: allow_research, force_research: force_research, context: context).call
         end
 
-        def initialize(author:, allow_research:)
+        def initialize(author:, allow_research:, force_research: false, context: nil)
           @author = author
           @allow_research = allow_research
+          @force_research = force_research
+          @context = context
           @records = MatchedRecords.new(author)
           @rows = []
         end
 
         def call
           return skipped("placeholder") if author.exclude_from_rankings?
+          return forced_research if force_research
           return skipped("complete") if complete?
 
           rows << run(:knowledge)
@@ -44,7 +47,14 @@ module Services
 
         private
 
-        attr_reader :author, :allow_research, :records, :rows
+        attr_reader :author, :allow_research, :force_research, :context, :records, :rows
+
+        # The paid worker: the research run at once, with no knowledge call, no
+        # completeness skip and no budget or mode check.
+        def forced_research
+          rows << run(:research)
+          result
+        end
 
         def skipped(reason)
           rows << skip(reason, mode: :knowledge)
@@ -73,6 +83,7 @@ module Services
         # Why the web search will not run, or nil when it will. In queue mode
         # the search is left to an agent.
         def research_skip_reason
+          return nil if force_research
           return "queued" if ::Services::EnrichmentQueue::ResearchRoute.queue?
 
           "budget_exhausted" if budget_exhausted?
@@ -115,13 +126,21 @@ module Services
           RecordAuthorFacts.call(
             author: author, records: records, facts: facts, mode: mode,
             citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model,
-            hold_low_confidence: hold_reason(mode, facts)
+            hold_low_confidence: hold_reason(mode, facts), extra_facts: context_facts
           )
         rescue => e
           # Whatever raises past the task call (a bug in the applier, a
           # constraint) still leaves exactly one row, and the job sees a failure.
-          author.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message, facts: RecordAuthorFacts.sources_fact(records)))
+          author.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message, facts: failed_facts))
         end
+
+        # The context goes on every row with facts or a failure, so the research
+        # cap can tell a queue worker's run from an importer's.
+        def context_facts
+          context ? {"context" => QueueTypes::LedgerEntries.input(context)} : {}
+        end
+
+        def failed_facts = RecordAuthorFacts.sources_fact(records).merge(context_facts)
 
         def row_attributes(mode, chat)
           {kind: KIND, mode: mode, ai_chat: chat, provider: chat&.provider, model: chat&.model}
@@ -130,7 +149,7 @@ module Services
         def failed_row(mode, task_result, error: task_result.error)
           role = ::Services::Ai::Roles.resolve((mode == :research) ? :research : :standard)
           author.enrichments.create!(kind: KIND, mode: mode, outcome: :failed, error: error, provider: role.provider.to_s,
-            model: role.model, ai_chat: task_result.ai_chat, facts: RecordAuthorFacts.sources_fact(records))
+            model: role.model, ai_chat: task_result.ai_chat, facts: failed_facts)
         end
 
         def skip(reason, mode:)

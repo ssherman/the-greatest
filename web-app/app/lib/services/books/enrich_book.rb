@@ -12,12 +12,13 @@ module Services
 
       KIND = RecordBookFacts::KIND
 
-      def self.call(book:, force_research: false, author_names: nil, goodreads_page: nil)
-        new(book: book, force_research: force_research, author_names: author_names, goodreads_page: goodreads_page).call
+      def self.call(book:, force_research: false, author_names: nil, goodreads_page: nil, context: nil)
+        new(book: book, force_research: force_research, author_names: author_names, goodreads_page: goodreads_page, context: context).call
       end
 
-      def initialize(book:, force_research:, author_names:, goodreads_page: nil)
+      def initialize(book:, force_research:, author_names:, goodreads_page: nil, context: nil)
         @book = book
+        @context = context
         @goodreads_page = goodreads_page
         @force_research = force_research
         @author_names = Array(author_names).map(&:to_s).reject(&:blank?)
@@ -60,7 +61,7 @@ module Services
 
       private
 
-      attr_reader :book, :force_research, :goodreads_page, :rows
+      attr_reader :book, :context, :force_research, :goodreads_page, :rows
 
       def author_names
         @author_names.presence || book.authors.map(&:name)
@@ -133,13 +134,13 @@ module Services
           book: book, facts: facts, mode: mode, citations: citations,
           ai_chat: chat, provider: chat&.provider, model: chat&.model,
           author_names: author_names, goodreads_page: goodreads_page,
-          hold_low_confidence: hold_reason(mode, facts)
+          hold_low_confidence: hold_reason(mode, facts), extra_facts: context_facts
         )
       rescue => e
         # Anything past this point that raises (a unique-index race between
         # concurrent jobs, a bug in ApplyBookFacts) must still leave exactly
         # one ledger row, and the job needs to see a failure to retry.
-        book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message))
+        book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message, facts: context_facts))
       end
 
       def failed_row(mode, task_result, error: task_result.error)
@@ -151,8 +152,15 @@ module Services
           error: error,
           provider: role.provider.to_s,
           model: role.model,
-          ai_chat: task_result.ai_chat
+          ai_chat: task_result.ai_chat,
+          facts: context_facts
         )
+      end
+
+      # Who ran this: recorded on every row that has facts or failed, so the
+      # research cap can tell a queue worker's run from an importer's.
+      def context_facts
+        context ? {"context" => QueueTypes::LedgerEntries.input(context)} : {}
       end
 
       def row_attributes(mode, chat)

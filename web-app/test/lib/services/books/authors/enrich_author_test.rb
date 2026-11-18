@@ -435,6 +435,46 @@ module Services
           assert_equal "budget_exhausted", rows.last.reason
           assert_equal 0, ::EnrichmentRequest.count
         end
+
+        test "force_research goes straight to research" do
+          @author.update!(birth_year: 1901, gender: :female)
+          @author.author_countries.create!(country: books_countries(:french))
+          @author.assign_description(source: :manual, content: "Written by hand.")
+          @author.save!
+          Rails.application.config.x.ai.stubs(:research_daily_cap).returns(0)
+          queue_mode!
+          expect_runs([:research, success_result(facts)])
+
+          result = EnrichAuthor.call(author: @author, force_research: true)
+
+          assert_equal %w[research], result.data[:enrichments].map(&:mode)
+          assert_equal 0, author_requests.count
+        end
+
+        test "a placeholder is still skipped under force_research" do
+          ::Services::Ai::Tasks::Books::AuthorFactsTask.expects(:new).never
+          author = books_authors(:excluded_placeholder)
+
+          EnrichAuthor.call(author: author, force_research: true)
+
+          assert_equal [["skipped", "placeholder"]], author.enrichments.for_kind(EnrichAuthor::KIND).pluck(:outcome, :reason)
+        end
+
+        test "context is recorded on the row" do
+          expect_runs([:research, success_result(facts)])
+
+          row = EnrichAuthor.call(author: @author, force_research: true, context: "queue").data[:enrichments].sole
+
+          assert_equal({"value" => "queue", "applied" => false, "reason" => "input"}, row.facts["context"])
+        end
+
+        test "a failed forced run carries the context" do
+          expect_runs([:research, failure_result("search down")])
+
+          row = EnrichAuthor.call(author: @author, force_research: true, context: "queue").data[:enrichments].sole
+
+          assert_equal ["failed", "queue"], [row.outcome, row.facts.dig("context", "value")]
+        end
       end
     end
   end

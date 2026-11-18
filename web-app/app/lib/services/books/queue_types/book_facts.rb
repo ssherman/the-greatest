@@ -56,6 +56,13 @@ module Services
             Services::Ai::Tasks::Books::BookFactsTask::ResponseSchema.to_json_schema.deep_stringify_keys
           end
 
+          def paid_research? = true
+
+          def research(request)
+            result = Services::Books::EnrichBook.call(book: request.enrichable, force_research: true, context: "queue")
+            ledger_result(result.data[:enrichments].last)
+          end
+
           # A raise (a failed description review) propagates to the apply job,
           # which retries and then marks the row failed.
           def apply(request)

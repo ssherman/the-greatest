@@ -45,6 +45,32 @@ module Services
         # Returns a Result with data: {enrichment:, outcome:}.
         def apply(request) = raise(NotImplementedError, "#{name} must define apply")
 
+        # True when the type can be worked by the paid research worker
+        # (Research), which runs the same forced path an importer would.
+        def paid_research? = false
+
+        # The paid research path for one claimed row: runs the type's own model
+        # call with research forced and returns a Result with
+        # data: {enrichment:, outcome:} (see ledger_result).
+        def research(request) = raise(NotImplementedError, "#{name} must define research")
+
+        # The Result for the ledger row a paid run ended on. A row that failed or
+        # was skipped (disabled, no inputs, ...) is a failure for the queue row;
+        # the row's mode is not checked: a forced origin run can still take the
+        # Wikidata shortcut and end applied without a web search.
+        def ledger_result(row)
+          errors = if row.nil?
+            ["no ledger row"]
+          elsif row.failed?
+            [row.error]
+          elsif row.skipped?
+            ["skipped: #{row.reason}"]
+          end
+          return Result.new(success?: false, data: nil, errors: errors) if errors
+
+          Result.new(success?: true, data: {enrichment: row, outcome: row.outcome}, errors: [])
+        end
+
         # Extra ERB locals for the Copy prompt.
         def prompt_locals = {}
 

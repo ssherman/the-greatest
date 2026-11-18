@@ -116,6 +116,12 @@ module Services
         assert_not result.success?
         assert result.errors.any?
       end
+
+      test "a claim with no user leaves claimed_by empty" do
+        data = Claim.call(kind: "books.test_type", limit: 1, user: nil).data
+        row = data[:items].sole.reload
+        assert_equal ["claimed", nil], [row.status, row.claimed_by_id]
+      end
     end
   end
 end

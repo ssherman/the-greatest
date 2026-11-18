@@ -305,6 +305,13 @@ module Services
           assert_equal ["research"], judge(force_research: true).data[:enrichments].map(&:mode)
           assert_equal 0, categories_requests.count
         end
+
+        test "rejudge is false for queue" do
+          stub_task({})
+          Mapper.stubs(:call).returns(mapped)
+          Apply.expects(:call).with(has_entry(rejudge: false)).returns(Apply::Result.new(success?: true, errors: [], data: applied_data))
+          Judge.call(book: @book, context: "queue")
+        end
       end
     end
   end

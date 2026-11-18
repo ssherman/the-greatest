@@ -48,6 +48,13 @@ module Services
             Services::Ai::Tasks::Books::BookOriginTask::ResponseSchema.to_json_schema.deep_stringify_keys
           end
 
+          def paid_research? = true
+
+          def research(request)
+            result = Services::Books::Origin::Judge.call(book: request.enrichable, context: "queue", label: "queue", force_research: true)
+            ledger_result(result.data[:enrichments].last)
+          end
+
           def apply(request)
             book = request.enrichable
             row = Services::Books::Origin::RecordAnswer.call(

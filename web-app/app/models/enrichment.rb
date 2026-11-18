@@ -66,7 +66,9 @@ class Enrichment < ApplicationRecord
   # categories backfills share their own cap, so their rows must not eat the
   # budget imports share.
   # COALESCE keeps rows with no context (NULL would drop them from NOT).
+  # A queue-worker row (context queue, bare or in the ledger entry shape) is paid
+  # for on purpose, outside the daily cap.
   # A skipped row (reason "queued" or "budget_exhausted") spent no web search.
-  scope :against_research_cap, -> { research.today.where.not(outcome: :skipped).where.not("kind IN ('books.origin', 'books.categories') AND COALESCE(facts->>'context', '') = 'backfill'") }
+  scope :against_research_cap, -> { research.today.where.not(outcome: :skipped).where.not("kind IN ('books.origin', 'books.categories') AND COALESCE(facts->>'context', '') = 'backfill'").where.not("COALESCE(facts #>> '{context,value}', facts->>'context', '') = 'queue'") }
   scope :low_confidence_on, ->(fact) { where("facts -> ? ->> 'confidence' = 'low'", fact.to_s) }
 end

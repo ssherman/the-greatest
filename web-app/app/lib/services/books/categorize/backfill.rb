@@ -12,7 +12,8 @@ module Services
       # A book is done (per kind: books.origin, books.categories) when its latest row ran the current prompt
       # version, did not fail or skip, and did not defer its research (a deferred
       # book counts as done while categorize_backfill_research_daily_cap is 0, since
-      # nothing could change its outcome). Books
+      # nothing could change its outcome, and in queue mode (research_via) whatever
+      # the cap, since the backfill never researches there and the queue owns it). Books
       # with a running books.book_enrichment run are left out: that import's
       # categorize step judges them. Order: ranked books by rank, then books
       # with no real country or, for the categories scopes, no genre beyond

@@ -164,4 +164,20 @@ class EnrichmentTest < ActiveSupport::TestCase
     refute_includes Enrichment.against_research_cap, skipped
     assert_includes Enrichment.against_research_cap, ran
   end
+
+  test "against_research_cap leaves out queue-worker rows in both shapes" do
+    book = books_books(:war_and_peace)
+    make = ->(facts) { book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :applied, facts: facts) }
+    bare = make.call({"context" => "queue"})
+    entry = make.call({"context" => {"value" => "queue"}})
+    admin = make.call({"context" => "admin"})
+    agent = make.call({"context" => {"value" => "agent"}})
+    empty = make.call({})
+    scoped = Enrichment.against_research_cap
+    refute_includes scoped, bare
+    refute_includes scoped, entry
+    assert_includes scoped, admin
+    assert_includes scoped, agent
+    assert_includes scoped, empty
+  end
 end

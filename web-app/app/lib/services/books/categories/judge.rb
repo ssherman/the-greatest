@@ -127,7 +127,7 @@ module Services
 
           answer = (task_result.data[:facts] || {}).to_h.deep_symbolize_keys
           row = RecordAnswer.call(book: book, dossier: dossier, answer: answer, vocabulary: vocabulary, mode: mode,
-            context: context, label: label, rejudge: context != "import",
+            context: context, label: label, rejudge: !%w[import queue].include?(context),
             citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model)
           [row, mode == :knowledge && row.unrecognized?]
         rescue => e

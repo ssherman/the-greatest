@@ -56,8 +56,9 @@ module Services
         attr_reader :owes_research, :book, :context, :label, :research_allowed, :force, :force_research, :rows, :dossier
 
         # A book that still owes research (its latest row says so, and research
-        # is not permitted now) keeps the debt on this row, so the backfill
-        # sees it again once the cap is raised.
+        # is not permitted now) keeps the debt on this row, so the research can be
+        # picked up later: by the backfill once the cap is raised, or in queue
+        # mode (where the backfill never researches) by the queue.
         def has_origin
           rows << book.enrichments.create!(kind: KIND, mode: :knowledge, outcome: :nothing_to_apply,
             reason: "has_origin", facts: base_facts("has_origin").merge("deferred_research" => owes_research))

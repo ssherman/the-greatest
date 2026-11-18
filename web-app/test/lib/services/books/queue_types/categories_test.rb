@@ -188,6 +188,29 @@ module Services
           assert_equal 0, ::EnrichmentRequest.where(kind: "books.categories", enrichable: @fiction_only).count
           assert_equal 17, ::EnrichmentRequest.find_by!(kind: "books.categories", enrichable: @bare).priority
         end
+
+        test "paid_research? is true" do
+          assert Type.paid_research?
+        end
+
+        test "research runs the forced paid path and maps its row" do
+          record = ::Books::Book.create!(title: "Forced Categories")
+          request = ::EnrichmentRequest.new(enrichable: record, kind: Type.kind)
+          {
+            [:applied, nil, nil] => [true, "applied"],
+            [:failed, "model down", nil] => [false, nil],
+            [:skipped, nil, "disabled"] => [false, nil]
+          }.each do |(outcome, error, reason), (success, expected_outcome)|
+            row = record.enrichments.create!(kind: Type.kind, mode: :research, outcome: outcome, error: error, reason: reason, facts: {})
+            Services::Books::Categories::Judge.expects(:call).with(book: record, context: "queue", label: "queue", force_research: true).returns(Services::Books::Categories::Judge::Result.new(success?: outcome != :failed, data: {enrichments: [row]}, errors: []))
+
+            result = Type.research(request)
+
+            assert_equal success, result.success?, outcome
+            assert_equal expected_outcome, result.data[:outcome] if success
+            assert_equal [error || "skipped: disabled"], result.errors unless success
+          end
+        end
       end
     end
   end

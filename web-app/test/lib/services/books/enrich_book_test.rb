@@ -660,6 +660,41 @@ module Services
         assert_equal "budget_exhausted", result.data[:enrichments].last.reason
         assert_equal 0, ::EnrichmentRequest.count
       end
+
+      test "context is recorded on the row and keeps it out of the import research cap" do
+        expect_facts_runs([:research, success_result(facts)])
+        queue_row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+        assert_equal({"value" => "queue", "applied" => false, "reason" => "input"}, queue_row.facts["context"])
+
+        other = ::Books::Book.create!(title: "Another Fresh Book")
+        other.book_authors.create!(author: books_authors(:tolstoy), position: 1)
+        task = mock
+        task.stubs(:call).returns(success_result(facts))
+        Services::Ai::Tasks::Books::BookFactsTask.expects(:new).with { |args| args[:parent] == other }.returns(task)
+        plain_row = EnrichBook.call(book: other, force_research: true).data[:enrichments].sole
+
+        scoped = Enrichment.against_research_cap
+        assert_not_includes scoped, queue_row
+        assert_includes scoped, plain_row
+        assert_not plain_row.facts.key?("context")
+      end
+
+      test "a failed forced run carries the context" do
+        expect_facts_runs([:research, failure_result("search down")])
+
+        row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+
+        assert_equal ["failed", {"value" => "queue", "applied" => false, "reason" => "input"}], [row.outcome, row.facts["context"]]
+      end
+
+      test "a run that raises after the model call carries the context" do
+        expect_facts_runs([:research, success_result(facts)])
+        RecordBookFacts.stubs(:call).raises("write failed")
+
+        row = EnrichBook.call(book: @book, force_research: true, context: "queue").data[:enrichments].sole
+
+        assert_equal ["failed", "queue"], [row.outcome, row.facts.dig("context", "value")]
+      end
     end
   end
 end
