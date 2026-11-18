@@ -136,6 +136,22 @@ module Services
             assert_includes text, "Already on record: born 480 BCE; died 406 BCE"
             assert_includes text, "- Medea (431 BCE)"
           end
+
+          test "the system message sent to the model is byte-for-byte what it was in knowledge mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = AuthorFactsTask.new(parent: @author, records: records, mode: :knowledge, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "71fea025a99c48242af4e73ec8bbfbdf1cd589209233c9b5ad150c8916ca81c1", Digest::SHA256.hexdigest(message)
+          end
+
+          test "the system message sent to the model is byte-for-byte what it was in research mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = AuthorFactsTask.new(parent: @author, records: records, mode: :research, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "2d4f739a646384c51fafe6be311e324aa34e9b7051f4f31465b6260736b9c5eb", Digest::SHA256.hexdigest(message)
+          end
         end
       end
     end
