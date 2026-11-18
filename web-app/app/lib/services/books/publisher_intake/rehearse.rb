@@ -32,7 +32,9 @@ module Services
         def initialize(source:, limit:, max_discovery_requests:, out:, sleeper:)
           @strategy = source
           @limit = limit.to_i
-          @max_requests = max_discovery_requests&.to_i
+          @max_given = !max_discovery_requests.nil?
+          # Integer() would truncate a Float; only an Integer or a numeric string is a count.
+          @max_requests = Integer(max_discovery_requests, exception: false) if max_discovery_requests.is_a?(Integer) || max_discovery_requests.is_a?(String)
           @out = out
           @sleeper = sleeper
           @fetched = false
@@ -42,10 +44,21 @@ module Services
         def call
           return Result.new(success?: false, data: nil, errors: ["rehearse does not run in production"]) if Rails.env.production?
 
+          if @max_given && !@max_requests&.positive?
+            return Result.new(success?: false, data: nil, errors: ["max_discovery_requests must be a positive integer"])
+          end
+
           @out.puts("rehearsing #{@strategy.key}")
           @run = start_run
-          discovery_ok = discover
-          read_listings if discovery_ok
+          begin
+            discovery_ok = discover
+            read_listings if discovery_ok
+          ensure
+            # An interrupted or raising rehearsal must not leave a running run,
+            # which would stop the weekly job starting this source. The
+            # exception goes on; only its class is recorded.
+            fail_unfinished_run
+          end
           @out.puts("requests #{@summary[:requests]}, listings seen #{@summary[:listings_seen]}, read #{@summary[:read]}, " \
             "outcomes #{@summary[:outcomes].to_h}, held #{@summary[:held].to_h}, run #{@run.status}")
           Result.new(success?: true, data: @summary.merge(outcomes: @summary[:outcomes].to_h, held: @summary[:held].to_h), errors: [])
@@ -57,6 +70,12 @@ module Services
           first_run = !::Books::PublisherIntakeRun.where(source: @strategy.key, status: :finished).exists?
           ::Books::PublisherIntakeRun.create!(source: @strategy.key, kind: :manual, status: :running, started_at: Time.current,
             baseline: first_run && @strategy.baseline_on_first_run?, counts: {"requests" => 0, "outstanding" => 0})
+        end
+
+        def fail_unfinished_run
+          return unless @run.reload.status_running?
+
+          @run.update!(status: :failed, finished_at: Time.current, error: "rehearsal ended early: #{$!&.class&.name || "unknown"}")
         end
 
         # Returns false when a request did not parse or was not answered, in
@@ -84,7 +103,10 @@ module Services
 
             recorded = RecordDiscovery.call(run: @run, listings: discovery.listings, seed: request.context["seed"] == true)
             @summary[:listings_seen] += recorded.data[:seen]
-            queue.concat(discovery.requests)
+            # As DiscoveryRequestJob does: a seed request's follow-ups are seeds too.
+            follow_ups = discovery.requests
+            follow_ups = follow_ups.map { |r| r.with(context: r.context.merge("seed" => true)) } if request.context["seed"] == true
+            queue.concat(follow_ups)
           end
           save_run(:finished, nil)
           true
@@ -107,6 +129,8 @@ module Services
             response, failure = fetch(@strategy.listing_request(listing))
             if failure
               store(listing, ::Books::PublisherIntake::Reading.new(outcome: failure, facts: nil, sibling_keys: []), nil)
+              break if failure == :fetcher_down
+
               next
             end
 

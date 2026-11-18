@@ -13,6 +13,7 @@ module Services
 
         setup do
           setup_intake_fetching
+          @attempted_at = 2.days.ago.change(usec: 0)
           @version = PublisherIntakeFetchHelper::TestStrategy::VERSION
         end
 
@@ -34,7 +35,7 @@ module Services
           listing = new_pending_listing(state: state)
           StoreReading.call(listing: listing, reading: Reading.new(outcome: :unparseable, facts: nil, sibling_keys: []),
             page: page_response(html: HTML), parser_version: version)
-          listing.reload.update!(last_attempt_at: 2.days.ago.change(usec: 0), queued_at: nil)
+          listing.reload.update!(last_attempt_at: @attempted_at, queued_at: nil)
           listing.reload
         end
 
@@ -68,7 +69,7 @@ module Services
           listing.reload
           assert result.data[:changed]
           assert_equal "Corrected Title", listing.publisher_title.title
-          assert_equal [read_at, 2.days.ago.change(usec: 0), "found", blob_id, @version],
+          assert_equal [read_at, @attempted_at, "found", blob_id, @version],
             [listing.read_at, listing.last_attempt_at, listing.last_attempt_outcome, listing.html.blob.id, listing.parser_version]
         end
 
@@ -108,7 +109,7 @@ module Services
           parse_as(:found, facts: facts)
           ::Books::PublisherIntake.expects(:client).never
 
-          Reparse.call(listing: listing)
+          assert Reparse.call(listing: listing).data[:changed]
         end
 
         TestStrategy = PublisherIntakeFetchHelper::TestStrategy

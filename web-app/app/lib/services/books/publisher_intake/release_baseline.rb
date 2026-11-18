@@ -26,7 +26,7 @@ module Services
 
           ids = ::Books::PublisherListing.where(source: @source, state: :baseline)
             .order(external_key: :desc, id: :desc).limit(@limit).pluck(:id)
-          released = ::Books::PublisherListing.where(id: ids).update_all(state: ::Books::PublisherListing.states[:pending],
+          released = ::Books::PublisherListing.where(id: ids, state: :baseline).update_all(state: ::Books::PublisherListing.states[:pending],
             updated_at: Time.current)
           result(released)
         end

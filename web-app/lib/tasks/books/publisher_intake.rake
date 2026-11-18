@@ -43,8 +43,11 @@ namespace :books do
       abort "unknown source #{args[:source].inspect}; registered: #{Books::PublisherIntake::Sources.registry.keys.join(", ")}" if strategy.nil?
       abort "usage: books:publisher_intake:rehearse[source,limit,max_discovery_requests]" unless args[:limit].to_i.positive?
 
+      max = args[:max_discovery_requests].presence
+      abort "usage: books:publisher_intake:rehearse[source,limit,max_discovery_requests] (max a positive integer)" if max && !Integer(max, exception: false)&.positive?
+
       result = Services::Books::PublisherIntake::Rehearse.call(source: strategy, limit: args[:limit].to_i,
-        max_discovery_requests: args[:max_discovery_requests].presence)
+        max_discovery_requests: max && Integer(max))
       abort result.errors.join(", ") unless result.success?
     end
 
