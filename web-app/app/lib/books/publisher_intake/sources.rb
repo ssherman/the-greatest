@@ -4,7 +4,9 @@ module Books
   module PublisherIntake
     # The registry of publisher strategies, by key.
     module Sources
-      REGISTRY = {}.freeze
+      REGISTRY = {
+        "hachette_us" => Sources::HachetteUs
+      }.freeze
 
       def self.registry = REGISTRY
 

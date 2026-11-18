@@ -1,0 +1,57 @@
+[
+  {
+    "id": 2564870,
+    "date": "2026-11-16T03:20:20",
+    "modified": "2026-11-16T03:20:20",
+    "link": "https://www.hachettebookgroup.com/titles/fawn-weaver/blink-last/9781538792346/",
+    "meta": {
+      "release_date": "2027-07-20",
+      "format": "ED",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 2217174,
+    "date": "2026-11-17T03:03:52",
+    "modified": "2026-11-17T03:03:52",
+    "link": "https://www.hachettebookgroup.com/titles/nicole-r-fleetwood/between-the-river-and-the-railroad-tracks/9780316612593/",
+    "meta": {
+      "release_date": "2026-11-17",
+      "format": "BC",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 6383,
+    "date": "2026-11-16T03:19:00",
+    "modified": "2026-11-16T03:19:00",
+    "link": "https://www.hachettebookgroup.com/titles/james-s-a-corey/leviathan-wakes/9780316129084/",
+    "meta": {
+      "release_date": "2011-06-15",
+      "format": "BC",
+      "is_primary_isbn": true
+    }
+  },
+  {
+    "id": 900001,
+    "date": "2026-11-16T03:19:10",
+    "modified": "2026-11-16T03:19:10",
+    "link": "https://www.hachettebookgroup.com/titles/example-author/no-release-date/9780316000024/",
+    "meta": {
+      "release_date": "",
+      "format": "BC",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 900002,
+    "date": "2026-11-16T03:19:20",
+    "modified": "2026-11-16T03:19:20",
+    "link": "https://www.hachettebookgroup.com/titles/mara-quill/goodnight-little-fox/9780316000017/",
+    "meta": {
+      "release_date": "2026-12-01",
+      "format": "BH",
+      "is_primary_isbn": true
+    }
+  }
+]

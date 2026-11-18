@@ -1,0 +1,57 @@
+[
+  {
+    "id": 3915,
+    "date": "2026-11-17T03:22:03",
+    "modified": "2026-11-17T03:22:03",
+    "link": "https://www.hachettebookgroup.com/titles/andrzej-sapkowski/the-last-wish/9781668666289/",
+    "meta": {
+      "release_date": "2027-07-27",
+      "format": "AJ",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 2591770,
+    "date": "2026-11-17T03:22:07",
+    "modified": "2026-11-17T03:22:07",
+    "link": "https://www.hachettebookgroup.com/titles/running-press/harry-potter-mini-levitating-nimbus-2000/9798894145822/",
+    "meta": {
+      "release_date": "2029-01-02",
+      "format": "BC",
+      "is_primary_isbn": true
+    }
+  },
+  {
+    "id": 900003,
+    "date": "2026-11-16T03:19:30",
+    "modified": "2026-11-16T03:19:30",
+    "link": "https://www.hachettebookgroup.com/titles/example-author/bad-date/9780316000031/",
+    "meta": {
+      "release_date": "to be announced",
+      "format": "BC",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 900004,
+    "date": "2026-11-16T03:19:40",
+    "modified": "2026-11-16T03:19:40",
+    "link": "https://www.hachettebookgroup.com/titles/example-author/no-isbn-in-link/",
+    "meta": {
+      "release_date": "2026-12-01",
+      "format": "BC",
+      "is_primary_isbn": false
+    }
+  },
+  {
+    "id": 2564353,
+    "date": "2026-11-16T03:20:20",
+    "modified": "2026-11-16T03:20:20",
+    "link": "https://www.hachettebookgroup.com/titles/guy-bass/the-worst-thing-that-could-possibly-happen/9781454977902/",
+    "meta": {
+      "release_date": "2027-07-20",
+      "format": "ED",
+      "is_primary_isbn": false
+    }
+  }
+]
