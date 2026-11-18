@@ -452,9 +452,9 @@ the same branch or a branch cut from it.
   - `data: {item:}`.
 
 - [ ] **Step 1: Failing tests**
-  - "restores a removed book to its old position and date". Remove the item at position 2 of
-    `regular_user_books_read` with `RemoveItems`, restore it, and expect position 2 and the same
-    `completed_on`.
+  - "restores a removed book to its old position and date". Give the item at position 2 of
+    `regular_user_books_read` a `completed_on` (add items in the test if the list has fewer than 3).
+    Remove it with `RemoveItems`, restore it, and expect position 2 and the same `completed_on`.
   - "fails without a duplicate when the item is already on the list".
   - "clamps a position past the end".
   - "sets manually_ordered only if the move was real" (follows MoveItem).
