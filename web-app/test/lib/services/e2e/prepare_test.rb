@@ -94,6 +94,35 @@ module Services
         assert_equal @user, public_list.user
       end
 
+      test "recreates the edit list with every item in position order and leaves a bystander's same-named list alone" do
+        bystander_list = ::Books::UserList.create!(user: @bystander, name: Prepare::EDIT_LIST_NAME, list_type: :custom)
+        bystander_list.user_list_items.create!(listable: books_books(:war_and_peace))
+        old = ::Books::UserList.create!(user: @user, name: Prepare::EDIT_LIST_NAME, list_type: :custom)
+        old.user_list_items.create!(listable: books_books(:war_and_peace))
+
+        result = prepare
+        assert result.success?, result.errors.inspect
+
+        edit_list = ::Books::UserList.find(result.data[:lists][:edit_books])
+        assert_not ::Books::UserList.exists?(old.id)
+        assert_equal [@user, Prepare::EDIT_LIST_NAME, false], [edit_list.user, edit_list.name, edit_list.manually_ordered]
+        positions = edit_list.user_list_items.order(:position).pluck(:position)
+        assert_operator positions.size, :>=, 3
+        assert_equal (1..positions.size).to_a, positions
+        assert ::Books::UserList.exists?(bystander_list.id)
+        assert_equal 1, bystander_list.reload.user_list_items.count
+      end
+
+      test "removes lists the dashboard E2E created" do
+        created = ::Books::UserList.create!(user: @user, name: "#{Prepare::CREATED_LIST_PREFIX}123", list_type: :custom)
+        kept = ::Books::UserList.create!(user: @user, name: "Reading club", list_type: :custom)
+
+        prepare
+
+        assert_not ::Books::UserList.exists?(created.id)
+        assert ::Books::UserList.exists?(kept.id)
+      end
+
       test "empties the account's default lists but leaves other users' lists alone" do
         stray = ::Books::UserList.find_by!(user: @user, list_type: :read)
         stray.user_list_items.create!(listable: books_books(:war_and_peace))

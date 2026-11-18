@@ -9,7 +9,8 @@
         data-user-list-completion-target="title">Edit completion date</h2>
 
     <%= form_with url: "#", scope: :user_list_item, method: :patch,
-          data: {user_list_completion_target: "form"} do |form| %>
+          data: {user_list_completion_target: "form", action: "turbo:submit-end->user-list-completion#submitted"} do |form| %>
+      <%= hidden_field_tag :variant, "table", data: {user_list_completion_target: "variant"} %>
       <label class="mt-4 block" for="completion-date-input">
         Completion date
       </label>

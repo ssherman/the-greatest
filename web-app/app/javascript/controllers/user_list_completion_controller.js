@@ -4,15 +4,18 @@ import { Controller } from "@hotwired/stimulus"
 // The trigger provides only the item id plus its display values; the form action
 // and editable date are populated immediately before native dialog opens.
 export default class extends Controller {
-  static targets = ["dialog", "form", "title", "date"]
+  static targets = ["dialog", "form", "title", "date", "variant"]
 
   open(event) {
     this.opener = event.currentTarget
+    this.itemId = this.opener.dataset.itemId
+    this.variant = this.opener.dataset.variant
     const { itemId, itemTitle, completedOn } = this.opener.dataset
 
     this.formTarget.action = `/user_list_items/${itemId}/completion`
     this.titleTarget.textContent = `Edit completion date for ${itemTitle}`
     this.dateTarget.value = completedOn || ""
+    this.variantTarget.value = this.opener.dataset.variant || "table"
     this.dialogTarget.showModal()
     this.dateTarget.focus()
   }
@@ -22,11 +25,31 @@ export default class extends Controller {
     this.formTarget.requestSubmit()
   }
 
+  // The Turbo Stream response has already updated the page; just close.
+  submitted(event) {
+    if (!event.detail.success) return
+    // Every opener of this item must offer the saved value, not the one it had on load.
+    this.element.querySelectorAll(`[data-action~="user-list-completion#open"][data-item-id="${this.itemId}"]`)
+      .forEach((opener) => { opener.dataset.completedOn = this.dateTarget.value })
+    this.dialogTarget.close()
+  }
+
   cancel() {
     this.dialogTarget.close()
   }
 
   restoreFocus() {
-    this.opener?.focus()
+    let opener = this.opener
+    // The stream may have replaced the opener (table cell); find its successor.
+    if (opener && !opener.isConnected) {
+      opener = this.element.querySelector(
+        `[data-action~="user-list-completion#open"][data-item-id="${this.itemId}"][data-variant="${this.variant}"]`
+      )
+    }
+    if (!opener) return
+    // Refocusing a button inside the daisyUI menu would pop it open again.
+    const dropdown = opener.closest(".dropdown")
+    if (dropdown) dropdown.closest("[data-item-id]")?.focus()
+    else opener.focus()
   }
 }

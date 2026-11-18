@@ -21,6 +21,21 @@ module Services
       new(domain: domain, queue: queue).call
     end
 
+    # The copy prompt for one enrichment queue type, rendered from
+    # config/mcp/<domain>/prompts/enrichment/<slug>.md.erb. The type's own
+    # prompt_locals carry what the file shares with the paid task (its rules).
+    # Nil when the type has no prompt file.
+    def self.for_enrichment(type)
+      file = Rails.root.join("config", "mcp", type.domain, "prompts", "enrichment", "#{type.slug}.md.erb")
+      return unless file.exist?
+
+      locals = {mcp_url: mcp_url, type: type.slug, label: type.label,
+                pending: ::EnrichmentRequest.for_kind(type.kind).pending.count}
+      ERB.new(file.read).result_with_hash(locals.merge(type.prompt_locals))
+    end
+
+    def self.mcp_url = "#{::Api::Host.base_url}/api/mcp/admin"
+
     def initialize(domain:, queue:)
       raise ArgumentError, "unknown queue #{queue.inspect}" unless QUEUES.include?(queue.to_sym)
 
@@ -32,7 +47,7 @@ module Services
       return unless file.exist?
 
       ERB.new(file.read).result_with_hash(
-        {mcp_url: "#{::Api::Host.base_url}/api/mcp/admin"}.merge(counts)
+        {mcp_url: self.class.mcp_url}.merge(counts)
       )
     end
 

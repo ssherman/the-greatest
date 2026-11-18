@@ -1,0 +1,41 @@
+<dialog id="new-list-dialog" class="modal" data-controller="new-list-dialog">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-4">New list</h3>
+
+    <%= form_with url: my_lists_path, method: :post, scope: :user_list, class: "flex flex-col gap-3", data: {new_list_dialog_target: "form"} do |f| %>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Name</legend>
+        <%= f.text_field :name, required: true, maxlength: Services::UserLists::ListRules::NAME_MAX, class: "input w-full", aria: {label: "Name"}, autocomplete: "off" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Description (optional)</legend>
+        <%= f.text_area :description, maxlength: Services::UserLists::ListRules::DESCRIPTION_MAX, rows: 3, class: "textarea w-full", aria: {label: "Description (optional)"} %>
+      </fieldset>
+
+      <% if types.size > 1 %>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">List of</legend>
+          <%= f.select :type, types.map { |klass| [klass.listable_class.model_name.human.pluralize, klass.name] }, {}, class: "select w-full", aria: {label: "List of"} %>
+        </fieldset>
+      <% else %>
+        <%= f.hidden_field :type, value: types.first&.name %>
+      <% end %>
+
+      <label class="label cursor-pointer justify-start gap-2">
+        <%= f.check_box :public, class: "checkbox" %>
+        <span>Make this list public</span>
+      </label>
+
+      <p id="new-list-errors" class="text-error text-sm" role="alert" data-new-list-dialog-target="errors"></p>
+
+      <div class="modal-action mt-0">
+        <button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create list</button>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

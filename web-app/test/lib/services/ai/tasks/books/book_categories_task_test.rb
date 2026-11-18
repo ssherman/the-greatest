@@ -44,6 +44,17 @@ module Services
             BookCategoriesTask.new(parent: @book, dossier: dossier, vocabulary: [@fiction, @novels, @childrens], mode: mode)
           end
 
+          # Pinned when RULES was extracted (2026-11-17): the wording must not change without a PROMPT_VERSION bump.
+          # The vocabulary ids are replaced first: the created audience's id differs on every run.
+          test "the system message sent to the model is byte-for-byte what it was" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = BookCategoriesTask.new(parent: @book, dossier: build_dossier, vocabulary: [@fiction, @novels, @childrens],
+              provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content").gsub(/^\d+: /, "ID: ")
+            assert_equal "9f9d7b555954065c89e496613502d16aafd418cb662ab546873962c9ab782684", Digest::SHA256.hexdigest(message)
+          end
+
           test "the system message lists vocabulary ids with descriptions and leaves out Fiction" do
             message = task.send(:system_message)
             assert_includes message, "#{@novels.id}: Novels — Long prose narratives"

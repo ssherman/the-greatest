@@ -11,12 +11,19 @@ module Services
       class Judge
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        KIND = "books.categories"
+        KIND = RecordAnswer::KIND
         VOCABULARY_TYPES = %w[genre audience].freeze
 
         def self.call(book:, context:, label: nil, research_allowed: true, force_research: false)
           new(book: book, context: context, label: label, research_allowed: research_allowed,
             force_research: force_research).call
+        end
+
+        # The genres and audiences a judgment may choose from: active, and never
+        # the book type (Fiction, Nonfiction), which is answered separately.
+        def self.vocabulary
+          ::Books::Category.active.where(category_type: VOCABULARY_TYPES)
+            .where.not(name: ::Books::Book::BOOK_TYPE_CATEGORY_NAMES).order(:category_type, :name).to_a
         end
 
         def initialize(book:, context:, label:, research_allowed:, force_research:)
@@ -44,8 +51,7 @@ module Services
           # Read before any row is written: judge writes one.
           @owes_research = previously_deferred?
           @dossier = Categorize::Dossier.build(book: book)
-          @vocabulary = ::Books::Category.active.where(category_type: VOCABULARY_TYPES)
-            .where.not(name: ::Books::Book::BOOK_TYPE_CATEGORY_NAMES).order(:category_type, :name).to_a
+          @vocabulary = self.class.vocabulary
           judge
           result
         end
@@ -107,68 +113,19 @@ module Services
         # Returns [row, needs_research].
         def run(mode)
           chat = nil
-          committed = {}
           task_result = Services::Ai::Tasks::Books::BookCategoriesTask.new(parent: book, dossier: dossier,
             vocabulary: vocabulary, mode: mode).call
           chat = task_result.ai_chat
           return [failed_row(mode, task_result, task_result.error), false] unless task_result.success?
 
-          answer = normalize_confidences((task_result.data[:facts] || {}).to_h.deep_symbolize_keys)
-          return [failed_row(mode, task_result, "empty response"), false] if answer.empty?
-
-          recognized = answer[:recognized]
-          unrecognized = recognized == false && !dossier.external? && !dossier.research_backed?
-          facts = base_facts("judge").merge("answer" => answer.deep_stringify_keys)
-          attributes = row_attributes(mode, chat).merge(recognized: recognized, confidence: confidence_for(answer[:confidence]),
-            citations: Array(task_result.data[:citations]))
-
-          if unrecognized
-            attributes.merge!(outcome: :unrecognized, reason: "unrecognized", facts: facts)
-          else
-            mapped = Mapper.call(book: book, answer: answer, vocabulary: vocabulary)
-            unless mapped.success?
-              return [book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed,
-                error: Array(mapped.errors).join("; "), facts: facts)), false]
-            end
-
-            # Built before Apply and kept for the rescue below: once Apply has committed removals the
-            # failed row must still carry them, or restore_removals cannot find them.
-            committed["mapping"] = mapping_facts(mapped.data)
-            applied = Apply.call(book: book, dossier: dossier, answer: answer, resolved: mapped.data[:resolved],
-              rejudge: context != "import", unmatched: mapped.data[:unmatched])
-            committed["apply"] = applied.data.deep_stringify_keys
-            changed = applied.data.values_at(:added, :confirmed, :removed).any?(&:present?) || applied.data.dig(:type, :applied) == true
-            attributes.merge!(outcome: changed ? :applied : :nothing_to_apply, reason: changed ? "applied" : "nothing_applied",
-              facts: facts.merge(committed).merge(
-                "choice_chat_id" => mapped.data[:ai_chat]&.id,
-                "parent_choice_chat_id" => mapped.data[:parent_ai_chat]&.id
-              ))
-          end
-          [book.enrichments.create!(attributes), mode == :knowledge && unrecognized]
+          answer = (task_result.data[:facts] || {}).to_h.deep_symbolize_keys
+          row = RecordAnswer.call(book: book, dossier: dossier, answer: answer, vocabulary: vocabulary, mode: mode,
+            context: context, label: label, rejudge: context != "import",
+            citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model)
+          [row, mode == :knowledge && row.unrecognized?]
         rescue => e
           [book.enrichments.create!(row_attributes(mode, chat).merge(outcome: :failed, error: e.message,
-            facts: base_facts("judge").merge(committed))), false]
-        end
-
-        # Confidence values are compared as lowercase strings downstream.
-        def normalize_confidences(answer)
-          clean = ->(value) { value.is_a?(String) ? value.strip.downcase : value }
-          answer = answer.merge(confidence: clean.call(answer[:confidence]))
-          answer[:book_type] = answer[:book_type].merge(confidence: clean.call(answer[:book_type][:confidence])) if answer[:book_type].is_a?(Hash)
-          answer[:audience] = answer[:audience].merge(confidence: clean.call(answer[:audience][:confidence])) if answer[:audience].is_a?(Hash)
-          %i[genres subjects locations].each do |key|
-            next unless answer[key].is_a?(Array)
-
-            answer[key] = answer[key].map { |entry| entry.is_a?(Hash) ? entry.merge(confidence: clean.call(entry[:confidence])) : entry }
-          end
-          answer
-        end
-
-        def mapping_facts(data)
-          {"resolved" => data[:resolved].map { |entry|
-            {"id" => entry[:category].id, "name" => entry[:category].name, "type" => entry[:type], "via" => entry[:via],
-             "confidence" => entry[:confidence], "originals" => Array(entry[:originals])}
-          }, "unmatched" => data[:unmatched].map(&:deep_stringify_keys)}
+            facts: base_facts("judge"))), false]
         end
 
         def failed_row(mode, task_result, error)
@@ -185,14 +142,7 @@ module Services
         end
 
         def base_facts(path)
-          {"prompt_version" => Services::Ai::Tasks::Books::BookCategoriesTask::PROMPT_VERSION, "context" => context,
-           "label" => label, "path" => path, "dossier" => dossier&.to_ledger, "answer" => nil, "mapping" => nil,
-           "apply" => nil, "choice_chat_id" => nil, "parent_choice_chat_id" => nil, "deferred_research" => false}
-        end
-
-        def confidence_for(value)
-          normalized = value.to_s.strip.downcase
-          Enrichment.confidences.key?(normalized) ? normalized : nil
+          RecordAnswer.base_facts(context: context, label: label, dossier: dossier, path: path)
         end
 
         def result

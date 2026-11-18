@@ -80,6 +80,8 @@ class User < ApplicationRecord
   has_many :granted_memberships, class_name: "Membership", foreign_key: :granted_by_id, dependent: :nullify
   has_many :reviewed_match_decisions, class_name: "MatchDecision", foreign_key: :reviewed_by_id, dependent: :nullify
   has_many :resolved_duplicate_candidates, class_name: "DuplicateCandidate", foreign_key: :resolved_by_id, dependent: :nullify
+  has_many :claimed_enrichment_requests, class_name: "EnrichmentRequest", foreign_key: :claimed_by_id, dependent: :nullify
+  has_many :resolved_enrichment_requests, class_name: "EnrichmentRequest", foreign_key: :resolved_by_id, dependent: :nullify
   has_many :news_posts, dependent: :destroy
   has_many :decided_alternate_titles, class_name: "::AlternateTitle", foreign_key: :decided_by_user_id, dependent: :nullify
 

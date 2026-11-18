@@ -164,10 +164,8 @@ class UserListTest < ActiveSupport::TestCase
     assert list.reload.grid_view?
   end
 
-  test "list_view is still reachable and maps to zero" do
-    @list.update!(view_mode: :list_view)
-    assert @list.reload.list_view?
-    assert_equal 0, @list.reload.view_mode_before_type_cast
+  test "view_mode offers only grid_view and table_view" do
+    assert_equal %w[table_view grid_view], UserList.view_modes.keys
   end
 
   test "VIEW_MODE_LABELS covers exactly the enum's members" do
@@ -295,5 +293,30 @@ class UserListTest < ActiveSupport::TestCase
 
     assert_includes visible, @custom_list
     assert_not_includes visible, user_lists(:regular_user_games_favorites)
+  end
+
+  test "completion_label names the completed state per domain" do
+    assert_equal "Finished", user_lists(:regular_user_books_read).completion_label
+    assert_equal "Listened", user_lists(:regular_user_music_albums_listened).completion_label
+  end
+
+  test "completion_label reads Played and Beaten for games lists" do
+    assert_equal "Played", Games::UserList.new(list_type: :played).completion_label
+    assert_equal "Beaten", Games::UserList.new(list_type: :beaten).completion_label
+  end
+
+  test "completion_label falls back to Completed" do
+    assert_equal "Completed", user_lists(:regular_user_books_favorites).completion_label
+  end
+
+  test "counts_toward_rankings? is true only for favorites of a generating subclass" do
+    assert user_lists(:regular_user_books_favorites).counts_toward_rankings?
+    assert_not user_lists(:regular_user_movies_favorites).counts_toward_rankings?
+    assert_not user_lists(:regular_user_custom_albums).counts_toward_rankings?
+  end
+
+  test "listable_noun is the lowercase plural of the listable" do
+    assert_equal "songs", user_lists(:regular_user_music_songs_favorites).listable_noun
+    assert_equal "books", user_lists(:regular_user_books_favorites).listable_noun
   end
 end

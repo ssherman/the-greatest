@@ -4,6 +4,7 @@ class UserListPolicyTest < ActiveSupport::TestCase
   setup do
     @user = users(:regular_user)
     @list = user_lists(:regular_user_music_albums_favorites)
+    @custom = user_lists(:regular_user_custom_albums)
   end
 
   test "create? requires a signed-in user" do
@@ -64,7 +65,7 @@ class UserListPolicyTest < ActiveSupport::TestCase
 
   test "update? and destroy? allow the owner" do
     assert UserListPolicy.new(@user, @list).update?
-    assert UserListPolicy.new(@user, @list).destroy?
+    assert UserListPolicy.new(@user, @custom).destroy?
   end
 
   test "update? and edit? refuse a global admin or editor who does not own the list" do
@@ -76,7 +77,13 @@ class UserListPolicyTest < ActiveSupport::TestCase
 
   # Decided 2026-10-01 (Shane): an admin can delete anything, a user list included.
   test "destroy? allows a global admin on a list they do not own" do
-    assert UserListPolicy.new(users(:admin_user), @list).destroy?
+    assert UserListPolicy.new(users(:admin_user), @custom).destroy?
+  end
+
+  test "destroy? refuses a default list, even for a global admin" do
+    default_list = user_lists(:regular_user_books_read)
+    refute UserListPolicy.new(default_list.user, default_list).destroy?
+    refute UserListPolicy.new(users(:admin_user), default_list).destroy?
   end
 
   test "destroy? refuses a global editor who does not own the list" do

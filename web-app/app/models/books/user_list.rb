@@ -56,6 +56,10 @@ module Books
       [:read]
     end
 
+    def self.completion_labels
+      {read: "Finished"}
+    end
+
     def self.completion_transition_sources
       {read: [:reading]}
     end
@@ -65,7 +69,7 @@ module Books
     end
 
     def self.listable_display_includes
-      [{book_authors: :author}, :categories, :primary_image, :descriptions]
+      [{book_authors: :author}, :categories, {primary_image: {file_attachment: :blob}}]
     end
 
     def self.catalog_items(scope)

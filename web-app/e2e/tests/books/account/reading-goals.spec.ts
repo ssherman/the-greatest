@@ -31,6 +31,16 @@ function longDate(value: string): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
+// The Table view's quiet format, e.g. "Mar 3, 2026".
+function shortDate(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
 const today = isoDate(0);
 const inRangeDate = isoDate(-1);
 const outOfRangeDate = isoDate(-2);
@@ -69,6 +79,9 @@ async function setListMembership(
 ): Promise<void> {
   const checkbox = dialog.getByRole('checkbox', { name: listName, exact: true });
   await expect(checkbox).toBeVisible();
+  // The dialog opens unchecked until the saved membership state arrives; unticking
+  // before then is a silent no-op, so wait for the saved tick first.
+  if (!checked) await expect(checkbox).toBeChecked();
   await checkbox.setChecked(checked);
   await expect(checkbox).toBeEnabled();
   await expect(page.getByRole('status').filter({ hasText: expectedMessage })).toBeVisible();
@@ -80,10 +93,18 @@ async function visitReadList(page: Page): Promise<void> {
   const dashboard = page.getByTestId('my-lists-dashboard');
   await dashboard.getByTestId('user-list-card').filter({ hasText: READ_LIST }).click();
   await expect(page.getByRole('heading', { name: READ_LIST, level: 1 })).toBeVisible();
+  // The grid has no date control; the finished-date editor lives in the Table view.
+  await page.getByTestId('list-toolbar').getByRole('link', { name: 'Table', exact: true }).click();
+  await expect(page).toHaveURL(/view_mode=table_view/);
+}
+
+function completionTrigger(page: Page, title: string): Locator {
+  return page.getByRole('button', { name: new RegExp(`^Finished date for ${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: `) });
 }
 
 async function completionDialog(page: Page, title: string): Promise<{ dialog: Locator; trigger: Locator; input: Locator }> {
-  const trigger = page.getByRole('button', { name: `Edit completion date for ${title}`, exact: true });
+  const trigger = completionTrigger(page, title);
+  await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
 
   const dialog = page.getByRole('dialog', { name: `Edit completion date for ${title}` });
@@ -93,10 +114,12 @@ async function completionDialog(page: Page, title: string): Promise<{ dialog: Lo
   return { dialog, trigger, input };
 }
 
-// The form is submitted as a POST carrying _method=patch (Rack::MethodOverride
-// turns it into a PATCH server-side), so the browser-level request is a POST.
+// The form is a Turbo form answered by a Turbo Stream (POST carrying _method=patch),
+// so saving must not navigate, reload or scroll: only the date cell and a toast change.
 async function submitCompletionDate(page: Page, title: string, completedOn: string | null): Promise<void> {
   const { dialog, input } = await completionDialog(page, title);
+  const urlBefore = page.url();
+  const scrollBefore = await page.evaluate(() => window.scrollY);
   const response = page.waitForResponse(
     (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
   );
@@ -108,9 +131,17 @@ async function submitCompletionDate(page: Page, title: string, completedOn: stri
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   }
 
-  expect((await response).status()).toBe(303);
-  await expect(page.getByRole('heading', { name: READ_LIST, level: 1 })).toBeVisible();
+  expect((await response).status()).toBe(200);
   await expect(dialog).not.toBeVisible();
+  await expect(completionTrigger(page, title)).toHaveText(completedOn === null ? 'Add date' : shortDate(completedOn));
+  expect(page.url()).toBe(urlBefore);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+  // The replaced cell must still be a working trigger.
+  const reopened = await completionDialog(page, title);
+  await expect(reopened.input).toHaveValue(completedOn ?? '');
+  await page.keyboard.press('Escape');
+  await expect(reopened.dialog).not.toBeVisible();
 }
 
 async function expectGoalProjection(
@@ -270,7 +301,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
       (candidate) => candidate.request().method() === 'POST' && candidate.url().includes('/completion'),
     );
     await completion.dialog.getByRole('button', { name: 'Save', exact: true }).click();
-    expect((await completionResponse).status()).toBe(303);
+    expect((await completionResponse).status()).toBe(200);
     await expectGoalProjection(page, baselineCount + 1, SECOND_BOOK.title, inRangeDate);
 
     await page.goto('/my/reading-goals/new');
@@ -345,6 +376,9 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await deleteGoal(page, publicGoalName);
     await deleteGoal(page, privateGoalName);
 
+    // This test's browser context starts from the sign-in snapshot of the list state, which
+    // predates the Read-list add above. Drop the cached state so the dialog loads the saved one.
+    await page.evaluate(() => localStorage.clear());
     const cleanupDialog = await openListDialog(page, SECOND_BOOK);
     await setListMembership(page, cleanupDialog, READ_LIST, false, `Removed from ${READ_LIST}`);
     await page.keyboard.press('Escape');

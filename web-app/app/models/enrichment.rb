@@ -52,7 +52,9 @@ class Enrichment < ApplicationRecord
   # Rows written while a workflow step runs link to it, whichever provider wrote them.
   before_create { self.workflow_step_id ||= Current.workflow_step_id }
 
-  enum :mode, {knowledge: 0, research: 1, sourced: 2}
+  enum :mode, {knowledge: 0, research: 1, sourced: 2, agent: 3}
+  # Answers "was this researched on the web?", not "did we pay for a search?" (that is the research scope and the caps).
+  WEB_VERIFIED_MODES = %w[research agent].freeze
   enum :outcome, {applied: 0, nothing_to_apply: 1, unrecognized: 2, skipped: 3, failed: 4}
   enum :confidence, {high: 0, medium: 1, low: 2}, prefix: true
 

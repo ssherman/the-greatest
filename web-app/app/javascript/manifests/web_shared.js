@@ -23,6 +23,8 @@ application.register("contact--form", Contact__FormController)
 
 import CsvExportController from "../controllers/csv_export_controller"
 application.register("csv-export", CsvExportController)
+import NewListDialogController from "../controllers/new_list_dialog_controller"
+application.register("new-list-dialog", NewListDialogController)
 
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
@@ -60,11 +62,17 @@ application.register("corrections--form", Shared__FormTokenController)
 import ToastController from "../controllers/toast_controller"
 application.register("toast", ToastController)
 
+import ToastItemController from "../controllers/toast_item_controller"
+application.register("toast-item", ToastItemController)
+
 import UserListAddItemController from "../controllers/user_list_add_item_controller"
 application.register("user-list-add-item", UserListAddItemController)
 
 import UserListCompletionController from "../controllers/user_list_completion_controller"
 application.register("user-list-completion", UserListCompletionController)
+
+import UserListEditController from "../controllers/user_list_edit_controller"
+application.register("user-list-edit", UserListEditController)
 
 import UserListModalController from "../controllers/user_list_modal_controller"
 application.register("user-list-modal", UserListModalController)

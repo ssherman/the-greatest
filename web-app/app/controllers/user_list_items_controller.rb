@@ -3,8 +3,16 @@ class UserListItemsController < ApplicationController
   include JsonErrorResponses
 
   before_action :prevent_caching
-  before_action :require_signed_in!
+  before_action :require_signed_in_as_stream!, if: -> { request.format.turbo_stream? }
+  before_action :require_signed_in!, unless: -> { request.format.turbo_stream? }
   before_action :load_user_list, only: [:create, :destroy]
+
+  # The completion dialog is a Turbo form, so every non-2xx answer to a
+  # turbo_stream request is a toast stream (an HTML or JSON body would leave the
+  # dialog open with no feedback). JSON callers keep JsonErrorResponses' shapes.
+  rescue_from Pundit::NotAuthorizedError, with: :stream_forbidden
+  rescue_from ActiveRecord::RecordNotFound, with: :stream_not_found
+  rescue_from ActionController::InvalidAuthenticityToken, with: :stream_invalid_token
 
   # POST /user_lists/:user_list_id/items
   def create
@@ -55,12 +63,24 @@ class UserListItemsController < ApplicationController
       Services::UserLists::UpdateCompletion.call(item: item, completed_on: completion_attrs[:completed_on])
     end
     unless result.success?
+      return render_completion_failure(result) if request.format.turbo_stream?
+
       redirect_to my_list_path(item.user_list), alert: result.errors.to_sentence, status: :see_other
       return
     end
 
     mark_user_state_changed
-    redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
+    if request.format.turbo_stream?
+      render turbo_stream: [
+        turbo_stream.replace(
+          helpers.dom_id(item, :completion),
+          UserLists::CompletionDateComponent.new(item: result.data[:item], variant: params[:variant] || "table", editable: true)
+        ),
+        turbo_stream.append("toast-region", Toast::MessageComponent.new(message: completion_message(result)))
+      ]
+    else
+      redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
+    end
   end
 
   private
@@ -118,6 +138,41 @@ class UserListItemsController < ApplicationController
     else
       "Added to #{item.user_list.name}"
     end
+  end
+
+  def render_completion_failure(result)
+    render_error_toast(result.errors.to_sentence, :unprocessable_entity)
+  end
+
+  def render_error_toast(message, status)
+    toast = Toast::MessageComponent.new(message: message, type: :error)
+    render turbo_stream: turbo_stream.append("toast-region", toast), status: status
+  end
+
+  def require_signed_in_as_stream!
+    return if current_user
+
+    render_error_toast("Sign in again to continue", :unauthorized)
+  end
+
+  def stream_forbidden(exception)
+    return render_forbidden unless request.format.turbo_stream?
+
+    render_error_toast("You can't change that item", :forbidden)
+  end
+
+  def stream_not_found(exception)
+    return render_not_found unless request.format.turbo_stream?
+
+    render_error_toast("That item is no longer in this list. Reload the page", :not_found)
+  end
+
+  def stream_invalid_token(exception)
+    unless request.format.turbo_stream?
+      return render json: error_body(:forbidden, "Invalid or missing CSRF token"), status: :forbidden
+    end
+
+    render_error_toast("Your session expired. Reload the page and try again", :unprocessable_entity)
   end
 
   def completion_message(result)
