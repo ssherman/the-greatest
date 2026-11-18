@@ -88,6 +88,26 @@ module Books
             discover("index", index).requests.map(&:url)
         end
 
+        test "the previous year's file is followed while the lookback window still reaches into it" do
+          index = <<~XML
+            <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <sitemap><loc>#{SITE}/sitemap-works-2025.xml</loc></sitemap>
+              <sitemap><loc>#{SITE}/sitemap-works-2026.xml</loc></sitemap>
+              <sitemap><loc>#{SITE}/sitemap-works-2027.xml</loc></sitemap>
+            </sitemapindex>
+          XML
+
+          # 2027-01-10: the 30-day lookback starts on 2026-12-11, so a December title is still wanted.
+          travel_to Time.utc(2027, 1, 10, 12)
+          assert_equal %w[2026 2027 2028].map { |year| "#{SITE}/sitemap-works-#{year}.xml" },
+            discover("index", index).requests.map(&:url)
+
+          # 2027-02-15: the lookback starts on 2027-01-16, and the 2026 file holds nothing in the window.
+          travel_to Time.utc(2027, 2, 15, 12)
+          assert_equal %w[2027 2028].map { |year| "#{SITE}/sitemap-works-#{year}.xml" },
+            discover("index", index).requests.map(&:url)
+        end
+
         test "a works file that is not there yet is ok and empty; a 403 on it is still blocked" do
           missing = discover("works", "", status: 404)
           assert_equal [:ok, [], []], [missing.outcome, missing.listings, missing.requests]

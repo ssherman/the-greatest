@@ -110,8 +110,10 @@ everything in production goes through the fetcher regardless.
 
 ### Penguin Random House (US) — a dated sitemap
 
-- **Discover:** `https://www.penguinrandomhouse.com/sitemap-works-<YYYY>.xml` for the current
-  year and each later year the index (`/sitemap.xml`) lists. One `<url>` per work;
+- **Discover:** `https://www.penguinrandomhouse.com/sitemap-works-<YYYY>.xml` for each year
+  from the one the lookback window starts in (the previous year, during January) to the one the
+  horizon ends in, as the index (`/sitemap.xml`) lists them; next year's file is requested even
+  when the index does not list it. One `<url>` per work;
   `<lastmod>` is the work's front-list on-sale date, including future dates. The 2026 file is
   6,065,011 bytes with 24,713 works, about 17,200 of them dated in 2026; the 2027 file has
   7,507.

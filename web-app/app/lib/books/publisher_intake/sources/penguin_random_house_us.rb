@@ -102,17 +102,21 @@ module Books
           Reading.new(outcome: outcome, facts: facts, sibling_keys: sibling_keys)
         end
 
-        # The current year's file and each later year up to the horizon's. A
-        # file for an earlier year holds only back-catalog, which the lookback
-        # window excludes anyway. The index lists files only up to the current
-        # year, yet next year's file exists unlisted, so it is requested too
-        # when the horizon reaches it (a 404 for it is handled as empty).
+        # Each year's file from the year the lookback window starts in to the
+        # year the horizon ends in: in January the window still reaches back
+        # into December, so the previous year's file is read too. A file for an
+        # earlier year holds only back-catalog, which the window excludes
+        # anyway. The index lists files only up to the current year, yet next
+        # year's file exists unlisted, so it is requested too when the horizon
+        # reaches it (a 404 for it is handled as empty).
         def index_discovery(sitemap)
-          last_year = (Date.current + ::Books::PublisherIntake.settings.horizon_days).year
+          settings = ::Books::PublisherIntake.settings
+          first_year = (Date.current - settings.lookback_days).year
+          last_year = (Date.current + settings.horizon_days).year
           years = []
           requests = sitemap.entries.filter_map do |entry|
             year = entry.loc[WORKS_FILE, 1]&.to_i
-            next unless year&.between?(Date.current.year, last_year)
+            next unless year&.between?(first_year, last_year)
 
             years << year
             Request.file(entry.loc, context: {"step" => "works"})
