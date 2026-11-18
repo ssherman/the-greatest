@@ -5,8 +5,11 @@ require "test_helper"
 module Books
   module PublisherIntake
     module Sources
-      # The product pages and API pages are real, trimmed by FixtureTrimmer and
-      # by hand; the synthetic_* files say in a comment why they are made up.
+      # The product pages are real, trimmed by FixtureTrimmer and by hand; the
+      # synthetic_* pages say in a comment why they are made up. api_page_1.json
+      # and api_page_2.json are SYNTHETIC records in the real API's shape (ids
+      # 900001-900004 and example-author are invented; JSON cannot carry a
+      # comment); api_past_the_end.json is a real body.
       class HachetteUsTest < ActiveSupport::TestCase
         API = "https://www.hachettebookgroup.com/wp-json/wp/v2/hbg-title"
         FIELDS = "_fields=id,date,modified,link,meta"
@@ -58,8 +61,9 @@ module Books
           assert_equal "#{API}?per_page=100&page=1&after=#{CGI.escape("2025-09-18T12:00:00Z")}&#{FIELDS}", first.first.url
           assert_equal({"page" => 1, "filter" => "after=#{CGI.escape("2025-09-18T12:00:00Z")}"}, first.first.context)
 
-          later = @source.discovery_requests(since: Time.utc(2026, 11, 10, 3, 30))
-          filter = "modified_after=#{CGI.escape("2026-11-10T03:30:00Z")}"
+          # one day of margin before the last run's start
+          later = @source.discovery_requests(since: Time.utc(2026, 11, 10, 6, 20))
+          filter = "modified_after=#{CGI.escape("2026-11-09T06:20:00Z")}"
           assert_equal "#{API}?per_page=100&page=1&#{filter}&#{FIELDS}", later.first.url
           assert_equal({"page" => 1, "filter" => filter}, later.first.context)
         end
@@ -109,6 +113,21 @@ module Books
           assert_equal [:ok, :ok], [page_1.outcome, page_2.outcome]
           refute_includes page_1.listings.map(&:external_key), "9780316000024"
           refute_includes page_2.listings.map(&:external_key), "9780316000031"
+        end
+
+        test "a record that is not a hash, or whose meta is not a hash, is skipped and the rest of the page is kept" do
+          good = {"link" => "https://x/titles/a/b/9780316000024/", "modified" => "t", "meta" => {"release_date" => "2026-12-01"}}
+          body = JSON.generate([good, "junk", nil, good.merge("meta" => []), good.merge("link" => "https://x/titles/a/b/9780316000017/")])
+
+          result = @source.parse_discovery(request: api_request, response: api_response(body))
+
+          assert_equal [:ok, %w[9780316000024 9780316000017]], [result.outcome, result.listings.map(&:external_key)]
+        end
+
+        test "a link whose last path segment is not exactly an ISBN-13 yields no listing" do
+          body = JSON.generate([{"link" => "https://x/titles/a/b/129780316564861/", "modified" => "t", "meta" => {"release_date" => "2026-12-01"}}])
+
+          assert_empty @source.parse_discovery(request: api_request, response: api_response(body)).listings
         end
 
         test "a record whose link does not end in an ISBN-13 is skipped" do
@@ -207,10 +226,50 @@ module Books
 
           spanish = read("synthetic_spanish.html", "9780316000031")
           assert_equal "Spanish", spanish.facts[:language]
+          assert_equal "Trade Paperback (Spanish Edition)", spanish.facts[:formats].first[:format_label]
           assert_equal [:held, :non_english], Hold.call(spanish.facts)
 
           novel = read("novel_four_formats.html.gz", "9780316564861")
           assert_equal [:ready, nil], Hold.call(novel.facts)
+        end
+
+        test "a qualifier that is not a language edition leaves language nil" do
+          {"series_audiobook.html.gz" => "9781668666289", "box_set.html.gz" => "9781538789940",
+           "novel_four_formats.html.gz" => "9780316564861", "backlist_ebook.html.gz" => "9780316134675"}.each do |name, isbn|
+            assert_nil read(name, isbn).facts[:language], name
+          end
+          assert_includes read("series_audiobook.html.gz", "9781668666289").facts[:formats].first[:format_label], "(Unabridged)"
+          assert_includes read("box_set.html.gz", "9781538789940").facts[:formats].first[:format_label], "(Special Edition)"
+        end
+
+        test "an English Edition qualifier reads English and is ready; other edition words are not languages" do
+          html = fixture_text("synthetic_spanish.html")
+          {"(English Edition)" => "English", "(Large Print Edition)" => nil, "(Media Tie-In Edition)" => nil,
+           "(Spanish-language edition)" => "Spanish", "(Klingon Edition)" => nil}.each do |qualifier, language|
+            page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
+              html: html.gsub("(Spanish Edition)", qualifier), selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+            reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
+
+            assert_equal [qualifier, language], [qualifier, reading.facts[:language]]
+            assert_equal [:ready, nil], Hold.call(reading.facts) if language == "English"
+          end
+        end
+
+        test "format words: ebook in any case is an ebook, a notebook is not" do
+          html = fixture_text("synthetic_spanish.html")
+          {"ebook" => "ebook", "eBook" => "ebook", "E-book" => "ebook", "Notebook" => "other"}.each do |label, format|
+            page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
+              html: html.sub("Trade Paperback", label), selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+            reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
+
+            assert_equal format, reading.facts[:formats].first[:format], label
+          end
+        end
+
+        test "the site's placeholder cover is not a cover" do
+          assert_nil read("non_book_product.html.gz", "9798894145822").facts[:cover_url]
+          assert_nil read("series_audiobook.html.gz", "9781668666289").facts[:cover_url]
+          assert_match(/9780316564861\.jpg\z/, read("novel_four_formats.html.gz", "9780316564861").facts[:cover_url])
         end
 
         test "the real non-book product page reads as the site presents it" do

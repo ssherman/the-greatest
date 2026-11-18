@@ -15,7 +15,15 @@ module Books
         PAST_THE_END = "rest_post_invalid_page_number"
         FIRST_RUN_MONTHS = 14
         PUBLISHER = "Hachette Book Group"
-        ISBN_AT_END = %r{(\d{13})/?\z}
+        ISBN_AT_END = %r{/(\d{13})/?\z}
+
+        # A format label carries a qualifier such as "(Unabridged)" or "(Special
+        # Edition)". A language edition is assumed to read "(Spanish Edition)";
+        # that wording has not been seen on a real page yet.
+        LANGUAGES = %w[Spanish French German Italian Portuguese Dutch Chinese Japanese Korean Russian Arabic
+          Hebrew Polish Swedish Norwegian Danish Finnish Greek Turkish Hindi Vietnamese Thai Czech Hungarian
+          English].freeze
+        LANGUAGE_EDITION = /\((\p{L}+)(?:[- ]language)? edition\)/i
 
         # The API's `modified_after` filter is honoured: measured 2026-11-18,
         # `per_page=1` answered X-WP-Total 7140 with `modified_after` set to a
@@ -29,7 +37,7 @@ module Books
         # "Paperback" there. The format list's own label is the signal.
         FORMAT_WORDS = [
           [/board/i, "board_book"],
-          [/e-?book/i, "ebook"],
+          [/\be-?book\b/i, "ebook"],
           [/audio/i, "audiobook"],
           [/mass market/i, "mass_market"],
           [/hardcover|hardback/i, "hardcover"],
@@ -50,7 +58,10 @@ module Books
 
         def discovery_requests(since:)
           filter = if since
-            "#{MODIFIED_FILTER}=#{CGI.escape(since.utc.iso8601)}"
+            # A day of margin: records modified while the last run was still
+            # discovering, or shifted by a timezone difference, are not missed.
+            # Seeing a record twice is harmless.
+            "#{MODIFIED_FILTER}=#{CGI.escape((since - 1.day).utc.iso8601)}"
           else
             "#{ADDED_FILTER}=#{CGI.escape(FIRST_RUN_MONTHS.months.ago.utc.iso8601)}"
           end
@@ -67,7 +78,8 @@ module Books
           records = JSON.parse(body)
           return discovery(:unparseable) unless records.is_a?(Array)
 
-          listings = records.filter_map { |record| listing_from(record) }
+          # One malformed record must not lose the rest of the page.
+          listings = records.filter_map { |record| listing_from(record) if record.is_a?(Hash) && record["meta"].is_a?(Hash) }
           requests = []
           if records.size >= PER_PAGE
             requests << api_request(request.context["page"].to_i + 1, request.context["filter"])
@@ -145,22 +157,34 @@ module Books
             formats: formats,
             imprint_name: clean(node.dig("brand", "name")).presence,
             publisher_name: PUBLISHER,
-            language: details["Language"].presence,
+            language: language_from(formats, own_isbn),
             genres: Array(node["genre"]).map { |genre| clean(genre) }.reject { |genre| genre.blank? || genre == "Genres" },
             series_name: series_name(doc),
             series_position: nil,
             age_range: nil,
             description: clean(node["description"]).presence,
-            cover_url: Array(node["image"]).first.to_s.sub(/\?.*\z/, "").presence,
+            cover_url: cover_from(node),
             on_sale_on: released,
             source_key: own_isbn
           }
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
         end
 
+        def language_from(formats, own_isbn)
+          label = formats.find { |format| format[:isbn13] == own_isbn }&.dig(:format_label)
+          word = label.to_s[LANGUAGE_EDITION, 1]
+          LANGUAGES.find { |language| language.casecmp?(word) } && word
+        end
+
+        # The site's stand-in image is not a cover.
+        def cover_from(node)
+          url = Array(node["image"]).first.to_s.sub(/\?.*\z/, "")
+          url.presence unless url.include?("missingbook")
+        end
+
         def clean(value) = CGI.unescapeHTML(value.to_s).squish
 
-        # "On Sale", "Page Count", "ISBN-13", "Language"... as the page lists them.
+        # "On Sale", "Page Count", "ISBN-13"... as the page lists them.
         def detail_terms(doc)
           doc.css(".product-supplemental__details__group").to_h do |group|
             [group.at_css("dt")&.text.to_s.squish, group.at_css("dd")&.text.to_s.squish]
