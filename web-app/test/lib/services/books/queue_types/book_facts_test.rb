@@ -141,6 +141,18 @@ module Services
           assert_not Type.still_needed?(book)
         end
 
+        test "an agent answer that applied nothing leaves a complete book needed, one that applied does not" do
+          held = complete(book_with_author("Held Answer"))
+          held.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :skipped, reason: "queued")
+          held.enrichments.create!(kind: "books.book_facts", mode: :agent, outcome: :nothing_to_apply)
+          assert Type.still_needed?(held)
+
+          answered = complete(book_with_author("Agent Applied"))
+          answered.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :skipped, reason: "queued")
+          answered.enrichments.create!(kind: "books.book_facts", mode: :agent, outcome: :applied)
+          assert_not Type.still_needed?(answered)
+        end
+
         test "a deferred_to_authors skip is not a research skip" do
           book = complete(book_with_author("Deferred To Authors"))
           book.enrichments.create!(kind: "books.book_facts", mode: :knowledge, outcome: :skipped, reason: "deferred_to_authors")

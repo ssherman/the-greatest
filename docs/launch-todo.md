@@ -656,7 +656,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    and description and are applied in the background, so check the page's Done and Failed counts afterwards; Re-queue
    a failed row once the cause is fixed.
 6. **Author facts through the agent queue.** Do it before step 7: the origin payload shows author nationalities. An
-   author is offered when the newest `books.author_facts` row, failed runs aside, is a skipped research row (not a placeholder, no running
+   author is offered when the newest `books.author_facts` row, leaving aside failed runs and agent answers that applied nothing, is a skipped research row (not a placeholder, no running
    author run). Two groups qualify: authors already refused a web search for budget (`budget_exhausted`), which exist
    whatever `AI_RESEARCH_VIA` is, and authors enriched in `queue` mode that no Wikidata or VIAF record matched and the
    model did not know well (reason `queued`), which in practice are the authors imports create. The bulk author

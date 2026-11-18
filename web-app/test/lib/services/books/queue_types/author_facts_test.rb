@@ -255,6 +255,54 @@ module Services
           assert_not Type.still_needed?(author)
         end
 
+        test "an agent answer that applied nothing leaves the author needed, one that applied does not" do
+          %w[nothing_to_apply unrecognized].each do |outcome|
+            author = new_author("Held #{outcome}")
+            skip_research(author)
+            author.enrichments.create!(kind: KIND, mode: :agent, outcome: outcome)
+
+            assert Type.still_needed?(author), outcome
+            assert_includes candidate_ids, author.id, outcome
+          end
+
+          answered = new_author("Agent Applied")
+          skip_research(answered)
+          answered.enrichments.create!(kind: KIND, mode: :agent, outcome: :applied)
+          assert_not Type.still_needed?(answered)
+          assert_not_includes candidate_ids, answered.id
+        end
+
+        test "a paid answer that applied nothing still ends the need" do
+          author = new_author("Paid Nothing")
+          skip_research(author)
+          author.enrichments.create!(kind: KIND, mode: :research, outcome: :nothing_to_apply)
+
+          assert_not Type.still_needed?(author)
+        end
+
+        test "a held agent answer can be re-queued and is handed out again, and a fill does not re-open it" do
+          author = new_author("Held Then Retried")
+          skip_research(author)
+          Services::EnrichmentQueue::Fill.call(kind: KIND, scope: "all")
+          row = ::EnrichmentRequest.find_by!(kind: KIND, enrichable: author)
+          claim = Services::EnrichmentQueue::Claim.call(kind: KIND, user: users(:admin_user), limit: 25)
+          submitted = Services::EnrichmentQueue::Submit.call(request: row.reload, lease_token: claim.data[:lease_token],
+            answer: answer("confidence" => "low"), sources: ["https://example.org/a"], user: users(:admin_user))
+          assert submitted.success?, submitted.errors.inspect
+          assert_equal ["done", "nothing_to_apply"], [row.reload.status, row.outcome]
+          assert_nil author.reload.birth_year
+
+          # No repeated work: the held answer does not put the author back in the queue by itself.
+          Services::EnrichmentQueue::Fill.call(kind: KIND, scope: "all")
+          assert_equal "done", row.reload.status
+
+          assert Services::EnrichmentQueue::Requeue.call(request: row, user: users(:admin_user)).success?
+          second = Services::EnrichmentQueue::Claim.call(kind: KIND, user: users(:admin_user), limit: 25)
+
+          assert_equal [row.id], second.data[:items].map(&:id)
+          assert_equal "claimed", row.reload.status
+        end
+
         test "a failed run with no research skip behind it does not make an author needed" do
           author = new_author("Failed Only")
           author.enrichments.create!(kind: KIND, mode: :knowledge, outcome: :applied, reason: "filled")
