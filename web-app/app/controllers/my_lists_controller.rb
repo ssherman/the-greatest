@@ -10,6 +10,7 @@ class MyListsController < ApplicationController
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
+  include EditPageRows
   include DomainLayout
 
   layout :resolve_layout
@@ -124,8 +125,9 @@ class MyListsController < ApplicationController
   def edit
     @list = find_owned_list
     @indexable = false
-    scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
-    @pagy, @items = pagy_path(scope, limit: 100)
+    @pagy, @items = load_edit_rows(@list, page: requested_page)
+    # Unlike a write's answer, a GET past the last page is a 404, not a clamp.
+    raise ActiveRecord::RecordNotFound if requested_page > @pagy.last
   end
 
   # PATCH /my/lists/:id

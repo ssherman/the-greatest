@@ -7,7 +7,7 @@
     <% end %>
 
     <% items.each do |item| %>
-      <%= render UserLists::Edit::RowComponent.new(item: item, page: pagy.page) %>
+      <%= render UserLists::Edit::RowComponent.new(item: item, page: pagy.page, item_count: pagy.count) %>
     <% end %>
 
     <% if pagy.pages > 1 %>

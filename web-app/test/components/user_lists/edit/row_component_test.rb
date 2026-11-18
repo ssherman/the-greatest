@@ -48,4 +48,23 @@ class UserLists::Edit::RowComponentTest < ViewComponent::TestCase
 
     assert_no_selector "b"
   end
+
+  test "the menu and remove button have accessible names and post to the item routes" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(UserLists::Edit::RowComponent.new(item: item, item_count: 7))
+
+    title = item.listable.title
+    assert_selector "button[aria-label='Actions for #{title}']"
+    assert_selector "button[aria-label='Remove #{title}']"
+    assert_selector "input[name='user_list_item[position]'][value='7']", visible: :all
+    assert_selector "input[type=number][min='1'][max='7'][required]"
+    assert_no_selector "[data-action='user-list-completion#open']"
+  end
+
+  test "a completion list offers a Set date opener with the text variant" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(UserLists::Edit::RowComponent.new(item: item))
+
+    assert_selector "button[data-action='user-list-completion#open'][data-variant=text][data-completed-on='2026-01-20']", text: "Set finished date…"
+  end
 end

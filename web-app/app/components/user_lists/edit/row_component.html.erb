@@ -25,13 +25,35 @@
 
   <div class="dropdown dropdown-end shrink-0">
     <button type="button" tabindex="0" class="btn btn-ghost btn-sm" aria-label="Actions for <%= title %>">⋯</button>
-    <ul tabindex="0" class="dropdown-content menu z-10 w-48 rounded-box bg-base-100 p-2 shadow" data-row-actions>
-      <%# Task 9: row actions (move to top/bottom, set date) go here. %>
+    <ul tabindex="0" class="dropdown-content menu z-10 w-60 rounded-box bg-base-100 p-2 shadow" data-row-actions>
+      <li><%= button_to "Move to top", move_my_list_item_path(user_list, item), method: :patch,
+            params: {user_list_item: {position: 1}, page: page}, form_class: "contents", class: "w-full text-left" %></li>
+      <li><%= button_to "Move to bottom", move_my_list_item_path(user_list, item), method: :patch,
+            params: {user_list_item: {position: item_count}, page: page}, form_class: "contents", class: "w-full text-left" %></li>
+      <li>
+        <%= form_with url: move_my_list_item_path(user_list, item), method: :patch, class: "flex items-center gap-2" do |form| %>
+          <%= hidden_field_tag :page, page, id: nil %>
+          <label for="<%= dom_id(item, :position) %>" class="sr-only">Move <%= title %> to position</label>
+          <%= number_field_tag "user_list_item[position]", nil, id: dom_id(item, :position), min: 1, max: item_count, required: true,
+                placeholder: "Position", class: "input input-sm w-24" %>
+          <button type="submit" class="btn btn-sm">Move</button>
+        <% end %>
+      </li>
+      <% if completed_on_enabled? %>
+        <li>
+          <button type="button"
+                  data-action="user-list-completion#open"
+                  data-variant="text"
+                  data-item-id="<%= item.id %>"
+                  data-item-title="<%= title %>"
+                  data-completed-on="<%= item.completed_on&.iso8601 %>">Set <%= user_list.completion_label.downcase %> date…</button>
+        </li>
+      <% end %>
     </ul>
   </div>
 
-  <%# Task 9: the ✕ remove button goes here. %>
-  <div data-row-remove-slot></div>
+  <%= button_to "✕", my_list_item_path(user_list, item), method: :delete, params: {page: page},
+        form_class: "shrink-0", class: "btn btn-ghost btn-sm", aria: {label: "Remove #{title}"} %>
 
   <span data-sortable-handle aria-hidden="true" class="shrink-0 cursor-grab select-none px-1 text-base-content/40">⠿</span>
 </div>

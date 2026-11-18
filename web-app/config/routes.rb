@@ -407,6 +407,10 @@ Rails.application.routes.draw do
   get "my/lists/:id/edit/page/:page", to: "my_lists#edit", as: :edit_my_list_page, constraints: {page: /\d+/}
   patch "my/lists/:id", to: "my_lists#update"
   delete "my/lists/:id", to: "my_lists#destroy"
+  # Row writes on the Edit page; all answer Turbo Streams that morph the rows.
+  patch "my/lists/:id/items/:item_id/position", to: "my_list_items#move", as: :move_my_list_item
+  delete "my/lists/:id/items/:item_id", to: "my_list_items#destroy", as: :my_list_item
+  post "my/lists/:id/items/restore", to: "my_list_items#restore", as: :restore_my_list_item
 
   # My Reviews (personal ratings library) -- global, never cached, per-domain
   # layout resolved from Current.domain in the controller. 404s on a domain with
