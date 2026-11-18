@@ -312,3 +312,58 @@ in the app. The ✕ and ⋯ buttons get accessible names that include the title.
 Service and class names; the item endpoint's route shape; how Move to position collects the number
 (inline input vs. small dialog); the toast component used for Undo; whether increment 1 ships the
 Edit button hidden or both increments ship together; copy for each domain's Favorites noun.
+
+## Addendum (2026-11-18): Edit page design pass
+
+Shane reviewed the built Edit page and found the ⋯ menu broken-looking (no hover, no pointer
+cursor, an inline position input crammed into it) and the details form sloppy (full-width
+description, no grouping). Three layouts were mocked: A (two columns, sticky details card),
+B (one narrow column, details card above the list), C (list first, details in a dialog). I
+recommended C; **Shane picked B.**
+
+**Layout (B).**
+- A single column, `max-w-3xl` (about 720px), centred.
+- Header: "← Back to list", then the list's name as the `h1`, with a "Built-in" badge (lock
+  icon) on default lists.
+- A white card (`card bg-base-100 shadow-sm`) holds:
+  - name and a **Public toggle** (daisyUI `toggle`, replacing the checkbox) on one line
+  - the description below them
+  - Save at the bottom right
+  - "Delete list" at the bottom left, in muted red, on custom lists only
+
+  Default lists show the name disabled with "Built-in lists keep their names."
+- Below the card, one line holds the item count ("127 books") and the pager, followed by the
+  rows.
+
+**Rows.**
+- Softer position badges (`badge-ghost`/`bg-base-200`, not neutral black).
+- The finish date sits on the by-line ("Leo Tolstoy · Finished Mar 3, 2026"), or the faint
+  "No … date".
+- ⋯ ✕ ⠿ stay on the right.
+
+**The ⋯ menu.**
+- It must follow daisyUI 5's `menu` contract: each `<li>`'s direct child is the `<button>`.
+  daisyUI styles only `li > *`, so the forms `button_to` generates broke hover, padding and the
+  pointer cursor.
+- The action forms are hidden elsewhere in the row, and each button targets its form with the
+  HTML `form` attribute.
+- Items, each with a lucide icon: Move to top, Move to bottom, Move to position…, then a
+  divider, then Set <label> date… (lists with completion dates only).
+
+**Move to position…** opens a small dialog, built like the completion-date dialog:
+- title "Move “<title>”" and the line "Currently #N"
+- a number input labelled "New position (1–<count>)", required
+- Cancel and Move buttons
+- it posts to the existing move endpoint with `page`
+
+The inline number form in the menu goes away.
+
+**Pointer cursor (my call).** Tailwind v4's preflight gives buttons `cursor: default`. The
+books, music and games stylesheets get Tailwind's recommended base rule:
+`button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }`.
+
+**Keyboard focus (my call; this closes the two parked follow-ups).**
+- After a ⋯ menu action, focus moves to that item's row container (`tabindex="-1"`). Today it
+  is blurred to `<body>`.
+- After a date save on the list page, focus moves to the replacement opener once the stream
+  has rendered. Today it is lost.
