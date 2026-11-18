@@ -392,7 +392,7 @@ The launch-todo steps go in section 14 and say:
   is written, so the apply job retries and the row ends `failed`; the paid path keeps recording `review_failed`
   (amended during planning, 2026-11-18). An answer with overall `confidence` low is held: recorded with reason
   `low_confidence`, nothing written (amended during planning, 2026-11-18). What an answer writes: year, original
-  language, word count, page range, subtitle, alternate titles and the description fill blanks; book type, series
+  language, word count, page range, subtitle and the description fill blanks, alternate titles are added to the ones the book holds; book type, series
   and origin countries are only recorded (amended during implementation, 2026-11-18).
 
 **`books.author_facts`**
