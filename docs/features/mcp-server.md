@@ -225,6 +225,20 @@ The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads re
 
 Nothing applies on approval: the matching apply task acts on approved verdicts later (`books:goodreads_reimport:apply` for re-import kinds, `books:goodreads_replay:apply` for replay kinds). The Copy prompt on the page (`config/mcp/books/prompts/repair_verdicts.md.erb`, queue `:repair_verdicts` in `Services::AgentPrompts`, counts of proposed `reimport_match` verdicts by confidence) tells the agent to approve or correct each one, never reject a `reimport_match`, and bulk approve only what it has read. E2E: `e2e/tests/books/admin/repair-verdicts-copy-prompt.spec.ts`.
 
+## The enrichment queues
+
+The books enrichment queues (`/admin/enrichment_queues`) let an agent research and fill in records itself: it claims a batch, searches the web, and submits an answer that the server applies by the paid pipeline's own rules. Five admin tools work it. `Services::EnrichmentQueue::*` is shared by the REST controllers and the page. Full behaviour is in `docs/features/enrichment-queue.md`.
+
+- `list_enrichment_queues` (`books:admin:read`). Each queue type with its count per status.
+- `get_enrichment_queue` (`books:admin:read`). Path `type` (`origin` or `categories`). Status counts, outcome counts of finished items and the type's `reference` (the answer schema, and for categories the genre and audience lists and the caps). Call it once per run.
+- `claim_enrichment_items` (`books:admin:write`). Body `{limit}` (1 to 25, default 10). Returns the items and `meta.lease_token`, `meta.lease_expires_at` and `meta.remaining`. The lease lasts 30 minutes. An empty batch with `remaining` above 0 is not the end: claim again.
+- `submit_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, answer, sources, note}`. Answers 202 with the status: the answer is applied in a background job, so the response does not say what was applied. A 409 means the lease is gone or the item was already answered (drop it); a 422 names what is wrong with the answer (fix it and resubmit).
+- `skip_enrichment_item` (`books:admin:write`). Path `id`, body `{lease_token, reason}`. A skipped item is not handed out again.
+
+None is destructive, and the five are exempt from "dry run, then ask": the agent decides each item itself, as it does for the duplicate queue (`config/mcp/books/admin_usage.md`, "The enrichment queues"). Submitting fills blanks only and never overwrites a held value. Claim, submit and skip also need a token whose owner may change books.
+
+The page's Copy prompt per type (`config/mcp/books/prompts/enrichment/origin.md.erb` and `categories.md.erb`, rendered by `Services::AgentPrompts.for_enrichment`) carries the loop, the type's judgment rules (shared with the paid model through the task's `RULES` constant) and the confidence guidance. E2E: `e2e/tests/books/admin/enrichment-queues.spec.ts`.
+
 ## Series
 
 Nine admin tools clean up the book series that the Goodreads enrichment created (`Services::Books::GoodreadsEnrichment::ApplySeries`), so the public site can later show "Book 3 of ..." on a book's page. The admin series pages and the API call the same services under `Services::Books::SeriesEdits`, so the rules cannot drift. Spec: `docs/superpowers/specs/2026-11-14-admin-mcp-series-design.md`.

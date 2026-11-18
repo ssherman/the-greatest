@@ -125,7 +125,7 @@ type. Columns:
 | `priority` | Lower is handed out first. A ranked book's rank; a large constant for the rest |
 | `reason` | Why it was queued: `missing`, `research_wanted`, `changed`, `version`, `manual` |
 | `fingerprint` | Optional. What the record looked like when it was resolved; only review types set it |
-| `outcome` | How it ended: `applied`, `nothing_to_apply`, `reviewed`, `no_longer_needed`, or the skip reason |
+| `outcome` | How it ended: `applied`, `nothing_to_apply`, `reviewed`, `no_longer_needed`, `abandoned`, or for an agent skip the literal `skipped_by_agent` (the agent's reason is in `note`) (amended during implementation, 2026-11-18) |
 | `note` | The agent's note or skip explanation |
 | `answer` | jsonb. The submitted answer, kept until it is applied and afterwards as the record of what was sent |
 | `error` | Why a `failed` row failed |
@@ -196,7 +196,7 @@ rows whose lease has expired, and marks them `claimed` with one `lease_token` fo
 - `attempts` counts claims. A row claimed three times without a submit or skip is closed as `skipped` with outcome
   `abandoned` instead of being handed out a fourth time, so one item an agent keeps choking on cannot keep a queue
   from ever reaching empty.
-- An empty batch with `remaining: 0` is how an agent knows to stop.
+- An empty batch with `remaining: 0` is how an agent knows to stop. A batch can also be empty while `remaining` is above 0 (every row picked was closed by the claim, or other agents hold the rest under leases), and the agent then claims again (amended during implementation, 2026-11-18).
 
 No sweeper job is needed: an expired lease is simply claimable again.
 
@@ -223,7 +223,7 @@ No sweeper job is needed: an expired lease is simply claimable again.
 - Because the agent never sees the apply result, `get_enrichment_queue` also returns the type's outcome counts
   (applied, nothing applied, failed), which is what the agent reports at the end of a run.
 
-`skip` takes the item id, the lease token and a reason of at most 500 characters. The row becomes `skipped`. A
+`skip` takes the item id, the lease token and a reason of at most 500 characters. The row becomes `skipped` with outcome `skipped_by_agent`, and the reason is stored in `note` (amended during implementation, 2026-11-18). A
 skipped row is resolved: it is not handed out again.
 
 Both stamp `resolved_by` (the token's user), `resolved_via: api` and `resolved_at`.
@@ -232,8 +232,8 @@ A queue is empty when it has no `pending` and no `claimed` row. `submitted` rows
 
 **An agent's answer goes through the existing confidence gates unchanged** (designer's call). A `high` answer is
 written, a `medium` one only with stored evidence that supports it, a `low` one is held. The prompt tells the
-agent that anything below `high` is held, to say `high` only when a source states the fact, and to skip when it
-cannot get there. Nothing in the appliers is loosened for agents.
+agent to say `high` only when a source states the fact, to give `low` to a guess, and to skip when it
+cannot get there (amended during implementation, 2026-11-18). Nothing in the appliers is loosened for agents.
 
 **A held answer closes the queue row but not the book.** When a submit applies nothing because the answer was
 held back, the queue row is still `done` (outcome `nothing_to_apply`), so no agent is handed that book again.
