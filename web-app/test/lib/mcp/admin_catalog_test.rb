@@ -69,6 +69,7 @@ module Mcp
       assert_match(/claim again/, tool_named("claim_enrichment_items").description)
       %w[submit_enrichment_item skip_enrichment_item].each do |name|
         assert_match(/no longer yours to answer/, tool_named(name).description, name)
+        assert_match(/A 404 means the item no longer exists/, tool_named(name).description, name)
       end
     end
 

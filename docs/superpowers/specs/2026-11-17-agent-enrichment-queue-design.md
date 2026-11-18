@@ -134,7 +134,7 @@ type. Columns:
 | `lease_token`, `lease_expires_at`, `attempts` | The claim |
 | `claimed_by_id`, `resolved_by_id` | Users (nullify on delete; `has_many` on `User`) |
 | `resolved_via` | `api`, `paid_research`, `admin_ui`, `system` |
-| `resolved_at` | When it reached `done` or `skipped` |
+| `resolved_at` | When it was submitted or skipped (amended during implementation, 2026-11-18) |
 
 A unique index on `(enrichable_type, enrichable_id, kind)` makes "one row per record and type" a database fact.
 A second index on `(kind, status, priority, id)` serves the claim. A re-opened row is the same row set back to
@@ -240,7 +240,10 @@ held back, the queue row is still `done` (outcome `nothing_to_apply`), so no age
 But most books have no stored evidence yet, and the paced backfill gathers it and can settle a book the agent
 could only half answer (the Wikidata shortcut, a supported `medium`). So an agent ledger row that applied nothing
 does not count as done for the paced backfill: `Backfill.done_rows` leaves out rows with mode `agent` and outcome
-`nothing_to_apply`. An agent row that applied something does count.
+`nothing_to_apply`. An agent row that applied something does count. Such a row is also invisible as a "newer row":
+a held agent answer leaves the book to the backfill only if the backfill has not judged it already, so it never
+displaces the paid pipeline's done row as the latest row and never makes the backfill repeat itself
+(amended during implementation, 2026-11-18).
 
 **Where the code asks "was this researched on the web?"**, an agent row counts as well as a research row. Today
 that is `Dossier#research_backed?`, which lets a web-verified `books.book_facts` row support an origin or

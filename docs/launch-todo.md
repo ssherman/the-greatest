@@ -638,7 +638,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    finished (it empties and deletes books) and after the author Wikidata enrichment (step 1; the payload shows author
    nationalities). Fill the queue for the ranked books: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`, or
    Fill on `/admin/enrichment_queues` on the books host. It runs in Sidekiq; reload the page until the Pending count
-   stops moving. Then Copy prompt on the "Book origin" row, paste it into an agent connected to the admin MCP server,
+   stops moving. Run the queues before you start the paced backfill in step 7: the backfill plans a run for every book up front, and a fill offers no book that has a running run, so once the backfill is planned a fill finds none of them until their runs finish. Then Copy prompt on the "Book origin" row, paste it into an agent connected to the admin MCP server,
    and let it run until the queue is empty (a claim returns no items and `remaining` is 0). Sub-agents are fine.
    The agent's answers are applied in the background by a Sidekiq job, so check the page's Done and Failed counts
    afterwards; Re-queue a failed row once the cause is fixed.

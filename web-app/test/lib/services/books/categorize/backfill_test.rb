@@ -78,6 +78,42 @@ module Services
           refute_includes Backfill.candidates(scope: "categories_only").pluck(:id), @american.id
         end
 
+        test "a held agent answer newer than a paid done row leaves the book done" do
+          %i[nothing_to_apply unrecognized].each do |outcome|
+            @american.enrichments.where(kind: "books.origin").delete_all
+            origin_row(@american, outcome: :nothing_to_apply)
+            origin_row(@american, mode: :agent, outcome: outcome)
+            refute_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id, outcome.to_s
+          end
+        end
+
+        test "a held agent answer newer than a paid categories done row leaves the book done" do
+          %i[nothing_to_apply unrecognized].each do |outcome|
+            @american.enrichments.where(kind: "books.categories").delete_all
+            categories_row(@american, outcome: :nothing_to_apply)
+            categories_row(@american, mode: :agent, outcome: outcome)
+            refute_includes Backfill.candidates(scope: "categories_only").pluck(:id), @american.id, outcome.to_s
+          end
+        end
+
+        test "a held agent answer newer than a paid failed row leaves the book a candidate" do
+          origin_row(@american, outcome: :failed)
+          origin_row(@american, mode: :agent, outcome: :nothing_to_apply)
+          assert_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
+        test "an applied agent answer newer than a paid done row keeps the book done" do
+          origin_row(@american, outcome: :nothing_to_apply)
+          origin_row(@american, mode: :agent)
+          refute_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
+        test "a newer paid failed row wins over an applied agent row" do
+          origin_row(@american, mode: :agent)
+          origin_row(@american, outcome: :failed)
+          assert_includes Backfill.candidates(scope: "origin_only").pluck(:id), @american.id
+        end
+
         test "a deferred book is left out at cap 0 and included once the cap is above 0" do
           deferred = book("Deferred")
           origin_row(deferred, deferred_research: true)

@@ -1009,6 +1009,7 @@ Rails.application.routes.draw do
         member { post :fill }
       end
       post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
+      post "enrichment_requests/:id/retry_apply", to: "enrichment_queues#retry_apply", as: :retry_apply_enrichment_request, constraints: {id: /\d+/}
 
       resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
         member do

@@ -10,14 +10,14 @@ class Admin::EnrichmentQueuesBaseController < Admin::BaseController
   include Admin::DomainScopedAuth
 
   before_action :set_type, only: [:show, :fill]
-  before_action :set_request, only: [:requeue]
-  before_action :require_domain_write!, only: [:fill, :requeue]
+  before_action :set_request, only: [:requeue, :retry_apply]
+  before_action :require_domain_write!, only: [:fill, :requeue, :retry_apply]
 
   STATUSES = ::EnrichmentRequest.statuses.keys.freeze
   VIAS = ::EnrichmentRequest.resolved_via.keys.freeze
   PER_PAGE = 50
 
-  helper_method :queues_path, :queue_path, :fill_path, :requeue_path, :record_name, :user_name
+  helper_method :queues_path, :queue_path, :fill_path, :requeue_path, :retry_apply_path, :stale_submitted?, :record_name, :user_name
 
   def index
     @types = types
@@ -36,9 +36,12 @@ class Admin::EnrichmentQueuesBaseController < Admin::BaseController
     @counts = STATUSES.index_with { |status| grouped.fetch(status, 0) }
     @vias = VIAS
     @via = params[:via] if VIAS.include?(params[:via]) && resolved_tab?
-    rows = ::EnrichmentRequest.for_kind(@type.kind).where(status: @status)
-      .includes(:enrichable, :resolved_by, :claimed_by)
+    in_tab = ::EnrichmentRequest.for_kind(@type.kind).where(status: @status)
+    @outcome_counts = in_tab.where.not(outcome: nil).group(:outcome).count
+    @outcome = params[:outcome] if @outcome_counts.key?(params[:outcome])
+    rows = in_tab.includes(:enrichable, :resolved_by, :claimed_by)
     rows = rows.where(resolved_via: @via) if @via
+    rows = rows.where(outcome: @outcome) if @outcome
     rows = resolved_tab? ? rows.order(Arel.sql("resolved_at DESC NULLS LAST"), id: :desc) : rows.order(:priority, :id)
     @pagy, @requests = pagy(rows, limit: PER_PAGE)
   end
@@ -67,6 +70,17 @@ class Admin::EnrichmentQueuesBaseController < Admin::BaseController
       redirect_to queue_path(type), notice: "Put back in the queue."
     else
       redirect_to queue_path(type), alert: result.errors.first[:detail]
+    end
+  end
+
+  def retry_apply
+    type = ::Services::EnrichmentQueue::Registry.fetch(@request.kind)
+    result = ::Services::EnrichmentQueue::RetryApply.call(request: @request, user: current_user)
+    back = queue_path(type, status: params[:status].presence_in(STATUSES))
+    if result.success?
+      redirect_to back, notice: "Apply queued again."
+    else
+      redirect_to back, alert: result.errors.first[:detail]
     end
   end
 
@@ -111,6 +125,15 @@ class Admin::EnrichmentQueuesBaseController < Admin::BaseController
 
   def requeue_path(request)
     public_send(:"#{route_prefix}requeue_enrichment_request_path", request)
+  end
+
+  def retry_apply_path(request)
+    public_send(:"#{route_prefix}retry_apply_enrichment_request_path", request)
+  end
+
+  # Offered on a submitted row whose apply job has been silent long enough that it is probably lost.
+  def stale_submitted?(request)
+    request.submitted? && request.resolved_at.present? && request.resolved_at < ::Services::EnrichmentQueue::RetryApply::STALE_AFTER.ago
   end
 
   # A deleted record leaves its row behind (the association has no foreign key).

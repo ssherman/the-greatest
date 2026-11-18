@@ -19,11 +19,24 @@
 
   <% if %w[done skipped failed].include?(@status) %>
     <div class="join" data-testid="via-filter">
-      <%= link_to "All", queue_path(@type, status: @status), class: "btn btn-xs join-item #{"btn-active" if @via.nil?}", data: {testid: "via-all"} %>
+      <%= link_to "All", queue_path(@type, status: @status, outcome: @outcome), class: "btn btn-xs join-item #{"btn-active" if @via.nil?}", data: {testid: "via-all"} %>
       <% @vias.each do |via| %>
-        <%= link_to via.humanize, queue_path(@type, status: @status, via: via),
+        <%= link_to via.humanize, queue_path(@type, status: @status, via: via, outcome: @outcome),
               class: "btn btn-xs join-item #{"btn-active" if @via == via}", data: {testid: "via-#{via}"} %>
       <% end %>
+    </div>
+  <% end %>
+
+  <% if @outcome_counts.any? %>
+    <div class="flex flex-wrap items-center gap-2" data-testid="outcome-filter">
+      <span class="text-xs font-semibold">Outcome</span>
+      <div class="join">
+        <%= link_to "All", queue_path(@type, status: @status, via: @via), class: "btn btn-xs join-item #{"btn-active" if @outcome.nil?}", data: {testid: "outcome-all"} %>
+        <% @outcome_counts.sort.each do |outcome, count| %>
+          <%= link_to "#{outcome.humanize} (#{count})", queue_path(@type, status: @status, via: @via, outcome: outcome),
+                class: "btn btn-xs join-item #{"btn-active" if @outcome == outcome}", data: {testid: "outcome-#{outcome}"} %>
+        <% end %>
+      </div>
     </div>
   <% end %>
 
@@ -74,8 +87,13 @@
                 <% end %>
               </td>
               <td>
-                <% if %w[done skipped failed].include?(request.status) %>
-                  <%= button_to "Re-queue", requeue_path(request), method: :post, class: "btn btn-xs", data: {testid: "requeue-#{request.id}"} %>
+                <% if current_user_can_write? %>
+                  <% if %w[done skipped failed].include?(request.status) %>
+                    <%= button_to "Re-queue", requeue_path(request), method: :post, class: "btn btn-xs", data: {testid: "requeue-#{request.id}"} %>
+                  <% end %>
+                  <% if (request.failed? && request.answer.present?) || stale_submitted?(request) %>
+                    <%= button_to "Retry apply", retry_apply_path(request), method: :post, params: {status: @status}, class: "btn btn-xs", data: {testid: "retry-apply-#{request.id}"} %>
+                  <% end %>
                 <% end %>
               </td>
             </tr>

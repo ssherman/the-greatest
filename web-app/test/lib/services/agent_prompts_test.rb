@@ -154,6 +154,7 @@ module Services
         refute_includes prompt, "anything lower is recorded and held", type.kind
         assert_includes prompt, "The lease lasts 30 minutes", type.kind
         assert_includes prompt, "fix the answer and submit again", type.kind
+        assert_includes prompt, "If either call answers 404, the item is gone", type.kind
       end
     end
 

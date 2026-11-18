@@ -49,7 +49,7 @@ module Services
         assert_not_equal first[:lease_token], second[:lease_token]
       end
 
-      test "the claim query skips rows another transaction has locked" do
+      test "the claim query locks with FOR UPDATE SKIP LOCKED" do
         queries = []
         subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| queries << payload[:sql] }
         claim

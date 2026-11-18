@@ -88,10 +88,16 @@ module Services
 
         # Correlated on books_books.id (NOT EXISTS anti-joins, not NOT IN).
         def self.done_rows(kind, version)
+          # A newer agent row that applied nothing is invisible here: it must neither count as
+          # done nor displace the paid pipeline's judgment as the latest row.
+          newer_agent_unapplied = ActiveRecord::Base.sanitize_sql_array([
+            "newer.mode = ? AND newer.outcome IS DISTINCT FROM ?", Enrichment.modes[:agent], Enrichment.outcomes[:applied]
+          ])
           rows = Enrichment.where(enrichable_type: "Books::Book", kind: kind)
             .where("enrichments.enrichable_id = books_books.id")
             .where("NOT EXISTS (SELECT 1 FROM enrichments newer WHERE newer.enrichable_type = enrichments.enrichable_type " \
-              "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id)")
+              "AND newer.enrichable_id = enrichments.enrichable_id AND newer.kind = enrichments.kind AND newer.id > enrichments.id " \
+              "AND NOT (#{newer_agent_unapplied}))")
             .where("enrichments.facts->>'prompt_version' = ?", version.to_s)
             .where.not(outcome: [:failed, :skipped])
             # An agent answered from its own web search, without the evidence the backfill

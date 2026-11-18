@@ -12,6 +12,8 @@ If submit_enrichment_item or skip_enrichment_item answers 409, the item is no lo
 
 If submit_enrichment_item answers 422, your answer did not match the schema. The item is still yours: fix the answer and submit again.
 
+If either call answers 404, the item is gone: its book was deleted or merged into another. Drop it and move on.
+
 Use sub-agents if you have them: each one runs steps 2 to 5 by itself. Two workers are never given the same book. A skipped item is never handed out again, so skip only after a real search.
 
 Deciding the categories, the same rules our own model follows. In them, the genre and audience lists are `reference.genres` and `reference.audiences`, and the evidence is the item's payload. At most 5 genres, 8 subjects and 5 locations.

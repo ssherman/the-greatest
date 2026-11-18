@@ -11,10 +11,14 @@ module Admin
         @viewer = users(:books_viewer_user)
         @book = books_books(:got)
         ::EnrichmentQueue::FillJob.jobs.clear
+        ::EnrichmentQueue::ApplyJob.jobs.clear
       end
 
       # Fake-mode jobs live in a process-wide array: leave it empty for whichever test runs next.
-      teardown { ::EnrichmentQueue::FillJob.jobs.clear }
+      teardown do
+        ::EnrichmentQueue::FillJob.jobs.clear
+        ::EnrichmentQueue::ApplyJob.jobs.clear
+      end
 
       def make_request(book, status:, kind: "books.origin", **attrs)
         ::EnrichmentRequest.create!({enrichable: book, kind: kind, reason: "missing", status: status}.merge(attrs))
@@ -171,6 +175,117 @@ module Admin
         post admin_books_requeue_enrichment_request_path(row)
         assert_redirected_to books_root_path
         assert row.reload.done?
+      end
+
+      def listed_ids
+        css_select("[data-testid=request-row]").map { |row| row["data-request-id"] }
+      end
+
+      test "the outcome filter lists only rows with that outcome and ignores an unknown one" do
+        applied = make_request(@book, status: :done, resolved_at: Time.current, outcome: "applied")
+        held = make_request(books_books(:clash), status: :done, resolved_at: 1.hour.ago, outcome: "nothing_to_apply")
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_enrichment_queue_path("origin", status: "done", outcome: "nothing_to_apply")
+        assert_equal [held.id.to_s], listed_ids
+
+        get admin_books_enrichment_queue_path("origin", status: "done", outcome: "abandoned")
+        assert_equal [applied.id.to_s, held.id.to_s], listed_ids
+
+        get admin_books_enrichment_queue_path("origin", status: "done", outcome: "bogus")
+        assert_equal [applied.id.to_s, held.id.to_s], listed_ids
+      end
+
+      test "the outcome filter only offers outcomes present in the current tab" do
+        make_request(@book, status: :done, resolved_at: Time.current, outcome: "applied")
+        skipped = make_request(books_books(:clash), status: :skipped, resolved_at: Time.current, outcome: "skipped_by_agent")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_enrichment_queue_path("origin", status: "skipped", outcome: "applied")
+        assert_equal [skipped.id.to_s], listed_ids
+      end
+
+      test "the via filter lists only rows resolved that way" do
+        make_request(@book, status: :done, resolved_at: Time.current, resolved_via: :api, outcome: "applied")
+        ui = make_request(books_books(:clash), status: :done, resolved_at: 1.hour.ago, resolved_via: :admin_ui, outcome: "applied")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_enrichment_queue_path("origin", status: "done", via: "admin_ui")
+        assert_equal [ui.id.to_s], listed_ids
+      end
+
+      test "retry_apply puts a failed row with an answer back to submitted and queues the apply job" do
+        row = make_request(@book, status: :failed, error: "outage", answer: {"nationality" => "French"}, sources: ["https://example.org/a"])
+        sign_in_as(@admin, stub_auth: true)
+        Sidekiq::Testing.fake! do
+          assert_difference -> { ::EnrichmentQueue::ApplyJob.jobs.size }, 1 do
+            post admin_books_retry_apply_enrichment_request_path(row), params: {status: "failed"}
+          end
+        end
+        assert_redirected_to admin_books_enrichment_queue_path("origin", status: "failed")
+        assert flash[:notice].present?
+        assert row.reload.submitted?
+        assert_nil row.error
+      end
+
+      test "retry_apply of a row that cannot be retried refuses with an alert" do
+        row = make_request(@book, status: :done, resolved_at: Time.current)
+        sign_in_as(@admin, stub_auth: true)
+        Sidekiq::Testing.fake! do
+          assert_no_difference -> { ::EnrichmentQueue::ApplyJob.jobs.size } do
+            post admin_books_retry_apply_enrichment_request_path(row)
+          end
+        end
+        assert flash[:alert].present?
+        assert row.reload.done?
+      end
+
+      test "a viewer cannot retry an apply" do
+        row = make_request(@book, status: :failed, error: "outage", answer: {"nationality" => "French"})
+        sign_in_as(@viewer, stub_auth: true)
+        Sidekiq::Testing.fake! do
+          assert_no_difference -> { ::EnrichmentQueue::ApplyJob.jobs.size } do
+            post admin_books_retry_apply_enrichment_request_path(row)
+          end
+        end
+        assert_redirected_to books_root_path
+        assert row.reload.failed?
+      end
+
+      test "retry_apply of a row of another domain is 404" do
+        row = make_request(@book, status: :failed, kind: "music.other", answer: {"a" => 1})
+        sign_in_as(@admin, stub_auth: true)
+        post admin_books_retry_apply_enrichment_request_path(row)
+        assert_response :not_found
+        assert row.reload.failed?
+      end
+
+      test "retry_apply end to end applies a stored origin answer" do
+        book = ::Books::Book.create!(title: "Retry Origin Book")
+        row = make_request(book, status: :failed, error: "model outage", resolved_by: @admin, resolved_via: :api, resolved_at: 1.hour.ago,
+          answer: {"recognized" => true, "original_language" => nil, "nationality" => "Japanese", "confidence" => "high", "reason" => "r"},
+          sources: ["https://example.org/a"])
+        sign_in_as(@admin, stub_auth: true)
+        post admin_books_retry_apply_enrichment_request_path(row)
+        assert row.reload.done?
+        assert_equal "applied", row.outcome
+        assert_equal ["Japanese"], book.countries.reload.pluck(:name)
+      end
+
+      test "a viewer is not shown the write controls an admin is" do
+        make_request(@book, status: :failed, error: "outage", answer: {"nationality" => "French"})
+        sign_in_as(@viewer, stub_auth: true)
+        get admin_books_enrichment_queues_path
+        assert_response :success
+        assert_empty css_select("[data-testid=fill-origin]")
+        get admin_books_enrichment_queue_path("origin", status: "failed")
+        assert_response :success
+        assert_empty css_select("[data-testid^=requeue-], [data-testid^=retry-apply-]")
+
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_enrichment_queues_path
+        assert_not_empty css_select("[data-testid=fill-origin]")
+        get admin_books_enrichment_queue_path("origin", status: "failed")
+        assert_not_empty css_select("[data-testid^=requeue-]")
+        assert_not_empty css_select("[data-testid^=retry-apply-]")
       end
 
       test "index has no links trapped in a frame" do

@@ -19,7 +19,7 @@ Deleting a book or author deletes its rows. A merge moves the source's rows to t
 | `submitted` | Answer stored, waiting for the apply job | the job: `done`, or `failed` after the retries |
 | `done` | Closed | re-open (version bump at a fill) or re-queue |
 | `skipped` | Closed without an answer | re-open or re-queue |
-| `failed` | The apply job gave up; `error` says why | re-queue |
+| `failed` | The apply job gave up; `error` says why | re-queue, or retry apply (keeps the answer) |
 
 `reason` says why a row was queued or re-opened: `missing` (a fill found a candidate), `version` (a fill re-opened it), `manual` (re-queued by hand). `changed` and `research_wanted` are allowed values that nothing writes yet (they belong to later types).
 
@@ -36,7 +36,7 @@ Deleting a book or author deletes its rows. A merge moves the source's rows to t
 
 ## The life of a row
 
-**Fill.** `Services::EnrichmentQueue::Fill` runs in `EnrichmentQueue::FillJob` (Sidekiq, no retry, because a fill is idempotent and can simply be run again). It takes a kind, a scope (`ranked`, the default, or `all`) and an optional limit, reads the type's candidates as `(id, priority)` pairs, and in batches of 5,000: inserts a `pending` row for every candidate that has none (reason `missing`; the unique index decides), re-opens `done` and `skipped` rows whose `version` is below the type's (reason `version`), and refreshes the priority of rows still `pending`, since ranks move. Running it twice changes nothing the second time. Priority is lower first: a ranked book's rank, 1,000,000 for the rest.
+**Fill.** `Services::EnrichmentQueue::Fill` runs in `EnrichmentQueue::FillJob` (Sidekiq, no retry, because a fill is idempotent and can simply be run again). It takes a kind, a scope (`ranked`, the default, or `all`) and an optional limit, reads the type's candidates as `(id, priority)` pairs, and in batches of 5,000: inserts a `pending` row for every candidate that has none (reason `missing`; the unique index decides), re-opens `done` and `skipped` rows whose `version` is below the type's (reason `version`), and refreshes the priority of rows still `pending`, since ranks move. Running it twice changes nothing the second time. Priority is lower first: a ranked book's rank, 1,000,000 for the rest. `limit` caps the candidates considered, highest priority first, including ones already queued or finished, so a fill with the same limit run twice adds nothing the second time; raise the limit to reach further down. A book with a running `books.book_enrichment` or `books.book_categorize` run is not a candidate, and the paced backfill plans a run for every book up front, so run the queues before starting the paced backfill (`docs/launch-todo.md` section 14 gives that order): once it is planned, a fill finds none of those books until their runs finish.
 
 **Claim.** `Services::EnrichmentQueue::Claim` hands out 1 to 25 rows (default 10) in `(priority, id)` order under one `lease_token`, with a lease of 30 minutes (`EnrichmentRequest::LEASE`). It selects with `FOR UPDATE SKIP LOCKED` and marks the rows claimed in the same transaction, so parallel sub-agents never get the same row. Claimable means `pending` or `claimed` with an expired lease; no sweeper is needed. Each claim increments `attempts`. Per row: a row already claimed three times (`MAX_ATTEMPTS`) is closed as `skipped` / `abandoned`, so one item an agent keeps choking on cannot stop a queue reaching empty; a record that no longer exists has its row deleted; a record whose gap is already filled (`still_needed?`) is closed as `done` / `no_longer_needed`. Each closed row leaves a hole, so up to three passes top the batch up.
 
@@ -52,6 +52,8 @@ Deleting a book or author deletes its rows. A merge moves the source's rows to t
 **Skip.** `POST .../skip` with `lease_token` and a `reason` of 1 to 500 characters. The row becomes `skipped`, outcome `skipped_by_agent`, the reason in `note`. A skipped row is resolved and is not handed out again. Same 409 rules as submit; an empty or over-long reason is a 422.
 
 **Re-queue.** `Services::EnrichmentQueue::Requeue` puts a `done`, `skipped` or `failed` row back to `pending` (reason `manual`, attempts and answer cleared, via `EnrichmentRequest::REOPEN_RESET`, the one definition the version re-open shares). A `pending`, `claimed` or `submitted` row is refused with a conflict, because re-queueing it would race the agent or the job holding it. The admin page's Re-queue button calls it.
+
+**Retry apply.** `Services::EnrichmentQueue::RetryApply` runs the apply job again without redoing the research, because Re-queue clears the answer. It takes a `failed` row that still holds its answer (a transient failure such as a model outage inside the categories chooser call) and puts it back to `submitted` with `error` cleared, keeping the answer, sources, note and submitter, then queues `ApplyJob`. It also takes a `submitted` row whose `resolved_at` is more than 15 minutes old (`RetryApply::STALE_AFTER`), which is a job lost to a Redis flush: it only moves `resolved_at` to now, so a second click inside 15 minutes is refused, and queues the job. Every other row is a conflict (a fresh `submitted` row is still being applied). Both transitions are one conditional UPDATE, so a double click cannot queue twice; if queueing raises, a row that was `failed` goes back to `failed` with its old error. The admin page offers a **Retry apply** button on exactly those rows.
 
 ## What re-opens a resolved row
 
@@ -97,7 +99,7 @@ Where code asks "was this researched on the web?" an agent row counts (`Enrichme
 The two pipelines see each other through the data, not through shared state:
 
 - **Candidates and `still_needed?` read the data.** A book the cheap pipeline or the backfill already filled is not queued, and a queued one is closed at claim time as `no_longer_needed`. A book with a running `books.book_enrichment` or `books.book_categorize` run is not offered by a fill, because that run is still judging it and would otherwise judge it again after the agent.
-- **An agent row is done for `Services::Books::Categorize::Backfill` only when its outcome is `applied`** (`Backfill.done_rows`). The agent has no stored evidence, and the backfill gathers it and can settle a book the agent could only half answer (the Wikidata shortcut, a supported `medium`). So a held answer closes the queue row (`done` / `nothing_to_apply`, no agent is handed the book again) but leaves the book to the backfill.
+- **An agent row is done for `Services::Books::Categorize::Backfill` only when its outcome is `applied`** (`Backfill.done_rows`). The agent has no stored evidence, and the backfill gathers it and can settle a book the agent could only half answer (the Wikidata shortcut, a supported `medium`). So a held answer closes the queue row (`done` / `nothing_to_apply`, no agent is handed the book again) but leaves the book to the backfill, if the backfill has not judged it already. A held agent row is ignored when `done_rows` looks for the latest row of a kind, so a book the paid pipeline already judged stays done and is not judged a second time.
 - An applied agent row carries the current `prompt_version`, so the backfill skips the book and a book that owed research no longer does.
 
 ## The two types
@@ -146,14 +148,16 @@ The judgment rules are not copied into the prompt file. Each type exposes its ta
 
 - The index shows one row per type with its count per status, a **Copy prompt** button, and a **Fill** form (scope ranked or all, optional limit). Fill only queues `EnrichmentQueue::FillJob`; reload the page to see the counts move.
 - A type's page has a tab per status, a "via" filter on the resolved tabs, and the items with the record link, reason, outcome, note, sources, who and when, 50 to a page. Resolved tabs sort newest first; open tabs by priority.
-- A done, skipped or failed row has a **Re-queue** button (`POST /admin/enrichment_requests/:id/requeue`).
-- Fill and Re-queue need write permission on the domain.
+- A done, skipped or failed row has a **Re-queue** button (`POST /admin/enrichment_requests/:id/requeue`). A failed row that holds an answer, and a submitted row older than 15 minutes, have a **Retry apply** button (`POST /admin/enrichment_requests/:id/retry_apply`), which keeps the answer (see "Retry apply" above).
+- Tabs with outcomes also have an outcome filter (the outcomes present in that tab, with counts, and All), beside the "via" filter.
+- Fill, Re-queue and Retry apply need write permission on the domain, and a read-only viewer is not shown them.
+- Under the Fill form: Limit takes the highest-priority records that need this enrichment, whether or not they are already queued, so repeating a fill with the same limit adds nothing.
 
 E2E: `web-app/e2e/tests/books/admin/enrichment-queues.spec.ts` (page loads, Copy prompt copies, a queue opens). It does not press Fill.
 
 ## Rake task
 
-`bin/rails "enrichment_queue:fill[kind,scope,limit]"` queues `FillJob` for a kind (`books.origin`, `books.categories`), scope `ranked` (default) or `all`, and an optional positive limit. It enqueues and returns; progress is in the worker log. Example: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`. The admin page's Fill does the same.
+`bin/rails "enrichment_queue:fill[kind,scope,limit]"` queues `FillJob` for a kind (`books.origin`, `books.categories`), scope `ranked` (default) or `all`, and an optional positive limit (the limit counts the highest-priority candidates whether or not they are already queued, so repeating a fill with the same limit adds nothing). It enqueues and returns; progress is in the worker log. Example: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`. The admin page's Fill does the same.
 
 ## Adding a type
 
