@@ -135,10 +135,10 @@ module Services
       # violations a regex can see, so it cannot stand in for the reviewer.
       def review_description(text, mode)
         review = Services::Ai::Tasks::Books::DescriptionReviewTask.new(parent: book, description: text, author_names: author_names).call
-        return review_failed(text) unless review.success?
+        return review_failed(text, review.error) unless review.success?
 
         data = review.data.deep_symbolize_keys
-        return review_failed(text) if data[:spoilers].nil?
+        return review_failed(text, nil) if data[:spoilers].nil?
 
         flagged = data[:spoilers] == true || Array(data[:style_violations]).any?
         if flagged && data[:rewritten].blank?
@@ -160,8 +160,9 @@ module Services
         }
       end
 
-      def review_failed(text)
-        raise ReviewFailed, "the description review failed" if strict_review
+      # error is the review call's own message, nil for an empty reply.
+      def review_failed(text, error)
+        raise ReviewFailed, "the description review failed: #{error.presence || "the reviewer returned no verdict"}" if strict_review
 
         {text: text, review: nil, reason: "review_failed"}
       end

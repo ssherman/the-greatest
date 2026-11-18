@@ -3,6 +3,8 @@ require "test_helper"
 module Services
   module EnrichmentQueue
     class RegistryTest < ActiveSupport::TestCase
+      SAMPLE_ATTRIBUTES = {"Books::Book" => {title: "Priority Sample"}, "Books::Author" => {name: "Priority Sample"}}.freeze
+
       test "fetch finds a type by kind and raises on an unknown one" do
         Registry.stubs(:types).returns([EnrichmentQueueTestType])
         assert_equal EnrichmentQueueTestType, Registry.fetch("books.test_type")
@@ -18,8 +20,8 @@ module Services
       end
 
       test "every registered type answers the whole interface" do
-        assert_operator Registry.types.size, :>=, 3
-        assert_equal %w[books.book_facts books.categories books.origin], Registry.types.map(&:kind).sort
+        assert_operator Registry.types.size, :>=, 4
+        assert_equal %w[books.author_facts books.book_facts books.categories books.origin], Registry.types.map(&:kind).sort
         Registry.types.each do |type|
           assert_match ::Enrichment::KIND_FORMAT, type.kind
           assert_kind_of Integer, type.version
@@ -29,8 +31,12 @@ module Services
           assert_operator type.target_class, :<, ApplicationRecord
           assert_kind_of String, type.priority_sql
           assert type.priority_sql.present?
-          assert_respond_to type, :priority_for
+          assert_kind_of Integer, type.priority_for(type.target_class.first || type.target_class.create!(**SAMPLE_ATTRIBUTES.fetch(type.target_class.name)))
         end
+      end
+
+      test "find resolves the author facts type by slug" do
+        assert_equal Services::Books::QueueTypes::AuthorFacts, Registry.find(domain: "books", slug: "author_facts")
       end
 
       test "find resolves the book facts type by slug" do

@@ -102,10 +102,10 @@ module Services
           review = ::Services::Ai::Tasks::Books::AuthorDescriptionReviewTask.new(
             parent: author, description: first.data[:text], source_text: source, flagged: first.errors
           ).call
-          return review_failed(first.data[:text]) unless review.success?
+          return review_failed(first.data[:text], review.error) unless review.success?
 
           data = review.data.to_h.deep_symbolize_keys
-          return review_failed(first.data[:text]) if data[:style_violations].nil?
+          return review_failed(first.data[:text], nil) if data[:style_violations].nil?
 
           if (data[:style_violations].any? || first.errors.any?) && data[:rewritten].blank?
             return {text: first.data[:text], review: verdict(data, first), reason: "rejected"}
@@ -116,8 +116,9 @@ module Services
           {text: final.data[:text], review: verdict(data, first, final), reason: final.success? ? nil : "rejected"}
         end
 
-        def review_failed(text)
-          raise ReviewFailed, "the description review failed" if strict_review
+        # error is the review call's own message, nil for an empty reply.
+        def review_failed(text, error)
+          raise ReviewFailed, "the description review failed: #{error.presence || "the reviewer returned no verdict"}" if strict_review
 
           {text: text, review: nil, reason: "review_failed"}
         end

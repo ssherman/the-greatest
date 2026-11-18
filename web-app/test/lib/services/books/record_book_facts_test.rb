@@ -97,7 +97,8 @@ module Services
         stub_review(spoilers: nil, style_violations: [], rewritten: nil, success: false)
 
         assert_no_difference -> { Enrichment.count } do
-          assert_raises(RecordBookFacts::ReviewFailed) { record(strict_review: true) }
+          error = assert_raises(RecordBookFacts::ReviewFailed) { record(strict_review: true) }
+          assert_includes error.message, "review down"
         end
         assert_nil @book.reload.first_published_year
         assert_empty @book.descriptions

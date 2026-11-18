@@ -25,7 +25,7 @@ module Api
             get "/api/v1/admin/enrichment_queues", headers: bearer(ApiTokenSecrets::ADMIN_READ)
             assert_api_response_conform(status: 200, api: :admin)
 
-            assert_equal %w[origin categories book_facts], json["data"].map { |row| row["type"] }
+            assert_equal %w[origin categories book_facts author_facts], json["data"].map { |row| row["type"] }
             json["data"].each do |row|
               assert_equal STATUS_KEYS, row["counts"].keys
               assert_equal %w[type kind label version counts], row.keys
