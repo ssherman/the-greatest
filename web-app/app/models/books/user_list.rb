@@ -56,6 +56,10 @@ module Books
       [:read]
     end
 
+    def self.completion_labels
+      {read: "Finished"}
+    end
+
     def self.completion_transition_sources
       {read: [:reading]}
     end

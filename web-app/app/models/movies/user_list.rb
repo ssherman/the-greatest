@@ -55,6 +55,10 @@ module Movies
       [:watched]
     end
 
+    def self.completion_labels
+      {watched: "Watched"}
+    end
+
     def self.ranking_configuration_class
       Movies::RankingConfiguration
     end

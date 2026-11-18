@@ -144,6 +144,12 @@ class UserList < ApplicationRecord
     []
   end
 
+  # Display copy for the list_types in completed_on_list_types, keyed by
+  # list_type. Base returns {}; subclasses override.
+  def self.completion_labels
+    {}
+  end
+
   def self.completion_transition_sources
     {}
   end
@@ -174,6 +180,20 @@ class UserList < ApplicationRecord
   # True when this list's list_type supports a completion date.
   def completed_on_enabled?
     self.class.completed_on_list_types.include?(list_type.to_sym)
+  end
+
+  def completion_label
+    self.class.completion_labels.fetch(list_type.to_sym, "Completed")
+  end
+
+  # Only a generating subclass's favorites feed the generated (ranked) list.
+  def counts_toward_rankings?
+    favorites? && self.class.in?(UserList.generating_subclasses)
+  end
+
+  # "books", "albums", "songs" or "games", for user-facing copy.
+  def listable_noun
+    self.class.listable_class.model_name.human.pluralize.downcase
   end
 
   def completion_transition_source_types

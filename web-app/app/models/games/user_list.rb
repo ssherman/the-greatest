@@ -63,6 +63,10 @@ module Games
       [:played, :beaten]
     end
 
+    def self.completion_labels
+      {played: "Played", beaten: "Beaten"}
+    end
+
     def self.ranking_configuration_class
       Games::RankingConfiguration
     end

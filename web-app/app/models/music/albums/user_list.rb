@@ -56,6 +56,10 @@ module Music
         [:listened]
       end
 
+      def self.completion_labels
+        {listened: "Listened"}
+      end
+
       def self.ranking_configuration_class
         Music::Albums::RankingConfiguration
       end
