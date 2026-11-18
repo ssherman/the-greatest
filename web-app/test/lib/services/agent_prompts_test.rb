@@ -130,7 +130,7 @@ module Services
       prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::Origin)
 
       assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
-      assert_includes prompt, "1 pending"
+      assert_includes prompt, "holds 1 pending"
       %w[get_enrichment_queue claim_enrichment_items submit_enrichment_item skip_enrichment_item].each { assert_includes prompt, it }
       assert_includes prompt, Services::Ai::Tasks::Books::BookOriginTask::RULES
     end
@@ -149,12 +149,19 @@ module Services
         assert_includes prompt, "`meta.remaining` is 0", type.kind
         assert_includes prompt, "no longer yours", type.kind
         assert_includes prompt, "Set `recognized` to true only when you are sure which book the item is", type.kind
-        assert_includes prompt, "Do not say high to get an answer through.", type.kind
+        assert_includes prompt, "do not raise your confidence to get an answer through", type.kind
+        assert_match(/medium/i, prompt, type.kind)
+        refute_includes prompt, "anything lower is recorded and held", type.kind
+        assert_includes prompt, "The lease lasts 30 minutes", type.kind
+        assert_includes prompt, "fix the answer and submit again", type.kind
       end
     end
 
-    test "the categories prompt says submitting only adds" do
-      assert_includes AgentPrompts.for_enrichment(Services::Books::QueueTypes::Categories), "It only adds."
+    test "the categories prompt says submitting only adds and never creates a category" do
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::Categories)
+
+      assert_includes prompt, "It only adds."
+      assert_includes prompt, "recorded and not created"
     end
 
     test "the enrichment prompt's pending count is the pending rows of that kind only" do

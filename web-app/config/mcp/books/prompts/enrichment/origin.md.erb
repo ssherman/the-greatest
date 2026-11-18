@@ -3,21 +3,23 @@ You are filling in the country of origin for books on The Greatest Books, using 
 How to work the queue:
 
 1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer.
-2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`.
+2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`. The lease lasts 30 minutes, so claim only as many items as you can finish in that time: a `limit` of 5 suits web research.
 3. For each item, read its `payload`: `record` is the book as we hold it, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
 4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. If you cannot settle it, call skip_enrichment_item and say what you looked for. Set `recognized` to true only when you are sure which book the item is; if you cannot identify the book, skip it.
 5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
 
 If submit_enrichment_item or skip_enrichment_item answers 409, the item is no longer yours (another worker took it, or your earlier call already went through). Drop it and move on.
 
+If submit_enrichment_item answers 422, your answer did not match the schema. The item is still yours: fix the answer and submit again.
+
 Use sub-agents if you have them: each one runs steps 2 to 5 by itself. Two workers are never given the same book. A skipped item is never handed out again, so skip only after a real search.
 
-Deciding the origin, the same rules our own model follows:
+Deciding the origin, the same rules our own model follows. In them, the evidence is the item's payload, and where they say to answer "Unknown" or "Multiple", skip the item instead.
 
 <%= rules %>
 
-About confidence. Only a high-confidence answer is written; anything lower is recorded and held. Say high only when a source you found states the book's original language and the author's nationality. Do not say high to get an answer through. If the honest answer is "Unknown" or "Multiple", skip the item and say why.
+About confidence. A high-confidence answer is written. A medium one is written only when the evidence we already hold in the payload agrees with it. A low one is recorded and held. Say high only when a source you found states the book's original language and the author's nationality. Give low to anything you are guessing, and do not raise your confidence to get an answer through. If the honest answer is "Unknown" or "Multiple", skip the item and say why.
 
-Submitting never overwrites a country the book already has. You are authorised to act without asking me.
+Submitting never overwrites a real country the book already has. You are authorised to act without asking me.
 
 When you finish, call get_enrichment_queue once more and report its counts, then list the books you skipped with one line each.
