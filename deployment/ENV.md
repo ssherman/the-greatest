@@ -250,6 +250,13 @@ These variables are used by nginx's built-in template system for environment var
   Goodreads re-import's matching (`docs/launch-todo.md` §12), then lower it again. Check Postgres headroom
   (`max_connections` 200) before going much higher.
 
+#### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD
+- **Description**: Basic-auth credentials for the Sidekiq dashboard at `/sidekiq-admin`
+  (answers on every domain)
+- **Required**: Yes in production, or the dashboard is unreachable
+- **Default**: none. If either is blank, every login is refused (`SidekiqWebAuth`) — the
+  dashboard fails closed, never open
+
 ### Publisher intake
 
 #### PUBLISHER_INTAKE_SOURCES
@@ -269,13 +276,6 @@ These variables are used by nginx's built-in template system for environment var
 - **Required**: No
 - **Default**: `2000`
 - **Used By**: worker
-
-#### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD
-- **Description**: Basic-auth credentials for the Sidekiq dashboard at `/sidekiq-admin`
-  (answers on every domain)
-- **Required**: Yes in production, or the dashboard is unreachable
-- **Default**: none. If either is blank, every login is refused (`SidekiqWebAuth`) — the
-  dashboard fails closed, never open
 
 ### Application Features
 
