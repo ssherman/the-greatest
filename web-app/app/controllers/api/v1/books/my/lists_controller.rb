@@ -20,8 +20,6 @@ module Api
 
           CREATE_FIELDS = %w[name description public books].freeze
           UPDATE_FIELDS = %w[name description public].freeze
-          NAME_MAX = 100
-          DESCRIPTION_MAX = 1_000
 
           def index
             # A member from before a default existed (or a new one) has no
@@ -90,26 +88,19 @@ module Api
             list = find_my_list!(params[:list]) or return
             unknown = body.keys - UPDATE_FIELDS
             return unknown_fields(unknown, UPDATE_FIELDS) if unknown.any?
-            return refuse("A default list cannot be renamed") if attrs.key?(:name) && list.default?
+            result = ::Services::UserLists::UpdateList.call(list: list, attrs: attrs)
+            return refuse(result.errors.first) unless result.success?
 
-            list.update!(attrs)
             render json: {data: list_json(list)}
           end
 
           # DELETE /api/v1/my/lists/:list -- no budget: it is one list, not book changes.
           def destroy
             list = find_my_list!(params[:list]) or return
-            return refuse("A default list cannot be deleted") if list.default?
-
             body = list_json(list)
-            # One DELETE for the items, not a callback per row: a list can hold
-            # thousands. No reading-goal purge: goals count only the read list
-            # (ProgressQuery), and default lists cannot be deleted, so a custom
-            # list's dates never move a goal.
-            ::Services::UserLists::OwnerMutation.call(owner: library_user) do
-              ::UserListItem.where(user_list_id: list.id).delete_all
-              list.destroy!
-            end
+            result = ::Services::UserLists::DeleteList.call(list: list)
+            return refuse(result.errors.first) unless result.success?
+
             render json: {data: body}
           end
 
@@ -139,25 +130,19 @@ module Api
 
           # Valid, stripped name; else renders a 400 and returns nil.
           def name!(raw)
-            name = raw.is_a?(String) ? raw.strip : nil
-            if name.nil? || name.empty? || name.length > NAME_MAX || name.include?("\u0000")
-              bad_body("name must be a string of 1 to #{NAME_MAX} characters")
-              return nil
-            end
+            name = ::Services::UserLists::ListRules.normalize_name(raw)
+            bad_body("name must be a string of 1 to #{::Services::UserLists::ListRules::NAME_MAX} characters") if name.nil?
             name
           end
 
           # A string of up to 1,000 characters, or null to clear it. Blank is stored
           # as null. Renders a 400 on anything else (the caller checks `performed?`).
           def description!(raw)
-            return nil if raw.nil?
+            text = ::Services::UserLists::ListRules.normalize_description(raw)
+            return text unless text == :invalid
 
-            text = raw.is_a?(String) ? raw.strip : nil
-            if text.nil? || text.length > DESCRIPTION_MAX || text.include?("\u0000")
-              bad_body("description must be a string of up to #{DESCRIPTION_MAX} characters, or null")
-              return nil
-            end
-            text.presence
+            bad_body("description must be a string of up to #{::Services::UserLists::ListRules::DESCRIPTION_MAX} characters, or null")
+            nil
           end
 
           # Only a JSON boolean: "yes" and "true" are rejected, not cast.
@@ -181,7 +166,12 @@ module Api
                 raise ActiveRecord::Rollback
               end
 
-              list = ::Books::UserList.create!(attrs.merge(user: library_user, list_type: :custom))
+              created = ::Services::UserLists::CreateList.call(user: library_user, klass: ::Books::UserList, **attrs)
+              unless created.success?
+                problem = created.errors.join(", ")
+                raise ActiveRecord::Rollback
+              end
+              list = created.data.fetch(:list)
               if books
                 result = ::Services::UserLists::AddItems.call(user_list: list, listables: books)
                 unless result.success?
