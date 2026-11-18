@@ -5,7 +5,7 @@ How to work the queue:
 1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer.
 2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`.
 3. For each item, read its `payload`: `record` is the book as we hold it, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
-4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. If you cannot settle it, call skip_enrichment_item and say what you looked for.
+4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. If you cannot settle it, call skip_enrichment_item and say what you looked for. Set `recognized` to true only when you are sure which book the item is; if you cannot identify the book, skip it.
 5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
 
 If submit_enrichment_item or skip_enrichment_item answers 409, the item is no longer yours (another worker took it, or your earlier call already went through). Drop it and move on.

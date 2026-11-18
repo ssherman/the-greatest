@@ -148,7 +148,13 @@ module Services
 
         assert_includes prompt, "`meta.remaining` is 0", type.kind
         assert_includes prompt, "no longer yours", type.kind
+        assert_includes prompt, "Set `recognized` to true only when you are sure which book the item is", type.kind
+        assert_includes prompt, "Do not say high to get an answer through.", type.kind
       end
+    end
+
+    test "the categories prompt says submitting only adds" do
+      assert_includes AgentPrompts.for_enrichment(Services::Books::QueueTypes::Categories), "It only adds."
     end
 
     test "the enrichment prompt's pending count is the pending rows of that kind only" do
