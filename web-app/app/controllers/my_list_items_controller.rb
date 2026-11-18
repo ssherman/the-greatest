@@ -88,7 +88,7 @@ class MyListItemsController < ApplicationController
   end
 
   def parse_integer(value)
-    Integer(value.to_s, exception: false)
+    Integer(value.to_s, 10, exception: false)
   end
 
   # nil for blank, :invalid for a value that is not an ISO date.

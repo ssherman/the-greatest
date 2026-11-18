@@ -11,6 +11,8 @@ class UserLists::Dashboard::NewListDialogComponentTest < ViewComponent::TestCase
     assert_selector "dialog#new-list-dialog"
     assert_selector "select[name='user_list[type]'] option[value='Music::Albums::UserList']"
     assert_selector "select[name='user_list[type]'] option[value='Music::Songs::UserList']"
+    assert_selector "select[name='user_list[type]'] option", text: "Albums"
+    assert_selector "select[name='user_list[type]'] option", text: "Songs"
     assert_selector "input[name='user_list[name]'][maxlength='100'][required]"
     assert_selector "textarea[name='user_list[description]'][maxlength='1000']"
     assert_selector "#new-list-errors[role='alert']"

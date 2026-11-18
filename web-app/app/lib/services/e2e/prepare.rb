@@ -27,7 +27,7 @@ module Services
       PUBLIC_LIST_NAME = "E2E Public Books"
       PRIVATE_LIST_NAME = "E2E Private Books"
       EDIT_LIST_NAME = "E2E Edit Books"
-      # More than one page of the Edit list (10 rows) so drag and the pager are exercised together.
+      # More than ten rows so drag can move an item past index 9 (the pager limit is 100, so this is one page).
       EDIT_LIST_ITEMS = 12
       CREATED_LIST_PREFIX = "E2E Created List "
       COMP_NOTE = "Playwright member account (bin/rails e2e:prepare)"

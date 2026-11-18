@@ -70,6 +70,24 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
     refute @list.reload.manually_ordered
   end
 
+  test "a radix-prefixed position is rejected rather than read as hex" do
+    sign_in_as(@user, stub_auth: true)
+
+    move(@first, "0x2")
+
+    assert_response :unprocessable_entity
+    assert_equal [@first.id, @second.id, @third.id], order
+  end
+
+  test "a zero-padded position is read as decimal" do
+    sign_in_as(@user, stub_auth: true)
+
+    move(@first, "02")
+
+    assert_response :success
+    assert_equal [@second.id, @first.id, @third.id], order
+  end
+
   test "move with a non-integer position answers 422" do
     sign_in_as(@user, stub_auth: true)
 
@@ -246,7 +264,7 @@ class MyListItemsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "[data-controller~=user-list-completion]"
     assert_select "dialog#completion-date-dialog"
-    assert_select "[data-action='user-list-completion#open'][data-variant=text]"
+    assert_select "[data-action='user-list-completion#open'][data-variant=row]"
 
     get edit_my_list_path(@list)
     assert_select "dialog#completion-date-dialog", count: 0

@@ -28,6 +28,6 @@ module EditPageRows
   end
 
   def requested_page
-    Integer(params[:page].to_s, exception: false)&.clamp(1, nil) || 1
+    Integer(params[:page].to_s, 10, exception: false)&.clamp(1, nil) || 1
   end
 end

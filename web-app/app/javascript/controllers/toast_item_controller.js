@@ -12,6 +12,11 @@ export default class extends Controller {
     }, this.ttlValue)
   }
 
+  // The action (Undo) is single-use: drop the toast as soon as it is submitted.
+  dismiss() {
+    this.element.remove()
+  }
+
   disconnect() {
     clearTimeout(this.fadeTimer)
     clearTimeout(this.removeTimer)

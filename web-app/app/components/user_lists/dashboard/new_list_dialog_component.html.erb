@@ -16,7 +16,7 @@
       <% if types.size > 1 %>
         <fieldset class="fieldset">
           <legend class="fieldset-legend">List of</legend>
-          <%= f.select :type, types.map { |klass| [klass.listable_class.model_name.human(count: 2), klass.name] }, {}, class: "select w-full", aria: {label: "List of"} %>
+          <%= f.select :type, types.map { |klass| [klass.listable_class.model_name.human.pluralize, klass.name] }, {}, class: "select w-full", aria: {label: "List of"} %>
         </fieldset>
       <% else %>
         <%= f.hidden_field :type, value: types.first&.name %>
