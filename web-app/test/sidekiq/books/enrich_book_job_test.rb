@@ -47,6 +47,15 @@ class Books::EnrichBookJobTest < ActiveSupport::TestCase
     @job.perform(@book.id, true)
   end
 
+  test "a skipped research row does not mark the book as researched" do
+    skipped = Enrichment.new(mode: :research, outcome: :skipped, reason: "queued")
+    Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: true, data: {enrichments: [skipped]}, errors: []))
+    Workflows::Books::BookCategorize.expects(:start)
+      .with(@book, initiated_by: "enrich_book_job", options: {"context" => "admin"})
+
+    @job.perform(@book.id, true)
+  end
+
   test "a failed enrichment does not start the categorize workflow" do
     Services::Books::EnrichBook.stubs(:call).returns(Services::Books::EnrichBook::Result.new(success?: false, data: {enrichments: []}, errors: ["x"]))
     Workflows::Books::BookCategorize.expects(:start).never

@@ -156,4 +156,12 @@ class EnrichmentTest < ActiveSupport::TestCase
     assert_includes scoped, no_context
     assert_includes scoped, facts_row
   end
+
+  test "against_research_cap leaves out skipped research rows" do
+    book = books_books(:war_and_peace)
+    skipped = book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :skipped, reason: "queued")
+    ran = book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :applied, facts: {})
+    refute_includes Enrichment.against_research_cap, skipped
+    assert_includes Enrichment.against_research_cap, ran
+  end
 end

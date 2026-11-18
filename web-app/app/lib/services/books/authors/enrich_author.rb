@@ -36,7 +36,8 @@ module Services
           return result if rows.last.failed?
 
           if research_wanted?(rows.last)
-            rows << (budget_exhausted? ? skip("budget_exhausted", mode: :research) : run(:research))
+            reason = research_skip_reason
+            rows << (reason ? skip_research(reason) : run(:research))
           end
           result
         end
@@ -69,6 +70,39 @@ module Services
           ::Enrichment.against_research_cap.count >= Rails.application.config.x.ai.research_daily_cap
         end
 
+        # Why the web search will not run, or nil when it will. In queue mode
+        # the search is left to an agent.
+        def research_skip_reason
+          return "queued" if ::Services::EnrichmentQueue::ResearchRoute.queue?
+
+          "budget_exhausted" if budget_exhausted?
+        end
+
+        # The skip row goes first: the queue type's still_needed? reads it.
+        def skip_research(reason)
+          row = skip(reason, mode: :research)
+          ::Services::EnrichmentQueue::ResearchRoute.defer(kind: KIND, record: author) if reason == "queued"
+          row
+        end
+
+        # Hold a low-confidence knowledge answer while research is still to
+        # follow. The cheap checks come first so the budget COUNT and the queue
+        # lookup only run for an answer that is low.
+        def hold_reason(mode, facts)
+          return nil unless mode == :knowledge && facts[:confidence].to_s.strip.downcase == "low"
+          return nil unless research_allowed?
+
+          "deferred" if research_will_follow?
+        end
+
+        def research_will_follow?
+          if ::Services::EnrichmentQueue::ResearchRoute.queue?
+            ::Services::EnrichmentQueue::ResearchRoute.open_for?(kind: KIND, record: author)
+          else
+            !budget_exhausted?
+          end
+        end
+
         def run(mode)
           task_result = ::Services::Ai::Tasks::Books::AuthorFactsTask.new(parent: author, records: records, mode: mode).call
           return failed_row(mode, task_result) unless task_result.success?
@@ -81,7 +115,7 @@ module Services
           RecordAuthorFacts.call(
             author: author, records: records, facts: facts, mode: mode,
             citations: Array(task_result.data[:citations]), ai_chat: chat, provider: chat&.provider, model: chat&.model,
-            hold_low_confidence: ("deferred" if mode == :knowledge && research_allowed? && !budget_exhausted?)
+            hold_low_confidence: hold_reason(mode, facts)
           )
         rescue => e
           # Whatever raises past the task call (a bug in the applier, a

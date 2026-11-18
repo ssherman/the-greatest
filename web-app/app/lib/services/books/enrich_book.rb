@@ -42,8 +42,8 @@ module Services
           :knowledge
         end
 
-        if first_mode == :research && !force_research && budget_exhausted?
-          rows << skip("budget_exhausted", mode: :research)
+        if first_mode == :research && (reason = research_skip_reason)
+          rows << skip_research(reason)
           return result
         end
 
@@ -51,11 +51,8 @@ module Services
         return result if rows.last.failed?
 
         if first_mode == :knowledge && needs_research?(rows.last)
-          rows << if budget_exhausted? && !force_research
-            skip("budget_exhausted", mode: :research)
-          else
-            run(:research)
-          end
+          reason = research_skip_reason
+          rows << (reason ? skip_research(reason) : run(:research))
         end
 
         result
@@ -86,6 +83,39 @@ module Services
         Enrichment.against_research_cap.count >= Rails.application.config.x.ai.research_daily_cap
       end
 
+      # Why the web search will not run, or nil when it will. A forced run
+      # always searches. In queue mode the search is left to an agent.
+      def research_skip_reason
+        return nil if force_research
+        return "queued" if Services::EnrichmentQueue::ResearchRoute.queue?
+
+        "budget_exhausted" if budget_exhausted?
+      end
+
+      # The skip row goes first: the queue type's still_needed? reads it.
+      def skip_research(reason)
+        row = skip(reason, mode: :research)
+        Services::EnrichmentQueue::ResearchRoute.defer(kind: KIND, record: book) if reason == "queued"
+        row
+      end
+
+      # Hold a low-confidence knowledge answer while research is still to
+      # follow. The cheap checks come first so the budget COUNT and the queue
+      # lookup only run for an answer that is low.
+      def hold_reason(mode, facts)
+        return nil unless mode == :knowledge && facts[:confidence].to_s.strip.downcase == "low"
+
+        "deferred" if research_will_follow?
+      end
+
+      def research_will_follow?
+        if Services::EnrichmentQueue::ResearchRoute.queue?
+          Services::EnrichmentQueue::ResearchRoute.open_for?(kind: KIND, record: book)
+        else
+          !budget_exhausted?
+        end
+      end
+
       def run(mode)
         task_result = Services::Ai::Tasks::Books::BookFactsTask.new(parent: book, mode: mode, author_names: author_names, source: goodreads_page).call
         return failed_row(mode, task_result) unless task_result.success?
@@ -103,7 +133,7 @@ module Services
           book: book, facts: facts, mode: mode, citations: citations,
           ai_chat: chat, provider: chat&.provider, model: chat&.model,
           author_names: author_names, goodreads_page: goodreads_page,
-          hold_low_confidence: ("deferred" if mode == :knowledge && !budget_exhausted?)
+          hold_low_confidence: hold_reason(mode, facts)
         )
       rescue => e
         # Anything past this point that raises (a unique-index race between

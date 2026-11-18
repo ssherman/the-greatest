@@ -66,6 +66,7 @@ class Enrichment < ApplicationRecord
   # categories backfills share their own cap, so their rows must not eat the
   # budget imports share.
   # COALESCE keeps rows with no context (NULL would drop them from NOT).
-  scope :against_research_cap, -> { research.today.where.not("kind IN ('books.origin', 'books.categories') AND COALESCE(facts->>'context', '') = 'backfill'") }
+  # A skipped row (reason "queued" or "budget_exhausted") spent no web search.
+  scope :against_research_cap, -> { research.today.where.not(outcome: :skipped).where.not("kind IN ('books.origin', 'books.categories') AND COALESCE(facts->>'context', '') = 'backfill'") }
   scope :low_confidence_on, ->(fact) { where("facts -> ? ->> 'confidence' = 'low'", fact.to_s) }
 end
