@@ -8,12 +8,22 @@ module PublisherIntakeFetchHelper
     VERSION = 7
 
     class << self
-      attr_accessor :listing_request_value, :listing_reading, :discovery_value, :seen
+      attr_accessor :listing_request_value, :listing_reading, :discovery_value, :seen,
+        :baseline_value, :discovery_requests_value, :seed_requests_value, :since_seen
     end
 
     def key = "test_source"
 
     def name = "Test source"
+
+    def baseline_on_first_run? = self.class.baseline_value || false
+
+    def discovery_requests(since:)
+      self.class.since_seen = since
+      self.class.discovery_requests_value || []
+    end
+
+    def seed_requests = self.class.seed_requests_value || []
 
     def listing_request(listing)
       self.class.listing_request_value || Books::PublisherIntake::Request.page(listing.url, wait_for_selector: "h1")
@@ -40,6 +50,10 @@ module PublisherIntakeFetchHelper
     TestStrategy.listing_reading = nil
     TestStrategy.discovery_value = nil
     TestStrategy.seen = nil
+    TestStrategy.baseline_value = nil
+    TestStrategy.discovery_requests_value = nil
+    TestStrategy.seed_requests_value = nil
+    TestStrategy.since_seen = nil
     config = ActiveSupport::OrderedOptions.new.merge(fetch_interval: 10, daily_fetch_cap: 100, block_cooldown: 6.hours.to_i)
     @gate = Books::FetchGate.new(key: "test:gate", config: config, label: SOURCE, redis: Books::OpenLibrary::FakeRedis.new)
     Books::PublisherIntake.stubs(:gate_for).returns(@gate)
