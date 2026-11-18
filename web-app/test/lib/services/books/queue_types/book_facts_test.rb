@@ -129,6 +129,18 @@ module Services
           assert_not_includes candidate_ids, book.id
         end
 
+        test "a failed run after a research skip leaves a complete book needed" do
+          book = complete(book_with_author("Failed After Skip"))
+          book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :skipped, reason: "queued")
+          book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :failed, error: "timeout")
+
+          assert Type.still_needed?(book)
+          assert_includes candidate_ids, book.id
+
+          book.enrichments.create!(kind: "books.book_facts", mode: :research, outcome: :applied, reason: "filled")
+          assert_not Type.still_needed?(book)
+        end
+
         test "a deferred_to_authors skip is not a research skip" do
           book = complete(book_with_author("Deferred To Authors"))
           book.enrichments.create!(kind: "books.book_facts", mode: :knowledge, outcome: :skipped, reason: "deferred_to_authors")

@@ -243,6 +243,47 @@ module Services
           assert_equal Type, Services::EnrichmentQueue::Registry.find(domain: "books", slug: "author_facts")
         end
 
+        test "a failed run after a research skip leaves the author needed" do
+          author = new_author("Failed After Skip")
+          skip_research(author)
+          author.enrichments.create!(kind: KIND, mode: :research, outcome: :failed, error: "timeout")
+
+          assert Type.still_needed?(author)
+          assert_includes candidate_ids, author.id
+
+          author.enrichments.create!(kind: KIND, mode: :research, outcome: :applied, reason: "filled")
+          assert_not Type.still_needed?(author)
+        end
+
+        test "a failed run with no research skip behind it does not make an author needed" do
+          author = new_author("Failed Only")
+          author.enrichments.create!(kind: KIND, mode: :knowledge, outcome: :applied, reason: "filled")
+          author.enrichments.create!(kind: KIND, mode: :research, outcome: :failed, error: "timeout")
+
+          assert_not Type.still_needed?(author)
+          assert_not_includes candidate_ids, author.id
+        end
+
+        test "a paid run that failed can be re-queued and is handed out again" do
+          author = new_author("Retry Me")
+          skip_research(author)
+          Services::EnrichmentQueue::Fill.call(kind: KIND, scope: "all")
+          # The real paid path: the research call fails, so EnrichAuthor writes a failed ledger row.
+          Services::Ai::Tasks::Books::AuthorFactsTask.any_instance.stubs(:call)
+            .returns(Services::Ai::Result.new(success: false, error: "timeout"))
+
+          Services::EnrichmentQueue::Research.call(kind: KIND)
+          request = ::EnrichmentRequest.find_by!(enrichable: author, kind: KIND)
+          assert_equal "failed", request.status
+          assert_equal %w[skipped failed], author.enrichments.where(kind: KIND).order(:id).map(&:outcome)
+
+          assert Services::EnrichmentQueue::Requeue.call(request: request, user: users(:admin_user)).success?
+          claim = Services::EnrichmentQueue::Claim.call(kind: KIND, user: users(:admin_user), limit: 1)
+
+          assert_equal [request.id], claim.data[:items].map(&:id)
+          assert_equal "claimed", request.reload.status
+        end
+
         test "paid_research? is true" do
           assert Type.paid_research?
         end
