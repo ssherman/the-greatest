@@ -57,7 +57,7 @@
               <td class="whitespace-nowrap"><%= source[:fetches_today] %> of <%= source[:daily_cap] %></td>
               <td class="whitespace-nowrap">
                 <% if source[:blocked_until] %>
-                  <%= source[:blocked_until].strftime("%Y-%m-%d %H:%M") %>
+                  <%= source[:blocked_until].in_time_zone.strftime("%Y-%m-%d %H:%M") %>
                 <% else %>
                   <span class="text-base-content/60">Not blocked</span>
                 <% end %>

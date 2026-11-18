@@ -7,8 +7,8 @@ module Admin
         host! Rails.application.config.domains[:books]
         # CI has no Redis: the overview's fetch counts come from a stubbed gate.
         config = ActiveSupport::OrderedOptions.new.merge(fetch_interval: 10, daily_fetch_cap: 100, block_cooldown: 6.hours.to_i)
-        gate = ::Books::FetchGate.new(key: "test:gate", config: config, label: "test", redis: ::Books::OpenLibrary::FakeRedis.new)
-        ::Books::PublisherIntake.stubs(:gate_for).returns(gate)
+        @gate = ::Books::FetchGate.new(key: "test:gate", config: config, label: "test", redis: ::Books::OpenLibrary::FakeRedis.new)
+        ::Books::PublisherIntake.stubs(:gate_for).returns(@gate)
       end
 
       test "an admin sees the overview, with a row for every registered source and a link to its titles" do
@@ -20,6 +20,14 @@ module Admin
           assert_select "[data-testid=source-row][data-source=?]", key
           assert_select "a[href=?]", admin_books_publisher_titles_path(source: key)
         end
+      end
+
+      test "the overview renders when a source's gate is blocked" do
+        @gate.block!
+        sign_in_as(users(:admin_user), stub_auth: true)
+        get admin_books_publisher_intake_path
+        assert_response :success
+        assert_select "[data-testid=source-row]", ::Books::PublisherIntake::Sources.registry.size
       end
 
       test "the overview renders when the tables are empty" do

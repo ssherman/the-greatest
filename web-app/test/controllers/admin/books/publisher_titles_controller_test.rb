@@ -24,6 +24,21 @@ module Admin
         assert_select "a[href=?]", admin_books_publisher_title_path(@held)
       end
 
+      test "the default order is upcoming first, undated last" do
+        late = ::Books::PublisherTitle.create!(source: "hachette_us", title: "Late", status: :ready, on_sale_on: Date.new(2028, 1, 1))
+        early = ::Books::PublisherTitle.create!(source: "hachette_us", title: "Early", status: :ready, on_sale_on: Date.new(2026, 1, 1))
+        undated = ::Books::PublisherTitle.create!(source: "hachette_us", title: "Undated", status: :ready)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_publisher_titles_path
+        assert_response :success
+
+        hrefs = css_select("a[href]").map { |a| a["href"] }
+        positions = [early, late, undated].map { |t| hrefs.index(admin_books_publisher_title_path(t)) }
+        assert_equal 3, positions.compact.size
+        assert_equal positions.sort, positions
+      end
+
       test "filters by source, status and hold reason narrow the list" do
         sign_in_as(@admin, stub_auth: true)
 
