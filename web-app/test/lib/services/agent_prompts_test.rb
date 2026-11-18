@@ -208,6 +208,7 @@ module Services
 
       assert_includes prompt, "Submitting only fills blanks"
       assert_includes prompt, "is recorded and nothing is written"
+      assert_includes prompt, "Book type, series and origin countries are recorded and not written"
     end
 
     test "the author facts prompt says what is written" do

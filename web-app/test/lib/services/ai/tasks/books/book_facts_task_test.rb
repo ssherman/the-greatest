@@ -177,6 +177,15 @@ module Services
             message = chat.messages.first.fetch("content")
             assert_equal "fe30fbe275ba6de57dc98fcef7c49ec7d28a106fcd890f5b902849e09e508c89", Digest::SHA256.hexdigest(message)
           end
+
+          test "the system message sent to the model is byte-for-byte what it was in sourced mode" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            page = ::Books::GoodreadsPage.new(title: "War and Peace", authors: [], original_publication_year: 1868, page_count: 1225, genres: [], description: nil)
+            chat = BookFactsTask.new(parent: @book, mode: :sourced, source: page, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "b6524ea34a1a86a2a47ba12b526ebfe42e257bcb5937491edc2aa3550fa5376f", Digest::SHA256.hexdigest(message)
+          end
         end
       end
     end

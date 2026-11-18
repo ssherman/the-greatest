@@ -72,11 +72,15 @@ module Services
             "EXISTS (SELECT 1 FROM #{::Books::BookAuthor.table_name} WHERE #{::Books::BookAuthor.table_name}.book_id = books_books.id)"
           end
 
+          # A book lacks a description for this queue when it has no description
+          # that is not deprecated AND no ai_generated one of any rank: the
+          # applier keeps any AI description, even a deprecated one, so an
+          # agent's description for such a book would never be written.
           def no_live_description_sql
             ActiveRecord::Base.sanitize_sql_array([
               "NOT EXISTS (SELECT 1 FROM descriptions WHERE descriptions.describable_type = 'Books::Book' " \
-              "AND descriptions.describable_id = books_books.id AND descriptions.rank <> ?)",
-              ::Description.ranks.fetch("deprecated")
+              "AND descriptions.describable_id = books_books.id AND (descriptions.rank <> ? OR descriptions.source = ?))",
+              ::Description.ranks.fetch("deprecated"), ::Description.sources[:ai_generated]
             ])
           end
 
@@ -94,7 +98,8 @@ module Services
             missing = []
             missing << "first_published_year" if book.first_published_year.nil? && !cleared.include?("first_published_year")
             missing << "original_language" if book.original_language_id.nil? && !cleared.include?("original_language_id")
-            missing << "description" if book.descriptions.where.not(rank: :deprecated).none?
+            # Same rule as no_live_description_sql.
+            missing << "description" if book.descriptions.where.not(rank: :deprecated).or(book.descriptions.where(source: :ai_generated)).none?
             missing
           end
 

@@ -92,6 +92,14 @@ module Services
           assert_not_includes candidate_ids, book.id
         end
 
+        test "a book whose only description is a deprecated AI one is not offered, since the applier keeps it" do
+          book = book_with_author("Deprecated AI", first_published_year: 1869, original_language: languages(:russian))
+          book.descriptions.create!(content: "A description.", source: :ai_generated, rank: :deprecated)
+
+          assert_not_includes candidate_ids, book.id
+          assert_not_includes Type.payload(book)["missing"], "description"
+        end
+
         test "a field a human cleared is not a gap" do
           book = book_with_author("Cleared Year", original_language: languages(:russian))
           add_description(book)
