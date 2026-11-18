@@ -1004,6 +1004,11 @@ Rails.application.routes.draw do
           post :bulk_approve
         end
       end
+      # The enrichment queues AI agents work through the admin API (type = the kind's slug).
+      resources :enrichment_queues, only: [:index, :show], param: :type do
+        member { post :fill }
+      end
+      post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
 
       resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
         member do
