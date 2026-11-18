@@ -141,6 +141,15 @@ module Services
             assert_equal BookOriginTask::ResponseSchema, task.send(:response_schema)
           end
 
+          # Pinned when RULES was extracted (2026-11-17): the wording must not change without a PROMPT_VERSION bump.
+          test "the system message sent to the model is byte-for-byte what it was" do
+            provider = stub(provider_key: "openai", default_model: "gpt-4o", capabilities: [])
+            provider.stubs(:send_message!).raises("stop before the network")
+            chat = BookOriginTask.new(parent: @book, dossier: build_dossier, provider: provider, model: "gpt-4o").call.ai_chat
+            message = chat.messages.first.fetch("content")
+            assert_equal "02c18748c94bafb15fed1ddd2cc1b1d7245bac6d5d1b9e7ddca0428d429d9bf1", Digest::SHA256.hexdigest(message)
+          end
+
           test "PROMPT_VERSION is 1" do
             assert_equal 1, BookOriginTask::PROMPT_VERSION
           end

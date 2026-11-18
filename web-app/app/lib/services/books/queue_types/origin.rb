@@ -22,6 +22,8 @@ module Services
 
           def target_class = ::Books::Book
 
+          def prompt_locals = {rules: Services::Ai::Tasks::Books::BookOriginTask::RULES}
+
           def candidates(scope:)
             base_relation(scope: scope).where(Services::Books::Categorize::Backfill.no_real_country_sql)
           end

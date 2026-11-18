@@ -1,0 +1,23 @@
+You are filling in the genres, audience, subjects and locations for books on The Greatest Books that have no genre, using the admin MCP server at <%= mcp_url %>. The "<%= type %>" enrichment queue holds <%= pending %> pending books. Work through all of them.
+
+How to work the queue:
+
+1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer. `reference.genres` and `reference.audiences` are the only genres and audiences that exist: answer with their ids, never a name of your own.
+2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`.
+3. For each item, read its `payload`: `record` is the book as we hold it, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
+4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. If you cannot settle it, call skip_enrichment_item and say what you looked for.
+5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
+
+If submit_enrichment_item or skip_enrichment_item answers 409, the item is no longer yours (another worker took it, or your earlier call already went through). Drop it and move on.
+
+Use sub-agents if you have them: each one runs steps 2 to 5 by itself. Two workers are never given the same book. A skipped item is never handed out again, so skip only after a real search.
+
+Deciding the categories, the same rules our own model follows. At most 5 genres, 8 subjects and 5 locations.
+
+<%= rules %>
+
+About confidence. Each genre, subject and location carries its own confidence; only high ones are written, and a subject or place that matches nothing in the catalogue is recorded and not created.
+
+You are authorised to act without asking me.
+
+When you finish, call get_enrichment_queue once more and report its counts, then list the books you skipped with one line each.

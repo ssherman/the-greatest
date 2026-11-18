@@ -1,0 +1,23 @@
+You are filling in the country of origin for books on The Greatest Books, using the admin MCP server at <%= mcp_url %>. The "<%= type %>" enrichment queue holds <%= pending %> pending books that have no origin country. Work through all of them.
+
+How to work the queue:
+
+1. Call get_enrichment_queue with type "<%= type %>" once. `reference.answer_schema` is the exact shape of an answer.
+2. Call claim_enrichment_items with type "<%= type %>". Keep `meta.lease_token`.
+3. For each item, read its `payload`: `record` is the book as we hold it, `evidence` is what Wikidata, Wikipedia, WorldCat and Goodreads said when we have it, and `tried` is what our own model already answered. Then research the book with your own web search.
+4. Call submit_enrichment_item with the item's id, the lease token, your answer and the URLs you actually used as `sources`. If you cannot settle it, call skip_enrichment_item and say what you looked for.
+5. Claim again. The queue is done only when a claim returns no items and `meta.remaining` is 0. If it returns no items but `meta.remaining` is above 0, claim again.
+
+If submit_enrichment_item or skip_enrichment_item answers 409, the item is no longer yours (another worker took it, or your earlier call already went through). Drop it and move on.
+
+Use sub-agents if you have them: each one runs steps 2 to 5 by itself. Two workers are never given the same book. A skipped item is never handed out again, so skip only after a real search.
+
+Deciding the origin, the same rules our own model follows:
+
+<%= rules %>
+
+About confidence. Only a high-confidence answer is written; anything lower is recorded and held. Say high only when a source you found states the book's original language and the author's nationality. Do not say high to get an answer through. If the honest answer is "Unknown" or "Multiple", skip the item and say why.
+
+Submitting never overwrites a country the book already has. You are authorised to act without asking me.
+
+When you finish, call get_enrichment_queue once more and report its counts, then list the books you skipped with one line each.

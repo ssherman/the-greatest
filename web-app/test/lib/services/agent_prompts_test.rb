@@ -124,6 +124,47 @@ module Services
       assert_equal before + 1, count.call
     end
 
+    test "the origin enrichment prompt carries the url, the pending count, the loop and the task's rules" do
+      book = ::Books::Book.create!(title: "Pending Origin")
+      ::EnrichmentRequest.create!(enrichable: book, kind: "books.origin", reason: "missing")
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::Origin)
+
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "1 pending"
+      %w[get_enrichment_queue claim_enrichment_items submit_enrichment_item skip_enrichment_item].each { assert_includes prompt, it }
+      assert_includes prompt, Services::Ai::Tasks::Books::BookOriginTask::RULES
+    end
+
+    test "the categories enrichment prompt carries the task's rules" do
+      prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::Categories)
+
+      assert_includes prompt, Services::Ai::Tasks::Books::BookCategoriesTask::RULES
+      assert_includes prompt, "claim_enrichment_items"
+    end
+
+    test "each enrichment prompt tells the agent when the queue is done and what a 409 means" do
+      [Services::Books::QueueTypes::Origin, Services::Books::QueueTypes::Categories].each do |type|
+        prompt = AgentPrompts.for_enrichment(type)
+
+        assert_includes prompt, "`meta.remaining` is 0", type.kind
+        assert_includes prompt, "no longer yours", type.kind
+      end
+    end
+
+    test "the enrichment prompt's pending count is the pending rows of that kind only" do
+      books = Array.new(3) { |i| ::Books::Book.create!(title: "Counted #{i}") }
+      ::EnrichmentRequest.create!(enrichable: books[0], kind: "books.origin", reason: "missing")
+      ::EnrichmentRequest.create!(enrichable: books[1], kind: "books.origin", reason: "missing", status: :done)
+      ::EnrichmentRequest.create!(enrichable: books[2], kind: "books.categories", reason: "missing")
+
+      assert_includes AgentPrompts.for_enrichment(Services::Books::QueueTypes::Origin), "holds 1 pending"
+      assert_includes AgentPrompts.for_enrichment(Services::Books::QueueTypes::Categories), "holds 1 pending"
+    end
+
+    test "a type with no prompt file has no prompt" do
+      assert_nil AgentPrompts.for_enrichment(EnrichmentQueueTestType)
+    end
+
     test "is nil for a domain with no prompt file" do
       assert_nil AgentPrompts.call(domain: :games, queue: :repair_verdicts)
       assert_nil AgentPrompts.call(domain: :games, queue: :series)
