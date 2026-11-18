@@ -17,7 +17,7 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     item = user_list_items(:regular_user_books_item_3)
     render_inline(Component.new(item: item, variant: "table", editable: true))
 
-    assert_selector "button.link[data-completed-on='2026-01-20']", text: "January 20, 2026"
+    assert_selector "button.link[data-completed-on='2026-01-20']", text: "Jan 20, 2026"
   end
 
   test "table variant without editable is plain text" do
@@ -25,14 +25,14 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     render_inline(Component.new(item: item, variant: :table))
 
     assert_no_selector "button"
-    assert_text "January 20, 2026"
+    assert_text "Jan 20, 2026"
   end
 
   test "text variant shows the label and date" do
     item = user_list_items(:regular_user_books_item_3)
     render_inline(Component.new(item: item, variant: "text"))
 
-    assert_text "Finished January 20, 2026"
+    assert_text "Finished Jan 20, 2026"
   end
 
   test "text variant renders nothing visible without a date" do
@@ -55,5 +55,13 @@ class UserLists::CompletionDateComponentTest < ViewComponent::TestCase
     render_inline(Component.new(item: item, variant: :text))
 
     assert_selector "##{ActionView::RecordIdentifier.dom_id(item, :completion)}"
+  end
+
+  test "single-digit days are not zero-padded" do
+    item = user_list_items(:regular_user_books_item_3)
+    item.completed_on = Date.new(2026, 3, 3)
+    render_inline(Component.new(item: item, variant: :text))
+
+    assert_text "Finished Mar 3, 2026"
   end
 end

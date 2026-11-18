@@ -24,6 +24,10 @@ class UserLists::CompletionDateComponent < ViewComponent::Base
     item.completed_on
   end
 
+  def formatted_date
+    date.strftime("%b %-d, %Y")
+  end
+
   def title
     item.listable.try(:title) || item.listable.try(:name)
   end

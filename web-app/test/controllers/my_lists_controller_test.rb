@@ -207,7 +207,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     get my_list_path(@albums_listened, view_mode: "table_view")
     assert_response :success
     assert_includes response.body, "Listened" # column header
-    assert_includes response.body, "February 01, 2026"
+    assert_includes response.body, "Feb 1, 2026"
   end
 
   test "an owner edits Books Read completion dates from the table; the grid shows quiet text" do

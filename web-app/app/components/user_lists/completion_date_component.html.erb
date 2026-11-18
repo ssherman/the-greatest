@@ -1,6 +1,6 @@
 <% if variant == :text %>
   <% if date.present? %>
-    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= date.to_fs(:long) %></p>
+    <p id="<%= dom_id_value %>" class="text-sm text-base-content/60"><%= label %> <%= formatted_date %></p>
   <% else %>
     <span id="<%= dom_id_value %>"></span>
   <% end %>
@@ -13,8 +13,8 @@
             data-variant="table"
             data-item-id="<%= item.id %>"
             data-item-title="<%= title %>"
-            data-completed-on="<%= date&.iso8601 %>"><%= date ? date.to_fs(:long) : "Add date" %></button>
+            data-completed-on="<%= date&.iso8601 %>"><%= date ? formatted_date : "Add date" %></button>
   </span>
 <% else %>
-  <span id="<%= dom_id_value %>" class="text-base-content/60"><%= date&.to_fs(:long) %></span>
+  <span id="<%= dom_id_value %>" class="text-base-content/60"><%= (formatted_date if date) %></span>
 <% end %>

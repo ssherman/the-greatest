@@ -32,7 +32,7 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     item = user_list_items(:regular_user_listened_album_1)
     render_inline(Component.new(item: item, view_mode: "table_view", position: 1))
 
-    assert_text "February 01, 2026"
+    assert_text "Feb 1, 2026"
   end
 
   test "renders an album card (not a row) in grid_view" do
