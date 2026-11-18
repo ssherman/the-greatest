@@ -138,8 +138,8 @@ class UserList < ApplicationRecord
 
   # The list_type values (symbols) for which a per-item completion date is
   # meaningful (e.g. :listened, :watched). Base returns []; subclasses override.
-  # Phase A uses this only to decide whether completed_on is *displayed*; the
-  # inline editor is Phase B.
+  # The Edit page and the list page use this to decide whether completed_on is shown and
+  # editable.
   def self.completed_on_list_types
     []
   end

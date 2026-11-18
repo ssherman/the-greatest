@@ -3,7 +3,7 @@
 ## Overview
 User Lists are personal, ordered collections that logged-in users use to organize items they care about across the four media domains (music albums, music songs, games, movies, books). Each user automatically receives a predefined set of default lists (e.g. "Favorite Albums", "Games I've Played") on signup and can create an unlimited number of additional custom lists.
 
-This feature corresponds to the `user-lists-01` spec (data model and core backend), the `user-lists-02a` spec (Add-to-List widget), and `user-lists-02` Phase A (the read-only `/my/lists` dashboard and per-list show page). Write/management actions (create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing) are Phase B (`user-lists-02f`); public discovery of other users' lists is `user-lists-02d`.
+This feature corresponds to the `user-lists-01` spec (data model and core backend), the `user-lists-02a` spec (Add-to-List widget), and `user-lists-02` Phase A (the read-only `/my/lists` dashboard and per-list show page). The write surface (create, the Edit list page with drag-and-drop reorder, remove with undo, delete list, `completed_on` editing) is built; see "Edit List Page" below. Public discovery of other users' lists is `user-lists-02d`.
 
 ## Architecture
 
@@ -69,8 +69,10 @@ except the order the user happened to add things in. The flag separates the two 
 
 The only consumer today is `Services::Lists::UserFavoritesTally` (see Generated Community Lists
 below), which splits a ballot's weight evenly across an unordered list and positionally down a
-manually ordered one. Nothing else reads it, and the public API's `update_my_list_book` sets it when it moves a book. The web
-UI's drag-and-drop reorder (Phase B) will set it too.
+manually ordered one. Nothing else reads it, and the public API's `update_my_list_book` sets it when it moves a book. The Edit
+list page's reorder (drag or "Move to…") sets it too, through the same `MoveItem` service, so a
+Favorites list the member arranges by hand counts positionally in the ranking and one they never
+touched stays an unordered set. Removing and undoing a removal leave the flag alone.
 
 `Services::UserLists::BackfillManuallyOrdered` (`rake user_favorites_lists:backfill_manually_ordered`)
 recovers the flag for legacy-imported favorites lists by comparing each list's position order
@@ -242,7 +244,7 @@ Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. 
 
 ## My Lists Read Surface (02 Phase A)
 
-A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashboard and a `/my/lists/:id` show page with two view modes (Grid and Table), three sorts, and CSV download. The dashboard can create custom lists and the list page can edit finish dates in place; the rest of the write surface (edit, reorder, remove, delete) is Phase B (`user-lists-02f`).
+A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashboard and a `/my/lists/:id` show page with two view modes (Grid and Table), three sorts, and CSV download. The dashboard can create custom lists, the list page can edit finish dates in place, and the Edit list page (below) handles renaming, reordering, removing and deleting.
 
 ### Routing & Layout
 
@@ -467,6 +469,32 @@ alone would take the generated list with it.
 
 Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md`.
 
+## Edit List Page
+
+`GET /my/lists/:id/edit` (`MyListsController#edit`, owner only, `edit_my_list_path`) is reached from the "Edit list" button on a list's page. It has three parts:
+
+- **Details form** (`UserLists::Edit::DetailsFormComponent`): name, description and public toggle, saved with `PATCH /my/lists/:id` through `Services::UserLists::UpdateList`. The answer is a Turbo Stream that replaces the form and appends a "Saved" toast. Built-in lists (`default?`) keep their names: the field is disabled with the note "Built-in lists keep their names.", and the controller ignores an unchanged name from it.
+- **Rows** (`UserLists::Edit::RowsComponent` / `RowComponent`, inside `#edit-list-rows`): one row per book with its position, cover, title, by-line, a "⋯" menu (Move to top, Move to bottom, Move to position, and "Set finished date…" on lists that record one), a remove button and a drag handle. The item-count heading lives inside `#edit-list-rows` so it morphs with the rows. Rows load 100 to a page (`EditPageRows::EDIT_PAGE_LIMIT`, path-based paging).
+- **Delete list**: shown on custom lists only, behind `data-turbo-confirm`; `DELETE /my/lists/:id` redirects to the dashboard.
+
+### Save per move, with morph
+
+Nothing on the page has a Save-all step. Every move is one request, `PATCH /my/lists/:id/items/:item_id/position` (`MyListItemsController#move`, which calls `Services::UserLists::UpdateItem`). The answer is a Turbo Stream that **morphs** `#edit-list-rows` to the server's truth (`turbo_stream.replace ... method: :morph`), so a drag, a menu move and a "Move to position" all converge on the stored order, a failed move snaps back, and the page never navigates, reloads a frame or loses its scroll position. `#edit-list-rows` sets `overflow-anchor: none` because Chrome's scroll anchoring would otherwise follow a moved row up or down the page. A toast says "Moved to #N" only when the book lands on a different page than the one being viewed. Failures (a bad position, a stale item, an expired session) are Turbo Streams too, with an error toast, because an HTML error body on a non-2xx status would replace the whole page.
+
+Drag is SortableJS (`user_list_edit_controller.js`), grabbed by the `[data-sortable-handle]` grip only so touch scrolling still works. On drop the controller sends the moved row's new position (the stored position of the neighbour it displaced) and renders the stream that comes back. The "⋯" menu is the touch and keyboard path.
+
+### Undo
+
+`DELETE /my/lists/:id/items/:item_id` removes the book (`RemoveItems`) and answers with the morphed rows plus a "Removed ..." toast carrying an **Undo** button (8 seconds, `UNDO_TTL`). Undo posts to `POST /my/lists/:id/items/restore` with what the removal captured (the book, its position, `completed_on`, the original `created_at`), and `Services::UserLists::RestoreItem` puts the book back at that position with its date and added-at intact; the count heading morphs back to the original number. Restoring does not touch `manually_ordered`.
+
+### Built-in list rules
+
+Built-in lists cannot be renamed or deleted from this page; custom lists can do both. Lists that record a completion date (Read on books) show "Set finished date…" in the menu, which opens the shared completion dialog and updates the row's date text in place.
+
+### E2E
+
+`e2e/tests/books/account/edit-list.spec.ts` drives all of it against the `E2E Edit Books` list that `bin/rails e2e:prepare` recreates (12 books, new id each run, so specs find it by name). The rename and delete tests create their own `E2E Created List *` lists through the dashboard.
+
 ## Library API
 
 Members read and edit their books lists over REST and MCP (`docs/features/public-api.md`, "Library (my lists)"; spec `docs/superpowers/specs/2026-11-16-library-api-design.md`).
@@ -478,7 +506,6 @@ Members read and edit their books lists over REST and MCP (`docs/features/public
 - **Cache lag.** An API write sets no `tg_state_mark` cookie, so the browser's cached list state can lag up to an hour. `/my/lists` is immediate.
 
 ## What's Not Yet Implemented
-- Write/management UI — edit, drag-and-drop reorder, remove items, delete list — Phase B (`user-lists-02f`). Creating a list and editing finish dates are done. The public API already renames, deletes and reorders books lists (see "Library API"); the web UI for those is still to come.
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
   the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books
@@ -488,7 +515,7 @@ Members read and edit their books lists over REST and MCP (`docs/features/public
 - `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
 - `docs/specs/completed/user-lists-02a-add-to-list-widget.md` — widget spec
 - `docs/specs/completed/user-lists-02-ui-and-cached-page-integration.md` — My Lists read surface (Phase A, this implementation)
-- `docs/specs/user-lists-02f-list-management-and-editing.md` — write surface (Phase B)
+- `docs/superpowers/specs/2026-11-17-user-lists-management-design.md` — Edit list page (web Phase B)
 - `docs/features/domain-scoped-authorization.md` — admin/editor role model (admin bypass is relevant here)
 - `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md` — books UI wiring + public viewing
 - `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md` — generated community lists (`user-lists-03`)

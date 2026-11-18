@@ -26,6 +26,9 @@ module Services
       EXCLUDED_REVIEW_SLUGS = %w[headlong-hall the-great-gatsby room-for-murder].freeze
       PUBLIC_LIST_NAME = "E2E Public Books"
       PRIVATE_LIST_NAME = "E2E Private Books"
+      EDIT_LIST_NAME = "E2E Edit Books"
+      # More than one page of the Edit list (10 rows) so drag and the pager are exercised together.
+      EDIT_LIST_ITEMS = 12
       CREATED_LIST_PREFIX = "E2E Created List "
       COMP_NOTE = "Playwright member account (bin/rails e2e:prepare)"
       # The catalog rows specs assume survive a refresh (famous books keep
@@ -209,11 +212,12 @@ module Services
         # goals add to Read/Reading); the next run must start from empty lists.
         ::Books::UserList.where(user: user).find_each { |list| list.user_list_items.each(&:destroy!) }
 
-        ::Books::UserList.where(user: user, name: [PUBLIC_LIST_NAME, PRIVATE_LIST_NAME]).find_each(&:destroy!)
+        ::Books::UserList.where(user: user, name: [PUBLIC_LIST_NAME, PRIVATE_LIST_NAME, EDIT_LIST_NAME]).find_each(&:destroy!)
         # my-lists.spec.ts creates lists from the dashboard; there is no delete UI to clean up with.
         ::Books::UserList.where(user: user).where("name LIKE ?", "#{CREATED_LIST_PREFIX}%").find_each(&:destroy!)
 
-        books = ::Books::Book.where(book_kind: :standalone).order(:id).limit(3).to_a
+        edit_books = ::Books::Book.where(book_kind: :standalone).order(:id).limit(EDIT_LIST_ITEMS).to_a
+        books = edit_books.first(3)
         raise SeedError, "only #{books.size} standalone books available; the E2E lists need 3" if books.size < 3
 
         public_list = ::Books::UserList.create!(user: user, name: PUBLIC_LIST_NAME, list_type: :custom, public: true)
@@ -221,8 +225,13 @@ module Services
         private_list = ::Books::UserList.create!(user: user, name: PRIVATE_LIST_NAME, list_type: :custom, public: false)
         private_list.user_list_items.create!(listable: books.first)
 
-        log.call("#{user.email}: lists #{public_list.id} (public, 3 items), #{private_list.id} (private, 1 item)")
-        {public_books: public_list.id, private_books: private_list.id}
+        # The Edit list spec reorders and removes from this list; it looks it up by name
+        # because every run recreates it with a new id.
+        edit_list = ::Books::UserList.create!(user: user, name: EDIT_LIST_NAME, list_type: :custom, public: false)
+        edit_books.each { |book| edit_list.user_list_items.create!(listable: book) }
+
+        log.call("#{user.email}: lists #{public_list.id} (public, 3 items), #{private_list.id} (private, 1 item), #{edit_list.id} (edit, #{edit_books.size} items)")
+        {public_books: public_list.id, private_books: private_list.id, edit_books: edit_list.id}
       end
 
       # The dump brings production's live Stripe price ids; dev talks to a

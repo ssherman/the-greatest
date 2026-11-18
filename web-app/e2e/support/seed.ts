@@ -4,7 +4,7 @@ import path from 'node:path';
 export type SeedManifest = {
   generated_at: string;
   users: Record<'admin' | 'user' | 'member', { id: number; email: string }>;
-  lists: { public_books: number; private_books: number };
+  lists: { public_books: number; private_books: number; edit_books: number };
 };
 
 const MANIFEST = path.join(__dirname, '..', '.auth', 'seed.json');

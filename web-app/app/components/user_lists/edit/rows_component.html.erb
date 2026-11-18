@@ -1,4 +1,5 @@
-<div id="edit-list-rows" class="flex flex-col gap-2">
+<%# Chrome scroll anchoring would follow a moved row up or down the page; the page must stay put. %>
+<div id="edit-list-rows" class="flex flex-col gap-2 [overflow-anchor:none]">
   <h2 class="mb-2 text-xl font-semibold" data-testid="item-count"><%= pluralize(pagy.count, "item") %></h2>
   <% if pagy.count.zero? %>
     <p class="py-8 text-center text-base-content/70" data-testid="empty-list">No items in this list yet.</p>

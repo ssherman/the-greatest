@@ -45,7 +45,7 @@ test.describe('Books My Lists', () => {
     const toolbar = page.getByTestId('list-toolbar');
     await expect(toolbar.getByRole('link', { name: 'Grid' })).toBeVisible();
     await expect(toolbar.getByRole('link', { name: 'Table' })).toBeVisible();
-    await expect(toolbar.getByRole('link', { name: 'List' })).toHaveCount(0);
+    await expect(toolbar.getByRole('link', { name: 'List', exact: true })).toHaveCount(0);
     await toolbar.getByRole('link', { name: 'Table' }).click();
 
     await expect(page).toHaveURL(/view_mode=table_view/);

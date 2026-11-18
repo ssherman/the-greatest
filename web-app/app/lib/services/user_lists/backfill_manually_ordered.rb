@@ -6,10 +6,9 @@ module Services
     # differs from the order the items were added in -- i.e. the user actually
     # arranged the list rather than just appending to it.
     #
-    # This only recovers signal from legacy-imported data. The new app has no
-    # reorder UI yet (Phase B of user-lists), so nothing created here can be
-    # curated; once that ships it sets the flag directly and this becomes a
-    # one-time historical backfill.
+    # This only recovers signal from legacy-imported data. Lists arranged on the
+    # Edit list page (or through the API) get the flag directly from MoveItem, so
+    # this is a one-time historical backfill.
     #
     # Detection is one-directional by design: a user who adds books in preference
     # order and never has to move anything is indistinguishable from one who
