@@ -13,10 +13,11 @@
   <div class="min-w-0 grow">
     <p class="font-bold truncate"><%= title %></p>
     <% if by_line.present? || completed_on_enabled? %>
-      <p class="text-sm text-base-content/70 truncate">
-        <%= by_line %>
+      <%# Below sm the author and the date sit on their own lines: the column is too narrow to truncate them together. %>
+      <p class="text-sm text-base-content/70 sm:truncate">
+        <% if by_line.present? %><span class="block truncate sm:inline"><%= by_line %></span><% end %>
         <% if completed_on_enabled? %>
-          <%= " · " if by_line.present? %><%= render UserLists::CompletionDateComponent.new(item: item, variant: :row) %>
+          <span class="block sm:inline"><% if by_line.present? %><span class="hidden sm:inline"> · </span><% end %><%= render UserLists::CompletionDateComponent.new(item: item, variant: :row) %></span>
         <% end %>
       </p>
     <% end %>

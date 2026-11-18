@@ -64,6 +64,11 @@ export default class extends Controller {
     event.detail.render = async (stream) => {
       await render(stream)
       requestAnimationFrame(() => {
+        // Never pull focus out of a field or dialog the user has moved to.
+        const active = document.activeElement
+        const rows = document.querySelector("#edit-list-rows")
+        const free = !active || active === document.body || rows?.contains(active)
+        if (!free) return
         const target = document.querySelector(`[data-item-id="${id}"][tabindex='-1']`) ||
           // The row left this page: fall back to the count heading.
           document.querySelector("#edit-list-rows [data-testid=item-count]")

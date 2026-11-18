@@ -471,7 +471,7 @@ Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-des
 
 ## Edit List Page
 
-`GET /my/lists/:id/edit` (`MyListsController#edit`, owner only, `edit_my_list_path`) is reached from the "Edit list" button on a list's page. It has three parts:
+`GET /my/lists/:id/edit` (`MyListsController#edit`, owner only, `edit_my_list_path`) is reached from the "Edit list" button on a list's page. It has two parts:
 
 - **Header and details card** (`UserLists::Edit::DetailsFormComponent`): the h1 is the list's name (`#list-name-heading`, refreshed after a rename) with a "Built-in" badge on default lists. The card holds name, description and a "Public" toggle, saved with `PATCH /my/lists/:id` through `Services::UserLists::UpdateList` (Save bottom-right). The answer is a Turbo Stream that replaces the form and appends a "Saved" toast. Built-in lists (`default?`) keep their names: the field is disabled with the note "Built-in lists keep their names.", and the controller ignores an unchanged name from it. Custom lists get "Delete list" bottom-left, a `button[form=delete-list-form]` whose hidden form carries the `data-turbo-confirm`; `DELETE /my/lists/:id` redirects to the dashboard.
 - **Rows** (`UserLists::Edit::RowsComponent` / `RowComponent`, inside `#edit-list-rows`): one row per book with its position, cover, title, by-line, a "⋯" menu, a remove button and a drag handle. The count line ("12 books" / "1 book", using the list noun) lives inside `#edit-list-rows` so it morphs with the rows. Rows load 100 to a page (`EditPageRows::EDIT_PAGE_LIMIT`, path-based paging). A row is `[data-item-id][tabindex='-1']`; the menu buttons also carry `data-item-id`, so locators must include the tabindex.

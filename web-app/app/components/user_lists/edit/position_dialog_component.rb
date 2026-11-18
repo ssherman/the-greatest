@@ -4,16 +4,13 @@
 # user-list-position controller fills the title, range and form action from the
 # opener; the form is a Turbo form whose stream answer morphs the rows.
 class UserLists::Edit::PositionDialogComponent < ViewComponent::Base
-  def initialize(user_list:, page:)
+  def initialize(user_list:, page:, item_count:)
     @user_list = user_list
     @page = page
+    @item_count = item_count
   end
 
   private
 
-  attr_reader :page
-
-  def item_count
-    @user_list.user_list_items.count
-  end
+  attr_reader :page, :item_count
 end

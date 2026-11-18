@@ -24,6 +24,15 @@ async function activeItemTitle(page: Page): Promise<string | null> {
   });
 }
 
+// data-item-id of the row holding focus, or null when focus is anywhere else.
+async function activeItemId(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el?.matches("[data-item-id][tabindex='-1']")) return null;
+    return el.dataset.itemId ?? null;
+  });
+}
+
 async function itemCount(page: Page): Promise<number> {
   const text = await page.getByTestId('item-count').innerText();
   return Number(text.match(/^(\d+) books?$/)![1]);
@@ -162,6 +171,11 @@ test.describe('Books Edit list page', () => {
       await openEditPage(page, EDIT_LIST);
       const before = await titles(page);
       const moving = before[5];
+      const movingId = await rows(page).nth(5).getAttribute('data-item-id');
+      const positionPatches: string[] = [];
+      page.on('request', (r) => {
+        if (r.method() === 'PATCH' && r.url().includes('/position')) positionPatches.push(r.url());
+      });
 
       await openRowMenu(page, moving);
       await rows(page).nth(5).getByRole('button', { name: 'Move to position…' }).click();
@@ -173,7 +187,8 @@ test.describe('Books Edit list page', () => {
       else await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
 
       await expect(dialog).toBeHidden();
-      await expect.poll(() => activeItemTitle(page)).toBe(moving);
+      await expect.poll(() => activeItemId(page)).toBe(movingId);
+      expect(positionPatches).toEqual([]);
       expect(await titles(page)).toEqual(before);
     });
   }
@@ -277,5 +292,41 @@ test.describe('Books Edit list page on a phone', () => {
     await rows(page).nth(3).getByRole('button', { name: 'Move to top' }).tap();
     await expect.poll(() => titles(page)).toEqual(expectedAfterMove(before, 3, 0));
     // Touch dragging itself is not exercised: Playwright has no touch-drag primitive for SortableJS.
+  });
+
+  test('the finished date stays fully visible on a Read-list row', async ({ page }) => {
+    const book = { path: '/book/headlong-hall', title: 'Headlong Hall' };
+    await page.goto(book.path);
+    await page.getByRole('button', { name: /^(Add to list|On \d+ lists?)$/ }).first().click();
+    const widget = page.getByRole('dialog').filter({ hasText: 'Your lists' });
+    const checkbox = widget.getByRole('checkbox', { name: READ_LIST, exact: true });
+    await expect(checkbox).toBeVisible();
+    await checkbox.check();
+    await expect(checkbox).toBeEnabled();
+    await expect(checkbox).toBeChecked();
+
+    try {
+      await openEditPage(page, READ_LIST);
+      const row = rows(page).filter({ hasText: book.title });
+      await expect(row).toHaveCount(1);
+      await openRowMenu(page, book.title);
+      await row.getByRole('button', { name: /^Set finished date/ }).tap();
+      const dialog = page.getByRole('dialog', { name: `Edit completion date for ${book.title}` });
+      await dialog.getByLabel('Completion date').fill('2024-03-05');
+      await dialog.getByRole('button', { name: 'Save', exact: true }).tap();
+      await expect(dialog).not.toBeVisible();
+
+      const date = row.getByText(/Mar(ch)? 5, 2024/);
+      await expect(date).toBeVisible();
+      await expect(date).toBeInViewport({ ratio: 1 });
+      // Not clipped by its own by-line: the text is not wider than the box that holds it.
+      const clipped = await date.evaluate((el) => el.parentElement!.scrollWidth > el.parentElement!.clientWidth);
+      expect(clipped).toBe(false);
+    } finally {
+      await openEditPage(page, READ_LIST);
+      const leftover = page.getByRole('button', { name: `Remove ${book.title}`, exact: true });
+      if (await leftover.count()) await leftover.tap();
+      await expect(leftover).toHaveCount(0);
+    }
   });
 });

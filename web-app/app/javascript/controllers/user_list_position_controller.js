@@ -38,6 +38,7 @@ export default class extends Controller {
   }
 
   submitted(event) {
-    if (event.detail.success) this.dialogTarget.close()
+    // Close on any answer: the morph shows the truth and the toast explains a failure.
+    this.dialogTarget.close()
   }
 }

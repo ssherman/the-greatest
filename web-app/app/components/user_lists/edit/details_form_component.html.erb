@@ -30,6 +30,7 @@
       <% if user_list.default? %>
         <span></span>
       <% else %>
+        <%# Submits #delete-list-form (my_lists/_delete_form), rendered by edit.html.erb. %>
         <button type="submit" form="delete-list-form" class="btn btn-ghost text-error">Delete list</button>
       <% end %>
       <button type="submit" class="btn btn-primary">Save</button>

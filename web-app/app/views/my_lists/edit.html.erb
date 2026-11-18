@@ -9,7 +9,7 @@
       ← Back to list
     <% end %>
     <div class="flex flex-wrap items-center gap-3">
-      <h1 class="text-3xl font-bold"><span id="list-name-heading"><%= @list.name %></span></h1>
+      <h1 class="text-3xl font-bold [overflow-wrap:anywhere]"><span id="list-name-heading"><%= @list.name %></span></h1>
       <% if @list.default? %>
         <span class="badge badge-ghost gap-1"><%= icon "lock", library: "lucide", class: "size-3", aria_hidden: "true" %>Built-in</span>
       <% end %>
@@ -25,7 +25,7 @@
     <%= render "my_lists/delete_form", list: @list %>
   <% end %>
 
-  <%= render UserLists::Edit::PositionDialogComponent.new(user_list: @list, page: @pagy.page) %>
+  <%= render UserLists::Edit::PositionDialogComponent.new(user_list: @list, page: @pagy.page, item_count: @pagy.count) %>
 
   <% if @list.completed_on_enabled? %>
     <%= render UserLists::Show::CompletionDialogComponent.new %>
