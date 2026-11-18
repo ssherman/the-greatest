@@ -11,7 +11,8 @@ module Services
       # Active Storage, never the network, and writes nothing to books, editions,
       # authors or identifiers.
       #
-      # A listing that was already read keeps its stored page, outcome, facts and
+      # A listing that was already read (read_at is set, whatever its state: a
+      # re-read starts from pending) keeps its stored page, outcome, facts and
       # title through any later attempt that is not a good page: a good page is
       # never replaced by a bad one. Only last_attempt_* moves.
       #
@@ -36,7 +37,7 @@ module Services
           @page = page
           @parser_version = parser_version
           @now = Time.current
-          @was_read = listing.state_read?
+          @was_read = listing.read_at.present?
         end
 
         def call

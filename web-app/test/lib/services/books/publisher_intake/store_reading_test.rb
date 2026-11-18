@@ -51,6 +51,21 @@ module Services
           StoreReading.call(listing: listing, reading: reading, page: page, parser_version: parser_version)
         end
 
+        # A listing as a re-read finds it: read before, then put back to pending
+        # by discovery or the daily job.
+        def reread_listing(**attrs)
+          listing = new_listing(**attrs)
+          store(listing, found)
+          listing.reload.update!(state: :pending, read_at: 2.days.ago, queued_at: Time.current)
+          listing
+        end
+
+        def snapshot(listing)
+          listing.reload
+          {checksum: listing.html.blob.checksum, title: listing.publisher_title.attributes,
+           listing: listing.attributes.slice("outcome", "http_status", "parser_version", "read_at", "attempts", "publisher_title_id")}
+        end
+
         def stored_html(listing)
           Zlib.gunzip(listing.reload.html.download)
         end
@@ -238,22 +253,19 @@ module Services
           assert listing.reload.outcome_unparseable?
         end
 
-        test "a downgraded reading of an already read listing changes nothing" do
-          listing = new_listing
-          store(listing, found)
-          listing.reload
-          checksum = listing.html.blob.checksum
-          title_attrs = listing.publisher_title.attributes
+        test "a re-read downgraded to unparseable keeps the stored page and facts and returns to read" do
+          [facts(title: ""), facts(formats: [format_for("9780802169991"), format_for("nope")])].each do |bad|
+            listing = reread_listing(key: SecureRandom.hex(4))
+            before = snapshot(listing)
 
-          result = store(listing, found(facts(title: "")), page: fetched("<p>other</p>"))
+            result = store(listing, found(bad), page: fetched("<p>other</p>"), parser_version: 9)
 
-          assert_equal :unparseable, result.data[:outcome]
-          listing.reload
-          assert listing.state_read?
-          assert listing.outcome_found?
-          assert_equal checksum, listing.html.blob.checksum
-          assert_equal title_attrs, listing.publisher_title.attributes
-          assert listing.last_attempt_unparseable?
+            assert_equal :unparseable, result.data[:outcome]
+            assert listing.reload.state_read?
+            assert listing.last_attempt_unparseable?
+            assert_nil listing.queued_at
+            assert_equal before, snapshot(listing)
+          end
         end
 
         test "a found reading with no page keeps the stored attachment" do
@@ -268,11 +280,8 @@ module Services
         end
 
         test "not_found fails the listing and leaves page and title alone" do
-          listing = new_listing
-          store(listing, found)
-          listing.reload
-          checksum = listing.html.blob.checksum
-          title_attrs = listing.publisher_title.attributes
+          listing = reread_listing
+          before = snapshot(listing)
 
           result = store(listing, outcome(:not_found), page: fetched("<p>404</p>", status: 404))
 
@@ -281,9 +290,9 @@ module Services
           assert listing.state_failed?
           assert listing.outcome_not_found?
           assert listing.last_attempt_not_found?
-          assert_equal checksum, listing.html.blob.checksum
-          assert_equal title_attrs, listing.publisher_title.attributes
           assert_nil listing.queued_at
+          after = snapshot(listing)
+          assert_equal [before[:checksum], before[:title]], [after[:checksum], after[:title]]
         end
 
         test "not_found on a never-read listing stores no page" do
@@ -308,25 +317,19 @@ module Services
           end
         end
 
-        test "a blocked re-read of a read listing keeps the stored page, outcome, facts and title" do
-          listing = new_listing
-          store(listing, found)
-          listing.reload
-          checksum = listing.html.blob.checksum
-          title_attrs = listing.publisher_title.attributes
-          listing_attrs = listing.attributes.slice("outcome", "http_status", "parser_version", "read_at")
+        test "a blocked or unparseable re-read keeps the stored page, outcome, facts and title and returns to read" do
+          listing = reread_listing
+          before = snapshot(listing)
 
           %i[blocked unparseable].each do |name|
-            listing.update!(queued_at: Time.current)
+            listing.update!(state: :pending, queued_at: Time.current)
             store(listing, outcome(name), page: fetched("<p>bad</p>", status: 403), parser_version: 9)
-            listing.reload
 
-            assert listing.state_read?, name
+            assert listing.reload.state_read?, name
             assert_equal name.to_s, listing.last_attempt_outcome
             assert_nil listing.queued_at
-            assert_equal checksum, listing.html.blob.checksum
-            assert_equal title_attrs, listing.publisher_title.attributes
-            assert_equal listing_attrs, listing.attributes.slice("outcome", "http_status", "parser_version", "read_at")
+            assert_equal before, snapshot(listing)
+            assert listing.outcome_found?
           end
         end
 
@@ -360,21 +363,26 @@ module Services
           assert_equal 0, listing.reload.attempts
         end
 
-        test "unavailable on a read listing returns it to read with nothing else changed" do
-          listing = new_listing
-          store(listing, found)
-          listing.reload
-          checksum = listing.html.blob.checksum
-          before = listing.attributes.slice("outcome", "http_status", "parser_version", "read_at", "attempts", "publisher_title_id")
-          listing.update!(queued_at: Time.current)
+        test "an unavailable re-read returns to read with attempts and everything else unchanged" do
+          listing = reread_listing
+          listing.update!(attempts: 1)
+          before = snapshot(listing)
 
           store(listing, outcome(:unavailable), page: nil)
 
-          listing.reload
-          assert listing.state_read?
+          assert listing.reload.state_read?
           assert listing.last_attempt_unavailable?
-          assert_equal before, listing.attributes.slice("outcome", "http_status", "parser_version", "read_at", "attempts", "publisher_title_id")
-          assert_equal checksum, listing.html.blob.checksum
+          assert_nil listing.queued_at
+          assert_equal before, snapshot(listing)
+        end
+
+        test "fetcher_down leaves a re-read listing pending" do
+          listing = reread_listing
+          store(listing, outcome(:fetcher_down), page: nil)
+
+          assert listing.reload.state_pending?
+          assert listing.last_attempt_fetcher_down?
+          assert_nil listing.queued_at
         end
 
         test "fetcher_down records the attempt and leaves the listing pending" do
