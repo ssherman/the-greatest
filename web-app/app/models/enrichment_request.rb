@@ -52,7 +52,28 @@ class EnrichmentRequest < ApplicationRecord
 
   # "via" is uncountable, so the generated mapping is EnrichmentRequest.resolved_via.
   enum :status, {pending: 0, claimed: 1, submitted: 2, done: 3, skipped: 4, failed: 5}
-  enum :resolved_via, {api: 0, paid_research: 1, admin_ui: 2, system: 3}
+  # Prefixed: an unprefixed :system would define EnrichmentRequest.system and shadow Kernel#system.
+  enum :resolved_via, {api: 0, paid_research: 1, admin_ui: 2, system: 3}, prefix: :resolved_via
+
+  # What a row gets when it is re-opened (Fill's version re-open, Requeue), apart
+  # from reason and version, which the caller supplies. Defined once so the two
+  # callers cannot drift apart.
+  REOPEN_RESET = {
+    status: statuses.fetch("pending"),
+    attempts: 0,
+    outcome: nil,
+    note: nil,
+    answer: nil,
+    error: nil,
+    sources: [],
+    enrichment_id: nil,
+    lease_token: nil,
+    lease_expires_at: nil,
+    claimed_by_id: nil,
+    resolved_by_id: nil,
+    resolved_via: nil,
+    resolved_at: nil
+  }.freeze
 
   belongs_to :enrichable, polymorphic: true
   belongs_to :enrichment, optional: true

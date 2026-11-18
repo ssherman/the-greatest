@@ -76,6 +76,28 @@ class EnrichmentRequestTest < ActiveSupport::TestCase
     end
   end
 
+  test "resolved_via is prefixed so it does not shadow Kernel#system" do
+    assert EnrichmentRequest.new(resolved_via: :system).resolved_via_system?
+    assert_equal Kernel, EnrichmentRequest.method(:system).owner
+  end
+
+  test "REOPEN_RESET returns a resolved row to a clean pending state" do
+    user = users(:regular_user)
+    row = EnrichmentRequest.create!(
+      enrichable: books_books(:war_and_peace), kind: "books.origin", reason: "missing",
+      status: :done, attempts: 2, outcome: "applied", note: "n", answer: {"a" => 1}, error: "e",
+      sources: ["https://example.com"], lease_token: "t", lease_expires_at: 1.hour.ago,
+      claimed_by: user, resolved_by: user, resolved_via: :api, resolved_at: Time.current
+    )
+    EnrichmentRequest.where(id: row.id).update_all(EnrichmentRequest::REOPEN_RESET.merge(reason: "version", version: 2))
+    row.reload
+    assert row.pending?
+    assert_equal [0, "version", 2, []], [row.attempts, row.reason, row.version, row.sources]
+    assert_equal [nil] * 10, [row.outcome, row.note, row.answer, row.error, row.enrichment_id, row.lease_token,
+      row.lease_expires_at, row.claimed_by_id, row.resolved_by_id, row.resolved_via]
+    assert_nil row.resolved_at
+  end
+
   test "carry_over moves the source's rows and drops one the target already has" do
     source, target = books_books(:war_and_peace), books_books(:crime_and_punishment)
     moved = EnrichmentRequest.create!(enrichable: source, kind: "books.origin", reason: "missing")
