@@ -62,13 +62,14 @@ class UserList < ApplicationRecord
   has_many :user_list_items, -> { order(:position) }, dependent: :destroy, inverse_of: :user_list
 
   # Enums
-  enum :view_mode, {list_view: 0, table_view: 1, grid_view: 2}, default: :grid_view
+  # Integer 0 (the retired List view) is deliberately unused; the remaining
+  # numbers must never change.
+  enum :view_mode, {table_view: 1, grid_view: 2}, default: :grid_view
 
   # Switcher order and copy. Declared here rather than in the view so the
   # default view mode can read first without reordering the enum's integers.
   VIEW_MODE_LABELS = {
     "grid_view" => "Grid",
-    "list_view" => "List",
     "table_view" => "Table"
   }.freeze
 
@@ -137,10 +138,16 @@ class UserList < ApplicationRecord
 
   # The list_type values (symbols) for which a per-item completion date is
   # meaningful (e.g. :listened, :watched). Base returns []; subclasses override.
-  # Phase A uses this only to decide whether completed_on is *displayed*; the
-  # inline editor is Phase B.
+  # The Edit page and the list page use this to decide whether completed_on is shown and
+  # editable.
   def self.completed_on_list_types
     []
+  end
+
+  # Display copy for the list_types in completed_on_list_types, keyed by
+  # list_type. Base returns {}; subclasses override.
+  def self.completion_labels
+    {}
   end
 
   def self.completion_transition_sources
@@ -173,6 +180,20 @@ class UserList < ApplicationRecord
   # True when this list's list_type supports a completion date.
   def completed_on_enabled?
     self.class.completed_on_list_types.include?(list_type.to_sym)
+  end
+
+  def completion_label
+    self.class.completion_labels.fetch(list_type.to_sym, "Completed")
+  end
+
+  # Only a generating subclass's favorites feed the generated (ranked) list.
+  def counts_toward_rankings?
+    favorites? && self.class.in?(UserList.generating_subclasses)
+  end
+
+  # "books", "albums", "songs" or "games", for user-facing copy.
+  def listable_noun
+    self.class.listable_class.model_name.human.pluralize.downcase
   end
 
   def completion_transition_source_types

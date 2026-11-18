@@ -22,11 +22,13 @@
               novalidate>
           <input type="text"
                  name="name"
+                 maxlength="100"
                  placeholder="List name"
                  class="input input-sm w-full"
                  data-user-list-modal-target="nameInput"
                  data-action="input->user-list-modal#syncCreateButton">
           <textarea name="description"
+                    maxlength="1000"
                     placeholder="Description (optional)"
                     class="textarea textarea-sm w-full"
                     rows="2"

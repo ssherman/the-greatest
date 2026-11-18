@@ -2,7 +2,7 @@
 
 # UserList authorization for end-user actions.
 # Domain-role logic does not apply — these are personal lists.
-# update? is owner-only; destroy? is the owner or a global admin (admins can delete anything). Editors get neither.
+# update? is owner-only; destroy? is the owner or a global admin (admins can delete anything), never a default list. Editors get neither.
 # STI subclasses must authorize with `policy_class: UserListPolicy` so Pundit
 # doesn't resolve to e.g. Music::Albums::UserListPolicy (which doesn't exist).
 class UserListPolicy < ApplicationPolicy
@@ -21,7 +21,7 @@ class UserListPolicy < ApplicationPolicy
   end
 
   def destroy?
-    owner? || global_admin?
+    (owner? || global_admin?) && !record.default?
   end
 
   def owner?

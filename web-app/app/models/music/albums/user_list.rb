@@ -56,12 +56,16 @@ module Music
         [:listened]
       end
 
+      def self.completion_labels
+        {listened: "Listened"}
+      end
+
       def self.ranking_configuration_class
         Music::Albums::RankingConfiguration
       end
 
       def self.listable_display_includes
-        [:artists, :categories, :primary_image, :descriptions]
+        [:artists, :categories, {primary_image: {file_attachment: :blob}}]
       end
 
       def self.generated_list_class

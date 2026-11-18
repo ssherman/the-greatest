@@ -1,0 +1,29 @@
+<section id="list-details" class="mb-6">
+  <%= form_with model: user_list, scope: :user_list, url: helpers.my_list_path(user_list), method: :patch, class: "flex flex-col gap-3" do |f| %>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Name</legend>
+      <% if user_list.default? %>
+        <%= f.text_field :name, disabled: true, class: "input w-full", aria: {label: "Name", describedby: "list-name-locked"} %>
+        <p id="list-name-locked" class="text-sm text-base-content/60">Built-in lists keep their names.</p>
+      <% else %>
+        <%= f.text_field :name, required: true, maxlength: Services::UserLists::ListRules::NAME_MAX, class: "input w-full", aria: {label: "Name"}, autocomplete: "off" %>
+      <% end %>
+    </fieldset>
+
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Description (optional)</legend>
+      <%= f.text_area :description, maxlength: Services::UserLists::ListRules::DESCRIPTION_MAX, rows: 3, class: "textarea w-full", aria: {label: "Description (optional)"} %>
+    </fieldset>
+
+    <label class="label cursor-pointer justify-start gap-2">
+      <%= f.check_box :public, class: "checkbox" %>
+      <span>Make this list public</span>
+    </label>
+
+    <p id="list-details-errors" class="text-error text-sm" role="alert"></p>
+
+    <div>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  <% end %>
+</section>
