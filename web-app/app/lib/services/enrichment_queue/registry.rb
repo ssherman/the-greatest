@@ -6,7 +6,7 @@ module Services
     class Registry
       class UnknownKind < StandardError; end
 
-      TYPE_NAMES = %w[Services::Books::QueueTypes::Origin].freeze
+      TYPE_NAMES = %w[Services::Books::QueueTypes::Origin Services::Books::QueueTypes::Categories].freeze
 
       # Constantized on every call in development so code reloading is seen;
       # memoized elsewhere, like Mcp::Catalog.

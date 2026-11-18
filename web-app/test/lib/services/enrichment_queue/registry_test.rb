@@ -18,7 +18,8 @@ module Services
       end
 
       test "every registered type answers the whole interface" do
-        assert_operator Registry.types.size, :>=, 1
+        assert_operator Registry.types.size, :>=, 2
+        assert_equal %w[books.categories books.origin], Registry.types.map(&:kind).sort
         Registry.types.each do |type|
           assert_match ::Enrichment::KIND_FORMAT, type.kind
           assert_kind_of Integer, type.version
