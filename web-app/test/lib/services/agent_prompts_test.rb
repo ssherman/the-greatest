@@ -35,6 +35,14 @@ module Services
       assert_match(/own data caused a false pair/, prompt)
     end
 
+    test "duplicates prompt says a wrong subtitle can hide a real duplicate and to check the year after a merge" do
+      prompt = AgentPrompts.call(domain: "books", queue: :duplicates)
+
+      assert_match(/wrong data can also hide a real duplicate/i, prompt)
+      assert_match(/holds the other's ISBN or Goodreads id/, prompt)
+      assert_match(/keeps the earlier first_published_year/, prompt)
+    end
+
     test "duplicates counts leave out pairs naming a book the re-import is emptying" do
       before = AgentPrompts.call(domain: "books", queue: :duplicates)
       pair = duplicate_candidates(:books_pending_pair)
