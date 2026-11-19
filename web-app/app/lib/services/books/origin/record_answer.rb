@@ -13,10 +13,12 @@ module Services
       class RecordAnswer
         KIND = "books.origin"
 
+        # accept_medium is handed to Origin::Apply (see there); the agent queue sets it.
         def self.call(book:, dossier:, answer:, mode:, context:, label:, citations: [], ai_chat: nil, provider: nil,
-          model: nil, extra_facts: {})
+          model: nil, extra_facts: {}, accept_medium: false)
           new(book: book, dossier: dossier, answer: answer, mode: mode, context: context, label: label,
-            citations: citations, ai_chat: ai_chat, provider: provider, model: model, extra_facts: extra_facts).call
+            citations: citations, ai_chat: ai_chat, provider: provider, model: model, extra_facts: extra_facts,
+            accept_medium: accept_medium).call
         end
 
         # The facts every books.origin row starts from; callers merge their own
@@ -27,7 +29,8 @@ module Services
            "deferred_research" => false}
         end
 
-        def initialize(book:, dossier:, answer:, mode:, context:, label:, citations:, ai_chat:, provider:, model:, extra_facts:)
+        def initialize(book:, dossier:, answer:, mode:, context:, label:, citations:, ai_chat:, provider:, model:, extra_facts:,
+          accept_medium: false)
           @book = book
           @dossier = dossier
           @answer = answer
@@ -39,6 +42,7 @@ module Services
           @provider = provider
           @model = model
           @extra_facts = extra_facts
+          @accept_medium = accept_medium
         end
 
         def call
@@ -54,7 +58,8 @@ module Services
           if unrecognized
             attributes.merge!(outcome: :unrecognized, reason: "unrecognized", facts: facts.merge(extra_facts))
           else
-            applied = Apply.call(book: book, dossier: dossier, nationality: answer[:nationality], confidence: answer[:confidence])
+            applied = Apply.call(book: book, dossier: dossier, nationality: answer[:nationality], confidence: answer[:confidence],
+              accept_medium: @accept_medium)
             attributes.merge!(outcome: applied.data[:applied] ? :applied : :nothing_to_apply,
               reason: applied.data[:reason],
               facts: facts.merge("origin" => applied.data.deep_stringify_keys).merge(extra_facts))

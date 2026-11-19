@@ -16,15 +16,23 @@ module Services
 
         INFOBOX_SPLIT = %r{\s*(?:,|;|/|\sand\s)\s*}
 
-        def self.call(book:, dossier:, nationality:, confidence:)
-          new(book: book, dossier: dossier, nationality: nationality, confidence: confidence).call
+        # accept_medium: a medium answer is written without stored evidence that
+        # agrees. The agent queue passes true (the owner's call, 2026-11-18: an
+        # agent researched the book on the web and cites its sources, and a
+        # country that turns out wrong can be corrected, where a blank helps
+        # nobody). The paid model's medium answer still needs support: it may be
+        # from memory alone. Low is never written, and a real country is never
+        # overwritten, either way.
+        def self.call(book:, dossier:, nationality:, confidence:, accept_medium: false)
+          new(book: book, dossier: dossier, nationality: nationality, confidence: confidence, accept_medium: accept_medium).call
         end
 
-        def initialize(book:, dossier:, nationality:, confidence:)
+        def initialize(book:, dossier:, nationality:, confidence:, accept_medium: false)
           @book = book
           @dossier = dossier
           @nationality = nationality.to_s.strip
           @confidence = confidence.to_s.strip.downcase
+          @accept_medium = accept_medium
         end
 
         def call
@@ -52,7 +60,7 @@ module Services
         def decide_empty
           case @confidence
           when "high" then write
-          when "medium" then supported? ? write : finish("unsupported")
+          when "medium" then (@accept_medium || supported?) ? write : finish("unsupported")
           else finish("low_confidence")
           end
         end

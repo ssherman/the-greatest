@@ -233,7 +233,7 @@ A queue is empty when it has no `pending` and no `claimed` row. `submitted` rows
 **An agent's answer goes through the existing confidence gates unchanged** (designer's call). A `high` answer is
 written, a `medium` one only with stored evidence that supports it, a `low` one is held. The prompt tells the
 agent to say `high` only when a source states the fact, to give `low` to a guess, and to skip when it
-cannot get there (amended during implementation, 2026-11-18). Nothing in the appliers is loosened for agents.
+cannot get there (amended during implementation, 2026-11-18). Nothing in the appliers is loosened for agents, with one exception the owner decided after the first production run (2026-11-18): an agent's `medium` origin answer is written without stored evidence, because a researched answer is better than a blank and a wrong one can be corrected. `low` is still held, and categories are unchanged.
 
 **A held answer closes the queue row but not the book.** When a submit applies nothing because the answer was
 held back, the queue row is still `done` (outcome `nothing_to_apply`), so no agent is handed that book again.

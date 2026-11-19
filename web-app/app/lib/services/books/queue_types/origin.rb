@@ -6,8 +6,9 @@ module Services
       # Books that still have no real country, worked by an agent. The agent
       # researches the book and answers in the shape the paid origin judge's
       # task returns; the answer goes through Origin::RecordAnswer, so the same
-      # rules (fill blanks only, confidence gates) and the same ledger row
-      # apply, with mode agent.
+      # rules (fill blanks only) and the same ledger row apply, with mode agent.
+      # One gate differs: an agent's medium answer is written without stored
+      # evidence behind it (accept_medium, see Origin::Apply). Low is still held.
       class Origin < Services::EnrichmentQueue::Type
         extend BookScope
 
@@ -61,7 +62,7 @@ module Services
               book: book, dossier: Services::Books::Categorize::Dossier.build(book: book),
               answer: request.answer.symbolize_keys, mode: :agent, context: "agent", label: "agent",
               citations: request.sources.uniq, provider: "agent", model: nil,
-              extra_facts: {"queue_request_id" => request.id}
+              extra_facts: {"queue_request_id" => request.id}, accept_medium: true
             )
             return Services::EnrichmentQueue::Type::Result.new(success?: false, data: {enrichment: row}, errors: [row.error]) if row.failed?
 

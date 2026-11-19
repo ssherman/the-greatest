@@ -62,6 +62,22 @@ module Services
           assert_equal "filled", apply(dossier(infobox_country: "France"), "French", "medium").data[:reason]
         end
 
+        test "a medium answer with no support is written when the caller accepts medium" do
+          result = Apply.call(book: @book, dossier: dossier(wikidata: false), nationality: "French", confidence: "medium", accept_medium: true)
+          assert_equal [true, "filled"], [result.data[:applied], result.data[:reason]]
+          assert_equal ["French"], @book.reload.countries.map(&:name)
+        end
+
+        test "accepting medium does not accept low, and never overwrites a real country" do
+          low = Apply.call(book: @book, dossier: dossier(wikidata: false), nationality: "French", confidence: "low", accept_medium: true)
+          assert_equal [false, "low_confidence"], [low.data[:applied], low.data[:reason]]
+
+          hold(@american)
+          held = Apply.call(book: @book, dossier: dossier(wikidata: false), nationality: "French", confidence: "medium", accept_medium: true)
+          assert_equal [false, "already_set"], [held.data[:applied], held.data[:reason]]
+          assert_equal ["American"], @book.reload.countries.map(&:name)
+        end
+
         test "a medium answer is supported by Wikidata matches" do
           assert_equal "filled", apply(dossier(country_matches: ["French"]), "French", "medium").data[:reason]
         end

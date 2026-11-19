@@ -158,15 +158,15 @@ module Services
       end
     end
 
-    test "the origin prompt names exactly what backs a medium answer and what high means" do
+    test "the origin prompt says medium is written and what high means" do
       prompt = AgentPrompts.for_enrichment(Services::Books::QueueTypes::Origin)
 
-      assert_includes prompt, "`evidence.wikidata.country_matches`"
-      assert_includes prompt, "`evidence.wikipedia.infobox_country`"
-      assert_includes prompt, "`evidence.book_facts.origin_countries` when that entry's `mode` is `research` or `agent`"
-      assert_includes prompt, "not an author's nationality in `record`"
+      assert_includes prompt, "A high-confidence answer and a medium one are both written"
+      assert_includes prompt, "A low one is recorded and held"
       assert_includes prompt, "counts toward high"
+      assert_includes prompt, "A source does not have to use the word citizenship"
       refute_includes prompt, "Say high only when a source you found states the book's original language and the author's nationality"
+      refute_includes prompt, "A medium one is written only when"
     end
 
     test "the categories prompt says submitting only adds and never creates a category" do
@@ -220,7 +220,7 @@ module Services
       assert_includes prompt, "Submitting only fills blanks"
       assert_includes prompt, "is recorded and nothing is written"
       assert_includes prompt, "Book type and series are recorded and not written"
-      assert_includes prompt, "they are what lets a medium-confidence answer in the origin queue be written"
+      assert_includes prompt, "the origin step reads them as supporting evidence"
       assert_includes prompt, "are added to the ones the book already holds"
     end
 
