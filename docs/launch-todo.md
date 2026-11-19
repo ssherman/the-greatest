@@ -648,7 +648,7 @@ backfill runs once here; the weekly run is section 4, step 10, and is optional.
    (`docs/features/enrichment-queue.md`, "The web-search switch".) Set it back to `api` to spend through the API again.
 5. **Book facts through the agent queue** (`docs/features/enrichment-queue.md`). Do it before the origins and categories
    queues in steps 7 and 8: an agent's book facts row counts as web-verified evidence for the origin and categories
-   answers that follow. Do it after section 12's apply is finished (it empties and deletes books). Fill the queue for
+   answers that follow (for origin, a medium answer is written when that row's origin countries name the same country). Do it after section 12's apply is finished (it empties and deletes books). Fill the queue for
    the ranked books: `bin/rails "enrichment_queue:fill[books.book_facts,ranked]"`, or Fill on `/admin/enrichment_queues`
    on the books host. It runs in Sidekiq; reload the page until the Pending count stops moving. Then Copy prompt on the
    "Book facts" row, paste it into an agent connected to the admin MCP server, and let it run until the queue is empty
