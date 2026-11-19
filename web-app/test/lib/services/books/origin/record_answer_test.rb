@@ -48,6 +48,14 @@ module Services
           assert_empty @book.countries.reload
         end
 
+        test "a medium answer with no stored evidence is written when the caller accepts medium" do
+          row = Services::Books::Origin::RecordAnswer.call(book: @book, dossier: @dossier, mode: :agent,
+            answer: {recognized: true, original_language: nil, nationality: "Japanese", confidence: "medium", reason: "r"},
+            context: "agent", label: "agent", accept_medium: true)
+          assert_equal ["applied", "filled", "medium"], [row.outcome, row.reason, row.confidence]
+          assert_equal ["Japanese"], @book.countries.reload.pluck(:name)
+        end
+
         test "a nationality that matches no country applies nothing and does not raise" do
           row = record({recognized: true, original_language: nil, nationality: "Atlantean", confidence: "high", reason: "r"})
           assert_equal ["nothing_to_apply", "no_match"], [row.outcome, row.reason]

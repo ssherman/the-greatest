@@ -113,6 +113,23 @@ module Services
           assert_equal ["Japanese"], @blank.countries.reload.pluck(:name)
         end
 
+        test "apply writes an agent's medium answer with no stored evidence, and holds a low one" do
+          medium = ::EnrichmentRequest.create!(enrichable: @blank, kind: "books.origin", reason: "missing", status: :submitted,
+            answer: {"recognized" => true, "original_language" => "Japanese", "nationality" => "Japanese", "confidence" => "medium", "reason" => "r"},
+            sources: ["https://example.org/a"], resolved_by: users(:admin_user))
+          result = Type.apply(medium)
+          assert_equal ["applied", "filled"], [result.data[:outcome], result.data[:enrichment].reason]
+          assert_equal ["Japanese"], @blank.countries.reload.pluck(:name)
+
+          other = ::Books::Book.create!(title: "Guessed At")
+          low = ::EnrichmentRequest.create!(enrichable: other, kind: "books.origin", reason: "missing", status: :submitted,
+            answer: {"recognized" => true, "original_language" => nil, "nationality" => "Japanese", "confidence" => "low", "reason" => "r"},
+            sources: ["https://example.org/a"], resolved_by: users(:admin_user))
+          result = Type.apply(low)
+          assert_equal ["nothing_to_apply", "low_confidence"], [result.data[:outcome], result.data[:enrichment].reason]
+          assert_empty other.countries.reload
+        end
+
         test "apply stores each source once" do
           request = ::EnrichmentRequest.create!(enrichable: @blank, kind: "books.origin", reason: "missing", status: :submitted,
             answer: {"recognized" => true, "original_language" => nil, "nationality" => "Japanese", "confidence" => "high", "reason" => "r"},
