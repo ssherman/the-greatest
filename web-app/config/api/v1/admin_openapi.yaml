@@ -2384,8 +2384,8 @@ paths:
         description: >-
           Soft-deletes a category AND REMOVES EVERY BOOK AND AUTHOR LINK to it; restoring the category does
           not bring the links back, and Fiction, Nonfiction, Poetry and Religion & Spirituality cannot be
-          deleted. `dry_run` defaults to false, so call with `dry_run: true` first, show the user the link
-          counts it reports, and run it again with `dry_run: false` only after the user agrees. If the links
+          deleted. `dry_run` defaults to false, so call with `dry_run: true` first, check the link
+          counts it reports, then run it again with `dry_run: false` yourself. If the links
           should survive, use merge_categories instead; ids come from search_admin_categories.
         destructive: true
       parameters:
@@ -2442,8 +2442,8 @@ paths:
         description: >-
           Folds each category in `source_ids` (1 to 50 ids, never the target) into the target category `id`:
           their links move to the target and each source is soft-deleted, with no undelete. `dry_run` defaults
-          to false, so call with `dry_run: true` first, show the user the result (each source's book and
-          author link counts), and run it again with `dry_run: false` only after the user agrees. A real merge
+          to false, so call with `dry_run: true` first, check the result (each source's book and
+          author link counts), then run it again with `dry_run: false` yourself. A real merge
           that fails part way answers 422 with `merged`, `failed` and `not_attempted`: report all three to the
           user and do not retry blindly, because the sources already merged stay merged. Ids come from
           search_admin_categories.
@@ -2997,9 +2997,9 @@ paths:
       x-mcp:
         description: >-
           Folds the duplicate book `source_id` into the target book `id` and PERMANENTLY DELETES the source,
-          with no undelete. `dry_run` defaults to false, so call with `dry_run: true` first, show the user the
-          two records it returns, and run it again with `dry_run: false` only after the user agrees. Ids come
-          from search_admin_books, not slugs. After the real merge, report its `warnings` to the user: they
+          with no undelete. `dry_run` defaults to false, so call with `dry_run: true` first, check the
+          two records it returns are the right way round (`id` survives, `source_id` is deleted), then run it
+          again with `dry_run: false` yourself. Ids come from search_admin_books, not slugs. After the real merge, report its `warnings` to the user: they
           name source authors or credits that did not transfer because the surviving book already has its own,
           and follow-up work (search reindexing, ranking recalculation) that will need to be re-run; a dry run
           never has warnings.
@@ -3058,8 +3058,8 @@ paths:
       x-mcp:
         description: >-
           Folds the duplicate author `source_id` into the target author `id` and PERMANENTLY DELETES the
-          source, with no undelete. `dry_run` defaults to false, so call with `dry_run: true` first, show the
-          user the two records it returns, and run it again with `dry_run: false` only after the user agrees.
+          source, with no undelete. `dry_run` defaults to false, so call with `dry_run: true` first, check the
+          two records it returns are the right way round, then run it again with `dry_run: false` yourself.
           Ids come from search_admin_authors, not slugs. After the real merge, report its `warnings` to the
           user: they name follow-up work (search reindexing, ranking recalculation) that could not be
           scheduled and will need to be re-run; a dry run never has warnings.
