@@ -19,7 +19,13 @@
       <% goals.each do |progress| %>
         <div class="space-y-2" data-testid="profile-goal">
           <div class="flex items-baseline justify-between gap-4">
-            <h3 class="font-semibold [overflow-wrap:anywhere]"><%= progress.goal.name %></h3>
+            <h3 class="font-semibold [overflow-wrap:anywhere]">
+              <% if (path = public_goal_path(progress.goal)) %>
+                <%= link_to progress.goal.name, path, class: "link link-hover" %>
+              <% else %>
+                <%= progress.goal.name %>
+              <% end %>
+            </h3>
             <span class="text-sm text-base-content/70 shrink-0"><%= days_left_text(progress.days_left) %></span>
           </div>
           <%= render Books::ReadingGoals::ProgressComponent.new(

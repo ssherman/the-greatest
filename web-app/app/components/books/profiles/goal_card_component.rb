@@ -3,10 +3,11 @@
 # Every active reading goal, with the books being read right now underneath.
 # Goals are the primary content: an owner with none gets a prompt to set one.
 class Books::Profiles::GoalCardComponent < ViewComponent::Base
-  def initialize(goals:, reading_now:, audience:)
+  def initialize(goals:, reading_now:, audience:, data: nil)
     @goals = goals || []
     @reading_now = reading_now
     @audience = audience
+    @data = data
   end
 
   def render?
@@ -15,11 +16,16 @@ class Books::Profiles::GoalCardComponent < ViewComponent::Base
 
   private
 
-  attr_reader :goals, :reading_now, :audience
+  attr_reader :goals, :reading_now, :audience, :data
 
   def owner? = audience == :owner
 
   def reading_books = reading_now&.books || []
+
+  # A visitor gets a link only to a goal that is public itself.
+  def public_goal_path(goal)
+    helpers.books_reading_goal_path(goal) if !owner? && data&.linkable?(goal)
+  end
 
   def prompt_only? = goals.empty? && reading_books.empty?
 

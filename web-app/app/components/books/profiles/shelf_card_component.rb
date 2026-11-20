@@ -13,11 +13,12 @@ class Books::Profiles::ShelfCardComponent < ViewComponent::Base
     recently_read: {title: "Recently read"}
   }.freeze
 
-  def initialize(kind:, shelf:, audience:, top_rated: nil)
+  def initialize(kind:, shelf:, audience:, top_rated: nil, data: nil)
     @kind = kind
     @shelf = shelf
     @audience = audience
     @top_rated = top_rated || []
+    @data = data
   end
 
   def render?
@@ -26,7 +27,7 @@ class Books::Profiles::ShelfCardComponent < ViewComponent::Base
 
   private
 
-  attr_reader :kind, :shelf, :audience, :top_rated
+  attr_reader :kind, :shelf, :audience, :top_rated, :data
 
   def owner? = audience == :owner
 
@@ -41,8 +42,13 @@ class Books::Profiles::ShelfCardComponent < ViewComponent::Base
   def prompt? = owner? && primary? && books.empty?
 
   def see_all_path
-    return unless owner? && shelf&.list
+    list = shelf&.list
+    return unless list
 
-    helpers.my_list_path(shelf.list)
+    if owner?
+      helpers.my_list_path(list)
+    elsif data&.linkable?(list)
+      helpers.user_list_path(list)
+    end
   end
 end

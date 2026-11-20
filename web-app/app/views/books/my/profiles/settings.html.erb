@@ -1,0 +1,99 @@
+<% content_for :page_title, "Share settings | The Greatest Books" %>
+<%
+  sections = {
+    show_stats: ["Reading stats", "Books read, read in the last 12 months, average rating and review count."],
+    show_favorites: ["Favorites", "Your favorite books."],
+    show_goals: ["Reading goals", "Your active reading goals and how far along they are."],
+    show_reading_now: ["Reading now", "The books you are reading right now."],
+    show_taste: ["Taste", "Taste is worked out from all your lists and ratings, and shows only genre and subject names."],
+    show_recently_read: ["Recently read", "The books you finished most recently."],
+    show_top_rated: ["Highest rated", "The books you rated highest."],
+    show_reviews: ["Recent reviews", "Your latest reviews."]
+  }
+%>
+
+<div class="mx-auto max-w-2xl space-y-6">
+  <div>
+    <h1 class="text-3xl sm:text-4xl font-bold">Share settings</h1>
+    <p class="mt-2 text-base-content/70">
+      Choose whether your profile has a public page and what is on it. Only books from the catalog are ever shown,
+      and a section you leave off is never sent to visitors.
+    </p>
+  </div>
+
+  <%# Public layouts render no flash, so this page shows its own. It is uncached and private. %>
+  <% if flash[:notice] %>
+    <div role="status" class="alert alert-success" data-testid="profile-settings-notice"><%= flash[:notice] %></div>
+  <% end %>
+  <% if flash[:alert] %>
+    <div role="alert" class="alert alert-warning" data-testid="profile-settings-alert"><%= flash[:alert] %></div>
+  <% end %>
+
+  <%= form_with model: @profile, scope: :books_profile, url: books_my_profile_settings_path, method: :patch, class: "space-y-6" do |form| %>
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body gap-5">
+        <% if @profile.errors.any? %>
+          <div role="alert" class="alert alert-error" data-testid="profile-settings-errors">
+            <ul class="list-disc pl-5">
+              <% @profile.errors.full_messages.each do |message| %>
+                <li><%= message %></li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Public profile</legend>
+          <label class="label cursor-pointer justify-start gap-3">
+            <%= form.check_box :public, class: "toggle toggle-primary", aria: {describedby: "profile-public-help"} %>
+            <span>Make my profile public</span>
+          </label>
+          <p id="profile-public-help" class="text-sm text-base-content/70">
+            Anyone with the link can see it. Search engines are asked not to list it.
+          </p>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <%= form.label :display_name, "Display name", class: "fieldset-legend" %>
+          <%= form.text_field :display_name, maxlength: 40, autocomplete: "off",
+                class: "input w-full #{"input-error" if @profile.errors[:display_name].any?}",
+                aria: {describedby: "profile-display-name-help"} %>
+          <p id="profile-display-name-help" class="text-sm text-base-content/70">
+            Shown at the top of your public page. Required when your profile is public (2 to 40 characters).
+          </p>
+        </fieldset>
+
+        <% if @profile.persisted? && @profile.public? %>
+          <fieldset class="fieldset">
+            <%= label_tag :profile_public_url, "Your public link", class: "fieldset-legend" %>
+            <input id="profile_public_url" type="text" readonly class="input w-full"
+                   value="<%= books_profile_url(@profile) %>" data-testid="profile-public-url">
+          </fieldset>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body gap-4">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">What visitors see</legend>
+          <% sections.each do |attribute, (label, help)| %>
+            <div class="py-2">
+              <label class="label cursor-pointer justify-start gap-3">
+                <%= form.check_box attribute, class: "toggle", aria: {describedby: "profile-#{attribute}-help"} %>
+                <span><%= label %></span>
+              </label>
+              <p id="profile-<%= attribute %>-help" class="text-sm text-base-content/70"><%= help %></p>
+            </div>
+          <% end %>
+        </fieldset>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      <%= form.submit "Save settings", class: "btn btn-primary" %>
+      <%= link_to "Preview public page", books_my_profile_preview_path, class: "btn btn-ghost" %>
+      <%= link_to "Back to my profile", books_my_profile_path, class: "btn btn-ghost" %>
+    </div>
+  <% end %>
+</div>

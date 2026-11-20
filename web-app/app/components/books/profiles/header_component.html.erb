@@ -1,4 +1,4 @@
-<header class="flex items-center gap-4" data-testid="profile-header">
+<header class="flex flex-wrap items-center gap-4" data-testid="profile-header">
   <div class="avatar avatar-placeholder">
     <div class="bg-neutral text-neutral-content w-16 rounded-full" aria-hidden="true" data-testid="profile-avatar">
       <% if initial %>
@@ -14,4 +14,10 @@
       <p class="text-base-content/70">Member since <%= header.member_since_year %></p>
     <% end %>
   </div>
+  <% if status_controls? %>
+    <div class="flex items-center gap-3 sm:ml-auto" data-testid="profile-sharing">
+      <span class="badge <%= profile.public? ? "badge-success" : "badge-ghost" %>" data-testid="profile-status"><%= status %></span>
+      <%= link_to "Share settings", helpers.books_my_profile_settings_path, class: "btn btn-sm" %>
+    </div>
+  <% end %>
 </header>

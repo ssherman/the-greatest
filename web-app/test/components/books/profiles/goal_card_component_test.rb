@@ -44,4 +44,18 @@ class Books::Profiles::GoalCardComponentTest < ViewComponent::TestCase
     assert_selector "[data-testid='profile-reading-now']"
     assert_no_link "Set a reading goal"
   end
+
+  test "public links a goal only when the page may link to it" do
+    item = progress
+    item.goal.id = 5
+
+    render_inline Books::Profiles::GoalCardComponent.new(goals: [item], reading_now: nil, audience: :public, data: stub(linkable?: true))
+    assert_link "Twelve in <b>2026</b>", href: "/reading_goals/5"
+
+    render_inline Books::Profiles::GoalCardComponent.new(goals: [item], reading_now: nil, audience: :public, data: stub(linkable?: false))
+    assert_no_link "Twelve in <b>2026</b>"
+
+    render_inline Books::Profiles::GoalCardComponent.new(goals: [item], reading_now: nil, audience: :public)
+    assert_no_link "Twelve in <b>2026</b>"
+  end
 end

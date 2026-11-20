@@ -27,4 +27,18 @@ class Books::Profiles::HeaderComponentTest < ViewComponent::TestCase
 
     assert_no_text "Your profile"
   end
+
+  test "the owner's own page shows the privacy status and share settings; nobody else does" do
+    header = Services::Books::Profiles::Build::Header.new(name: "Al", member_since_year: 2020)
+
+    render_inline Books::Profiles::HeaderComponent.new(header: header, audience: :owner, profile: books_profiles(:public_profile))
+    assert_selector "[data-testid='profile-status']", text: "Public"
+    assert_link "Share settings", href: "/my/profile/settings"
+
+    render_inline Books::Profiles::HeaderComponent.new(header: header, audience: :owner, profile: books_profiles(:private_profile))
+    assert_selector "[data-testid='profile-status']", text: "Private"
+
+    render_inline Books::Profiles::HeaderComponent.new(header: header, audience: :public, profile: books_profiles(:public_profile))
+    assert_no_selector "[data-testid='profile-sharing']"
+  end
 end

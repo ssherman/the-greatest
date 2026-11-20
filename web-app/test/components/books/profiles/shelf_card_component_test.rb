@@ -54,4 +54,20 @@ class Books::Profiles::ShelfCardComponentTest < ViewComponent::TestCase
     assert_selector "[data-testid='profile-top-rated'] [data-testid='profile-book']", text: "4"
     assert_no_text "4.0"
   end
+
+  test "see all points at the visitor list only when linkable, and never builds a path without a list" do
+    list = Books::UserList.create!(user: users(:profile_reader), list_type: :favorites,
+      name: Books::UserList.default_list_name_for(:favorites))
+    shelf = Services::Books::Profiles::Library::Shelf.new(books: [books_books(:war_and_peace)], total: 1, list: list)
+
+    render_inline Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: shelf, audience: :public, data: stub(linkable?: true))
+    assert_link "See all (1)", href: "/user_lists/#{list.id}"
+
+    render_inline Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: shelf, audience: :public, data: stub(linkable?: false))
+    assert_no_link "See all (1)"
+
+    no_list = Services::Books::Profiles::Library::Shelf.new(books: [books_books(:war_and_peace)], total: 1, list: nil)
+    render_inline Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: no_list, audience: :owner, data: stub(linkable?: true))
+    assert_no_link "See all (1)"
+  end
 end
