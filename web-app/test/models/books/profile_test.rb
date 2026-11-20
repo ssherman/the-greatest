@@ -66,8 +66,18 @@ class Books::ProfileTest < ActiveSupport::TestCase
     assert_not Books::Profile.new.show?(:stats)
   end
 
+  test "destroying a public profile enqueues the purge; a private one does not" do
+    public_profile = books_profiles(:public_profile)
+    url = "https://#{Rails.application.config.domains[:books]}/profiles/#{public_profile.id}"
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", [url]).once
+
+    public_profile.destroy
+    books_profiles(:private_profile).destroy
+  end
+
   test "destroying the user destroys the profile" do
     user = users(:profile_reader)
+    Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
     assert_difference "Books::Profile.count", -1 do
       user.destroy
     end

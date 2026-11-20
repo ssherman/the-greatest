@@ -35,6 +35,10 @@ class Books::Profile < ApplicationRecord
   validates :user_id, uniqueness: true
   validates :display_name, presence: true, length: {in: 2..40}, if: :public?
 
+  # Account deletion cascades here; it cannot wait on a confirmed purge, so
+  # the public page is purged by the retrying job.
+  after_destroy_commit :enqueue_purge, if: :public?
+
   def show?(section)
     raise ArgumentError, "unknown profile section: #{section.inspect}" unless SECTIONS.include?(section.to_sym)
 
@@ -42,6 +46,11 @@ class Books::Profile < ApplicationRecord
   end
 
   private
+
+  def enqueue_purge
+    urls = Services::Books::Profiles::CachedUrls.call(profile: self)
+    ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+  end
 
   def normalize_display_name
     self.display_name = display_name&.squish
