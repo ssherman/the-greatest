@@ -381,6 +381,29 @@ module Services
             assert_equal true, verdict.reload.payload["redirect_written"]
           end
 
+          test "a book merged into the mixed book earlier still redirects: deleting the mixed book passes it on to the mixed book's target" do
+            folded_id = ::Books::Book.maximum(:id) + 1000
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded_id, to_id: @mixed.id)
+
+            Mixed.call(verdict: mixed_verdict)
+
+            assert_equal @to.id, RecordRedirect.find_by(item_type: "Books::Book", from_id: folded_id).to_id
+            assert_nil GoodreadsReplay::Apply::MergedBook.call(folded_id), "the passed-on redirect points at a guess, not a merge"
+          end
+
+          test "a run that died after the delete still passes the earlier redirects on when it writes the owed one" do
+            folded_id = ::Books::Book.maximum(:id) + 1000
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded_id, to_id: @mixed.id)
+            verdict = mixed_verdict
+            ::Services::BooksMigration::RedirectRecorder.stubs(:merged).raises(RuntimeError, "boom").then.returns(nil)
+
+            assert_raises(RuntimeError) { Mixed.call(verdict: verdict) }
+            assert_nil RecordRedirect.find_by(item_type: "Books::Book", from_id: folded_id).to_id
+            Mixed.call(verdict: verdict.reload)
+
+            assert_equal @to.id, RecordRedirect.find_by(item_type: "Books::Book", from_id: folded_id).to_id
+          end
+
           test "a book another merge removed first gets no redirect from this verdict" do
             verdict = mixed_verdict
             @mixed.destroy!
