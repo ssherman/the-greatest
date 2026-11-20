@@ -79,6 +79,47 @@ module Services
             assert_nil MergedBook.call(mixed_id)
           end
 
+          test "a deleted mixed book that absorbed a duplicate before redirects existed is not sent back to it" do
+            mixed_id, folded = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: mixed_id, item_b_id: folded, status: :merged, source: :ai)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @survivor.id, "archive" => {}})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @survivor.id)
+
+            assert_nil MergedBook.merge_target(mixed_id)
+          end
+
+          test "a deleted mixed book that absorbed a duplicate through a merge_books verdict is not sent back to it" do
+            mixed_id, folded = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: mixed_id, item_b_id: folded, status: :merged, source: :ai)
+            ::Books::RepairVerdict.create!(kind: :merge_books, subject_key: "books:#{mixed_id}:#{folded}", decided_by: :rule, status: :approved,
+              payload: {"source_id" => folded, "target_id" => mixed_id})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: nil)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @survivor.id, "archive" => {}})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @survivor.id)
+
+            assert_nil MergedBook.merge_target(mixed_id)
+          end
+
+          test "a pair-only chain through a gone middle book still reaches the survivor" do
+            first, middle = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: first, item_b_id: middle, status: :merged, source: :ai)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: @survivor.id, item_b_id: middle, status: :merged, source: :ai)
+
+            assert_equal @survivor, MergedBook.call(first)
+          end
+
+          test "a redirect a mixed delete passed on to its guess is not a merge into the guess" do
+            mixed_id, folded = gone_ids(2)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @survivor.id, "archive" => {}, "redirected_here" => [folded]})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @survivor.id)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: @survivor.id)
+
+            assert_nil MergedBook.call(folded)
+          end
+
           test "a deleted book (a redirect with no target) resolves to nothing" do
             gone_id, = gone_ids(1)
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: nil)
