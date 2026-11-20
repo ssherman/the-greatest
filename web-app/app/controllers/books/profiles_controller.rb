@@ -9,9 +9,15 @@ class Books::ProfilesController < ApplicationController
   before_action :set_profile
 
   def show
-    # ?anything and .html are separate edge cache entries the hide purge does
-    # not reach, so a query string never gets its own copy of the page.
-    return redirect_to(books_profile_path(@profile), status: :moved_permanently) if request.query_string.present?
+    # Only the canonical path may be cached. /profiles/0001, /profiles/1/ and
+    # /profiles/1?anything all reach this row but are separate edge cache
+    # entries the hide purge never clears, so each is sent to the canonical
+    # path with a redirect that is itself never cached.
+    # original_fullpath, because fullpath has already lost a trailing slash.
+    unless request.original_fullpath == books_profile_path(@profile)
+      prevent_caching
+      return redirect_to(books_profile_path(@profile), status: :moved_permanently)
+    end
 
     # @indexable stays unset, which the layout reads as noindex.
     @profile_data = Services::Books::Profiles::Build.call(

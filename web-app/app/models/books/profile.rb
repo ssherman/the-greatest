@@ -39,6 +39,12 @@ class Books::Profile < ApplicationRecord
   # the public page is purged by the retrying job.
   after_destroy_commit :enqueue_purge, if: :public?
 
+  # Whether the public page exists right now. Reads the stored flag, so a
+  # rejected attempt to go public does not count.
+  def published?
+    persisted? && public_in_database
+  end
+
   def show?(section)
     raise ArgumentError, "unknown profile section: #{section.inspect}" unless SECTIONS.include?(section.to_sym)
 

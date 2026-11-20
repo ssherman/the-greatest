@@ -85,6 +85,9 @@ is cached an hour per user, and only when ready.
 
 - The public page is cached at the edge only (Cloudflare, 600 seconds); the header is
   `public, max-age=0, s-maxage=600`, so browsers may store it but must revalidate every time. In development there is no edge, so changes show at once.
+  Only the canonical path `/profiles/<id>` is ever cached. A zero-padded id, a trailing slash or a
+  query string reaches the same profile but would be a separate edge cache entry the purge cannot
+  clear, so each gets an uncached 301 to the canonical path; a `.html` suffix is not routable.
 - A save that hides anything the edge may hold (switching public off, turning a section off, or
   changing the display name) purges the cached URL synchronously after the commit, and the
   settings page says something only when the purge was not confirmed (a confirmed one shows the

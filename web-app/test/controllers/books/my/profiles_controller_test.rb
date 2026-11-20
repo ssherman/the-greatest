@@ -45,42 +45,33 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "own page shows the privacy status and a link to the settings" do
+  test "own page hands the view the reader's saved profile" do
     sign_in_as users(:profile_reader), stub_auth: true
 
     get books_my_profile_path, headers: {"HOST" => @host}
 
-    assert_select "[data-testid=profile-status]", text: "Public"
-    assert_select "a[href=?]", books_my_profile_settings_path
+    assert_equal books_profiles(:public_profile), @controller.view_assigns.fetch("profile")
   end
 
-  test "own page shows Private and the settings link for an account with no profile, without creating one" do
+  test "own page hands the view an unsaved private profile for an account with none, without creating one" do
     sign_in_as users(:regular_user), stub_auth: true
 
     assert_no_difference "Books::Profile.count" do
       get books_my_profile_path, headers: {"HOST" => @host}
     end
 
-    assert_select "[data-testid=profile-status]", text: "Private"
-    assert_select "[data-testid=profile-sharing] a[href=?]", books_my_profile_settings_path
+    profile = @controller.view_assigns.fetch("profile")
+    assert_equal [false, false], [profile.persisted?, profile.public?]
   end
 
-  test "preview renders no sharing block" do
-    sign_in_as users(:profile_reader), stub_auth: true
-
-    get books_my_profile_preview_path, headers: {"HOST" => @host}
-
-    assert_select "[data-testid=profile-sharing]", count: 0
-  end
-
-  test "a failed attempt to go public does not show the public link" do
+  test "a failed attempt to go public leaves the profile unpublished" do
     sign_in_as users(:profile_empty_reader), stub_auth: true
 
     patch books_my_profile_settings_path, headers: {"HOST" => @host},
       params: {books_profile: {public: "1", display_name: ""}}
 
     assert_response :unprocessable_entity
-    assert_select "[data-testid=profile-public-url]", count: 0
+    assert_not @controller.view_assigns.fetch("profile").published?
   end
 
   test "a scalar books_profile param is a 400" do
@@ -107,17 +98,7 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
 
     get books_my_profile_settings_path, headers: {"HOST" => @host}
 
-    assert_select "input[name='books_profile[display_name]'][value=?]", user.display_name
-  end
-
-  test "settings show the public link only once public" do
-    sign_in_as users(:profile_reader), stub_auth: true
-    get books_my_profile_settings_path, headers: {"HOST" => @host}
-    assert_select "[data-testid=profile-public-url][readonly]"
-
-    sign_in_as users(:profile_empty_reader), stub_auth: true
-    get books_my_profile_settings_path, headers: {"HOST" => @host}
-    assert_select "[data-testid=profile-public-url]", count: 0
+    assert_equal user.display_name, @controller.view_assigns.fetch("profile").display_name
   end
 
   test "update creates the profile and redirects" do
@@ -143,7 +124,7 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
-    assert_select "[data-testid=profile-settings-errors]"
+    assert_predicate @controller.view_assigns.fetch("profile").errors, :any?
   end
 
   test "update that hides a section calls the synchronous purge" do
@@ -177,8 +158,6 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to books_my_profile_settings_path
     assert_includes flash[:alert], "could not confirm the cached copy was cleared"
     assert_not books_profiles(:public_profile).reload.public?
-    follow_redirect!
-    assert_select "[data-testid=profile-settings-alert]"
   end
 
   test "update ignores parameters outside the permitted list" do

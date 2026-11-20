@@ -66,6 +66,16 @@ class Books::ProfileTest < ActiveSupport::TestCase
     assert_not Books::Profile.new.show?(:stats)
   end
 
+  test "published? follows the stored public flag, not an unsaved change" do
+    assert_predicate books_profiles(:public_profile), :published?
+    assert_not books_profiles(:private_profile).published?
+    assert_not Books::Profile.new(public: true).published?
+
+    private_profile = books_profiles(:private_profile)
+    private_profile.public = true
+    assert_not private_profile.published?
+  end
+
   test "destroying a public profile enqueues the purge; a private one does not" do
     public_profile = books_profiles(:public_profile)
     url = "https://#{Rails.application.config.domains[:books]}/profiles/#{public_profile.id}"

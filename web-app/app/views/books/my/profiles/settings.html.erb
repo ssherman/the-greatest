@@ -63,7 +63,7 @@
           </p>
         </fieldset>
 
-        <% if @profile.persisted? && @profile.public_in_database %>
+        <% if @profile.published? %>
           <fieldset class="fieldset">
             <%= label_tag :profile_public_url, "Your public link", class: "fieldset-legend" %>
             <input id="profile_public_url" type="text" readonly class="input w-full"

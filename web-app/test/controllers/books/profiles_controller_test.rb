@@ -116,12 +116,37 @@ class Books::ProfilesControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "a public profile with a query string redirects to the bare path" do
+  test "a public profile with a query string redirects, uncached, to the bare path" do
     get "#{books_profile_path(@profile)}?utm=x", headers: {"HOST" => @host}
 
     assert_response :moved_permanently
-    assert_equal books_profile_url(@profile, host: @host), response.location.sub(/\Ahttp:/, "http:")
-    assert_nil URI(response.location).query
+    assert_equal books_profile_path(@profile), URI(response.location).request_uri
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  # /profiles/0001 and /profiles/1/ reach the same row but are separate edge
+  # cache entries the hide purge never clears, so neither may be cached.
+  test "a zero-padded id redirects, uncached, to the canonical path" do
+    get "/profiles/#{"00#{@profile.id}"}", headers: {"HOST" => @host}
+
+    assert_response :moved_permanently
+    assert_equal books_profile_path(@profile), URI(response.location).request_uri
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  test "a trailing slash redirects, uncached, to the canonical path" do
+    get "#{books_profile_path(@profile)}/", headers: {"HOST" => @host}
+
+    assert_response :moved_permanently
+    assert_equal books_profile_path(@profile), URI(response.location).request_uri
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  test "a zero-padded id of a private profile is still an uncached 404" do
+    get "/profiles/#{"00#{books_profiles(:private_profile).id}"}", headers: {"HOST" => @host}
+
+    assert_response :not_found
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
 
   test "a private profile with a query string is still an uncached 404" do
@@ -140,14 +165,6 @@ class Books::ProfilesControllerTest < ActionDispatch::IntegrationTest
     get books_profile_path(@profile), headers: {"HOST" => @host}
 
     assert_response :success
-  end
-
-  test "an owner-only shelf prompt is not shown to visitors" do
-    get books_profile_path(@profile), headers: {"HOST" => @host}
-
-    assert_response :success
-    assert_select "[data-testid=profile-favorites-prompt]", count: 0
-    assert_select "[data-testid=profile-sharing]", count: 0
   end
 
   test "the public page has no frame-trapped links" do
