@@ -1,0 +1,28 @@
+You are reviewing the author check of the Goodreads re-import on The Greatest Books, using the admin MCP server at <%= mcp_url %>. The check compared each book's credited authors with the author its readers' Goodreads rows name, and recorded a reimport_author verdict where they seemed to disagree. The queue holds <%= pending_authors %> proposed reimport_author verdicts. Work through all of them.
+
+Use list_repair_verdicts with kind=reimport_author to list them (status defaults to proposed). Page through the whole list.
+
+What a verdict says (get_repair_verdict):
+
+- `books` is the book, with the authors it credits now.
+- `payload.row_author_names` is what the rows say: the author most of the book's Goodreads editions name first, then any co-author the AI confirmed.
+- `payload.after` maps each of those names to the author the verdict would credit: an existing author's id, or null for a new author it would create. `authors` lists the existing ones.
+- `payload.ai` holds the AI's matches and what the author finder said about each name.
+- Approving makes the next books:goodreads_reimport:apply replace the book's credits with exactly `after`, in that order, creating an author for every null. Rejecting leaves the book as it is.
+
+For each verdict, decide whether the book's current credit is wrong. Use the book's title and year, the author records (get_admin_author, search_admin_authors) and your own web search.
+
+- **The current credit is right: reject it** with reject_repair_verdict. Most verdicts will be this. The rows' name is often a variant of the same person: a misspelling ("Louis May Alcott"), a reversed or slug form ("Wharton Edith", "heller-joseph"), a transliteration or translation ("Fedor Dostoyevsky", "丹尼尔·笛福"), a pen name of the same person, or the translator, narrator, illustrator or editor of one edition credited first. None of these is a reason to change a book's author.
+- **Never create an author from a misspelling or a variant.** If `after` has null for a name that is a variant of an author who already exists, the verdict is wrong.
+- **Never credit a duplicate author record.** If `after` points at a second record of the book's own author (the same person under another spelling), the verdict is wrong: reject it and note both author ids in your report.
+- **"Unknown", "Anonymous", "Various" and place-named authors (for example "China") are deliberate placeholders.** Never replace one with a person.
+- **The current credit is wrong and `after` is exactly right: approve** with approve_repair_verdict. Exactly right means the right people, each an existing record when one exists, no duplicates, and no co-author of the book left out.
+- **The current credit is wrong but `after` is not exactly right:** reject the verdict, then fix the book yourself. Find the right authors with search_admin_authors; add them with add_book_author, remove the wrong one with remove_book_author, and set the order with update_book_author (position 1 is the main author). Create an author with create_admin_author only when the person has no record, passing their wikidata_qid when you can find it. A namesake (a different person with the same name) is a common cause: check birth and death years and the books each record holds.
+
+Use bulk_approve_repair_verdicts only for verdicts you have each read with get_repair_verdict. Do not approve a whole page unread.
+
+Approving does not change anything at once. The next books:goodreads_reimport:apply run acts on it, so treat each answer as final.
+
+You are authorised to act without asking me. If you genuinely cannot tell, skip the verdict and say why.
+
+When you finish, report what you did with each verdict: its id, the book, what you did (approved, rejected, rejected and fixed by hand, skipped) and one line of reasoning. List any duplicate author records you found, with both ids.

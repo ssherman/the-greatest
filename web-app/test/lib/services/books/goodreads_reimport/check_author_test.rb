@@ -89,7 +89,7 @@ module Services
           assert_equal :agrees, call.data[:outcome]
         end
 
-        test "disagrees and links a catalog author the finder confirms; auto-approved on an import-made book" do
+        test "disagrees and links a catalog author the finder confirms; proposed with high confidence on an import-made book" do
           garnett = books_authors(:garnett)
           edition("Constance Garnett")
           @task_class.expects(:new).returns(ai({export_name: "Constance Garnett", author_number: 1, confidence: "none"}))
@@ -99,14 +99,15 @@ module Services
           verdict = result.data[:verdict]
 
           assert_equal :recorded, result.data[:outcome]
-          assert verdict.approved?
+          assert verdict.proposed?, "an author verdict always waits for a reviewer"
+          assert_equal "high", verdict.confidence
           assert_equal "reimport:author:#{@book.id}", verdict.subject_key
           assert_equal [@tolstoy.id], verdict.payload["before_author_ids"]
           assert_equal ["Constance Garnett"], verdict.payload["row_author_names"]
           assert_equal({"Constance Garnett" => garnett.id}, verdict.payload["after"])
         end
 
-        test "disagrees with no catalog author found: create, still auto-approved when the finder is sure" do
+        test "disagrees with no catalog author found: create, proposed with high confidence when the finder is sure" do
           edition("Brand New Writer")
           @task_class.expects(:new).returns(ai)
           @finder.expects(:call).returns(none)
@@ -114,7 +115,7 @@ module Services
           verdict = call.data[:verdict]
 
           assert_equal({"Brand New Writer" => nil}, verdict.payload["after"])
-          assert verdict.approved?
+          assert_equal ["proposed", "high"], [verdict.status, verdict.confidence]
         end
 
         test "a finder pick below high is not accepted and the verdict is proposed" do
@@ -206,7 +207,7 @@ module Services
           @task_class.expects(:new).returns(ai)
           @finder.expects(:call).returns(found(books_authors(:garnett)))
 
-          assert call.data[:verdict].approved?
+          assert_equal ["proposed", "high"], call.data[:verdict].then { |verdict| [verdict.status, verdict.confidence] }
         end
 
         test "the row name is the editions' most common primary author, and an additional author joins only when the AI confirms it" do

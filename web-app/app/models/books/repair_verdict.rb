@@ -74,8 +74,12 @@ module Books
       ids.compact
     end
 
+    # A reimport_author verdict names the existing authors it would credit (a nil in `after` is one to create).
     def author_ids
-      merge_authors? ? [payload["source_id"], payload["target_id"]].compact : []
+      return [payload["source_id"], payload["target_id"]].compact if merge_authors?
+      return (payload["after"] || {}).values.select { |id| id.is_a?(Integer) }.uniq if reimport_author?
+
+      []
     end
 
     def summary
