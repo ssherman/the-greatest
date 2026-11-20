@@ -42,14 +42,14 @@ choosing which sections visitors see. Sharing is off until the reader turns it o
 
 - A profile row (`Books::Profile`) exists only once the reader saves Share settings; before that
   the profile is private. `/my/profile/settings` shows and saves the form, `/my/profile/preview`
-  shows the owner exactly what a visitor would see (public audience, even while private).
+  shows the owner exactly what a visitor would see (public audience, even while private, once a profile row exists; with no row it redirects to settings).
 - The row holds `public`, a `display_name` (2 to 40 characters, required while public; nothing is
   ever derived from the email address) and eight switches, all off by default: stats, favorites,
   goals, reading now, taste, recently read, highest rated, reviews.
 - The page header on `/my/profile` shows the sharing status and a "Share settings" link; the
   public page shows only the name and "Member since".
-- Making the profile public and picking sections on a first save shows the public link on the
-  settings page; the link is read from there.
+- The settings page shows the public link whenever the stored profile is public; read it from
+  there.
 
 ## What each audience sees
 
@@ -68,22 +68,25 @@ choosing which sections visitors see. Sharing is off until the reader turns it o
 ## Taste
 
 Genres and subjects come from the recommendation engine's taste profile built from the reader's
-Favorites and Read lists and their rated books, the same input the recommendations use. The
-public page shows only the genre and subject names, never the books behind them. The result
+default lists (Favorites, Read, Reading, Want to Read; not custom lists) and reviewed books, the
+same input the recommendations use. The 10-book minimum counts only favorited, read or rated
+books. The public page shows only genre and subject names and each genre's relative strength,
+never the books behind them. The result
 is cached an hour per user, and only when ready.
 
 ## Caching and purge
 
-- The public page is cached at the edge only (Cloudflare, 600 seconds); browsers do not cache
-  it. In development there is no edge, so changes show at once.
+- The public page is cached at the edge only (Cloudflare, 600 seconds); the header is
+  `public, max-age=0, s-maxage=600`, so browsers may store it but must revalidate every time. In development there is no edge, so changes show at once.
 - A save that hides anything the edge may hold (switching public off, turning a section off, or
   changing the display name) purges the cached URL synchronously after the commit, and the
-  settings page says whether the purge was confirmed. If it was not, the save still stands, the
-  reader is told the old copy clears within 10 minutes, and a retrying job purges it. A save
+  settings page says something only when the purge was not confirmed (a confirmed one shows the
+  plain "Profile settings saved."). Then the save still stands, the reader is told the old copy
+  clears within 10 minutes, and a retrying job purges it. A save
   that only reveals more enqueues a purge in the background.
 - Hiding saves refuse to run inside an enclosing database transaction, because the purge result
   could not be reported.
-- Deleting an account deletes the profile and enqueues the purge job.
+- Deleting an account deletes the profile, and enqueues the purge job when the profile was public.
 
 ## Search engines and moderation
 
