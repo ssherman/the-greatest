@@ -67,6 +67,18 @@ module Services
             assert_nil MergedBook.call(gone_id)
           end
 
+          test "a deleted mixed book that survived an earlier merged pair is not sent back to the book merged into it" do
+            mixed_id, folded = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: mixed_id, item_b_id: folded, status: :merged, source: :ai)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: mixed_id)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @survivor.id, "archive" => {}})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @survivor.id)
+
+            assert_nil MergedBook.merge_target(mixed_id)
+            assert_nil MergedBook.call(mixed_id)
+          end
+
           test "a deleted book (a redirect with no target) resolves to nothing" do
             gone_id, = gone_ids(1)
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: nil)
