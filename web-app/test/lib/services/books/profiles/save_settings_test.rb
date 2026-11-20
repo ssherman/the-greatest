@@ -170,13 +170,14 @@ module Services
           assert result.data[:purge_confirmed]
         end
 
-        test "nothing is purged when an enclosing transaction rolls back" do
+        test "nothing is enqueued when an enclosing transaction rolls back" do
           Cloudflare::PurgeService.expects(:new).never
           ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
 
+          @public_profile.update_columns(show_reviews: false)
           with_purge_token do
             ::Books::Profile.transaction(requires_new: true) do
-              SaveSettings.call(user: @public_user, attributes: {public: false})
+              SaveSettings.call(user: @public_user, attributes: {show_reviews: true})
               raise ActiveRecord::Rollback
             end
           end

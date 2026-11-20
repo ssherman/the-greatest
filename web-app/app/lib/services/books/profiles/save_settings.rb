@@ -20,10 +20,20 @@ module Services
           saved = false
           hiding = false
           committed_result = nil
+          deferred = deferred_commit?
 
           ::Books::Profile.transaction do |transaction|
             profile.assign_attributes(attributes)
             hiding = hiding_save?
+            if hiding && deferred
+              profile.restore_attributes
+              return result(
+                success: false,
+                persisted: false,
+                purge_confirmed: nil,
+                errors: ["Hiding profile content cannot run inside an existing transaction"]
+              )
+            end
             saved = profile.save
             if saved
               transaction.after_commit { committed_result = invalidate_cache(hiding) }
@@ -43,6 +53,14 @@ module Services
 
         def profile
           @profile ||= ::Books::Profile.find_or_initialize_by(user: user)
+        end
+
+        # Inside a caller's joinable transaction the after_commit hook waits for
+        # the outer commit, so a hide could not report whether its purge worked.
+        # (Rails' own fixture transaction is not joinable, so this is false
+        # in transactional tests and true only for a real enclosing transaction.)
+        def deferred_commit?
+          ::Books::Profile.connection.current_transaction.joinable?
         end
 
         # Must run after assign_attributes and before save, while the changes

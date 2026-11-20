@@ -77,7 +77,9 @@ class Books::ProfileTest < ActiveSupport::TestCase
 
   test "destroying the user destroys the profile" do
     user = users(:profile_reader)
-    Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+    profile = books_profiles(:public_profile)
+    url = "https://#{Rails.application.config.domains[:books]}/profiles/#{profile.id}"
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", [url]).once
     assert_difference "Books::Profile.count", -1 do
       user.destroy
     end
