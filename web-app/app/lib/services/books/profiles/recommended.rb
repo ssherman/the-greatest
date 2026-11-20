@@ -5,7 +5,7 @@ module Services
       # books from the same engine call the recommendations page makes, with
       # the reader's stored settings. Never raises; a failure is :unavailable.
       class Recommended
-        LIMIT = 6
+        LIMIT = 8
 
         # state: :ok | :no_history | :unavailable
         Data = Struct.new(:state, :books, keyword_init: true)

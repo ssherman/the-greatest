@@ -24,10 +24,10 @@ module Services
           assert_equal [:no_history, []], [data.state, data.books]
         end
 
-        test "ok with up to 6 books from the engine" do
+        test "ok with up to 8 books from the engine" do
           stub_history(true)
           books = ::Books::Book.limit(3).to_a
-          ::Recommendations::Engine.expects(:call).with { |args| args[:limit] == 6 && args[:domain] == "books" }
+          ::Recommendations::Engine.expects(:call).with { |args| args[:limit] == 8 && args[:domain] == "books" }
             .returns(engine_result(items: books))
 
           data = Recommended.call(user: @user)

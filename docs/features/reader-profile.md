@@ -24,7 +24,13 @@ choosing which sections visitors see. Sharing is off until the reader turns it o
 - **Recently read.** Cover shelf from the Read list, with a "Highest rated" row in the same card.
 - **Recent reviews.** The latest reviews with cover, stars and a snippet; "See all" goes to
   `/my/reviews`.
-- **Recommended for you.** Covers from the recommendation engine, with "See all".
+- **Recommended for you.** Eight covers from the recommendation engine, with "See all".
+
+Layout: the cover shelves (Favorites, Recently read / Highest rated, Recommended for you) run the
+full width, eight covers to a row on desktop and four on a phone. The small cards between them
+(Reading goal, Taste, Recent reviews) flow in two columns, each sitting directly under the one
+above it, so a missing or short card leaves no hole. On the page the order is Favorites, Recently
+read, the small cards, then Recommended for you.
 
 ## Empty-state rules
 
