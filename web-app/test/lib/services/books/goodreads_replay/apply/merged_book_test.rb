@@ -110,6 +110,16 @@ module Services
             assert_equal @survivor, MergedBook.call(first)
           end
 
+          test "a redirect a mixed delete passed on to its guess is not a merge into the guess" do
+            mixed_id, folded = gone_ids(2)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @survivor.id, "archive" => {}, "redirected_here" => [folded]})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @survivor.id)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: @survivor.id)
+
+            assert_nil MergedBook.call(folded)
+          end
+
           test "a deleted book (a redirect with no target) resolves to nothing" do
             gone_id, = gone_ids(1)
             RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: nil)

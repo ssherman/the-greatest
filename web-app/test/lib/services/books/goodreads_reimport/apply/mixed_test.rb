@@ -388,6 +388,7 @@ module Services
             Mixed.call(verdict: mixed_verdict)
 
             assert_equal @to.id, RecordRedirect.find_by(item_type: "Books::Book", from_id: folded_id).to_id
+            assert_nil GoodreadsReplay::Apply::MergedBook.call(folded_id), "the passed-on redirect points at a guess, not a merge"
           end
 
           test "a run that died after the delete still passes the earlier redirects on when it writes the owed one" do

@@ -13,7 +13,8 @@ module Services
         # were never a duplicate pair leaves (merge_book in the admin UI, API or
         # MCP). A deleted mixed book's redirect is the exception: it points at a
         # guess (the book most of its readers moved to), and moves and copies
-        # must not send readers there. Chains are followed. Merges run before
+        # must not send readers there. So are the redirects its delete passed on
+        # from books merged into it earlier. Chains are followed. Merges run before
         # relinks in ApplyVerdicts, and admins merge between passes, so without
         # this a relink naming a merged book would no-op on every pass.
         class MergedBook
@@ -71,8 +72,11 @@ module Services
               .where.not("item_a_id = :id OR item_b_id = :id", id: id).exists?
           end
 
+          # A deleted mixed book's redirect is not followed, nor the redirects of books once merged into it, which
+          # the delete passed on to the same guess (Reimport::Apply::Mixed records them as redirected_here).
           def self.redirect_target(id)
             return nil if ::Books::RepairVerdict.reimport_mixed.where("payload->>'book_id' = ?", id.to_s).exists?
+            return nil if ::Books::RepairVerdict.reimport_mixed.where("payload->'redirected_here' @> ?::jsonb", [id].to_json).exists?
 
             ::RecordRedirect.where(item_type: "Books::Book", from_id: id).where.not(to_id: nil).pick(:to_id)
           end
