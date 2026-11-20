@@ -11,17 +11,18 @@
 
   <% cards = capture do %>
     <%= render Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: data.favorites, audience: audience, data: data) %>
-    <%= render Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: data.recently_read, top_rated: data.top_rated, audience: audience, data: data) %>
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: data.recently_read, audience: audience, data: data) %>
     <%= render Books::Profiles::GoalCardComponent.new(goals: data.goals, reading_now: data.reading_now, audience: audience, data: data) %>
     <%= render Books::Profiles::TasteCardComponent.new(taste: data.taste, audience: audience) %>
     <%= render Books::Profiles::ReviewsCardComponent.new(reviews: data.recent_reviews, audience: audience) %>
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :top_rated, rated: data.top_rated, audience: audience) %>
     <%= render Books::Profiles::RecommendationsCardComponent.new(recommendations: data.recommendations, audience: audience) %>
   <% end %>
   <% if cards.present? %>
     <%# CSS columns, not a grid: a grid row is as tall as its tallest card, which
         left a hole beside every short card. Columns let each card sit directly
         under the one above it, whichever cards happen to render. The cover
-        shelves (favorites, recently read / highest rated, recommendations) set
+        shelves (favorites, recently read, highest rated, recommendations) set
         column-span: all on themselves, so they run the full width and the small
         cards between them balance across the two columns. %>
     <div class="md:columns-2 gap-4 -mb-4 *:mb-4 *:break-inside-avoid" data-testid="profile-cards">

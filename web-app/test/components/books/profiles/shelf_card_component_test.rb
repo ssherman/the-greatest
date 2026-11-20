@@ -26,20 +26,31 @@ class Books::Profiles::ShelfCardComponentTest < ViewComponent::TestCase
     end
   end
 
-  test "a highest-rated-only card has a card title for both audiences" do
+  test "highest rated is its own card with its own title, for both audiences" do
     top = [RatedBook.new(book: books_books(:war_and_peace), rating: 5)]
 
     [:owner, :public].each do |audience|
-      render_inline Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: empty_shelf, top_rated: top, audience: audience)
+      render_inline Books::Profiles::ShelfCardComponent.new(kind: :top_rated, rated: top, audience: audience)
 
-      assert_selector "h2.card-title", text: "Highest rated"
+      assert_selector "section[data-testid='profile-top-rated'] h2.card-title", text: "Highest rated"
       assert_no_text "Recently read"
     end
+  end
+
+  test "the recently read card holds only the read shelf" do
+    shelf = Shelf.new(books: [books_books(:war_and_peace)], total: 1, list: nil)
+
+    render_inline Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: shelf, audience: :owner)
+
+    assert_selector "section[data-testid='profile-recently-read'] h2.card-title", text: "Recently read"
+    assert_no_text "Highest rated"
   end
 
   test "secondary kind with nothing does not render for either audience" do
     [:owner, :public].each do |audience|
       refute Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: empty_shelf, audience: audience).render?
+      refute Books::Profiles::ShelfCardComponent.new(kind: :top_rated, rated: [], audience: audience).render?
+      refute Books::Profiles::ShelfCardComponent.new(kind: :top_rated, rated: nil, audience: audience).render?
     end
   end
 
@@ -55,12 +66,10 @@ class Books::Profiles::ShelfCardComponentTest < ViewComponent::TestCase
     assert_no_selector "a[href='/my/lists/#{shelf.list.id}']"
   end
 
-  test "highest rated shares the recently read card and prints ratings without a trailing zero" do
+  test "highest rated prints ratings without a trailing zero" do
     rated = [RatedBook.new(book: books_books(:war_and_peace), rating: BigDecimal("4.0"))]
 
-    render_inline Books::Profiles::ShelfCardComponent.new(
-      kind: :recently_read, shelf: empty_shelf, top_rated: rated, audience: :public
-    )
+    render_inline Books::Profiles::ShelfCardComponent.new(kind: :top_rated, rated: rated, audience: :public)
 
     assert_selector "[data-testid='profile-top-rated'] [data-testid='profile-book']", text: "4"
     assert_no_text "4.0"
