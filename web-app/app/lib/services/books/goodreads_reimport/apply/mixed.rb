@@ -49,8 +49,11 @@ module Services
               reason = blocker(book, items)
               raise ActiveRecord::Rollback if reason
 
+              # Deleting the book blanks the redirects of books merged into it earlier (RedirectRecorder.deleted). They are
+              # recorded here and passed on with this book's own redirect (write_redirect).
+              redirected_here = ::RecordRedirect.where(item_type: "Books::Book", to_id: book.id).pluck(:from_id)
               verdict.update_columns(payload: verdict.payload.merge("deleted" => items.map { |item| attributes(item) },
-                "deleted_images" => image_records(book), "redirect_written" => false))
+                "deleted_images" => image_records(book), "redirect_written" => false, "redirected_here" => redirected_here))
               Leftovers.purge_goal_pages(items)
               items.each(&:destroy!)
               keep_image_files(book)
@@ -110,8 +113,13 @@ module Services
           def self.write_redirect(verdict, book_id, to_id)
             return unless to_id
 
-            ::Services::BooksMigration::RedirectRecorder.merged(item_type: "Books::Book", from_id: book_id, to_id: to_id)
-            verdict.update_columns(payload: verdict.payload.merge("redirect_written" => true))
+            ::ApplicationRecord.transaction do
+              ::Services::BooksMigration::RedirectRecorder.merged(item_type: "Books::Book", from_id: book_id, to_id: to_id)
+              # Only the ones still blank: anything that pointed them elsewhere since knows better.
+              ::RecordRedirect.where(item_type: "Books::Book", from_id: Array(verdict.payload["redirected_here"]), to_id: nil)
+                .update_all(to_id: to_id, updated_at: Time.current)
+              verdict.update_columns(payload: verdict.payload.merge("redirect_written" => true))
+            end
           end
 
           # The most-read book, followed through merges. Not the book itself.

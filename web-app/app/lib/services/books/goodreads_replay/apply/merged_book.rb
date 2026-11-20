@@ -46,14 +46,29 @@ module Services
             redirected = redirect_target(id)
             return redirected if redirected
 
-            # A pair names no direction, so a half whose redirect points at this id was folded into it: this id
+            # A pair names no direction, so a half that was folded into this id must not be followed: this id
             # survived that merge, and following the pair would walk back to a gone book (a deleted mixed book
-            # that had absorbed duplicates then loops, and Leftovers never reaches its own redirect).
+            # that had absorbed duplicates then loops, and Leftovers never reaches its own redirect). A folded-in
+            # half either redirects here, or (a merge from before redirects were recorded) is gone and leads
+            # nowhere but back through this same pair. An approved merge_books verdict into this id says so too,
+            # even after deleting this id blanked the half's redirect.
             others = ::DuplicateCandidate.merged.where(item_type: "Books::Book")
               .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc)
               .pluck(:item_a_id, :item_b_id).map { |a, b| (a == id) ? b : a }
             folded_in = ::RecordRedirect.where(item_type: "Books::Book", from_id: others, to_id: id).pluck(:from_id).to_set
-            others.find { |other| !folded_in.include?(other) }
+            folded_in.merge(::Books::RepairVerdict.merge_books.approved.where("payload->>'target_id' = ?", id.to_s)
+              .where("payload->>'source_id' IN (?)", others.map(&:to_s).presence || [""]).pluck(Arel.sql("payload->>'source_id'")).map(&:to_i))
+            others.find { |other| !folded_in.include?(other) && leads_on?(other, id) }
+          end
+
+          # Does the pair's other half lead anywhere but back to `id`: it is live, or some other merge edge leaves it?
+          def self.leads_on?(other, id)
+            return true if ::Books::Book.exists?(other)
+            return true if ::Books::RepairVerdict.merge_books.approved.where("payload->>'source_id' = ?", other.to_s).exists?
+            return true if redirect_target(other)
+
+            ::DuplicateCandidate.merged.where(item_type: "Books::Book").where("item_a_id = :o OR item_b_id = :o", o: other)
+              .where.not("item_a_id = :id OR item_b_id = :id", id: id).exists?
           end
 
           def self.redirect_target(id)
@@ -61,7 +76,7 @@ module Services
 
             ::RecordRedirect.where(item_type: "Books::Book", from_id: id).where.not(to_id: nil).pick(:to_id)
           end
-          private_class_method :redirect_target
+          private_class_method :redirect_target, :leads_on?
         end
       end
     end
