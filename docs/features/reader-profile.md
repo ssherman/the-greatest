@@ -37,14 +37,13 @@ planned (phase 2) and do not exist yet: `Services::Books::Profiles::Build` accep
 - **Recommendations** show only to the owner. If the engine fails or returns nothing, the card is
   omitted rather than showing an error. A reader with no history gets a prompt for the
   recommendation wizard.
-- The stat row always renders for the owner; a visitor view (phase 2) shows only tiles that have a
-  number.
+- The stat row always renders for the owner.
 
 ## Behaviour notes
 
 - The page is never cached (`prevent_caching`); the taste result is cached for an hour per user,
   and only when ready, because computing it for the heaviest readers is too slow to do per request.
-- The owner view is not limited to the public catalog; the visitor view will be.
+- The owner view is not limited to the public catalog.
 
 ## Where the code lives
 
@@ -53,7 +52,7 @@ planned (phase 2) and do not exist yet: `Services::Books::Profiles::Build` accep
   `Taste` and `Recommended` supply the parts).
 - Components: `web-app/app/components/books/profiles/`, one per card.
 - Views: `web-app/app/views/books/my/profiles/show.html.erb` and the shared body
-  `web-app/app/views/books/profiles/` (`_dashboard`, `_cover`), which phase 2 will reuse.
+  `web-app/app/views/books/profiles/` (`_dashboard`, `_cover`).
 - Tests: mirrored under `web-app/test/`; E2E in `web-app/e2e/tests/books/account/profile.spec.ts`.
   The three E2E accounts are not empty, so the empty-account render is covered by the controller
   test, not Playwright.
