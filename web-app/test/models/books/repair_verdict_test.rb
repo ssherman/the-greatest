@@ -122,6 +122,9 @@ module Books
       assert_equal [[], [5, 6]], [merge.book_ids, merge.author_ids]
       assert_equal [7], verdict(kind: :mark_provisional, subject_key: "book:7", payload: {"book_id" => 7}).book_ids
       assert_empty verdict(subject_key: "user:2:book:3:goodreads:4").author_ids
+      author = verdict(kind: :reimport_author, subject_key: "reimport:author:7",
+        payload: {"book_id" => 7, "before_author_ids" => [1], "row_author_names" => ["B", "C"], "after" => {"B" => 11, "C" => nil}})
+      assert_equal [[7], [11]], [author.book_ids, author.author_ids], "an author verdict names the authors it would credit"
     end
 
     test "the replay applies approved verdicts once its auto verdicts are hand-checked" do

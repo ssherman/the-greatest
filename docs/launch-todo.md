@@ -568,8 +568,10 @@ Every step below only queues a Sidekiq job; wait for the jobs to finish before t
    snapshot predates id tracking". Run `bin/rails "books:goodreads_reimport:snapshot[redo]"` once, before any row
    has been applied, to replace it.
 9. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
-10. **Check the authors, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
-    `check_authors[all]`, then `bin/rails books:goodreads_reimport:apply` again.
+10. **Check the authors, review, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
+    `check_authors[all]`. Every author verdict is a proposal: review them in Admin, Repair verdicts, filtered to
+    `reimport_author` (its Copy prompt hands the review to an admin agent). Then `bin/rails books:goodreads_reimport:apply`
+    again. Pause author merges from the first `check_authors` until that apply finishes.
 11. **Report.** `bin/rails books:goodreads_reimport:report` again. The acceptance lines at the bottom should
     each print 0. Conflicts and verdicts closed because there was nothing left to do are listed in it; read them.
 12. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log (search

@@ -96,7 +96,13 @@ Everything is written to `books_repair_verdicts` before it happens. Admin, Repai
 - `reimport_strip`: a legacy identifier removed from a book. Applying a match records one for every OTHER book that
   holds the edition's own Goodreads id, ISBN-13 or ISBN-10 (from the CSV) as a legacy-sourced identifier; apply removes
   only legacy-sourced ones.
-- `reimport_author`: a correction to a book's credited authors.
+- `reimport_author`: a correction to a book's credited authors. Always proposed, never approved by itself: the
+  2026-11-20 production sample showed a confident AI still credits typos and duplicate records. The check compares
+  the credits with the editions' most common primary author only (other editions' primary names are typos,
+  translations or narrators), and a verdict that would change nothing is an agreement. Confidence is high only on an
+  import-made book where every name was settled with confidence. Review them in Admin, Repair verdicts, filtered to
+  `reimport_author`; that view's Copy prompt (`config/mcp/books/prompts/author_verdicts.md.erb`) has an admin agent
+  approve, reject, or reject and fix the book by hand.
 
 A status says what happens next: approved ones are carried out by `apply`; proposed ones wait for Shane;
 rejected ones are never carried out.

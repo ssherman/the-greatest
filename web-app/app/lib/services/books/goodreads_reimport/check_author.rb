@@ -15,9 +15,10 @@ module Services
       #
       # Agree: every name matches a current author by name key (MatchAuthors settles those without the AI) or by
       # the AI's same-person check. Disagree: each unmatched name is looked up in the whole catalog with the author
-      # finder and accepted only on a high-confidence match, else it is left nil (apply creates it). The verdict is
-      # auto-approved only on an import-made book where every name was settled with confidence; a trusted book's
-      # verdict is always a proposal.
+      # finder and accepted only on a high-confidence match, else it is left nil (apply creates it). Every verdict is
+      # a proposal for a reviewer (Shane, or an admin agent with the author_verdicts prompt): the 2026-11-20 sample
+      # showed a confident AI still credits typos and duplicate records. Its confidence is high only on an
+      # import-made book where every name was settled with confidence, so a reviewer can start there.
       class CheckAuthor
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -150,11 +151,10 @@ module Services
           current = @book.book_authors.author.pluck(:author_id)
           return agrees if after.values.all? { |id| id && current.include?(id) }
 
-          trusted = self.class.trusted?(@book.id)
-          auto = confident && !trusted
+          sure = confident && !self.class.trusted?(@book.id)
           recorded = ::Services::Books::GoodreadsReplay::RecordVerdict.call(
-            kind: :reimport_author, subject_key: "reimport:author:#{@book.id}", decided_by: :ai, confidence: auto ? :high : :medium,
-            auto: auto, replace_superseded: true,
+            kind: :reimport_author, subject_key: "reimport:author:#{@book.id}", decided_by: :ai, confidence: sure ? :high : :medium,
+            auto: false, replace_superseded: true,
             payload: {
               book_id: @book.id, before_author_ids: @book.book_authors.author.order(:position).pluck(:author_id),
               row_author_names: row_names, after: after, ai: {matched: links, catalog: findings}

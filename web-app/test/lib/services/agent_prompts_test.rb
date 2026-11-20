@@ -92,6 +92,33 @@ module Services
       assert_includes prompt, "correct_repair_verdict"
     end
 
+    test "author verdicts renders the admin MCP url, the proposed author verdict count, the tools and the rules" do
+      count = ::Books::RepairVerdict.reimport_author.proposed.current.count
+      prompt = AgentPrompts.call(domain: :books, queue: :author_verdicts)
+
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "#{count} proposed reimport_author"
+      %w[list_repair_verdicts get_repair_verdict approve_repair_verdict reject_repair_verdict add_book_author remove_book_author].each do |tool|
+        assert_includes prompt, tool
+      end
+      assert_match(/never create an author from a misspelling/i, prompt)
+      assert_match(/translator/i, prompt)
+    end
+
+    test "author verdicts counts only proposed, current reimport_author verdicts" do
+      count = -> { AgentPrompts.call(domain: :books, queue: :author_verdicts)[/(\d+) proposed reimport_author/, 1].to_i }
+      before = count.call
+      attrs = {kind: :reimport_author, decided_by: :ai, confidence: :high, payload: {}, reason: "t"}
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "ta:approved", status: :approved)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "ta:superseded", status: :proposed, superseded_at: Time.current)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "ta:match", status: :proposed, kind: :reimport_match)
+      assert_equal before, count.call
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "ta:proposed", status: :proposed)
+      assert_equal before + 1, count.call
+    end
+
     test "repair verdicts counts only proposed reimport matches" do
       count = -> { AgentPrompts.call(domain: :books, queue: :repair_verdicts)[/(\d+) high confidence/, 1].to_i }
       before = count.call

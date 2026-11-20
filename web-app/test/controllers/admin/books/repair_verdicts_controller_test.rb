@@ -53,6 +53,15 @@ module Admin
         assert_equal Services::AgentPrompts.call(domain: :books, queue: :repair_verdicts), @controller.view_assigns["agent_prompt"]
       end
 
+      test "index filtered to author verdicts assigns the author verdicts prompt" do
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_repair_verdicts_path(kind: "reimport_author")
+
+        assert_response :success
+        assert_equal Services::AgentPrompts.call(domain: :books, queue: :author_verdicts), @controller.view_assigns["agent_prompt"]
+      end
+
       test "guess filter shows only guesses" do
         sign_in_as(@admin, stub_auth: true)
         guess = verdict(:reimport_guess, "reimport:guess:Review:1", payload: {"item_type" => "Review", "item_id" => 1, "from_book_id" => @book.id, "to_book_id" => books_books(:got).id, "guess" => true})
