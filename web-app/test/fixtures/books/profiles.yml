@@ -1,0 +1,43 @@
+# == Schema Information
+#
+# Table name: books_profiles
+#
+#  id                 :bigint           not null, primary key
+#  display_name       :string
+#  public             :boolean          default(FALSE), not null
+#  show_favorites     :boolean          default(FALSE), not null
+#  show_goals         :boolean          default(FALSE), not null
+#  show_reading_now   :boolean          default(FALSE), not null
+#  show_recently_read :boolean          default(FALSE), not null
+#  show_reviews       :boolean          default(FALSE), not null
+#  show_stats         :boolean          default(FALSE), not null
+#  show_taste         :boolean          default(FALSE), not null
+#  show_top_rated     :boolean          default(FALSE), not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  user_id            :bigint           not null
+#
+# Indexes
+#
+#  index_books_profiles_on_user_id  (user_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+public_profile:
+  user: profile_reader
+  public: true
+  display_name: Avid Reader
+  show_stats: true
+  show_favorites: true
+  show_goals: true
+  show_reading_now: true
+  show_taste: true
+  show_recently_read: true
+  show_top_rated: true
+  show_reviews: true
+
+private_profile:
+  user: profile_empty_reader
+  public: false

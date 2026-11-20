@@ -54,6 +54,7 @@ class User < ApplicationRecord
   has_many :reviews, dependent: :destroy
   has_many :memberships, dependent: :nullify
   has_many :books_reading_goals, class_name: "Books::ReadingGoal", dependent: :destroy
+  has_one :books_profile, class_name: "Books::Profile", dependent: :destroy
   has_many :api_tokens, dependent: :destroy
   has_many :oauth_connections, dependent: :destroy
   has_many :sessions, dependent: :destroy

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_18_053826) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_20_062508) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -419,6 +419,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_18_053826) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["query"], name: "index_books_goodreads_searches_on_query", unique: true
+  end
+
+  create_table "books_profiles", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.boolean "public", default: false, null: false
+    t.string "display_name"
+    t.boolean "show_stats", default: false, null: false
+    t.boolean "show_favorites", default: false, null: false
+    t.boolean "show_goals", default: false, null: false
+    t.boolean "show_reading_now", default: false, null: false
+    t.boolean "show_taste", default: false, null: false
+    t.boolean "show_recently_read", default: false, null: false
+    t.boolean "show_top_rated", default: false, null: false
+    t.boolean "show_reviews", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_books_profiles_on_user_id", unique: true
   end
 
   create_table "books_publisher_intake_runs", force: :cascade do |t|
@@ -1920,6 +1937,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_18_053826) do
   add_foreign_key "books_goodreads_import_rows", "books_goodreads_imports", column: "import_id", on_delete: :cascade
   add_foreign_key "books_goodreads_imports", "users"
   add_foreign_key "books_goodreads_imports", "users", column: "reviewed_by_id"
+  add_foreign_key "books_profiles", "users"
   add_foreign_key "books_publisher_listings", "books_publisher_titles", column: "publisher_title_id", on_delete: :nullify
   add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_rebuild_book_surveys", "books_books", column: "book_id", on_delete: :cascade
