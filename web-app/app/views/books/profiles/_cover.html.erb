@@ -15,7 +15,7 @@
     <span class="mt-1 block text-xs font-medium line-clamp-2 [overflow-wrap:anywhere] group-hover:text-primary"><%= book.title %></span>
   <% end %>
   <% if rating %>
-    <div class="mt-0.5 flex items-center gap-1 text-xs">
+    <div class="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs">
       <%= render Reviews::StarsComponent.new(rating: rating, exact: true, size: "size-3") %>
       <span class="tabular-nums"><%= Review.format_rating(rating) %></span>
     </div>

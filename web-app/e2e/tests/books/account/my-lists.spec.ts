@@ -11,6 +11,7 @@ test.describe('Books My Lists', () => {
 
     await myBooks.locator('summary').click();
     await expect(myBooks.getByRole('link')).toHaveText([
+      'Profile',
       'Lists',
       'Reading Goals',
       'Import from Goodreads',
@@ -123,6 +124,7 @@ test.describe('Books My Lists mobile navigation', () => {
     await expect(myBooks.getByText('My Books', { exact: true })).toBeVisible();
     await expect(myBooks.locator('details, summary')).toHaveCount(0);
     await expect(myBooks.getByRole('link')).toHaveText([
+      'Profile',
       'Lists',
       'Reading Goals',
       'Import from Goodreads',

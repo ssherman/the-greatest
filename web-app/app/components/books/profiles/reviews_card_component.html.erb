@@ -19,7 +19,7 @@
         <% reviews.each do |review| %>
           <% book = review.reviewable %>
           <li class="flex gap-3" data-testid="profile-review">
-            <div class="w-14 shrink-0">
+            <div class="w-20 shrink-0">
               <%= render partial: "books/profiles/cover", locals: {book: book} %>
             </div>
             <div class="min-w-0 flex-1 text-sm">
