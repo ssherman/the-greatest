@@ -45,6 +45,17 @@ class Books::Profiles::GoalCardComponentTest < ViewComponent::TestCase
     assert_no_link "Set a reading goal"
   end
 
+  test "public reading now without goals is the card title and no Reading goal heading shows" do
+    shelf = Services::Books::Profiles::Library::Shelf.new(books: [books_books(:war_and_peace)], total: 1, list: nil)
+
+    [[], nil].each do |goals|
+      render_inline Books::Profiles::GoalCardComponent.new(goals: goals, reading_now: shelf, audience: :public)
+
+      assert_no_text "Reading goal"
+      assert_selector "h2.card-title", text: "Reading now"
+    end
+  end
+
   test "public links a goal only when the page may link to it" do
     item = progress
     item.goal.id = 5

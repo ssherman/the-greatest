@@ -1,5 +1,5 @@
 <% if prompt? %>
-  <section class="card card-dash bg-base-100" data-testid="profile-<%= kind.to_s.dasherize %>-prompt">
+  <section class="card card-dash border-base-300 bg-base-100" data-testid="profile-<%= kind.to_s.dasherize %>-prompt">
     <div class="card-body items-start">
       <h2 class="card-title"><%= title %></h2>
       <p class="text-base-content/70"><%= copy.fetch(:empty) %></p>
@@ -25,7 +25,11 @@
 
       <% if top_rated.any? %>
         <div data-testid="profile-top-rated">
-          <h3 class="font-semibold mb-3">Highest rated</h3>
+          <% if books.any? %>
+            <h3 class="font-semibold mb-3">Highest rated</h3>
+          <% else %>
+            <h2 class="card-title mb-3">Highest rated</h2>
+          <% end %>
           <div class="grid grid-cols-4 gap-3">
             <% top_rated.each do |rated| %>
               <%= render partial: "books/profiles/cover", locals: {book: rated.book, rating: rated.rating} %>

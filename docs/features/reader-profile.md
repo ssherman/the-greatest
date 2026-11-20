@@ -19,7 +19,8 @@ choosing which sections visitors see. Sharing is off until the reader turns it o
   list page.
 - **Reading goal.** Every active goal with progress and days left, plus the books being read now.
 - **Taste.** Favorite genres as bars scaled to the strongest, and favorite subjects as badges,
-  both derived from the reader's read and rated books.
+  both derived from the reader's default lists (Favorites, Read, Reading, Want to Read, not
+  custom lists) plus reviewed books. Taste needs at least 10 favorited, read or rated books.
 - **Recently read.** Cover shelf from the Read list, with a "Highest rated" row in the same card.
 - **Recent reviews.** The latest reviews with cover, stars and a snippet; "See all" goes to
   `/my/reviews`.

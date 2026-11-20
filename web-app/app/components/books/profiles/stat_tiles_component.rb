@@ -33,7 +33,7 @@ class Books::Profiles::StatTilesComponent < ViewComponent::Base
         value: stats.read_last_12_months, link: finish_dates_link(stats.read_last_12_months)),
       Tile.new(key: "average-rating", label: "Average rating",
         value: stats.average_rating && helpers.number_with_precision(stats.average_rating, precision: 1),
-        detail: stats.ratings_count && "#{helpers.number_with_delimiter(stats.ratings_count)} ratings"),
+        detail: stats.ratings_count && helpers.pluralize(helpers.number_with_delimiter(stats.ratings_count), "rating")),
       Tile.new(key: "reviews", label: "Reviews", value: stats.reviews_count)
     ]
   end

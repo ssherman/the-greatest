@@ -26,6 +26,17 @@ class Books::Profiles::ShelfCardComponentTest < ViewComponent::TestCase
     end
   end
 
+  test "a highest-rated-only card has a card title for both audiences" do
+    top = [RatedBook.new(book: books_books(:war_and_peace), rating: 5)]
+
+    [:owner, :public].each do |audience|
+      render_inline Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: empty_shelf, top_rated: top, audience: audience)
+
+      assert_selector "h2.card-title", text: "Highest rated"
+      assert_no_text "Recently read"
+    end
+  end
+
   test "secondary kind with nothing does not render for either audience" do
     [:owner, :public].each do |audience|
       refute Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: empty_shelf, audience: audience).render?

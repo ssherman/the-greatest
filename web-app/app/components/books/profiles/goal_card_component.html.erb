@@ -1,5 +1,5 @@
 <% if prompt_only? %>
-  <section class="card card-dash bg-base-100" data-testid="profile-goals-prompt">
+  <section class="card card-dash border-base-300 bg-base-100" data-testid="profile-goals-prompt">
     <div class="card-body items-start">
       <h2 class="card-title">Reading goal</h2>
       <p class="text-base-content/70">Set a goal and watch your progress here.</p>
@@ -9,19 +9,21 @@
 <% else %>
   <section class="card bg-base-100 border border-base-300 shadow-sm" data-testid="profile-goals">
     <div class="card-body gap-4">
-      <div class="flex items-baseline justify-between gap-4">
-        <h2 class="card-title">Reading goal</h2>
-        <% if owner? && goals.any? %>
-          <%= link_to "See all", helpers.books_my_reading_goals_path, class: "link text-sm" %>
-        <% end %>
-      </div>
+      <% if goal_section? %>
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="card-title">Reading goal</h2>
+          <% if owner? && goals.any? %>
+            <%= link_to "See all", helpers.books_my_reading_goals_path, class: "link text-sm" %>
+          <% end %>
+        </div>
+      <% end %>
 
       <% goals.each do |progress| %>
         <div class="space-y-2" data-testid="profile-goal">
           <div class="flex items-baseline justify-between gap-4">
             <h3 class="font-semibold [overflow-wrap:anywhere]">
               <% if (path = public_goal_path(progress.goal)) %>
-                <%= link_to progress.goal.name, path, class: "link link-hover" %>
+                <%= link_to progress.goal.name, path, class: "link" %>
               <% else %>
                 <%= progress.goal.name %>
               <% end %>
@@ -46,7 +48,11 @@
 
       <% if reading_books.any? %>
         <div data-testid="profile-reading-now">
-          <h3 class="font-semibold mb-3">Reading now</h3>
+          <% if goal_section? %>
+            <h3 class="font-semibold mb-3">Reading now</h3>
+          <% else %>
+            <h2 class="card-title mb-3">Reading now</h2>
+          <% end %>
           <div class="grid grid-cols-4 gap-3">
             <% reading_books.each do |book| %>
               <%= render partial: "books/profiles/cover", locals: {book: book} %>

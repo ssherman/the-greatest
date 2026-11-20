@@ -103,10 +103,32 @@ class Books::ProfilesControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "<b>Al</b>"
   end
 
-  test "the page carries noindex" do
+  test "the page carries noindex even when public indexing is on" do
+    ::Books::PublicIndexing.stubs(:enabled?).returns(true)
     get books_profile_path(@profile), headers: {"HOST" => @host}
 
     assert_select "meta[name=robots][content*=noindex]"
+  end
+
+  test "a format suffix is not routable" do
+    get "/profiles/#{@profile.id}.html", headers: {"HOST" => @host}
+
+    assert_response :not_found
+  end
+
+  test "a public profile with a query string redirects to the bare path" do
+    get "#{books_profile_path(@profile)}?utm=x", headers: {"HOST" => @host}
+
+    assert_response :moved_permanently
+    assert_equal books_profile_url(@profile, host: @host), response.location.sub(/\Ahttp:/, "http:")
+    assert_nil URI(response.location).query
+  end
+
+  test "a private profile with a query string is still an uncached 404" do
+    get "#{books_profile_path(books_profiles(:private_profile))}?utm=x", headers: {"HOST" => @host}
+
+    assert_response :not_found
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
 
   test "private -> public makes the URL work again" do

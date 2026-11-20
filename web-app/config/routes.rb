@@ -837,7 +837,7 @@ Rails.application.routes.draw do
     get "my/profile/settings", to: "books/my/profiles#settings", as: :books_my_profile_settings
     patch "my/profile/settings", to: "books/my/profiles#update_settings"
     get "my/profile/preview", to: "books/my/profiles#preview", as: :books_my_profile_preview
-    get "profiles/:id", to: "books/profiles#show", as: :books_profile, constraints: {id: /\d+/}
+    get "profiles/:id", to: "books/profiles#show", as: :books_profile, constraints: {id: /\d+/}, format: false
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"

@@ -48,6 +48,13 @@ class Books::Profiles::StatTilesComponentTest < ViewComponent::TestCase
     assert_no_selector "[data-testid='stat-read-last-12-months'] a"
   end
 
+  test "a single rating is not pluralized" do
+    render_inline Books::Profiles::StatTilesComponent.new(stats: stats(ratings_count: 1), audience: :public)
+
+    assert_text "1 rating"
+    assert_no_text "1 ratings"
+  end
+
   test "public with every stat nil does not render" do
     component = Books::Profiles::StatTilesComponent.new(
       stats: stats(books_read: nil, average_rating: nil, ratings_count: nil), audience: :public

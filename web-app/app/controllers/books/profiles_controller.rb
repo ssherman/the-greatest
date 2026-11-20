@@ -9,6 +9,10 @@ class Books::ProfilesController < ApplicationController
   before_action :set_profile
 
   def show
+    # ?anything and .html are separate edge cache entries the hide purge does
+    # not reach, so a query string never gets its own copy of the page.
+    return redirect_to(books_profile_path(@profile), status: :moved_permanently) if request.query_string.present?
+
     # @indexable stays unset, which the layout reads as noindex.
     @profile_data = Services::Books::Profiles::Build.call(
       user: @profile.user, audience: :public, profile: @profile

@@ -10,7 +10,7 @@
             <% taste.genres.each do |category, weight| %>
               <li class="flex items-center gap-3">
                 <%= link_to category.name, category_path(category),
-                      class: "w-32 shrink-0 text-sm link link-hover [overflow-wrap:anywhere]" %>
+                      class: "w-32 shrink-0 text-sm link [overflow-wrap:anywhere]" %>
                 <progress class="progress progress-primary flex-1" max="100" value="<%= bar_value(weight) %>"
                           aria-label="<%= category.name %> relative strength"></progress>
               </li>
@@ -32,7 +32,7 @@
     </div>
   </section>
 <% else %>
-  <section class="card card-dash bg-base-100" data-testid="profile-taste-progress">
+  <section class="card card-dash border-base-300 bg-base-100" data-testid="profile-taste-progress">
     <div class="card-body items-start">
       <h2 class="card-title">Taste</h2>
       <p class="text-base-content/70">

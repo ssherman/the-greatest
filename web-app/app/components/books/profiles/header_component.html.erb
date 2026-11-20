@@ -1,4 +1,4 @@
-<header class="flex flex-wrap items-center gap-4" data-testid="profile-header">
+<header class="flex flex-wrap items-center gap-4<%= " rounded-box bg-base-100 border border-base-300 shadow-sm p-4 sm:p-6" unless owner? %>" data-testid="profile-header">
   <div class="avatar avatar-placeholder">
     <div class="bg-neutral text-neutral-content w-16 rounded-full" aria-hidden="true" data-testid="profile-avatar">
       <% if initial %>

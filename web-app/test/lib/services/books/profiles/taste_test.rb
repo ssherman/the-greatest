@@ -72,6 +72,18 @@ module Services
           assert_equal [], data.subjects
         end
 
+        test "a soft-deleted category is dropped from genres and subjects" do
+          stub_interactions(build_interactions(:read, 10))
+          @novels.update_column(:deleted, true)
+          @history.update_column(:deleted, true)
+          Recommendations::ProfileBuilder.stubs(:call).returns(build_profile(genres: [[@fiction.id, 2.0], [@novels.id, 1.0]], subjects: [[@politics.id, 3.0], [@history.id, 1.0]]))
+
+          data = Taste.call(user: @user)
+
+          assert_equal [[@fiction, 1.0]], data.genres
+          assert_equal [@politics], data.subjects
+        end
+
         private
 
         def stub_interactions(list)

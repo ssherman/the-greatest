@@ -44,7 +44,7 @@
 
         <fieldset class="fieldset">
           <legend class="fieldset-legend">Public profile</legend>
-          <label class="label cursor-pointer justify-start gap-3">
+          <label class="flex items-center gap-3 cursor-pointer">
             <%= form.check_box :public, class: "toggle toggle-primary", aria: {describedby: "profile-public-help"} %>
             <span>Make my profile public</span>
           </label>
@@ -79,7 +79,7 @@
           <legend class="fieldset-legend">What visitors see</legend>
           <% sections.each do |attribute, (label, help)| %>
             <div class="py-2">
-              <label class="label cursor-pointer justify-start gap-3">
+              <label class="flex items-center gap-3 cursor-pointer">
                 <%= form.check_box attribute, class: "toggle", aria: {describedby: "profile-#{attribute}-help"} %>
                 <span><%= label %></span>
               </label>

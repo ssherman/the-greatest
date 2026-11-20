@@ -27,6 +27,10 @@ class Books::Profiles::GoalCardComponent < ViewComponent::Base
     helpers.books_reading_goal_path(goal) if !owner? && data&.linkable?(goal)
   end
 
+  # A visitor never sees a "Reading goal" heading over nothing: with no goals,
+  # "Reading now" is the card's title.
+  def goal_section? = goals.any? || owner?
+
   def prompt_only? = goals.empty? && reading_books.empty?
 
   def percentage(progress)
