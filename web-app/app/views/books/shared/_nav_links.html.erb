@@ -52,6 +52,7 @@
     <details>
       <summary>My Books</summary>
       <ul class="bg-base-100 rounded-box z-[1] w-max max-w-[calc(100vw-2rem)] p-2 shadow">
+        <li><%= link_to "Profile", books_my_profile_path %></li>
         <li><%= link_to "Lists", my_lists_path %></li>
         <li><%= link_to "Reading Goals", books_my_reading_goals_path %></li>
         <li><%= link_to "Import from Goodreads", books_my_goodreads_imports_path %></li>
@@ -70,6 +71,7 @@
   <li id="navbar_my_books" class="hidden">
     <span class="menu-title text-xs uppercase tracking-wider text-base-content/70">My Books</span>
     <ul>
+      <li><%= books_nav_link "Profile", books_my_profile_path, variant %></li>
       <li><%= books_nav_link "Lists", my_lists_path, variant %></li>
       <li><%= books_nav_link "Reading Goals", books_my_reading_goals_path, variant %></li>
       <li><%= books_nav_link "Import from Goodreads", books_my_goodreads_imports_path, variant %></li>

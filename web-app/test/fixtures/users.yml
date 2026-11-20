@@ -179,3 +179,20 @@ agent_runner_service_account:
   account_kind: 1
   email_verified: false
   original_signup_domain: thegreatestbooks.org
+
+# Reader profile fixtures: deliberately no list, review or goal fixtures point at these.
+profile_reader:
+  email: profile-reader@example.com
+  display_name: Profile Reader
+  name: Profile Reader Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestbooks.org
+
+profile_empty_reader:
+  email: profile-empty-reader@example.com
+  display_name: Profile Empty Reader
+  name: Profile Empty Reader Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestbooks.org

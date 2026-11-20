@@ -1,0 +1,42 @@
+<% if prompt? %>
+  <section class="card card-dash border-base-300 bg-base-100 md:[column-span:all]" data-testid="profile-<%= kind.to_s.dasherize %>-prompt">
+    <div class="card-body items-start">
+      <h2 class="card-title"><%= title %></h2>
+      <p class="text-base-content/70"><%= copy.fetch(:empty) %></p>
+      <%= link_to copy.fetch(:action), helpers.books_root_path, class: "btn btn-sm btn-primary" %>
+    </div>
+  </section>
+<% else %>
+  <section class="card bg-base-100 border border-base-300 shadow-sm md:[column-span:all]" data-testid="profile-<%= kind.to_s.dasherize %>">
+    <div class="card-body gap-4">
+      <% if books.any? %>
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="card-title"><%= title %></h2>
+          <% if see_all_path %>
+            <%= link_to "See all (#{helpers.number_with_delimiter(shelf.total)})", see_all_path, class: "link text-sm" %>
+          <% end %>
+        </div>
+        <div class="grid grid-cols-4 md:grid-cols-8 gap-3">
+          <% books.each do |book| %>
+            <%= render partial: "books/profiles/cover", locals: {book: book} %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if top_rated.any? %>
+        <div data-testid="profile-top-rated">
+          <% if books.any? %>
+            <h3 class="font-semibold mb-3">Highest rated</h3>
+          <% else %>
+            <h2 class="card-title mb-3">Highest rated</h2>
+          <% end %>
+          <div class="grid grid-cols-4 md:grid-cols-8 gap-3">
+            <% top_rated.each do |rated| %>
+              <%= render partial: "books/profiles/cover", locals: {book: rated.book, rating: rated.rating} %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+<% end %>

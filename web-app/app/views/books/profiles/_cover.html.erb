@@ -1,0 +1,23 @@
+<%# A cover at shelf size: no list widget and no rank, just the cover and title,
+    linked to the book. Locals: book, rating (optional, a quarter-star decimal). %>
+<% cover = book.primary_image if book.primary_image&.file&.attached? %>
+<% rating = local_assigns[:rating] %>
+<div class="min-w-0" data-testid="profile-book" data-book-id="<%= book.id %>">
+  <%= link_to book_path(book.slug), class: "block group" do %>
+    <% if cover %>
+      <%= image_tag rails_public_blob_url(cover.file), alt: "", loading: "lazy", decoding: "async",
+            class: "w-full aspect-[2/3] object-cover rounded shadow-sm group-hover:shadow-md transition-shadow" %>
+    <% else %>
+      <div class="w-full aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
+        <span class="text-2xl opacity-40">📖</span>
+      </div>
+    <% end %>
+    <span class="mt-1 block text-xs font-medium line-clamp-2 [overflow-wrap:anywhere] group-hover:text-primary"><%= book.title %></span>
+  <% end %>
+  <% if rating %>
+    <div class="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs">
+      <%= render Reviews::StarsComponent.new(rating: rating, exact: true, size: "size-3") %>
+      <span class="tabular-nums"><%= Review.format_rating(rating) %></span>
+    </div>
+  <% end %>
+</div>

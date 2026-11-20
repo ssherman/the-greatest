@@ -1,0 +1,23 @@
+<header class="flex flex-wrap items-center gap-4<%= " rounded-box bg-base-100 border border-base-300 shadow-sm p-4 sm:p-6" unless owner? %>" data-testid="profile-header">
+  <div class="avatar avatar-placeholder">
+    <div class="bg-neutral text-neutral-content w-16 rounded-full" aria-hidden="true" data-testid="profile-avatar">
+      <% if initial %>
+        <span class="text-2xl"><%= initial %></span>
+      <% else %>
+        <%= helpers.icon "user", library: "lucide", class: "size-8" %>
+      <% end %>
+    </div>
+  </div>
+  <div class="min-w-0">
+    <h1 class="text-3xl sm:text-4xl font-bold [overflow-wrap:anywhere]"><%= heading %></h1>
+    <% if header.member_since_year %>
+      <p class="text-base-content/70">Member since <%= header.member_since_year %></p>
+    <% end %>
+  </div>
+  <% if status_controls? %>
+    <div class="flex items-center gap-3 sm:ml-auto" data-testid="profile-sharing">
+      <span class="badge <%= profile.public? ? "badge-success" : "badge-ghost" %>" data-testid="profile-status"><%= status %></span>
+      <%= link_to "Share settings", helpers.books_my_profile_settings_path, class: "btn btn-sm" %>
+    </div>
+  <% end %>
+</header>

@@ -30,6 +30,7 @@ Only icons actually referenced in the codebase live here. Currently:
 | `plus` | `UserLists::CardWidgetComponent` button |
 | `star` | `Reviews::StarsComponent` and `Reviews::HistogramComponent` |
 | `trophy` | `Games::UserList.list_type_icons[:beaten]` |
+| `user` | `Books::Profiles::HeaderComponent` avatar when the reader has no name |
 
 ## Adding a new icon
 

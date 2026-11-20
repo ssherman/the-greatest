@@ -31,6 +31,13 @@ module Cacheable
     expires_in 24.hours, public: true, stale_while_revalidate: 1.hour
   end
 
+  # Cached by the edge only: Cloudflare keeps it for +ttl+, browsers always
+  # revalidate. For pages that must stop being served soon after a purge.
+  def cache_at_edge_only(ttl)
+    skip_session_for_caching
+    response.headers["Cache-Control"] = "public, max-age=0, s-maxage=#{ttl.to_i}"
+  end
+
   # Explicitly prevent caching (for admin, auth, search)
   def prevent_caching
     response.cache_control.replace(no_store: true, private: true)

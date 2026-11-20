@@ -1,0 +1,65 @@
+<% if prompt_only? %>
+  <section class="card card-dash border-base-300 bg-base-100" data-testid="profile-goals-prompt">
+    <div class="card-body items-start">
+      <h2 class="card-title">Reading goal</h2>
+      <p class="text-base-content/70">Set a goal and watch your progress here.</p>
+      <%= link_to "Set a reading goal", helpers.new_books_my_reading_goal_path, class: "btn btn-sm btn-primary" %>
+    </div>
+  </section>
+<% else %>
+  <section class="card bg-base-100 border border-base-300 shadow-sm" data-testid="profile-goals">
+    <div class="card-body gap-4">
+      <% if goal_section? %>
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="card-title">Reading goal</h2>
+          <% if owner? && goals.any? %>
+            <%= link_to "See all", helpers.books_my_reading_goals_path, class: "link text-sm" %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% goals.each do |progress| %>
+        <div class="space-y-2" data-testid="profile-goal">
+          <div class="flex items-baseline justify-between gap-4">
+            <h3 class="font-semibold [overflow-wrap:anywhere]">
+              <% if (path = public_goal_path(progress.goal)) %>
+                <%= link_to progress.goal.name, path, class: "link" %>
+              <% else %>
+                <%= progress.goal.name %>
+              <% end %>
+            </h3>
+            <span class="text-sm text-base-content/70 shrink-0"><%= days_left_text(progress.days_left) %></span>
+          </div>
+          <%= render Books::ReadingGoals::ProgressComponent.new(
+                count: progress.count,
+                target_count: progress.goal.target_count,
+                percentage: percentage(progress),
+                bar_percentage: progress.bar_percentage
+              ) %>
+        </div>
+      <% end %>
+
+      <% if goals.empty? && owner? %>
+        <p class="text-base-content/70">
+          No goal this year yet.
+          <%= link_to "Set a reading goal", helpers.new_books_my_reading_goal_path, class: "link" %>
+        </p>
+      <% end %>
+
+      <% if reading_books.any? %>
+        <div data-testid="profile-reading-now">
+          <% if goal_section? %>
+            <h3 class="font-semibold mb-3">Reading now</h3>
+          <% else %>
+            <h2 class="card-title mb-3">Reading now</h2>
+          <% end %>
+          <div class="grid grid-cols-4 gap-3">
+            <% reading_books.each do |book| %>
+              <%= render partial: "books/profiles/cover", locals: {book: book} %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+<% end %>

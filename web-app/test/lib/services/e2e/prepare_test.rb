@@ -71,6 +71,23 @@ module Services
         assert reviews.exists?(reviewable: books_books(:war_and_peace))
       end
 
+      test "resets the user's reader profile to private and empty, leaving a bystander's alone" do
+        mine = ::Books::Profile.create!(user: @user, public: true, display_name: "E2E Reader", show_stats: true, show_reviews: true)
+        theirs = ::Books::Profile.create!(user: @bystander, public: true, display_name: "Bystander", show_stats: true)
+        assert prepare.success?
+
+        mine.reload
+        assert_not mine.public?
+        assert_nil mine.display_name
+        assert_equal [], ::Books::Profile::SECTIONS.select { |section| mine.show?(section) }
+        assert theirs.reload.public?
+      end
+
+      test "runs with no reader profile to reset" do
+        assert prepare.success?
+        assert_nil ::Books::Profile.find_by(user: @user)
+      end
+
       test "touches no other user's reviews or lists" do
         @bystander.reviews.create!(reviewable: books_books(:war_and_peace), rating: 4)
         before = [@bystander.reviews.count, ::Books::UserList.where(user: @bystander).count]

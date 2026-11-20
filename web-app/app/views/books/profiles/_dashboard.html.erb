@@ -1,0 +1,31 @@
+<%# The profile body shared by the owner's page and the public page. Local: data
+    (a Services::Books::Profiles::Build::Data). Optional local: profile (the owner's own page passes it so the header can show
+    the privacy status). Each component decides for itself
+    whether to render, so an empty section simply leaves no gap. %>
+<% audience = data.audience %>
+<% profile = local_assigns[:profile] %>
+<div class="space-y-6<%= " min-h-[50vh]" if audience == :public %>" data-testid="profile-dashboard">
+  <%= render Books::Profiles::HeaderComponent.new(header: data.header, audience: audience, profile: profile) %>
+
+  <%= render Books::Profiles::StatTilesComponent.new(stats: data.stats, audience: audience, read_list: data.recently_read&.list) %>
+
+  <% cards = capture do %>
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: data.favorites, audience: audience, data: data) %>
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: data.recently_read, top_rated: data.top_rated, audience: audience, data: data) %>
+    <%= render Books::Profiles::GoalCardComponent.new(goals: data.goals, reading_now: data.reading_now, audience: audience, data: data) %>
+    <%= render Books::Profiles::TasteCardComponent.new(taste: data.taste, audience: audience) %>
+    <%= render Books::Profiles::ReviewsCardComponent.new(reviews: data.recent_reviews, audience: audience) %>
+    <%= render Books::Profiles::RecommendationsCardComponent.new(recommendations: data.recommendations, audience: audience) %>
+  <% end %>
+  <% if cards.present? %>
+    <%# CSS columns, not a grid: a grid row is as tall as its tallest card, which
+        left a hole beside every short card. Columns let each card sit directly
+        under the one above it, whichever cards happen to render. The cover
+        shelves (favorites, recently read / highest rated, recommendations) set
+        column-span: all on themselves, so they run the full width and the small
+        cards between them balance across the two columns. %>
+    <div class="md:columns-2 gap-4 -mb-4 *:mb-4 *:break-inside-avoid" data-testid="profile-cards">
+      <%= cards %>
+    </div>
+  <% end %>
+</div>

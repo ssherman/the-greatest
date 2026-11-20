@@ -1,0 +1,3 @@
+<% content_for :page_title, "#{@profile_data.header.name.presence || "Reader profile"} | The Greatest Books" %>
+
+<%= render "books/profiles/dashboard", data: @profile_data %>

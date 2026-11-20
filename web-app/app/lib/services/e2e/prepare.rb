@@ -81,6 +81,7 @@ module Services
         assign_roles(accounts)
         reset_reviews(accounts[:user])
         lists = reset_lists(accounts[:user])
+        reset_profile(accounts[:user])
         clear_scratch_books(accounts)
         seed_category_scratch
         sync_stripe(errors)
@@ -205,6 +206,15 @@ module Services
             body: i.odd? ? "Seed review #{i} for the E2E /my/reviews spec." : nil)
         end
         log.call("#{user.email}: #{review_target} Books::Book reviews")
+      end
+
+      # The profile spec switches sharing on and back off; a failed run could leave it public.
+      # One record updated through the model, so no bulk write and no purge job.
+      def reset_profile(user)
+        profile = ::Books::Profile.find_by(user: user)
+        return unless profile
+
+        profile.update!({public: false, display_name: nil}.merge(::Books::Profile::SECTIONS.to_h { |section| [:"show_#{section}", false] }))
       end
 
       def reset_lists(user)
