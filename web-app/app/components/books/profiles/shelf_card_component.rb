@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-# One card of covers. :favorites is a primary card (an owner with none gets a
-# prompt); :recently_read is the read shelf plus, in the same card, the
-# highest-rated books, and both are secondary (nothing when empty).
+# One full-width card of covers. :favorites is a primary card (an owner with
+# none gets a prompt). :recently_read and :top_rated are secondary: nothing at
+# all when empty. :top_rated takes `rated` (Library::RatedBook) instead of a
+# shelf and prints each book's rating under its cover.
 class Books::Profiles::ShelfCardComponent < ViewComponent::Base
   KINDS = {
     favorites: {
@@ -10,24 +11,25 @@ class Books::Profiles::ShelfCardComponent < ViewComponent::Base
       empty: "Your favorite books will show up here.",
       action: "Find books to favorite"
     },
-    recently_read: {title: "Recently read"}
+    recently_read: {title: "Recently read"},
+    top_rated: {title: "Highest rated"}
   }.freeze
 
-  def initialize(kind:, shelf:, audience:, top_rated: nil, data: nil)
+  def initialize(kind:, audience:, shelf: nil, rated: nil, data: nil)
     @kind = kind
     @shelf = shelf
+    @rated = rated || []
     @audience = audience
-    @top_rated = top_rated || []
     @data = data
   end
 
   def render?
-    books.any? || top_rated.any? || prompt?
+    entries.any? || prompt?
   end
 
   private
 
-  attr_reader :kind, :shelf, :audience, :top_rated, :data
+  attr_reader :kind, :shelf, :rated, :audience, :data
 
   def owner? = audience == :owner
 
@@ -35,11 +37,14 @@ class Books::Profiles::ShelfCardComponent < ViewComponent::Base
 
   def title = copy.fetch(:title)
 
-  def books = shelf&.books || []
+  # [book, rating-or-nil] pairs, whichever source this kind draws on.
+  def entries
+    @entries ||= (kind == :top_rated) ? rated.map { |r| [r.book, r.rating] } : (shelf&.books || []).map { |book| [book, nil] }
+  end
 
   def primary? = kind == :favorites
 
-  def prompt? = owner? && primary? && books.empty?
+  def prompt? = owner? && primary? && entries.empty?
 
   def see_all_path
     list = shelf&.list
