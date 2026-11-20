@@ -62,6 +62,26 @@ module Services
           assert_equal :agrees, call.data[:outcome]
         end
 
+        test "a minority primary name (a typo, a translation, a narrator) is not required: the most common one agrees" do
+          edition("Leo Tolstoy")
+          edition("Leo Tolstoy")
+          edition("Garrison Keillor")
+          @task_class.expects(:new).never
+          @finder.expects(:call).never
+
+          assert_equal :agrees, call.data[:outcome]
+          assert_equal 0, ::Books::RepairVerdict.reimport_author.count
+        end
+
+        test "a row name the finder links to an author the book already credits agrees: nothing would change" do
+          edition("Tolstoy Leo")
+          @task_class.expects(:new).returns(ai)
+          @finder.expects(:call).returns(found(@tolstoy))
+
+          assert_equal :agrees, call.data[:outcome]
+          assert_equal 0, ::Books::RepairVerdict.reimport_author.count
+        end
+
         test "a translator among the additional authors is not a credited author" do
           edition("Leo Tolstoy", additional: ["Constance Garnett"])
           @task_class.expects(:new).never
@@ -157,15 +177,16 @@ module Services
           assert verdict.reload.superseded_at.present?
         end
 
-        test "an additional author already linked to a primary name's author is not listed twice" do
+        test "a co-author the AI confirms among the additional authors stays credited when the primary name is corrected" do
           edition("Brand New Writer", additional: ["Lev N. Tolstoy"])
           edition("Leo Tolstoy", additional: ["Lev N. Tolstoy"])
-          @task_class.stubs(:new).returns(ai({export_name: "Lev N. Tolstoy", author_number: 1, confidence: "high"}))
+          @task_class.stubs(:new).returns(ai, ai({export_name: "Lev N. Tolstoy", author_number: 1, confidence: "high"}))
           @finder.stubs(:call).returns(none)
 
           verdict = call.data[:verdict]
 
-          assert_equal ["Brand New Writer", "Leo Tolstoy"], verdict.payload["row_author_names"]
+          assert_equal ["Brand New Writer", "Lev N. Tolstoy"], verdict.payload["row_author_names"]
+          assert_equal({"Brand New Writer" => nil, "Lev N. Tolstoy" => @tolstoy.id}, verdict.payload["after"])
         end
 
         test "a trusted book is always proposed" do
@@ -188,7 +209,7 @@ module Services
           assert call.data[:verdict].approved?
         end
 
-        test "row names are the editions' primary authors, most common first, and an additional author joins only when the AI confirms it" do
+        test "the row name is the editions' most common primary author, and an additional author joins only when the AI confirms it" do
           edition("Constance Garnett")
           edition("Brand New Writer", additional: ["Count L. N. Tolstoi"])
           edition("Brand New Writer")
@@ -197,8 +218,8 @@ module Services
 
           verdict = call.data[:verdict]
 
-          assert_equal ["Brand New Writer", "Constance Garnett", "Count L. N. Tolstoi"], verdict.payload["row_author_names"]
-          assert_equal({"Brand New Writer" => nil, "Constance Garnett" => nil, "Count L. N. Tolstoi" => @tolstoy.id}, verdict.payload["after"])
+          assert_equal ["Brand New Writer", "Count L. N. Tolstoi"], verdict.payload["row_author_names"]
+          assert_equal({"Brand New Writer" => nil, "Count L. N. Tolstoi" => @tolstoy.id}, verdict.payload["after"])
         end
 
         test "an AI failure fails the result and records nothing" do

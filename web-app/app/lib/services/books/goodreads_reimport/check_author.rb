@@ -6,9 +6,12 @@ module Services
       # Checks one book's credited authors against what the CSV rows that now sit on it say (re-import spec 4.7),
       # and records a reimport_author verdict when they disagree. Run after the rows are on their exact books.
       #
-      # The rows' names are the PRIMARY author of each of the book's editions (EditionFacts#primary_author), most
-      # common first. Goodreads' additional authors are often translators and illustrators, so they are never
-      # required: one joins the verdict only when the AI confirms it is among the book's current authors.
+      # The row name is the most common PRIMARY author of the book's editions (EditionFacts#primary_author). The
+      # other editions' primary names are not required: in practice they are typos ("Louis May Alcott"), reversed or
+      # slug forms ("heller-joseph"), translations ("丹尼尔·笛福") or a narrator's edition, and requiring them made
+      # the check add those as authors (the 2026-11-20 production sample). Goodreads' additional authors are often
+      # translators and illustrators, so they are never required either: one joins the verdict only when the AI
+      # confirms it is among the book's current authors.
       #
       # Agree: every name matches a current author by name key (MatchAuthors settles those without the AI) or by
       # the AI's same-person check. Disagree: each unmatched name is looked up in the whole catalog with the author
@@ -69,7 +72,7 @@ module Services
           return done(:kept, current_verdict) if current_verdict&.applied_at
 
           facts = edition_facts
-          names = primary_names(facts)
+          names = primary_names(facts).first(1)
           return agrees if names.empty?
 
           matched = ::Services::Books::GoodreadsRebuild::MatchAuthors.call(book: @book, facts: facts_for(facts, names), task_class: @task_class)
@@ -142,6 +145,10 @@ module Services
             confident &&= sure
             findings[name] = finding
           end
+
+          # Every name settled on an author the book already credits: the rows confirm the credits, nothing changes.
+          current = @book.book_authors.author.pluck(:author_id)
+          return agrees if after.values.all? { |id| id && current.include?(id) }
 
           trusted = self.class.trusted?(@book.id)
           auto = confident && !trusted
