@@ -833,6 +833,7 @@ Rails.application.routes.draw do
     post "oauth/authorize", to: "oauth/authorizations#create", format: false
     delete "oauth/authorize", to: "oauth/authorizations#destroy", format: false
 
+    get "my/profile", to: "books/my/profiles#show", as: :books_my_profile
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"

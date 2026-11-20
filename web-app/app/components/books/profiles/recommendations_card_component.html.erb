@@ -1,0 +1,23 @@
+<% if no_history? %>
+  <section class="card card-dash bg-base-100" data-testid="profile-recommendations-prompt">
+    <div class="card-body items-start">
+      <h2 class="card-title">Recommended for you</h2>
+      <p class="text-base-content/70">Tell us what you like and we will suggest what to read next.</p>
+      <%= link_to "Get recommendations", helpers.recommendations_wizard_path(step: 1), class: "btn btn-sm btn-primary" %>
+    </div>
+  </section>
+<% else %>
+  <section class="card bg-base-100 border border-base-300 shadow-sm" data-testid="profile-recommendations">
+    <div class="card-body gap-4">
+      <div class="flex items-baseline justify-between gap-4">
+        <h2 class="card-title">Recommended for you</h2>
+        <%= link_to "See all", helpers.recommendations_path, class: "link text-sm" %>
+      </div>
+      <div class="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <% recommendations.books.each do |book| %>
+          <%= render partial: "books/profiles/cover", locals: {book: book} %>
+        <% end %>
+      </div>
+    </div>
+  </section>
+<% end %>

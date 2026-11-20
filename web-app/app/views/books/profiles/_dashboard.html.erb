@@ -1,0 +1,18 @@
+<%# The profile body shared by the owner's page and the public page. Local: data
+    (a Services::Books::Profiles::Build::Data). Each component decides for itself
+    whether to render, so an empty section simply leaves no gap. %>
+<% audience = data.audience %>
+<div class="space-y-6" data-testid="profile-dashboard">
+  <%= render Books::Profiles::HeaderComponent.new(header: data.header, audience: audience) %>
+
+  <%= render Books::Profiles::StatTilesComponent.new(stats: data.stats, audience: audience, read_list: data.recently_read&.list) %>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :favorites, shelf: data.favorites, audience: audience) %>
+    <%= render Books::Profiles::GoalCardComponent.new(goals: data.goals, reading_now: data.reading_now, audience: audience) %>
+    <%= render Books::Profiles::TasteCardComponent.new(taste: data.taste, audience: audience) %>
+    <%= render Books::Profiles::ShelfCardComponent.new(kind: :recently_read, shelf: data.recently_read, top_rated: data.top_rated, audience: audience) %>
+    <%= render Books::Profiles::ReviewsCardComponent.new(reviews: data.recent_reviews, audience: audience) %>
+    <%= render Books::Profiles::RecommendationsCardComponent.new(recommendations: data.recommendations, audience: audience) %>
+  </div>
+</div>

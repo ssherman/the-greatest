@@ -1,0 +1,14 @@
+<div class="stats stats-vertical sm:stats-horizontal w-full shadow-sm bg-base-100 border border-base-300" data-testid="profile-stats">
+  <% tiles.each do |tile| %>
+    <div class="stat" data-testid="stat-<%= tile.key %>">
+      <div class="stat-title"><%= tile.label %></div>
+      <div class="stat-value text-3xl"><%= display(tile.value) %></div>
+      <% if tile.detail %>
+        <div class="stat-desc"><%= tile.detail %></div>
+      <% end %>
+      <% if tile.link %>
+        <div class="stat-desc"><%= link_to "Add finish dates", tile.link, class: "link" %></div>
+      <% end %>
+    </div>
+  <% end %>
+</div>

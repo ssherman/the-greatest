@@ -1,0 +1,47 @@
+<% if ready? %>
+  <section class="card bg-base-100 border border-base-300 shadow-sm" data-testid="profile-taste">
+    <div class="card-body gap-4">
+      <h2 class="card-title">Taste</h2>
+
+      <% if taste.genres.any? %>
+        <div>
+          <h3 class="font-semibold mb-2">Favorite genres</h3>
+          <ul class="space-y-2">
+            <% taste.genres.each do |category, weight| %>
+              <li class="flex items-center gap-3">
+                <%= link_to category.name, category_path(category),
+                      class: "w-32 shrink-0 text-sm link link-hover [overflow-wrap:anywhere]" %>
+                <progress class="progress progress-primary flex-1" max="100" value="<%= bar_value(weight) %>"
+                          aria-label="<%= category.name %> relative strength"></progress>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <% if taste.subjects.any? %>
+        <div>
+          <h3 class="font-semibold mb-2">Favorite subjects</h3>
+          <div class="flex flex-wrap gap-2">
+            <% taste.subjects.each do |category| %>
+              <%= link_to category.name, category_path(category), class: "badge badge-lg badge-outline hover:badge-primary" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+<% else %>
+  <section class="card card-dash bg-base-100" data-testid="profile-taste-progress">
+    <div class="card-body items-start">
+      <h2 class="card-title">Taste</h2>
+      <p class="text-base-content/70">
+        Your favorite genres and subjects appear once you have favorited, read or rated <%= minimum %> books.
+        You have <%= qualifying_count %> of <%= minimum %> so far.
+      </p>
+      <progress class="progress progress-primary w-full" max="<%= minimum %>" value="<%= [qualifying_count, minimum].min %>"
+                aria-label="<%= qualifying_count %> of <%= minimum %> books"></progress>
+      <%= link_to "Rate some books", helpers.books_root_path, class: "btn btn-sm btn-primary" %>
+    </div>
+  </section>
+<% end %>

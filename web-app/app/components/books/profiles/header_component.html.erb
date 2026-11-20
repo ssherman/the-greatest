@@ -1,0 +1,17 @@
+<header class="flex items-center gap-4" data-testid="profile-header">
+  <div class="avatar avatar-placeholder">
+    <div class="bg-neutral text-neutral-content w-16 rounded-full" aria-hidden="true" data-testid="profile-avatar">
+      <% if initial %>
+        <span class="text-2xl"><%= initial %></span>
+      <% else %>
+        <%= helpers.icon "user", library: "lucide", class: "size-8" %>
+      <% end %>
+    </div>
+  </div>
+  <div class="min-w-0">
+    <h1 class="text-3xl sm:text-4xl font-bold [overflow-wrap:anywhere]"><%= heading %></h1>
+    <% if header.member_since_year %>
+      <p class="text-base-content/70">Member since <%= header.member_since_year %></p>
+    <% end %>
+  </div>
+</header>

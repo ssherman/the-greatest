@@ -1,0 +1,43 @@
+<% if reviews.empty? %>
+  <section class="card card-dash bg-base-100" data-testid="profile-reviews-prompt">
+    <div class="card-body items-start">
+      <h2 class="card-title">Recent reviews</h2>
+      <p class="text-base-content/70">Reviews you write will show up here.</p>
+      <%= link_to "Find a book to review", helpers.books_root_path, class: "btn btn-sm btn-primary" %>
+    </div>
+  </section>
+<% else %>
+  <section class="card bg-base-100 border border-base-300 shadow-sm" data-testid="profile-reviews">
+    <div class="card-body gap-4">
+      <div class="flex items-baseline justify-between gap-4">
+        <h2 class="card-title">Recent reviews</h2>
+        <% if owner? %>
+          <%= link_to "See all", helpers.my_reviews_path, class: "link text-sm" %>
+        <% end %>
+      </div>
+      <ul class="space-y-4">
+        <% reviews.each do |review| %>
+          <% book = review.reviewable %>
+          <li class="flex gap-3" data-testid="profile-review">
+            <div class="w-14 shrink-0">
+              <%= render partial: "books/profiles/cover", locals: {book: book} %>
+            </div>
+            <div class="min-w-0 flex-1 text-sm">
+              <% if review.rating %>
+                <div class="flex items-center gap-2">
+                  <%= render Reviews::StarsComponent.new(rating: review.rating, exact: true) %>
+                  <span class="tabular-nums"><%= review.formatted_rating %></span>
+                </div>
+              <% end %>
+              <div class="review-body mt-1 line-clamp-3 [overflow-wrap:anywhere]"
+                   data-controller="reviews--spoiler"
+                   data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
+                <%= snippet(review) %>
+              </div>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  </section>
+<% end %>
