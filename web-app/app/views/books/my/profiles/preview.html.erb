@@ -3,7 +3,7 @@
 <div class="space-y-6">
   <div role="status" class="alert alert-info" data-testid="profile-preview-banner">
     <span>This is what visitors see<%= " once you make your profile public" unless current_user.books_profile&.public? %>. Only you can see this page.</span>
-    <%= link_to "Share settings", books_my_profile_settings_path, class: "btn btn-sm" %>
+    <%= link_to "Share settings", books_my_profile_settings_path, class: "btn btn-sm whitespace-nowrap" %>
   </div>
 
   <%= render "books/profiles/dashboard", data: @profile_data %>

@@ -60,4 +60,49 @@ test.describe('Books reader profile', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test('sharing: a public page shows the chosen sections, and going private makes it a 404', async ({ page, browser }) => {
+    await page.goto('/my/profile');
+    await expect(page.getByTestId('profile-status')).toHaveText(/private/i);
+    await page.getByRole('link', { name: 'Share settings' }).click();
+    await expect(page).toHaveURL(/\/my\/profile\/settings$/);
+
+    await page.getByLabel('Make my profile public').check();
+    await page.getByLabel('Display name').fill('E2E Sharing Reader');
+    await page.getByLabel('Reading stats').check();
+    await page.getByLabel('Highest rated').check();
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByTestId('profile-settings-notice')).toBeVisible();
+
+    const publicUrl = await page.getByTestId('profile-public-url').inputValue();
+    expect(publicUrl).toMatch(/\/profiles\/\d+$/);
+
+    const visitor = await browser.newContext({ storageState: undefined, ignoreHTTPSErrors: true });
+    try {
+      const guest = await visitor.newPage();
+      const shown = await guest.goto(publicUrl);
+      expect(shown?.status()).toBe(200);
+      await expect(guest.getByRole('heading', { name: 'E2E Sharing Reader', level: 1 })).toBeVisible();
+      await expect(guest.getByTestId('profile-stats')).toBeVisible();
+      await expect(guest.getByTestId('profile-top-rated')).toBeVisible();
+      await expect(guest.getByTestId('profile-reviews')).toHaveCount(0);
+      await expect(guest.getByTestId('profile-reviews-prompt')).toHaveCount(0);
+      await expect(guest.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+
+      // The owner's preview shows the same page and the banner only the owner sees.
+      await page.goto('/my/profile/preview');
+      await expect(page.getByTestId('profile-preview-banner')).toBeVisible();
+      await expect(page.getByTestId('profile-stats')).toBeVisible();
+
+      await page.goto('/my/profile/settings');
+      await page.getByLabel('Make my profile public').uncheck();
+      await page.getByRole('button', { name: 'Save settings' }).click();
+      await expect(page.getByTestId('profile-settings-notice')).toBeVisible();
+
+      const gone = await guest.goto(publicUrl);
+      expect(gone?.status()).toBe(404);
+    } finally {
+      await visitor.close();
+    }
+  });
 });

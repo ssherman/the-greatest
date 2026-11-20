@@ -1,12 +1,11 @@
 # Reader Profile (books)
 
 A signed-in reader's own profile page at `/my/profile` on the books site, linked first in the
-"My Books" menu. It summarises what the reader has done on the site: reading, rating, reviewing,
+"My Books" menu, plus an opt-in public page. It summarises what the reader has done on the site: reading, rating, reviewing,
 goals and taste. Design: `docs/superpowers/specs/2026-11-19-reader-profile-design.md`.
 
-**Status:** phase 1 (the owner's own page) is built. Sharing and a public profile page are
-planned (phase 2) and do not exist yet: `Services::Books::Profiles::Build` accepts only the
-`:owner` audience and raises for anything else.
+A reader can also share a read-only copy at `/profiles/:id` (id of the profile row, not the user),
+choosing which sections visitors see. Sharing is off until the reader turns it on.
 
 ## What each section means
 
@@ -39,20 +38,81 @@ planned (phase 2) and do not exist yet: `Services::Books::Profiles::Build` accep
   recommendation wizard.
 - The stat row always renders for the owner.
 
+## Sharing model
+
+- A profile row (`Books::Profile`) exists only once the reader saves Share settings; before that
+  the profile is private. `/my/profile/settings` shows and saves the form, `/my/profile/preview`
+  shows the owner exactly what a visitor would see (public audience, even while private).
+- The row holds `public`, a `display_name` (2 to 40 characters, required while public; nothing is
+  ever derived from the email address) and eight switches, all off by default: stats, favorites,
+  goals, reading now, taste, recently read, highest rated, reviews.
+- The page header on `/my/profile` shows the sharing status and a "Share settings" link; the
+  public page shows only the name and "Member since".
+- Making the profile public and picking sections on a first save shows the public link on the
+  settings page; the link is read from there.
+
+## What each audience sees
+
+- **Owner** (`/my/profile`): every section, with prompts for empty ones, the Recommended card,
+  and books outside the public catalog. Never cached.
+- **Public** (`/profiles/:id`): identical for every viewer, the owner and admins included. Only
+  switched-on sections, only books in the public catalog, and a section that is on but empty
+  leaves no gap, so a profile with every switch off is the header alone. A shelf or goal links
+  to its list page only when that list is itself public. No recommendations and no prompts.
+  Taste appears only once it is ready.
+- A switched-off section is never computed for the public page, so it never touches the
+  database or the taste cache.
+- A private or missing profile is a 404 for everyone, so the URL says nothing about whether the
+  account exists.
+
+## Taste
+
+Genres and subjects come from the recommendation engine's taste profile built from the reader's
+Favorites and Read lists and their rated books, the same input the recommendations use. The
+public page shows only the genre and subject names, never the books behind them. The result
+is cached an hour per user, and only when ready.
+
+## Caching and purge
+
+- The public page is cached at the edge only (Cloudflare, 600 seconds); browsers do not cache
+  it. In development there is no edge, so changes show at once.
+- A save that hides anything the edge may hold (switching public off, turning a section off, or
+  changing the display name) purges the cached URL synchronously after the commit, and the
+  settings page says whether the purge was confirmed. If it was not, the save still stands, the
+  reader is told the old copy clears within 10 minutes, and a retrying job purges it. A save
+  that only reveals more enqueues a purge in the background.
+- Hiding saves refuse to run inside an enclosing database transaction, because the purge result
+  could not be reported.
+- Deleting an account deletes the profile and enqueues the purge job.
+
+## Search engines and moderation
+
+The public page is `noindex` (the layout does not mark it indexable) and the settings page says
+search engines are asked not to list it. There is no moderation: the display name and the
+reader's own reviews are shown as written, and the reader controls visibility. Report handling,
+if ever needed, would be a new feature.
+
 ## Behaviour notes
 
-- The page is never cached (`prevent_caching`); the taste result is cached for an hour per user,
-  and only when ready, because computing it for the heaviest readers is too slow to do per request.
+- The owner pages are never cached (`prevent_caching`); the taste result is cached for an hour
+  per user, and only when ready, because computing it for the heaviest readers is too slow to do
+  per request.
 - The owner view is not limited to the public catalog.
 
 ## Where the code lives
 
-- Controller: `web-app/app/controllers/books/my/profiles_controller.rb`; route `books_my_profile`.
-- Services: `web-app/app/lib/services/books/profiles/` (`Build` assembles everything; `Library`,
-  `Taste` and `Recommended` supply the parts).
+- Controllers: `web-app/app/controllers/books/my/profiles_controller.rb` (routes `books_my_profile`,
+  `books_my_profile_settings`, `books_my_profile_preview`) and
+  `web-app/app/controllers/books/profiles_controller.rb` (public `books_profile`).
+- Model: `Books::Profile` (switches in `SECTIONS`).
+- Services: `web-app/app/lib/services/books/profiles/` (`Build` assembles everything for either audience;
+  `Library`, `Taste` and `Recommended` supply the parts; `SaveSettings` saves and purges;
+  `CachedUrls` lists the URLs to purge).
 - Components: `web-app/app/components/books/profiles/`, one per card.
 - Views: `web-app/app/views/books/my/profiles/show.html.erb` and the shared body
-  `web-app/app/views/books/profiles/` (`_dashboard`, `_cover`).
+  `web-app/app/views/books/profiles/` (`_dashboard`, `_cover`, public `show`); settings and
+  preview under `web-app/app/views/books/my/profiles/`.
 - Tests: mirrored under `web-app/test/`; E2E in `web-app/e2e/tests/books/account/profile.spec.ts`.
-  The three E2E accounts are not empty, so the empty-account render is covered by the controller
-  test, not Playwright.
+  The sharing flow (settings, public page in a signed-out context, 404 after going private) is in
+  the same spec; `e2e:prepare` resets the E2E account's profile to private. The three E2E accounts
+  are not empty, so the empty-account render is covered by the controller test, not Playwright.
