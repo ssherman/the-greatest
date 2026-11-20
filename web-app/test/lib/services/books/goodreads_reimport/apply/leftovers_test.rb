@@ -239,6 +239,23 @@ module Services
             assert_not UserListItem.exists?(reading.id), "a row naming the merged-away book follows its redirect and no longer holds the sweep"
           end
 
+          test "a row naming a deleted mixed book that survived an earlier merged pair is traced through the mixed book's redirect, so the sweep goes on" do
+            mixed_id, folded = gone_ids(2)
+            DuplicateCandidate.create!(item_type: "Books::Book", item_a_id: mixed_id, item_b_id: folded, status: :merged, source: :ai)
+            RecordRedirect.create!(item_type: "Books::Book", from_id: folded, to_id: mixed_id)
+            ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{mixed_id}", decided_by: :rule, status: :approved,
+              payload: {"book_id" => mixed_id, "redirect_to_book_id" => @other.id, "archive" => {}})
+            RecordRedirect.create!(item_type: "Books::Book", from_id: mixed_id, to_id: @other.id)
+            reading = UserListItem.create!(user_list: list(:reading), listable: @from)
+            stray = row_verdict(csv_row(exclusive_shelf: "read"), action: "copy", from: @other, to: @other)
+            stray.update!(applied_at: Time.current, payload: stray.payload.merge("from_book_id" => mixed_id))
+            copy = row_verdict(csv_row(exclusive_shelf: "to-read"), action: "copy", from: @from, to: @to)
+
+            apply(copy)
+
+            assert_not UserListItem.exists?(reading.id)
+          end
+
           test "a rejected row naming a gone book does not hold the sweep" do
             gone_id, = gone_ids(1)
             reading = UserListItem.create!(user_list: list(:reading), listable: @from)
