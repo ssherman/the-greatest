@@ -54,12 +54,41 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", books_my_profile_settings_path
   end
 
-  test "own page shows Private for an account with no profile" do
+  test "own page shows Private and the settings link for an account with no profile, without creating one" do
     sign_in_as users(:regular_user), stub_auth: true
 
-    get books_my_profile_path, headers: {"HOST" => @host}
+    assert_no_difference "Books::Profile.count" do
+      get books_my_profile_path, headers: {"HOST" => @host}
+    end
+
+    assert_select "[data-testid=profile-status]", text: "Private"
+    assert_select "[data-testid=profile-sharing] a[href=?]", books_my_profile_settings_path
+  end
+
+  test "preview renders no sharing block" do
+    sign_in_as users(:profile_reader), stub_auth: true
+
+    get books_my_profile_preview_path, headers: {"HOST" => @host}
 
     assert_select "[data-testid=profile-sharing]", count: 0
+  end
+
+  test "a failed attempt to go public does not show the public link" do
+    sign_in_as users(:profile_empty_reader), stub_auth: true
+
+    patch books_my_profile_settings_path, headers: {"HOST" => @host},
+      params: {books_profile: {public: "1", display_name: ""}}
+
+    assert_response :unprocessable_entity
+    assert_select "[data-testid=profile-public-url]", count: 0
+  end
+
+  test "a scalar books_profile param is a 400" do
+    sign_in_as users(:regular_user), stub_auth: true
+
+    patch books_my_profile_settings_path, headers: {"HOST" => @host}, params: {books_profile: "x"}
+
+    assert_response :bad_request
   end
 
   test "settings GET does not create a profile row" do
@@ -119,7 +148,7 @@ class Books::My::ProfilesControllerTest < ActionDispatch::IntegrationTest
 
   test "update that hides a section calls the synchronous purge" do
     purge = mock("purge")
-    purge.stubs(:purge_urls).returns(success: true)
+    purge.expects(:purge_urls).with(:books, anything).returns(success: true)
     Cloudflare::PurgeService.stubs(:new).returns(purge)
     sign_in_as users(:profile_reader), stub_auth: true
 

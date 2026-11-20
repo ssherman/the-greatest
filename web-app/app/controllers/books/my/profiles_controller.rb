@@ -9,7 +9,8 @@ class Books::My::ProfilesController < ApplicationController
   SETTINGS_PARAMS = [:public, :display_name, *Books::Profile::SECTIONS.map { |section| :"show_#{section}" }].freeze
 
   def show
-    @profile = current_user.books_profile
+    # Never saved: a reader with no row still gets the status and the settings link.
+    @profile = current_user.books_profile || Books::Profile.new(user: current_user)
     @profile_data = Services::Books::Profiles::Build.call(user: current_user, audience: :owner).data
   end
 
@@ -22,7 +23,7 @@ class Books::My::ProfilesController < ApplicationController
   def update_settings
     result = Services::Books::Profiles::SaveSettings.call(
       user: current_user,
-      attributes: params.fetch(:books_profile, {}).permit(*SETTINGS_PARAMS)
+      attributes: settings_params
     )
     @profile = result.data[:profile]
 
@@ -42,5 +43,15 @@ class Books::My::ProfilesController < ApplicationController
     return redirect_to(books_my_profile_settings_path) unless profile
 
     @profile_data = Services::Books::Profiles::Build.call(user: current_user, audience: :public, profile: profile).data
+  end
+
+  private
+
+  # A scalar books_profile (books_profile=x) is a malformed request, not a 500.
+  def settings_params
+    raw = params.require(:books_profile)
+    raise ActionController::BadRequest, "books_profile must be an object" unless raw.is_a?(ActionController::Parameters)
+
+    raw.permit(*SETTINGS_PARAMS)
   end
 end
