@@ -21,16 +21,17 @@ choosing which sections visitors see. Sharing is off until the reader turns it o
 - **Taste.** Favorite genres as bars scaled to the strongest, and favorite subjects as badges,
   both derived from the reader's default lists (Favorites, Read, Reading, Want to Read, not
   custom lists) plus reviewed books. Taste needs at least 10 favorited, read or rated books.
-- **Recently read.** Cover shelf from the Read list, with a "Highest rated" row in the same card.
+- **Recently read.** Cover shelf from the Read list.
+- **Highest rated.** Its own cover shelf of the reader's best-rated books, each with its rating.
 - **Recent reviews.** The latest reviews with cover, stars and a snippet; "See all" goes to
   `/my/reviews`.
 - **Recommended for you.** Eight covers from the recommendation engine, with "See all".
 
-Layout: the cover shelves (Favorites, Recently read / Highest rated, Recommended for you) run the
+Layout: the cover shelves (Favorites, Recently read, Highest rated, Recommended for you) run the
 full width, eight covers to a row on desktop and four on a phone. The small cards between them
 (Reading goal, Taste, Recent reviews) flow in two columns, each sitting directly under the one
 above it, so a missing or short card leaves no hole. On the page the order is Favorites, Recently
-read, the small cards, then Recommended for you.
+read, the small cards, Highest rated, then Recommended for you.
 
 ## Empty-state rules
 
@@ -39,7 +40,8 @@ read, the small cards, then Recommended for you.
   so on.
 - **Taste** needs a minimum number of qualifying books (`Services::Books::Profiles::Taste::MIN_BOOKS`);
   below it the owner sees "N of M" progress instead.
-- **Recently read** is secondary: when empty it renders nothing and leaves no gap.
+- **Recently read** and **Highest rated** are secondary: when empty each renders nothing and
+  leaves no gap.
 - **Recommendations** show only to the owner. If the engine fails or returns nothing, the card is
   omitted rather than showing an error. A reader with no history gets a prompt for the
   recommendation wizard.
