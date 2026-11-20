@@ -212,8 +212,11 @@ module Services
           end
 
           # Nothing left on the old book. If this verdict already recorded a move, a crash lost only its applied_at,
-          # and it is done; otherwise there was never anything to move.
-          def self.nothing_to_move(verdict) = Entries.moved?(verdict) ? Entries.applied : Entries.noop("nothing to move")
+          # and it is done; otherwise there was never anything to move. Final either way: the reader's legacy entries
+          # for this row are not coming back to the old book (a sibling row with the same old book and destination
+          # already moved them, or the reader removed them), and an open row would hold the reader's sweeps and every
+          # kept mixed book they touch for good.
+          def self.nothing_to_move(verdict) = Entries.moved?(verdict) ? Entries.applied : Entries.noop("nothing to move", final: true)
 
           # The CSV's review is written when the row carries the review and there is none to move (a review is
           # moved, never doubled), or when it does not carry it but has a rating or text of its own: that review

@@ -46,9 +46,14 @@ module Services
             redirected = redirect_target(id)
             return redirected if redirected
 
-            pair = ::DuplicateCandidate.merged.where(item_type: "Books::Book")
-              .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc).first
-            pair && ((pair.item_a_id == id) ? pair.item_b_id : pair.item_a_id)
+            # A pair names no direction, so a half whose redirect points at this id was folded into it: this id
+            # survived that merge, and following the pair would walk back to a gone book (a deleted mixed book
+            # that had absorbed duplicates then loops, and Leftovers never reaches its own redirect).
+            others = ::DuplicateCandidate.merged.where(item_type: "Books::Book")
+              .where("item_a_id = :id OR item_b_id = :id", id: id).order(id: :desc)
+              .pluck(:item_a_id, :item_b_id).map { |a, b| (a == id) ? b : a }
+            folded_in = ::RecordRedirect.where(item_type: "Books::Book", from_id: others, to_id: id).pluck(:from_id).to_set
+            others.find { |other| !folded_in.include?(other) }
           end
 
           def self.redirect_target(id)

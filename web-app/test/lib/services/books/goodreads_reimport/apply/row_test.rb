@@ -360,10 +360,22 @@ module Services
             assert_equal [old.id, winner.id], verdict.reload.payload["moved"].values_at("review_id_before", "review_id_after")
           end
 
-          test "move is a no-op when the user has nothing on the old book" do
+          test "move with nothing on the old book is a final no-op: nothing will ever arrive there to move" do
             result = Row.call(verdict: row_verdict(csv_row, action: "move", review: true))
 
-            assert_equal [:noop, "nothing to move"], [result.data[:outcome], result.data[:reason]]
+            assert_equal [:noop, "nothing to move", true], result.data.values_at(:outcome, :reason, :final)
+          end
+
+          test "a second CSV row moving the same old book to the same destination settles once the first has moved the entry" do
+            item = UserListItem.create!(user_list: list(:read), listable: @from)
+            first = row_verdict(csv_row, action: "move")
+            second = row_verdict(csv_row, action: "move")
+
+            Row.call(verdict: first)
+            result = Row.call(verdict: second)
+
+            assert_equal [:noop, true], result.data.values_at(:outcome, :final)
+            assert_equal @to, item.reload.listable
           end
 
           test "move reports a favorites change as a follow-up" do
@@ -506,7 +518,7 @@ module Services
           test "copy is a no-op when the user has nothing left on the old book" do
             result = Row.call(verdict: row_verdict(csv_row, action: "copy"))
 
-            assert_equal [:noop, "nothing to move"], [result.data[:outcome], result.data[:reason]]
+            assert_equal [:noop, "nothing to move", true], result.data.values_at(:outcome, :reason, :final)
             assert_not UserListItem.exists?(listable: @to)
           end
 
