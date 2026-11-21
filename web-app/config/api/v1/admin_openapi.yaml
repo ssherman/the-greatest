@@ -3941,7 +3941,7 @@ paths:
       x-mcp:
         description: >-
           Releases audit `id` that you hold without a verdict, with an optional `note` saying why. The list goes back to the queue
-          behind lists nobody has started. An audit that is not in progress or is not yours is a 409.
+          behind lists nobody has started. An audit that is not in progress or is not yours is a 409. The list's weight does not change until an admin refreshes the ranking configuration.
       parameters:
         - $ref: "#/components/parameters/id"
       requestBody:

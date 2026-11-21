@@ -169,7 +169,8 @@ module Api
             assert_response :not_found
           end
 
-          test "release frees the list and the next start does not hand it straight back" do
+          test "release frees the list and the next start hands out the other list before it" do
+            ::Books::List.where.not(id: [@first.id, @second.id]).find_each { |list| finished_audit_for(list) unless ListAudit.finished.exists?(list_id: list.id) }
             start({list_id: @first.id})
             audit_id = json[:data][:audit][:id]
 
@@ -178,7 +179,12 @@ module Api
             assert_equal "released", json[:data][:status]
 
             start
-            assert_not_equal @first.id, json[:data][:list][:id]
+            assert_equal @second.id, json[:data][:list][:id]
+            finish(json[:data][:audit][:id], {verdict: "unverifiable", note: "x", sources: []})
+            assert_response :ok
+
+            start
+            assert_equal @first.id, json[:data][:list][:id]
           end
 
           test "release by another admin is 409 and keeps the audit open" do
