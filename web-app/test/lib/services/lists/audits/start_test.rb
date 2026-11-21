@@ -32,6 +32,16 @@ module Services
           end
         end
 
+        test "with no list, resumes the caller's own open audit and renews the lease" do
+          first = Start.call(user: @user, list: @list).data[:audit]
+          travel 1.hour do
+            result = Start.call(user: @user)
+            assert result.data[:resumed]
+            assert_equal first.id, result.data[:audit].id
+            assert_operator result.data[:audit].lease_expires_at, :>, first.lease_expires_at
+          end
+        end
+
         test "refuses a list another user is auditing" do
           Start.call(user: @other, list: @list)
           result = Start.call(user: @user, list: @list)

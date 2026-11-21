@@ -300,7 +300,8 @@ module Services
     end
 
     test "list audit single-list prompt embeds the list and its penalties" do
-      list = ::Books::List.joins(:penalties).first || ::Books::List.first
+      list = lists(:books_list)
+      assert list.penalties.any?
       prompt = AgentPrompts.for_list_audit(list: list)
 
       assert_includes prompt, list.name
@@ -315,6 +316,32 @@ module Services
       list.update_columns(number_of_voters: nil)
 
       assert_includes AgentPrompts.for_list_audit(list: list), "number_of_voters: null"
+    end
+
+    test "list audit prompt states the server's rules" do
+      prompt = AgentPrompts.for_list_audit
+      [
+        "A null `number_of_voters` or `num_years_covered` means no penalty from that curve",
+        "set `voter_count_unknown` to true rather than leaving the count null",
+        "cuts the list's total penalty by a third",
+        "`location_specific` set to true plus exactly one static geographic penalty",
+        "Do not change `status`",
+        "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",
+        "`sources` is an array of http(s) URLs", "`verified` needs at least one",
+        "refuses any penalty that is not in `list_admin_penalties`",
+        "refuses them", "If you already hold an open audit, the same call resumes it",
+        "`percentage_western` is computed from the list's books", "`data: null`"
+      ].each { |text| assert_includes prompt, text }
+    end
+
+    test "list audit single-list prompt says what to do on a 409" do
+      assert_includes AgentPrompts.for_list_audit(list: lists(:books_list)), "409"
+    end
+
+    test "list audit prompt renders a singular remaining count" do
+      ::Services::Lists::Audits::Queue.stubs(:remaining).returns(1)
+
+      assert_includes AgentPrompts.for_list_audit, "There is 1 list waiting."
     end
   end
 end

@@ -3827,7 +3827,7 @@ paths:
         Without `list_id`, takes the next books list that has no finished audit and nobody else is auditing, and opens an audit on it for the token's owner. With `list_id` (a JSON integer), audits that list. Calling again on a list you are already auditing resumes it (`resumed: true`) and renews the lease. A list another admin is auditing is 409; a missing or non-books list is 404; a non-integer `list_id` is 400. `data` is the audit and the list as the list read returns it; with nothing left to audit `data` is null. `meta.remaining` counts the lists still waiting. Requires `books:admin:write`.
       x-mcp:
         description: >-
-          Starts an audit of a books list. Call with no list_id to take the next unaudited list; call with list_id to audit that
+          Starts an audit of a books list. Call with no list_id to get an audit you already hold (resumed) or else take the next unaudited list; call with list_id to audit that
           list; calling again on a list you are auditing resumes it. Returns the audit, whether it was resumed, and the list as
           get_admin_list does, with `meta.remaining` lists still waiting; `data` is null when none are left. The audit holds the
           list for three hours. Read the list and its items, check them against the sources, fix what is wrong with

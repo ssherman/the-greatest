@@ -50,6 +50,16 @@ module Api
             assert_kind_of Integer, json[:meta][:remaining]
           end
 
+          test "start with no list_id twice by the same token resumes the same audit" do
+            start
+            audit_id = json[:data][:audit][:id]
+            start
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal audit_id, json[:data][:audit][:id]
+            assert_equal true, json[:data][:resumed]
+          end
+
           test "start twice on one list by the same token resumes the same audit" do
             start({list_id: @first.id})
             audit_id = json[:data][:audit][:id]

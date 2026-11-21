@@ -35,13 +35,29 @@ module Services
           conflict(::ListAudit.in_progress.find_by(list_id: @list.id))
         end
 
+        # A caller who already holds an open audit gets it back (lease renewed)
+        # rather than a second list: the queue excludes lists under a live lease.
         def start_next
+          own = resume_own
+          return success(own, resumed: true) if own
+
           Queue.relation.first(MAX_TRIES).each do |candidate|
             next if ::ListAudit.finished.exists?(list_id: candidate.id) # finished since the queue was read
             audit = claim(candidate)
             return success(audit, resumed: false) if audit
           end
           success(nil, resumed: false)
+        end
+
+        def resume_own
+          now = Time.current
+          scope = ::ListAudit.open.where(user_id: @user.id)
+          audit = scope.order(:started_at, :id).first
+          return unless audit
+
+          renewed = ::ListAudit.open.where(id: audit.id, user_id: @user.id)
+            .update_all(lease_expires_at: now + ::ListAudit::LEASE, updated_at: now)
+          (renewed > 0) ? ::ListAudit.in_progress.find_by(id: audit.id) : nil
         end
 
         # Releases an expired holder, then inserts. Returns nil when someone else
