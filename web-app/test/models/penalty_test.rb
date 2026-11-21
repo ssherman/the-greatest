@@ -230,4 +230,14 @@ class PenaltyTest < ActiveSupport::TestCase
     assert_nil Penalty.new.driving_field
     assert_equal Penalty.dynamic_types.keys.sort, Penalty::DRIVING_FIELDS.keys.sort
   end
+
+  test "books_catalogue holds books and global penalties without an owner" do
+    catalogue = Penalty.books_catalogue
+
+    assert_includes catalogue, penalties(:books_penalty)
+    assert_includes catalogue, penalties(:global_penalty)
+    [:movies_penalty, :games_penalty, :music_penalty, :user_penalty].each do |name|
+      assert_not_includes catalogue, penalties(name), name
+    end
+  end
 end

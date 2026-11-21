@@ -11,7 +11,7 @@ module Api
           require_scopes index: "books:admin:read"
 
           def index
-            penalties = ::Penalty.where(type: %w[Books::Penalty Global::Penalty], user_id: nil)
+            penalties = ::Penalty.books_catalogue
               .order(Arel.sql("penalties.category ASC NULLS LAST"), :name, :id).to_a
             ids = penalties.map(&:id)
             primary = ::Books::RankingConfiguration.default_primary

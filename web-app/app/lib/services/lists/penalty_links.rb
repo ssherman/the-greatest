@@ -9,10 +9,8 @@ module Services
     class PenaltyLinks
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-      CATALOGUE_TYPES = %w[Books::Penalty Global::Penalty].freeze
-
       def self.attach(list:, penalty_id:)
-        penalty = ::Penalty.where(type: CATALOGUE_TYPES, user_id: nil).find_by(id: penalty_id)
+        penalty = ::Penalty.books_catalogue.find_by(id: penalty_id)
         return failure("Penalty #{penalty_id} is not a books list penalty (see list_admin_penalties).") unless penalty
         return failure(dynamic_refusal(penalty)) if penalty.dynamic?
         return success(penalty: penalty, changed: false) if list.list_penalties.exists?(penalty_id: penalty.id)

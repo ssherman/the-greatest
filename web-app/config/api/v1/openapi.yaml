@@ -1467,7 +1467,7 @@ paths:
       security: [{bearerAuth: ["books:read"]}]
       summary: Penalties applied to lists
       description: |
-        The penalty catalogue for book lists, by category then name. A penalty is a named weakness of a list (a narrow time span, a Western-only canon, an unknown voter count); each one a list carries lowers its weight. Not paged. A list's own penalties are on its `penalties` field.
+        The penalty catalogue for book lists, in the site's category order (as on the rankings page), then by name, uncategorized last. A penalty is a named weakness of a list (a narrow time span, a Western-only canon, an unknown voter count); each one a list carries lowers its weight. Not paged. A list's own penalties are on its `penalties` field.
       x-mcp:
         description: >-
           Lists the penalties that can lower a book list's weight, with their category and what each
@@ -2540,7 +2540,7 @@ components:
               description: The original list on the web, as recorded — a few carry more than one address.
             penalties:
               type: array
-              description: The penalties in effect on the list's weight on the configuration it was read through, by category then name. Empty when the list has no weight there yet.
+              description: The penalties in effect on the list's weight on the configuration it was read through, in the site's category order (as on the rankings page), then by name, uncategorized last. Empty when the list has no weight there yet.
               items:
                 $ref: "#/components/schemas/Penalty"
     ListCollection:
@@ -2659,7 +2659,7 @@ components:
       required: [name, category, category_title, description]
       properties:
         name: {type: string}
-        category: {type: string, description: "Machine name of the penalty's category."}
+        category: {type: [string, "null"], description: "Machine name of the penalty's category; null when uncategorized."}
         category_title: {type: string, description: "The category as shown to readers."}
         description: {type: [string, "null"], description: What the penalty means, in plain words.}
     PenaltyCollection:

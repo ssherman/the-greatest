@@ -4037,7 +4037,7 @@ paths:
       operationId: listAdminPenalties
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: The books penalty catalogue
-      description: Every penalty that can apply to a books list (books and global, not user-owned), ordered by category then name, with its value on the default primary ranking configuration and how many books lists carry it. Not paged. Requires `books:admin:read`.
+      description: Every penalty that can apply to a books list (books and global, not user-owned), ordered in the site's category order (as on the rankings page), then by name, uncategorized last, with its value on the default primary ranking configuration and how many books lists carry it. Not paged. Requires `books:admin:read`.
       x-mcp:
         description: >-
           Lists the penalties a books list can carry, with what each means (`description`), how to judge it

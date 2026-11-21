@@ -7,7 +7,7 @@ module Api
       # paged (a few dozen rows). A list's own penalties ride on its show.
       class PenaltiesController < BaseController
         def index
-          penalties = ::Penalty.where(type: %w[Books::Penalty Global::Penalty], user_id: nil).order(:category, :name)
+          penalties = ::Penalty.books_catalogue.order(:category, :name)
 
           render json: {data: penalties.map { |penalty| PenaltyResource.new(penalty).to_h }}
         end

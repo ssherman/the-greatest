@@ -96,6 +96,8 @@ class Penalty < ApplicationRecord
   scope :static, -> { where(dynamic_type: nil) }
   scope :by_dynamic_type, ->(dynamic_type) { where(dynamic_type: dynamic_type) }
   scope :by_category, ->(category) { where(category: category) }
+  # The penalties that can apply to a books list: books and global, never user-owned.
+  scope :books_catalogue, -> { where(type: %w[Books::Penalty Global::Penalty], user_id: nil) }
 
   # Public Methods
   def dynamic?
