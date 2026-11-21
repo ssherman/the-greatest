@@ -184,8 +184,9 @@ module Services
         end
 
         # Applied row verdicts whose destination does not carry the CSV row's title. A match the AI answered with
-        # high confidence, or that an admin reviewed, explains a difference (translations, editions); an
-        # unreviewed "create" does not.
+        # high confidence, a certain match (an identifier settled it), or one an admin reviewed explains a difference
+        # (translations, editions), also when its book has since been merged into the destination; an unreviewed
+        # "create" does not.
         def title_mismatches
           found = []
           after = 0
@@ -230,10 +231,12 @@ module Services
           ::Services::Books::Verification::Check.title_key(cleaned)
         end
 
+        # The book's title is cleaned the way the CSV's is (csv_key), so an edition tag both carry ("(Oxford Readers)",
+        # "(mobi)") is not a difference.
         def title_keys(book)
           title, subtitle = book
           check = ::Services::Books::Verification::Check
-          [check.title_key(title), check.title_key([title, subtitle.presence].compact.join(": "))]
+          [check.title_key(title), check.title_key([title, subtitle.presence].compact.join(": ")), csv_key(title)]
         end
 
         def approved_matches(edition_ids)
@@ -244,9 +247,20 @@ module Services
 
         def explained?(match, to_id)
           return false if match.nil?
-          return false unless (match.payload["book_id"] || match.payload["created_book_id"]) == to_id
+          return false unless same_book?(match.payload["book_id"] || match.payload["created_book_id"], to_id)
 
-          match.reviewed_at.present? || (match.payload.dig("ai", "answer").present? && match.payload.dig("ai", "confidence") == "high")
+          # certain also marks a no-candidates create, which proves nothing; only a certain match is an identifier hit.
+          match.reviewed_at.present? || (match.confidence_certain? && match.payload["outcome"] == "matched") ||
+            (match.payload.dig("ai", "answer").present? && match.payload.dig("ai", "confidence") == "high")
+        end
+
+        # The match's book is the destination, or was merged into it since (followed both ways through MergedBook).
+        def same_book?(match_book_id, to_id)
+          return false if match_book_id.nil?
+          return true if match_book_id == to_id
+
+          resolved = ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(match_book_id)
+          resolved.present? && resolved.id == (::Services::Books::GoodreadsReplay::Apply::MergedBook.call(to_id)&.id || to_id)
         end
 
         # nil without a snapshot; otherwise {unexplained:, explained:}, each [[user_id, "items"|"reviews", before, now,
