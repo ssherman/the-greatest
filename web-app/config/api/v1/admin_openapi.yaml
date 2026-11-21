@@ -3541,6 +3541,210 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/lists:
+    x-domain: books
+    get:
+      operationId: searchAdminLists
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: Search books lists
+      description: |
+        Books lists with their status, item count, weight on the default primary ranking configuration (null when the list is not on it) and the latest finished audit. `q` is a case-insensitive substring of the name, source or url. `status` is `unapproved`, `approved`, `rejected` or `active`. `audit` is `not_audited` (no finished audit), `verified` or `unverifiable` (the latest finished audit has that verdict) or `in_progress` (an audit is open). `sort` is `weight` (default, heaviest first, unweighted last), `name` or `id`. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Searches books lists. `q` is a substring of the name, source or url; `status` filters by approval status;
+          `audit` finds lists by audit state (`not_audited` means no finished audit, `verified` and `unverifiable`
+          look at the latest finished audit, `in_progress` means someone holds an open audit); `sort` is `weight`
+          (default, heaviest first), `name` or `id`. Each row carries its item count, its weight on the main ranking
+          and its latest finished audit. Use it to find the integer list `id` that get_admin_list takes.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A case-insensitive substring of the name, source or url.
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          description: "`unapproved`, `approved`, `rejected` or `active`."
+          schema:
+            type: string
+            enum: [unapproved, approved, rejected, active]
+        - name: audit
+          in: query
+          required: false
+          description: "`not_audited` (no finished audit), `verified` or `unverifiable` (the latest finished audit has that verdict) or `in_progress` (an audit is open)."
+          schema:
+            type: string
+            enum: [not_audited, verified, unverifiable, in_progress]
+        - name: sort
+          in: query
+          required: false
+          description: "`weight` (default, heaviest first), `name` or `id`."
+          schema:
+            type: string
+            enum: [weight, name, id]
+            default: weight
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of lists.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/lists/{id}:
+    x-domain: books
+    get:
+      operationId: getAdminList
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: One books list
+      description: The list with every editable field, its attached penalties (with their value on the default primary configuration), the weight breakdown on that configuration, the open audit and the last five finished or released audits. Only books lists answer. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Returns one books list by integer id (from search_admin_lists): its editable fields, the penalties attached to
+          it, the weight breakdown on the main ranking, the open audit if someone holds one and its last five audits.
+          Read list_admin_penalties first so you know what each penalty means. A penalty whose `value_on_primary` is
+          null costs nothing on the main ranking. `weight_details` and `weight_computed_at` are null when the list is not
+          on the main ranking.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The list.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/lists/{id}/items:
+    x-domain: books
+    get:
+      operationId: listAdminListItems
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: The rows of a books list
+      description: A list's rows in position order (unpositioned last, then id), each with its linked book or, for a row with no linked book, the title and author text the list carried. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the rows of one books list by integer id, in the list's own order. A row with a `book` is matched to a
+          catalogue book (title, authors, first published year, countries); a row with `text` and no `book` is not
+          matched, and `text` is the title and author as the list printed them. `verified` says whether a person
+          confirmed the match.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of list rows.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListItemCollection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/penalties:
+    x-domain: books
+    get:
+      operationId: listAdminPenalties
+      security: [{bearerAuth: ["books:admin:read"]}]
+      summary: The books penalty catalogue
+      description: Every penalty that can apply to a books list (books and global, not user-owned), ordered by category then name, with its value on the default primary ranking configuration and how many books lists carry it. Not paged. Requires `books:admin:read`.
+      x-mcp:
+        description: >-
+          Lists the penalties a books list can carry, with what each means (`description`), how to judge it
+          (`guidance`) and what it costs on the main ranking (`value_on_primary`, null when it costs nothing there).
+          Static penalties (`kind: static`) are attached to a list with attach_list_penalty. Dynamic penalties
+          (`kind: dynamic`) are never attached: they are computed from a list field, named by `driving_field`, so
+          set that field with update_admin_list. A null `number_of_voters` or `num_years_covered` means no penalty
+          from that curve. `percentage_western` has no field; it is computed from the list's books.
+      responses:
+        "200":
+          description: The catalogue.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPenaltyCollection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -4269,6 +4473,165 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    AdminList:
+      type: object
+      required: [id, name, source, year_published, status, item_count, weight, last_audit]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        source: {type: [string, "null"]}
+        year_published: {type: [integer, "null"]}
+        status: {type: string, enum: [unapproved, approved, rejected, active]}
+        item_count: {type: integer, minimum: 0}
+        weight: {type: [integer, "null"], description: Weight on the default primary ranking configuration; null when the list is not on it.}
+        last_audit:
+          oneOf:
+            - {type: "null"}
+            - type: object
+              required: [id, status, verdict, finished_at]
+              properties:
+                id: {type: integer}
+                status: {type: string}
+                verdict: {type: [string, "null"]}
+                finished_at: {type: [string, "null"], format: date-time}
+    AdminListAudit:
+      type: object
+      required: [id, status, verdict, user_name, started_at, finished_at, lease_expires_at, note, sources, changes]
+      properties:
+        id: {type: integer}
+        status: {type: string, enum: [in_progress, finished, released]}
+        verdict: {type: [string, "null"], enum: [verified, unverifiable, null]}
+        user_name: {type: [string, "null"]}
+        started_at: {type: [string, "null"], format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        lease_expires_at: {type: [string, "null"], format: date-time}
+        note: {type: [string, "null"]}
+        sources: {description: The sources the auditor recorded.}
+        changes: {description: The field changes the audit recorded.}
+    AdminListFull:
+      allOf:
+        - $ref: "#/components/schemas/AdminList"
+        - type: object
+          required: [description, source_country_origin, url, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality, auto_generated, has_raw_content, penalties, weight_details, weight_computed_at, open_audit, audits]
+          properties:
+            description: {type: [string, "null"]}
+            source_country_origin: {type: [string, "null"]}
+            url: {type: [string, "null"]}
+            number_of_voters: {type: [integer, "null"]}
+            num_years_covered: {type: [integer, "null"]}
+            yearly_award: {type: [boolean, "null"]}
+            high_quality_source: {type: [boolean, "null"]}
+            category_specific: {type: [boolean, "null"]}
+            location_specific: {type: [boolean, "null"]}
+            creator_specific: {type: [boolean, "null"]}
+            voter_count_estimated: {type: [boolean, "null"]}
+            voter_count_unknown: {type: [boolean, "null"]}
+            voter_names_unknown: {type: [boolean, "null"]}
+            estimated_quality: {type: integer}
+            auto_generated: {type: boolean}
+            has_raw_content: {type: boolean}
+            penalties:
+              type: array
+              items:
+                type: object
+                required: [id, name, kind, category, value_on_primary]
+                properties:
+                  id: {type: integer}
+                  name: {type: string}
+                  kind: {type: string, enum: [static, dynamic]}
+                  category: {type: [string, "null"]}
+                  value_on_primary: {type: [integer, "null"], description: "Percent taken off on the default primary ranking configuration; null when the penalty costs nothing there."}
+            weight_details: {description: The weight breakdown on the default primary ranking configuration, or null.}
+            weight_computed_at: {type: [string, "null"], format: date-time}
+            open_audit:
+              oneOf:
+                - {type: "null"}
+                - $ref: "#/components/schemas/AdminListAudit"
+            audits:
+              type: array
+              description: The last five finished or released audits, newest first.
+              items:
+                $ref: "#/components/schemas/AdminListAudit"
+    AdminListDetail:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListFull"
+    AdminListCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminList"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminListItem:
+      type: object
+      required: [id, position, verified, book, text]
+      properties:
+        id: {type: integer}
+        position: {type: [integer, "null"]}
+        verified: {type: boolean}
+        book:
+          oneOf:
+            - {type: "null"}
+            - type: object
+              required: [id, title, authors, first_published_year, countries]
+              properties:
+                id: {type: integer}
+                title: {type: string}
+                authors: {type: array, items: {type: string}}
+                first_published_year: {type: [integer, "null"]}
+                countries: {type: array, items: {type: string}}
+        text:
+          oneOf:
+            - {type: "null"}
+            - type: object
+              required: [title, author]
+              properties:
+                title: {type: [string, "null"]}
+                author: {type: [string, "null"]}
+    AdminListItemCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminListItem"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AdminPenalty:
+      type: object
+      required: [id, name, type, kind, dynamic_type, driving_field, category, category_title, description, guidance, value_on_primary, books_list_count]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        type: {type: string}
+        kind: {type: string, enum: [static, dynamic]}
+        dynamic_type: {type: [string, "null"]}
+        driving_field: {type: [string, "null"], description: The list field a dynamic penalty reads; null for static ones and for percentage_western.}
+        category: {type: [string, "null"]}
+        category_title: {type: string}
+        description: {type: [string, "null"]}
+        guidance: {type: [string, "null"]}
+        value_on_primary: {type: [integer, "null"], description: "Percent taken off on the default primary ranking configuration; null when it costs nothing there."}
+        books_list_count: {type: integer, minimum: 0}
+    AdminPenaltyCollection:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminPenalty"
     DuplicateCandidateRecord:
       type: object
       description: One side of a pair. A record that has been merged away or deleted is only `id` and `missing`. A present record carries the finder summary plus type-specific fields (book_kind and alternate_titles for books; alternate_names, birth_year, death_year, kind and book_titles for authors) and, on the single-pair endpoint, the detail fields.

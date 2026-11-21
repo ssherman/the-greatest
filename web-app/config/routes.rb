@@ -784,6 +784,10 @@ Rails.application.routes.draw do
             patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
             post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
             delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
+            get "lists", to: "lists#index"
+            get "lists/:id", to: "lists#show", constraints: {id: /\d+/}
+            get "lists/:id/items", to: "list_items#index", constraints: {id: /\d+/}
+            get "penalties", to: "penalties#index"
             get "series", to: "series#index"
             get "series/:id", to: "series#show", constraints: {id: /\d+/}
             post "series", to: "series#create"
