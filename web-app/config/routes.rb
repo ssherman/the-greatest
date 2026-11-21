@@ -716,6 +716,7 @@ Rails.application.routes.draw do
           get "search/categories", to: "category_searches#index", as: :search_categories
           get "countries", to: "countries#index"
           get "languages", to: "languages#index"
+          get "penalties", to: "penalties#index"
 
           # The token holder's own lists (library scopes), not a catalogue.
           scope "my", module: :my, as: :my do

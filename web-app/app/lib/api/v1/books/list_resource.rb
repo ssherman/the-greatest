@@ -52,6 +52,10 @@ module Api
           attribute :source_url do |list|
             list.url
           end
+
+          attribute :penalties do
+            params.fetch(:penalties).map { PenaltyResource.new(it).to_h }
+          end
         end
       end
     end

@@ -356,12 +356,42 @@ module Api
           assert_api_conform(status: 200)
 
           assert_response :success
-          assert_equal %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url], json[:data].keys
+          assert_equal %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url penalties], json[:data].keys
           assert_equal @heavy.id, json[:data][:id]
           assert_equal 90, json[:data][:weight]
           assert_equal 2, json[:data][:item_count]
           assert_equal "About Heavy", json[:data][:description]
           assert_equal "https://example.com/heavy", json[:data][:source_url]
+        end
+
+        test "show carries the public penalties in effect from the ranked list's details" do
+          pen = penalties(:books_penalty)
+          @heavy.ranked_lists.first.update_columns(calculated_weight_details: {"penalties" => [{"penalty_id" => pen.id, "value" => 10}]})
+
+          get "/api/v1/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_equal [{name: pen.name, category: pen.category, category_title: ::Penalty.category_title(pen.category), description: pen.description}], json[:data][:penalties]
+        end
+
+        test "show has no penalties without a ranked list or without details" do
+          get "/api/v1/lists/#{@orphan.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          assert_equal [], json[:data][:penalties]
+
+          @heavy.ranked_lists.first.update_columns(calculated_weight_details: nil)
+          get "/api/v1/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          assert_equal [], json[:data][:penalties]
+        end
+
+        test "nested show reads the named configuration's penalties" do
+          pen = penalties(:books_penalty)
+          RankedList.create!(list: @heavy, ranking_configuration: @year, weight: 5, calculated_weight_details: {"penalties" => [{"penalty_id" => pen.id}]})
+
+          get "/api/v1/ranking_configurations/#{@year.id}/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+          assert_equal [pen.name], json[:data][:penalties].map { |p| p[:name] }
         end
 
         test "show answers for an active list off the primary with a null weight" do
