@@ -184,7 +184,7 @@ module Services
         end
 
         # Applied row verdicts whose destination does not carry the CSV row's title. A match the AI answered with
-        # high confidence, one an identifier settled (certain), or one an admin reviewed explains a difference
+        # high confidence, a certain match (an identifier settled it), or one an admin reviewed explains a difference
         # (translations, editions), also when its book has since been merged into the destination; an unreviewed
         # "create" does not.
         def title_mismatches
@@ -249,7 +249,8 @@ module Services
           return false if match.nil?
           return false unless same_book?(match.payload["book_id"] || match.payload["created_book_id"], to_id)
 
-          match.reviewed_at.present? || match.confidence_certain? ||
+          # certain also marks a no-candidates create, which proves nothing; only a certain match is an identifier hit.
+          match.reviewed_at.present? || (match.confidence_certain? && match.payload["outcome"] == "matched") ||
             (match.payload.dig("ai", "answer").present? && match.payload.dig("ai", "confidence") == "high")
         end
 

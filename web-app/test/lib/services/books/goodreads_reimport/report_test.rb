@@ -92,9 +92,16 @@ module Services
 
         test "acceptance: a certain match (an identifier hit) explains it" do
           row_verdict(@row, @other, applied_at: Time.current)
-          verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"book_id" => @other.id, "ai" => {"answer" => nil}}, confidence: :certain)
+          verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"outcome" => "matched", "book_id" => @other.id, "ai" => {"answer" => nil}}, confidence: :certain)
 
           assert_includes Report.call, "no approved verdict explaining it: 0"
+        end
+
+        test "acceptance: a certain create (no candidates, never reviewed) does not explain it" do
+          row_verdict(@row, @other, applied_at: Time.current)
+          verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"outcome" => "create", "created_book_id" => @other.id, "ai" => {"answer" => nil}}, confidence: :certain)
+
+          assert_includes Report.call, "no approved verdict explaining it: 1"
         end
 
         test "acceptance: a destination carrying the CSV's own edition tag in its title is fine" do
