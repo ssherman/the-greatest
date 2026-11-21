@@ -1034,6 +1034,11 @@ Rails.application.routes.draw do
       resources :enrichment_queues, only: [:index, :show], param: :type do
         member { post :fill }
       end
+
+      # List audits: the queue page and the admin's escape hatch for a stuck lease.
+      resources :list_audits, only: [:index] do
+        member { post :release }
+      end
       post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
       post "enrichment_requests/:id/retry_apply", to: "enrichment_queues#retry_apply", as: :retry_apply_enrichment_request, constraints: {id: /\d+/}
 

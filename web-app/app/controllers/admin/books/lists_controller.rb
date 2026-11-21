@@ -21,6 +21,24 @@ class Admin::Books::ListsController < Admin::ListsBaseController
 
   def param_key = :books_list
 
+  def list_audits? = true
+
+  AUDIT_FILTERS = %w[none verified unverifiable in_progress].freeze
+
+  def audit_filter
+    params[:audit].presence_in(AUDIT_FILTERS)
+  end
+
+  def apply_extra_filters(scope)
+    case audit_filter
+    when "none" then scope.where.not(id: ::ListAudit.finished.select(:list_id))
+    when "verified" then scope.where(id: ::ListAudit.finished.verified.select(:list_id))
+    when "unverifiable" then scope.where(id: ::ListAudit.finished.unverifiable.select(:list_id))
+    when "in_progress" then scope.where(id: ::ListAudit.in_progress.select(:list_id))
+    else scope
+    end
+  end
+
   def items_count_name = "books_count"
 
   def listable_includes = [:authors]

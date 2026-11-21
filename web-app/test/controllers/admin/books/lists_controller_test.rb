@@ -168,6 +168,37 @@ module Admin
         assert_response :success
         assert_match(/href="[^"]*submitted=submitted[^"]*"/, response.body)
       end
+
+      test "index audit=verified returns only the audited list" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_lists_path(audit: "verified", status: "all")
+        assert_response :success
+        assert_includes response.body, lists(:books_list).name
+        assert_not_includes response.body, @list.name
+      end
+
+      test "index audit=none leaves out the audited list" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_lists_path(audit: "none")
+        assert_response :success
+        assert_includes response.body, @list.name
+        assert_not_includes response.body, lists(:books_list).name
+      end
+
+      test "show renders the audits section and the audit prompt button" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_list_path(lists(:books_list))
+        assert_response :success
+        assert_select "[data-testid=copy-list-audit-prompt]"
+        assert_select "[data-testid=list-audits]"
+      end
+
+      test "index ignores an unknown audit value" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_lists_path(audit: "bogus")
+        assert_response :success
+        assert_includes response.body, @list.name
+      end
     end
   end
 end

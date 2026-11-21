@@ -70,6 +70,7 @@
             <% end %>
           </th>
           <th><%= domain_config[:item_label_plural] %></th>
+          <% if audits? %><th>Last audit</th><% end %>
           <th>
             <%
               created_direction = (current_sort == "created_at" && current_direction != "desc") ? "desc" : "asc"
@@ -172,6 +173,17 @@
             <td>
               <span class="badge badge-outline badge-sm"><%= items_count(list) %></span>
             </td>
+            <% if audits? %>
+              <td class="text-sm" data-testid="last-audit">
+                <% audit = last_audit(list) %>
+                <% if audit %>
+                  <span class="badge badge-sm <%= audit.verified? ? "badge-success" : "badge-warning" %>"><%= audit.verdict.titleize %></span>
+                  <span class="text-base-content/70"><%= time_tag audit.finished_at, audit.finished_at.strftime("%b %d, %Y") %></span>
+                <% else %>
+                  <span class="text-base-content/30">-</span>
+                <% end %>
+              </td>
+            <% end %>
             <td class="text-sm text-base-content/70">
               <%= time_tag list.created_at, list.created_at.strftime("%b %d, %Y") %>
             </td>
@@ -216,7 +228,7 @@
 
   <% if pagy %>
     <div class="flex justify-center py-4 border-t border-base-300">
-      <%== pagy.series_nav(querify: ->(p) { p.merge!(helpers.params.permit(:sort, :direction, :status, :submitted, :q).to_h.stringify_keys) }) if pagy.pages > 1 %>
+      <%== pagy.series_nav(querify: ->(p) { p.merge!(helpers.params.permit(:sort, :direction, :status, :submitted, :audit, :q).to_h.stringify_keys) }) if pagy.pages > 1 %>
     </div>
   <% end %>
 <% else %>

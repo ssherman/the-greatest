@@ -1,0 +1,81 @@
+<% content_for :title, "List Audits" %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold">List Audits</h1>
+    <div data-controller="clipboard-copy">
+      <textarea hidden readonly data-clipboard-copy-target="source"><%= @agent_prompt %></textarea>
+      <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+              data-clipboard-copy-target="button" data-testid="copy-agent-prompt">Copy prompt</button>
+    </div>
+  </div>
+
+  <div class="stats stats-vertical sm:stats-horizontal shadow bg-base-100 w-full">
+    <div class="stat">
+      <div class="stat-title">Not audited</div>
+      <div class="stat-value" data-testid="count-not-audited"><%= number_with_delimiter(@counts[:not_audited]) %></div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Verified</div>
+      <div class="stat-value" data-testid="count-verified"><%= number_with_delimiter(@counts[:verified]) %></div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Unverifiable</div>
+      <div class="stat-value" data-testid="count-unverifiable"><%= number_with_delimiter(@counts[:unverifiable]) %></div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">In progress</div>
+      <div class="stat-value" data-testid="count-in-progress"><%= number_with_delimiter(@counts[:in_progress]) %></div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Most recent audits</h2>
+      <% if @audits.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-zebra">
+            <thead>
+              <tr>
+                <th>List</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Verdict</th>
+                <th>Finished</th>
+                <th>Fields changed</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @audits.each do |audit| %>
+                <tr data-testid="audit-row">
+                  <td class="[overflow-wrap:anywhere]"><%= link_to audit.list.name, admin_books_list_path(audit.list), class: "link link-hover" %></td>
+                  <td class="[overflow-wrap:anywhere]"><%= audit.user&.email || "—" %></td>
+                  <td><span class="badge badge-ghost badge-sm"><%= audit.status.titleize %></span></td>
+                  <td>
+                    <% if audit.verdict %>
+                      <span class="badge badge-sm <%= audit.verified? ? "badge-success" : "badge-warning" %>"><%= audit.verdict.titleize %></span>
+                    <% else %>
+                      <span class="text-base-content/50">—</span>
+                    <% end %>
+                  </td>
+                  <td class="text-sm"><%= audit.finished_at ? time_tag(audit.finished_at, audit.finished_at.strftime("%b %d, %Y %H:%M")) : "—" %></td>
+                  <td><%= (audit.field_changes["fields"] || {}).size %></td>
+                  <td class="text-right">
+                    <% if audit.in_progress? && current_user_can_write? %>
+                      <%= button_to "Release", release_admin_books_list_audit_path(audit), method: :post,
+                            class: "btn btn-xs btn-warning btn-outline",
+                            data: {turbo_confirm: "Release this audit?"} %>
+                    <% end %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">No audits yet.</p>
+      <% end %>
+    </div>
+  </div>
+</div>

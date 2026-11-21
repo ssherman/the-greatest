@@ -1,0 +1,67 @@
+<div class="card bg-base-100 shadow-xl" data-testid="list-audits">
+  <div class="card-body">
+    <h2 class="card-title">Audits</h2>
+
+    <% if audits.empty? %>
+      <p class="text-base-content/70" data-testid="no-audits">This list has not been audited.</p>
+    <% end %>
+
+    <% audits.each do |audit| %>
+      <div class="border border-base-300 rounded-box p-4 space-y-3" data-testid="audit">
+        <div class="flex flex-wrap items-center gap-2">
+          <% if audit.verdict %>
+            <span class="badge <%= verdict_badge_class(audit) %>"><%= audit.verdict.titleize %></span>
+          <% else %>
+            <span class="badge badge-ghost"><%= audit.status.titleize %></span>
+          <% end %>
+          <span class="text-sm [overflow-wrap:anywhere]"><%= user_label(audit) %></span>
+          <span class="text-sm text-base-content/70">
+            started <%= format_time(audit.started_at) %><% if audit.finished_at %>, finished <%= format_time(audit.finished_at) %><% end %>
+          </span>
+          <% if audit.in_progress? && can_release %>
+            <%= button_to "Release", release_admin_books_list_audit_path(audit), method: :post,
+                  class: "btn btn-xs btn-warning btn-outline", form: {class: "ml-auto"},
+                  data: {turbo_confirm: "Release this audit?"} %>
+          <% end %>
+        </div>
+
+        <% if audit.note.present? %>
+          <p class="whitespace-pre-line [overflow-wrap:anywhere]"><%= audit.note %></p>
+        <% end %>
+
+        <% if audit.sources.present? %>
+          <ul class="list-disc pl-5 text-sm">
+            <% audit.sources.each do |source| %>
+              <li class="[overflow-wrap:anywhere]"><%= link_to source, source, target: "_blank", rel: "noopener nofollow", class: "link link-primary" %></li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <% if changed?(audit) %>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead>
+                <tr><th>Field</th><th>From</th><th>To</th></tr>
+              </thead>
+              <tbody>
+                <% field_changes(audit).each do |name, change| %>
+                  <tr>
+                    <td class="font-mono"><%= name %></td>
+                    <td class="[overflow-wrap:anywhere]"><%= change["from"].inspect %></td>
+                    <td class="[overflow-wrap:anywhere]"><%= change["to"].inspect %></td>
+                  </tr>
+                <% end %>
+                <% penalties(audit, "penalties_attached").each do |penalty| %>
+                  <tr><td colspan="3">Penalty attached: <%= penalty["name"] %></td></tr>
+                <% end %>
+                <% penalties(audit, "penalties_detached").each do |penalty| %>
+                  <tr><td colspan="3">Penalty detached: <%= penalty["name"] %></td></tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

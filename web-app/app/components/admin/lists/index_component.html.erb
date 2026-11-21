@@ -48,6 +48,19 @@
               {},
               class: "select",
               onchange: "this.form.requestSubmit()" %>
+          <% if domain_config[:list_audits] %>
+            <%= f.select :audit,
+                options_for_select([
+                  ["Any audit state", ""],
+                  ["Not audited", "none"],
+                  ["Verified", "verified"],
+                  ["Unverifiable", "unverifiable"],
+                  ["Audit in progress", "in_progress"]
+                ], selected_audit),
+                {},
+                class: "select",
+                onchange: "this.form.requestSubmit()" %>
+          <% end %>
         <% end %>
       </div>
 
