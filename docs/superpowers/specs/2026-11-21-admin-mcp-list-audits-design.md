@@ -77,7 +77,11 @@ end to end by the agent, for books.
   5 rejected). 910 list-penalty attachments.
 - Of the active/approved books lists: `num_years_covered` is null on 568, `number_of_voters` null on
   155, `location_specific` set on 137, `category_specific` on 165, `high_quality_source` on 49,
-  `creator_specific` on 0.
+  `creator_specific` on 0. A null `num_years_covered` or `number_of_voters` means **no** penalty
+  from that curve, not a missing value the curve punishes: null is right for an all-time list
+  (most of the 568), and a list whose voter count is unknown should carry `voter_count_unknown`
+  (141 of the 155 do). Values in use for years covered: 1 (yearly awards, 48 lists), 100, 10, 25.
+  The books primary configuration's median voter count is 24.
 - Penalties that apply to books lists: `Books::Penalty` and `Global::Penalty` rows with
   `user_id IS NULL` (36 in dev). 27 are static (attached by hand through `list_penalties`), 9 are
   dynamic (`dynamic_type` set; computed by `Rankings::WeightCalculatorV1` from list fields).
