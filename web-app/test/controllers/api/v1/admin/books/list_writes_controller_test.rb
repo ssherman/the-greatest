@@ -42,6 +42,13 @@ module Api
             end
           end
 
+          test "update with an estimated_quality beyond the integer column is 422 and writes nothing" do
+            assert_no_changes -> { @list.reload.attributes } do
+              patch_list({number_of_voters: 12, estimated_quality: 3_000_000_000})
+              assert_response :unprocessable_entity
+            end
+          end
+
           test "update refuses the wrong JSON type with 400 and writes nothing" do
             [{number_of_voters: "12"}, {number_of_voters: -1}, {number_of_voters: 1.5}, {high_quality_source: nil},
               {yearly_award: "true"}, {name: 3}, {url: 3}, {year_published: "1990"}, {estimated_quality: true}].each do |bad|

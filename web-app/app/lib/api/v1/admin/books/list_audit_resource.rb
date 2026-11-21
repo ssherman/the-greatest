@@ -13,7 +13,7 @@ module Api
 
           attribute :user_name do |audit|
             user = audit.user
-            user && (user.display_name.presence || user.name.presence || user.email)
+            user && (user.display_name.presence || user.name.presence || "user ##{user.id}")
           end
 
           attributes :started_at, :finished_at, :lease_expires_at, :note, :sources

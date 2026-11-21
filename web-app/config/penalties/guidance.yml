@@ -37,7 +37,7 @@
   guidance: 'Set `voter_names_unknown: true` when the source does not say who chose the books. False when the panel is named, even partly.'
 - id: 13
   name: 'Voters: Voter Count'
-  guidance: Set `number_of_voters` to the number of people who chose the books, counted conservatively. 1 for a single critic. At 1 the penalty is the maximum; it shrinks to 0 at the configuration's median (24 today). Null means no penalty from this curve, so never leave it null when a count or estimate exists.
+  guidance: Set `number_of_voters` to the number of people who chose the books, counted conservatively. 1 for a single critic. At 1 the penalty is the maximum; it shrinks to 0 at the configuration's median voter count. Null means no penalty from this curve, so never leave it null when a count or estimate exists.
 - id: 14
   name: 'Voters: Unknown Count'
   guidance: 'Set `voter_count_unknown: true` (and leave `number_of_voters` null) only when no count can be found or reasonably estimated. It costs as much as a single voter, so an honest estimate with `voter_count_estimated` is better when the source gives enough to estimate ("our 12 editors", "a panel of critics" with a byline list).'

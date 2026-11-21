@@ -112,7 +112,7 @@ class List < ApplicationRecord
   # voter count outside a 4-byte column. Admin currently 500s here the same way.
   PG_INTEGER_RANGE = (-2_147_483_648..2_147_483_647)
 
-  validates :year_published, :number_of_voters,
+  validates :year_published, :number_of_voters, :estimated_quality,
     numericality: {only_integer: true, in: PG_INTEGER_RANGE}, allow_nil: true
   validates :num_years_covered,
     numericality: {only_integer: true, greater_than: 0, in: PG_INTEGER_RANGE}, allow_nil: true

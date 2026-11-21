@@ -28,6 +28,8 @@ module Api
               return not_found("No books list #{list_id}.") unless list
             end
 
+            return forbidden_update(list || ::Books::List.new) unless allowed?(list || ::Books::List.new)
+
             result = ::Services::Lists::Audits::Start.call(user: current_principal.user, list: list)
             return failed(result) unless result.success?
 
@@ -43,6 +45,8 @@ module Api
 
           def finish
             audit = find_audit or return
+            return forbidden_update(audit.list) unless allowed?(audit.list)
+
             body = body_for(%w[verdict note sources], required: true) or return
 
             unless body["verdict"].is_a?(String) && body["note"].is_a?(String) && body["sources"].is_a?(Array)
@@ -56,6 +60,8 @@ module Api
 
           def release
             audit = find_audit or return
+            return forbidden_update(audit.list) unless allowed?(audit.list)
+
             body = body_for(%w[note]) or return
             return bad_body("note must be a string") if body.key?("note") && !body["note"].nil? && !body["note"].is_a?(String)
 
@@ -64,6 +70,13 @@ module Api
           end
 
           private
+
+          def allowed?(list) = ::Books::ListPolicy.new(current_principal.user, list).update?
+
+          def forbidden_update(list)
+            detail = list.persisted? ? "Your account may not edit list #{list.id}." : "Your account may not edit lists."
+            render_problem(::Api::Problem.new(:forbidden, detail: detail))
+          end
 
           # The JSON object, {} for a blank body (every key here is optional unless
           # `required`); nil after rendering the 400 or 422.

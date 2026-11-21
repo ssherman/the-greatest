@@ -50,14 +50,41 @@ module Api
             assert_kind_of Integer, json[:meta][:remaining]
           end
 
-          test "start with no list_id twice by the same token resumes the same audit" do
+          test "start with no list_id twice by the same token takes two different lists" do
             start
-            audit_id = json[:data][:audit][:id]
+            first = json[:data]
             start
             assert_api_response_conform(status: 200, api: :admin)
 
-            assert_equal audit_id, json[:data][:audit][:id]
-            assert_equal true, json[:data][:resumed]
+            assert_not_equal first[:audit][:id], json[:data][:audit][:id]
+            assert_not_equal first[:list][:id], json[:data][:list][:id]
+            assert_equal false, json[:data][:resumed]
+          end
+
+          test "a token whose owner fails the list policy is 403 on start, finish and release" do
+            start({list_id: @first.id})
+            audit_id = json[:data][:audit][:id]
+            ::Books::ListPolicy.any_instance.stubs(:update?).returns(false)
+
+            assert_no_difference -> { ListAudit.count } do
+              start
+              assert_response :forbidden
+              start({list_id: @second.id})
+              assert_response :forbidden
+            end
+            finish(audit_id, {verdict: "unverifiable", note: "n", sources: []})
+            assert_response :forbidden
+            release(audit_id)
+            assert_response :forbidden
+            assert ListAudit.find(audit_id).in_progress?
+          end
+
+          test "an audit by a user with no names reports user #id, never the email" do
+            user = users(:regular_user)
+            user.update_columns(name: nil, display_name: nil, email: "private-address@example.com")
+            audit = ListAudit.create!(list: @first, user: user, started_at: Time.current, lease_expires_at: 1.hour.from_now)
+            name = ListAuditResource.new(audit).to_h[:user_name]
+            assert_equal "user ##{user.id}", name
           end
 
           test "start twice on one list by the same token resumes the same audit" do

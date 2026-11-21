@@ -32,14 +32,22 @@ module Services
           end
         end
 
-        test "with no list, resumes the caller's own open audit and renews the lease" do
+        test "with no list, a user holding an open audit on list A is given a different list" do
           first = Start.call(user: @user, list: @list).data[:audit]
-          travel 1.hour do
-            result = Start.call(user: @user)
-            assert result.data[:resumed]
-            assert_equal first.id, result.data[:audit].id
-            assert_operator result.data[:audit].lease_expires_at, :>, first.lease_expires_at
-          end
+          result = Start.call(user: @user)
+          assert result.success?
+          assert_not result.data[:resumed]
+          assert_not_equal first.id, result.data[:audit].id
+          assert_not_equal @list.id, result.data[:audit].list_id
+        end
+
+        test "a conflict message names a user without an email" do
+          nameless = users(:regular_user)
+          nameless.update_columns(name: nil, email: "private-address@example.com")
+          Start.call(user: nameless, list: @list)
+          result = Start.call(user: @user, list: @list)
+          assert_includes result.errors.first, "user ##{nameless.id}"
+          refute_includes result.errors.first, "private-address"
         end
 
         test "refuses a list another user is auditing" do

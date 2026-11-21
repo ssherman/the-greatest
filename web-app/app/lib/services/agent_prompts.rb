@@ -62,7 +62,9 @@ module Services
       lines.concat(full[:penalties].map { |p| "  #{p[:id]} — #{p[:name]} (#{p[:kind]})" })
       lines << "  none" if full[:penalties].empty?
       lines.concat(weight_lines(full[:weight_details]))
-      lines.join("\n")
+      # The block sits inside a four-backtick fence in the prompt; no run of 4+ backticks
+      # in a value may close it.
+      lines.join("\n").gsub(/`{4,}/, "```")
     end
 
     def self.weight_lines(details)

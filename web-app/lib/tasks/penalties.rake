@@ -214,6 +214,8 @@ namespace :penalties do
     data = Services::Penalties::LoadGuidance.call(entries: entries).data
 
     data.each { |bucket, items| puts "#{bucket}: #{items.inspect}" }
+
+    exit(1) if data[:mismatched].present? || data[:missing].present?
   end
 
   desc "List dynamic penalties attached to lists; APPLY=1 destroys the attachments"
