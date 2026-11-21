@@ -3817,6 +3817,173 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/list_audits:
+    x-domain: books
+    post:
+      operationId: startListAudit
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Start or resume an audit of a books list
+      description: |
+        Without `list_id`, takes the next books list that has no finished audit and nobody else is auditing, and opens an audit on it for the token's owner. With `list_id` (a JSON integer), audits that list. Calling again on a list you are already auditing resumes it (`resumed: true`) and renews the lease. A list another admin is auditing is 409; a missing or non-books list is 404; a non-integer `list_id` is 400. `data` is the audit and the list as the list read returns it; with nothing left to audit `data` is null. `meta.remaining` counts the lists still waiting. Requires `books:admin:write`.
+      x-mcp:
+        description: >-
+          Starts an audit of a books list. Call with no list_id to take the next unaudited list; call with list_id to audit that
+          list; calling again on a list you are auditing resumes it. Returns the audit, whether it was resumed, and the list as
+          get_admin_list does, with `meta.remaining` lists still waiting; `data` is null when none are left. The audit holds the
+          list for three hours. Read the list and its items, check them against the sources, fix what is wrong with
+          update_admin_list, attach_list_penalty and detach_list_penalty, then call finish_list_audit. A list another admin is
+          auditing is a 409. The list's weight does not change until an admin refreshes the ranking configuration.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListAuditStartRequest"
+      responses:
+        "200":
+          description: The audit and its list, or null data when no list is left to audit.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListAuditStart"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/list_audits/{id}/finish:
+    x-domain: books
+    post:
+      operationId: finishListAudit
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Finish a list audit
+      description: |
+        Closes the audit the token's owner holds with a `verdict`, a required `note` and `sources` (an array of http(s) URLs). `verified` means the list was researched and now matches what its source supports, and needs at least one source; `unverifiable` means not enough could be found to judge. The server computes `changes`, the fields that differ between the list when the audit began and now. A finished audit takes the list out of the queue for good. An audit that is not in progress or is held by someone else is 409; a bad verdict, blank note or bad sources is 422. Requires `books:admin:write`.
+      x-mcp:
+        description: >-
+          Finishes audit `id`, which you must hold. `verdict` is `verified` (you researched the list and it now matches what its
+          source supports; needs at least one URL in `sources`) or `unverifiable` (you could not find enough to judge). `note` is
+          required: say what you checked and what you changed. The response's `changes` is computed by the server from the list's
+          fields when the audit began against now, so you do not report them yourself. A finished list is not offered again.
+          An audit that is not in progress or is not yours is a 409. The list's weight does not change until an admin refreshes the ranking configuration.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListAuditFinishRequest"
+      responses:
+        "200":
+          description: The finished audit, with the changes the server computed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListAuditResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/list_audits/{id}/release:
+    x-domain: books
+    post:
+      operationId: releaseListAudit
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Release a list audit
+      description: |
+        Gives the list back without a verdict: the audit becomes `released`, with the optional `note` appended, and the list returns to the queue behind lists never started. Only the holder may release (409 otherwise). Requires `books:admin:write`.
+      x-mcp:
+        description: >-
+          Releases audit `id` that you hold without a verdict, with an optional `note` saying why. The list goes back to the queue
+          behind lists nobody has started. An audit that is not in progress or is not yours is a 409.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListAuditReleaseRequest"
+      responses:
+        "200":
+          description: The released audit.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListAuditResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/lists/{id}/items:
     x-domain: books
     get:
@@ -4752,6 +4919,56 @@ components:
           oneOf:
             - {type: integer, minimum: 1}
             - {type: string, pattern: "^0*[1-9][0-9]*$"}
+    AdminListAuditStartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        list_id:
+          type: integer
+          minimum: 1
+          description: The books list to audit. Leave it out to take the next unaudited list.
+    AdminListAuditFinishRequest:
+      type: object
+      required: [verdict, note, sources]
+      additionalProperties: false
+      properties:
+        verdict: {type: string, enum: [verified, unverifiable]}
+        note: {type: string, minLength: 1, description: What was checked and what was changed.}
+        sources:
+          type: array
+          description: http(s) URLs the verdict rests on. A `verified` audit needs at least one.
+          items: {type: string}
+    AdminListAuditReleaseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        note: {type: [string, "null"], description: Why the audit is being given back.}
+    AdminListAuditStart:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          oneOf:
+            - {type: "null"}
+            - type: object
+              required: [audit, resumed, list]
+              properties:
+                audit:
+                  $ref: "#/components/schemas/AdminListAudit"
+                resumed: {type: boolean, description: True when the caller already held an open audit on this list.}
+                list:
+                  $ref: "#/components/schemas/AdminListFull"
+        meta:
+          type: object
+          required: [remaining]
+          properties:
+            remaining: {type: integer, description: Lists still waiting for an audit.}
+    AdminListAuditResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListAudit"
     AdminListUpdated:
       type: object
       required: [data, changed]

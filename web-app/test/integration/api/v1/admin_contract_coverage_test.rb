@@ -276,6 +276,30 @@ module Api
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "403"] => -> { delete "/api/v1/admin/lists/#{lists(:books_list).id}/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(READ) },
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "404"] => -> { delete "/api/v1/admin/lists/999999999/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(MERGE) },
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/lists/#{lists(:books_list).id}/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/list_audits", "200"] => -> { post "/api/v1/admin/list_audits", params: {list_id: coverage_list.id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits", "400"] => -> { post "/api/v1/admin/list_audits", params: {list_id: "x"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits", "401"] => -> { post "/api/v1/admin/list_audits", params: {}, as: :json },
+        ["POST", "/api/v1/admin/list_audits", "403"] => -> { post "/api/v1/admin/list_audits", params: {}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/list_audits", "404"] => -> { post "/api/v1/admin/list_audits", params: {list_id: 999999999}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits", "409"] => -> { post "/api/v1/admin/list_audits", params: {list_id: coverage_list(held_by: users(:regular_user)).id}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits", "422"] => -> { post "/api/v1/admin/list_audits", params: {extra: 1}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/list_audits", params: {}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "200"] => -> { post "/api/v1/admin/list_audits/#{coverage_audit.id}/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "400"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/finish", params: {}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "401"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "403"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "404"] => -> { post "/api/v1/admin/list_audits/999999999/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "409"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "422"] => -> { post "/api/v1/admin/list_audits/#{coverage_audit.id}/finish", params: {verdict: "verified", note: "Checked", sources: []}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/finish", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/finish", params: {verdict: "unverifiable", note: "Checked", sources: []}, as: :json, headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "200"] => -> { post "/api/v1/admin/list_audits/#{coverage_audit.id}/release", params: {note: "later"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "400"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {note: 3}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "401"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {}, as: :json },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "403"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "404"] => -> { post "/api/v1/admin/list_audits/999999999/release", params: {}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "409"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "422"] => -> { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {extra: 1}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/list_audits/{id}/release", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/list_audits/#{list_audits(:books_verified_audit).id}/release", params: {}, as: :json, headers: bearer(MERGE) } },
         ["GET", "/api/v1/admin/penalties", "200"] => -> { get "/api/v1/admin/penalties", headers: bearer(READ) },
         ["GET", "/api/v1/admin/penalties", "401"] => -> { get "/api/v1/admin/penalties" },
         ["GET", "/api/v1/admin/penalties", "403"] => -> { get "/api/v1/admin/penalties", headers: bearer(MEMBER) },
@@ -575,6 +599,20 @@ module Api
         stub_workflow_dispatch
         ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
         ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
+      end
+
+      # A books list nobody has audited, optionally already held by someone else.
+      def coverage_list(held_by: nil)
+        list = ::Books::List.create!(name: "Coverage Audit #{SecureRandom.hex(4)}", status: :active)
+        if held_by
+          ListAudit.create!(list: list, user: held_by, status: :in_progress, started_at: Time.current, lease_expires_at: 1.hour.from_now)
+        end
+        list
+      end
+
+      # An open audit held by the admin the MERGE token belongs to.
+      def coverage_audit
+        ListAudit.create!(list: (list = coverage_list), before: ::Services::Lists::Audits::Snapshot.call(list), user: users(:admin_user), status: :in_progress, started_at: Time.current, lease_expires_at: 1.hour.from_now)
       end
 
       test "the map and the document describe the same responses" do

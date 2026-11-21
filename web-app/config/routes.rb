@@ -790,6 +790,9 @@ Rails.application.routes.draw do
             get "lists/:id/items", to: "list_items#index", constraints: {id: /\d+/}
             post "lists/:id/penalties", to: "list_penalties#create", constraints: {id: /\d+/}
             delete "lists/:id/penalties/:penalty_id", to: "list_penalties#destroy", constraints: {id: /\d+/, penalty_id: /\d+/}
+            post "list_audits", to: "list_audits#start"
+            post "list_audits/:id/finish", to: "list_audits#finish", constraints: {id: /\d+/}
+            post "list_audits/:id/release", to: "list_audits#release", constraints: {id: /\d+/}
             get "penalties", to: "penalties#index"
             get "series", to: "series#index"
             get "series/:id", to: "series#show", constraints: {id: /\d+/}
