@@ -917,3 +917,21 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    stays `running` until a source is enabled again.
 8. **Nothing here touches the catalog.** Creating books from stored titles is a later design; until
    then the tables only grow, in the private imports storage.
+
+## 19. List audits (after the deploy that adds them)
+
+An admin's agent audits the books lists one at a time. Details: `docs/features/list-audits.md`.
+Steps marked "Shane runs with `!`" change production, so an agent does not run them.
+
+1. **Load the penalty guidance. Shane runs with `!`.** `bin/rails penalties:load_guidance`. It fills
+   blank `guidance` columns only. Check the output: `mismatched` and `missing` must be empty, and
+   `filled` should hold the penalties you expect. Edit any wording on the admin penalties form.
+2. **Detach hand-attached dynamic penalties. Shane runs with `!`.** `bin/rails penalties:detach_dynamic`
+   is a dry run. Check it lists one row (dev had exactly one, on a music albums list), then run
+   `APPLY=1 bin/rails penalties:detach_dynamic`.
+3. **Work the queue. Shane runs with `!`.** Open `/admin/list_audits` on the books host, use **Copy
+   prompt**, and give it to an agent on the admin MCP endpoint with a `books:admin:write` token. A
+   list is audited once; **Release** frees a list whose lease got stuck.
+4. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
+   and penalties but never the weight. Use the admin **Refresh Rankings** action on the books primary
+   once the batch is done, and again after later audits.
