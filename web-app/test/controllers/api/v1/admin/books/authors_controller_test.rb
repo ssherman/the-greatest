@@ -15,6 +15,69 @@ module Api
 
           def hits(*authors) = authors.map { |author| {id: author.id.to_s, score: 1.0, source: {}} }
 
+          MERGE = ApiTokenSecrets::ADMIN
+
+          def empty_author = ::Books::Author.create!(name: "Stranded Record #{SecureRandom.hex(3)}")
+
+          test "delete removes an author with no books and no credits" do
+            author = empty_author
+
+            delete "/api/v1/admin/authors/#{author.id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [author.id, author.name, true], json[:data].values_at(:id, :name, :deleted)
+            assert_nil json[:meta]
+            assert_not ::Books::Author.exists?(author.id)
+          end
+
+          test "delete dry run changes nothing" do
+            author = empty_author
+
+            delete "/api/v1/admin/authors/#{author.id}", params: {dry_run: "true"}, headers: bearer(MERGE)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal [author.id, true], [json[:data][:id], json[:meta][:dry_run]]
+            assert ::Books::Author.exists?(author.id)
+          end
+
+          test "delete refuses an author who still has books, pointing at merge_author" do
+            delete "/api/v1/admin/authors/#{@tolstoy.id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert_match(/merge_author/, json[:detail])
+            assert ::Books::Author.exists?(@tolstoy.id)
+          end
+
+          test "delete refuses an author with a credit on an edition or book" do
+            author = empty_author
+            ::Books::Credit.create!(author: author, creditable: books_books(:war_and_peace), role: :translator)
+
+            delete "/api/v1/admin/authors/#{author.id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 422, api: :admin)
+
+            assert ::Books::Author.exists?(author.id)
+          end
+
+          test "delete of an unknown author is 404 and a bad dry_run is 400" do
+            delete "/api/v1/admin/authors/999999999", headers: bearer(MERGE)
+            assert_api_response_conform(status: 404, api: :admin)
+
+            delete "/api/v1/admin/authors/#{empty_author.id}", params: {dry_run: "maybe"}, headers: bearer(MERGE)
+            assert_api_response_conform(status: 400, api: :admin)
+          end
+
+          test "delete needs the merge scope and an account allowed to delete the author" do
+            author = empty_author
+            delete "/api/v1/admin/authors/#{author.id}", headers: bearer(ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            assert_equal "insufficient_scope", json[:code]
+
+            ::Books::AuthorPolicy.stubs(:new).returns(stub_everything(destroy?: false))
+            delete "/api/v1/admin/authors/#{author.id}", headers: bearer(MERGE)
+            assert_api_response_conform(status: 403, api: :admin)
+            assert ::Books::Author.exists?(author.id)
+          end
+
           test "results follow the search order and carry book_count" do
             ::Search::Books::Search::AuthorGeneral.expects(:call).with("t", size: 1000).returns(hits(@king, @tolstoy))
 

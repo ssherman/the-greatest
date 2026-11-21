@@ -381,6 +381,62 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteAdminAuthor
+      security: [{bearerAuth: ["books:admin:merge"]}]
+      summary: Delete an author no book uses
+      description: |
+        Permanently deletes an author that no book credits (as an author) and that holds no credit as translator, editor or the like: the empty records merges and splits leave behind. Its identifiers, descriptions, images and category links go with it, and the delete is recorded so the legacy sync does not bring it back. There is no undelete.
+        An author who still has a book or a credit is refused (422): to fold a duplicate into the right person, merge it with mergeAuthor, which keeps a redirect from the old page.
+        Send `dry_run=true` to check the author can be deleted without changing anything. Requires `books:admin:merge`, and the token's owner must be allowed to delete the author.
+      x-mcp:
+        description: >-
+          Permanently deletes author `id` when no book credits it and it holds no translator, editor or other credit;
+          there is no undelete. Use it for empty records left by merges and splits, and for junk names that are no
+          person. A duplicate of a real person should be merged with merge_author instead, so its old page redirects:
+          an author who still has a book or a credit is refused (422). `dry_run` defaults to false, so call with
+          `dry_run: true` first, check it names the author you mean, then run it again with `dry_run: false`
+          yourself. Ids come from search_admin_authors.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: dry_run
+          in: query
+          required: false
+          description: "`true` checks the author can be deleted and changes nothing. Default `false`. Only `true` and `false` are accepted; anything else is a 400."
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          description: The author was deleted (or, for a dry run, would be).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthorDelete"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/duplicate_candidates:
     x-domain: books
     get:
@@ -4141,6 +4197,22 @@ components:
                   title: {type: string}
                   moved: {type: integer, minimum: 0, description: Books linked to the target by the merge.}
                   dropped: {type: integer, minimum: 0, description: "Source links dropped because the book is already in the target."}
+        meta:
+          type: object
+          required: [dry_run]
+          properties:
+            dry_run: {type: boolean}
+    AdminAuthorDelete:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, name, deleted]
+          properties:
+            id: {type: integer}
+            name: {type: string}
+            deleted: {type: boolean}
         meta:
           type: object
           required: [dry_run]
