@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_21_213406) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_21_214209) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1118,6 +1118,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_213406) do
     t.index ["key"], name: "index_legacy_sync_watermarks_on_key", unique: true
   end
 
+  create_table "list_audits", force: :cascade do |t|
+    t.bigint "list_id", null: false
+    t.bigint "user_id"
+    t.integer "status", default: 0, null: false
+    t.integer "verdict"
+    t.datetime "lease_expires_at"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.jsonb "before"
+    t.jsonb "after"
+    t.jsonb "field_changes"
+    t.text "note"
+    t.jsonb "sources", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["list_id"], name: "index_list_audits_on_list_id"
+    t.index ["list_id"], name: "index_list_audits_one_open_per_list", unique: true, where: "(status = 0)"
+    t.index ["status", "finished_at"], name: "index_list_audits_on_status_and_finished_at"
+    t.index ["user_id"], name: "index_list_audits_on_user_id"
+  end
+
   create_table "list_items", force: :cascade do |t|
     t.bigint "list_id", null: false
     t.string "listable_type"
@@ -1980,6 +2001,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_213406) do
   add_foreign_key "games_game_platforms", "games_platforms", column: "platform_id"
   add_foreign_key "games_games", "games_games", column: "parent_game_id"
   add_foreign_key "games_games", "games_series", column: "series_id"
+  add_foreign_key "list_audits", "lists"
+  add_foreign_key "list_audits", "users", on_delete: :nullify
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"
