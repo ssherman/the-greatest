@@ -927,9 +927,11 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    blank `guidance` columns only. Check the output: `mismatched` and `missing` must be empty, and
    `filled` should hold the penalties you expect. Edit any wording on the admin penalties form.
 2. **Detach hand-attached dynamic penalties. Shane runs with `!`.** `bin/rails penalties:detach_dynamic`
-   is a dry run. Check it lists one row (dev had exactly one, on a music albums list), then run
-   `APPLY=1 bin/rails penalties:detach_dynamic`.
-3. **Work the queue. Shane runs with `!`.** Open `/admin/list_audits` on the books host, use **Copy
+   is a dry run that prints only `list_penalty` ids. Check it lists one row (dev had exactly one). If it
+   lists more, inspect each (`ListPenalty.find(id)` with its list and penalty) before running
+   `APPLY=1 bin/rails penalties:detach_dynamic`. Detaching changes no weight: the calculator skips
+   non-static attachments.
+3. **Work the queue.** Open `/admin/list_audits` on the books host, use **Copy
    prompt**, and give it to an agent on the admin MCP endpoint with a `books:admin:write` token. A
    list is audited once; **Release** frees a list whose lease got stuck.
 4. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
