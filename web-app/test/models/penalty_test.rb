@@ -6,6 +6,7 @@
 #  category     :integer
 #  description  :text
 #  dynamic_type :integer
+#  guidance     :text
 #  name         :string           not null
 #  type         :string           not null
 #  created_at   :datetime         not null
@@ -221,5 +222,12 @@ class PenaltyTest < ActiveSupport::TestCase
   test "category_title falls back to Other for an unknown or nil category" do
     assert_equal "Other", Penalty.category_title(nil)
     assert_equal "Other", Penalty.category_title("something_else")
+  end
+
+  test "driving_field names the list field behind each dynamic type" do
+    assert_equal "num_years_covered", Penalty.new(dynamic_type: :num_years_covered).driving_field
+    assert_nil Penalty.new(dynamic_type: :percentage_western).driving_field
+    assert_nil Penalty.new.driving_field
+    assert_equal Penalty.dynamic_types.keys.sort, Penalty::DRIVING_FIELDS.keys.sort
   end
 end

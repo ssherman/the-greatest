@@ -207,4 +207,20 @@ namespace :penalties do
     # happens, so a bad production run is loud rather than silently wrong.
     exit(1) if result[:mismatched].any?
   end
+
+  desc "Fill blank penalty guidance from config/penalties/guidance.yml (never overwrites)"
+  task load_guidance: :environment do
+    entries = YAML.load_file(Rails.root.join("config/penalties/guidance.yml"))
+    data = Services::Penalties::LoadGuidance.call(entries: entries).data
+
+    data.each { |bucket, items| puts "#{bucket}: #{items.inspect}" }
+  end
+
+  desc "List dynamic penalties attached to lists; APPLY=1 destroys the attachments"
+  task detach_dynamic: :environment do
+    apply = ENV["APPLY"] == "1"
+    data = Services::Penalties::DetachDynamic.call(dry_run: !apply).data
+
+    puts "#{apply ? "Destroyed" : "Would destroy (dry run, APPLY=1 to apply)"} list_penalty ids: #{data[:list_penalty_ids].inspect}"
+  end
 end

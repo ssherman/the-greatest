@@ -1,0 +1,115 @@
+---
+- id: 1
+  name: 'List: Creator of the list, sells the items on the list'
+  guidance: 'The organisation that published the list sells the books on it: a bookseller (Amazon, Barnes & Noble, Waterstones, a bookshop), a publisher ranking its own titles, a book club ranking its picks. A newspaper or magazine that only carries affiliate links does not count.'
+- id: 2
+  name: 'List: contains over 500 items(Quantity over Quality)'
+  guidance: The source list has more than 500 entries. Count the source, not how many we imported.
+- id: 3
+  name: 'List: criteria is not just best/favorite'
+  guidance: 'The list ranks by something other than quality or love: most influential, most important, most read, best-selling, most challenged, most underrated, "books that changed the world". "Essential", "must-read" and "greatest" count as best and do not take this. Prefer 7 when the angle is a gimmick.'
+- id: 4
+  name: 'List: is a follow up/honorable mention to a different list'
+  guidance: The list is the overflow or sequel of another list ("100 more", "honourable mentions", "the ones that didn't make the cut").
+- id: 5
+  name: 'List: only covers 1 specific gender'
+  guidance: Only books by authors of one gender were eligible ("best books by women"). A result that merely skews one way does not count.
+- id: 6
+  name: 'List: only covers 1 specific language'
+  guidance: Eligibility is limited to books originally written in one language ("best Spanish-language novels", "best novels in English"). An English-language outlet whose picks happen to be mostly English does not count.
+- id: 7
+  name: 'List: only covers items with a weird criteria'
+  guidance: The selection is built around a concept unrelated to quality (books with dogs in them, best first lines, books set on trains, cover colours). Ordinary alternative criteria such as influence take 3 instead.
+- id: 8
+  name: 'Voters: are mostly from a single country/location'
+  guidance: 'Most of the people who chose the books live in one country: a national newspaper''s critics, one country''s readers'' poll. Not for a genuinely international panel. Most single-outlet lists take this.'
+- id: 9
+  name: 'Voters: diversity of voters is very low'
+  guidance: The panel comes from one narrow pool (one university's faculty, one magazine's staff, one MFA programme, one prize jury's alumni). Being from one country alone is 8, not 9.
+- id: 10
+  name: 'Voters: not critics, authors, or experts'
+  guidance: The general public chose the books (reader polls, public votes, Goodreads-style voting) with no expert vetting. If experts chose the candidates and the public ranked them, use 44. If roughly half the panel were experts, use 32.
+- id: 11
+  name: 'Voters: restricted to a distinct criteria(race, gender, etc)'
+  guidance: Who could *vote* was limited to one group (only women critics, only Black writers, only teenagers). Restrictions on which *books* were eligible are 5 or 6, not 11.
+- id: 12
+  name: 'Voters: Unknown Names'
+  guidance: 'Set `voter_names_unknown: true` when the source does not say who chose the books. False when the panel is named, even partly.'
+- id: 13
+  name: 'Voters: Voter Count'
+  guidance: Set `number_of_voters` to the number of people who chose the books, counted conservatively. 1 for a single critic. At 1 the penalty is the maximum; it shrinks to 0 at the configuration's median (24 today). Null means no penalty from this curve, so never leave it null when a count or estimate exists.
+- id: 14
+  name: 'Voters: Unknown Count'
+  guidance: 'Set `voter_count_unknown: true` (and leave `number_of_voters` null) only when no count can be found or reasonably estimated. It costs as much as a single voter, so an honest estimate with `voter_count_estimated` is better when the source gives enough to estimate ("our 12 editors", "a panel of critics" with a byline list).'
+- id: 15
+  name: 'List: only covers 1 specific location'
+  guidance: 'Set `location_specific: true` when the list states a geographic limit on eligible books (a country, region, continent, state or city). It costs nothing itself; it exempts the list from the western-canon penalty (23) and must be paired with exactly one static geographic penalty: 42 city, 39 state, 46 small region, 37 country, 38 large region, 36 continent (the narrowest that fits), or 31 when only about half the entries are reserved for one country.'
+- id: 16
+  name: 'List: only covers 1 specific genre'
+  guidance: 'Set `category_specific: true` when eligibility is one genre or form (crime, science fiction, poetry, children''s books, graphic novels) or one non-fiction subject (history, science). Literary fiction as a whole, or "novels", is not a genre for this purpose.'
+- id: 17
+  name: 'List: number of years covered'
+  guidance: 'Set `num_years_covered` to the span of publication years that were eligible: 1 for a yearly award or "best of 2023", 10 for a decade, 25 for "the 21st century so far" (count to the list''s year), 100 for a century. Leave it null for an all-time list; null means no time penalty.'
+- id: 18
+  name: 'Voters: Estimated Count'
+  guidance: 'Set `voter_count_estimated: true` whenever `number_of_voters` is your estimate rather than a published figure.'
+- id: 21
+  name: 'Voters: specific voter details are lacking'
+  guidance: The voters are named but we can learn little about who they are or why they are qualified.
+- id: 22
+  name: 'Voters: Voters seem to have an agenda/bias of some kind'
+  guidance: The people choosing are promoting a viewpoint (a religious, political or advocacy organisation's list) rather than judging quality.
+- id: 23
+  name: 'List: only covers mostly "Western Canon" books'
+  guidance: 'Computed from the list''s books when the list is not `location_specific`: a list that presents itself as general but is 90% or more western takes it. Nothing to set; it explains why `location_specific` matters.'
+- id: 25
+  name: 'List: The selection involves selecting a favorite book per year'
+  guidance: One book was chosen for each year ("the best book of every year since 1900").
+- id: 26
+  name: 'List: has a focus on a specific theme(religion, etc) but is not definite'
+  guidance: The list is organised around a theme (religion, politics, war, nature, food) that is broader than a genre. A single genre is the `category_specific` flag instead.
+- id: 27
+  name: 'List: only covers genre fiction(multiple genres)'
+  guidance: Eligibility is limited to genre fiction across several genres (science fiction, fantasy and horror together). For one genre, use the `category_specific` flag alone.
+- id: 31
+  name: 'List: only partially covers 1 specific country'
+  guidance: About half the entries had to come from one country (a quota), so the field was partly reserved. Pair with `location_specific`.
+- id: 32
+  name: 'Voters: half the voters are not critics, authors, or experts'
+  guidance: Roughly half the panel were experts and half general readers.
+- id: 34
+  name: 'List: Very hard to find any official information on the list'
+  guidance: After a real search we could not find who made the list or how. Usually goes with an `unverifiable` audit verdict.
+- id: 36
+  name: 'List: only covers 1 specific continent'
+  guidance: Eligible books come from one continent ("best African novels"). Pair with `location_specific`.
+- id: 37
+  name: 'List: only covers 1 specific country'
+  guidance: Eligible books or authors come from one country ("best Australian novels"). Pair with `location_specific`.
+- id: 38
+  name: 'List: only covers 1 specific large geographical region (Asia, Latin America, etc)'
+  guidance: One large region spanning several countries (Asia, Latin America, the Middle East, Scandinavia). Pair with `location_specific`.
+- id: 39
+  name: 'List: only covers 1 specific state of a country'
+  guidance: One state or province ("best Texas books"). Pair with `location_specific`.
+- id: 42
+  name: 'List: only covers 1 specific city'
+  guidance: One city ("best New York novels", "books set in London"). Pair with `location_specific`.
+- id: 43
+  name: 'List: only covers translated or foreign books than where voters are from'
+  guidance: Eligibility is limited to translated books, or books from outside the voters' country ("best translated fiction", the International Booker).
+- id: 44
+  name: 'Voters: not critics, authors, or experts, but the books on the list were curated by critics/experts'
+  guidance: The public voted, but from a shortlist that critics, editors or experts chose.
+- id: 45
+  name: 'List: Covers aggregated lists that might already be included on the site'
+  guidance: The list is compiled from other lists or polls, some of which we may already count, so it risks counting the same opinions twice.
+- id: 46
+  name: 'List: only covers 1 specific small geographical region (Southern United States, etc)'
+  guidance: A region smaller than a country or spanning parts of one (the American South, the Pacific Northwest, the Highlands). Pair with `location_specific`.
+- id: 47
+  name: 'List: Only covers Series'''
+  guidance: Only books in a series were eligible.
+- id: 49
+  name: 'List: Podcast/Etc that covers 1 book a week/month'
+  guidance: A podcast, column or club featuring one book at a time; the picks are discussion topics, not a ranking.

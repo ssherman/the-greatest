@@ -6,6 +6,7 @@
 #  category     :integer
 #  description  :text
 #  dynamic_type :integer
+#  guidance     :text
 #  name         :string           not null
 #  type         :string           not null
 #  created_at   :datetime         not null

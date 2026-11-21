@@ -6,6 +6,7 @@
 #  category     :integer
 #  description  :text
 #  dynamic_type :integer
+#  guidance     :text
 #  name         :string           not null
 #  type         :string           not null
 #  created_at   :datetime         not null
@@ -72,6 +73,20 @@ class Penalty < ApplicationRecord
     CATEGORY_TITLES.fetch(category.to_s, "Other")
   end
 
+  # The list field each dynamic type reads its input from. percentage_western is
+  # computed from the list's books, so there is no field to set.
+  DRIVING_FIELDS = {
+    "number_of_voters" => "number_of_voters",
+    "voter_names_unknown" => "voter_names_unknown",
+    "voter_count_unknown" => "voter_count_unknown",
+    "voter_count_estimated" => "voter_count_estimated",
+    "category_specific" => "category_specific",
+    "location_specific" => "location_specific",
+    "num_years_covered" => "num_years_covered",
+    "creator_specific" => "creator_specific",
+    "percentage_western" => nil
+  }.freeze
+
   # Validations
   validates :name, presence: true
   validates :type, presence: true
@@ -85,6 +100,10 @@ class Penalty < ApplicationRecord
   # Public Methods
   def dynamic?
     dynamic_type.present?
+  end
+
+  def driving_field
+    DRIVING_FIELDS[dynamic_type]
   end
 
   def static?
