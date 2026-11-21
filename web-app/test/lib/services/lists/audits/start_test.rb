@@ -51,6 +51,16 @@ module Services
           end
         end
 
+        test "a finished audit is never turned back into a released one" do
+          audit = Start.call(user: @other, list: @list).data[:audit]
+          travel 4.hours do
+            Finish.call(audit: audit, user: @other, verdict: "unverifiable", note: "Agent note", sources: [])
+            Start.call(user: @user, list: @list)
+            assert audit.reload.finished?
+            assert_equal "Agent note", audit.note
+          end
+        end
+
         test "without a list takes the head of the queue" do
           head = Queue.relation.first
           result = Start.call(user: @user)

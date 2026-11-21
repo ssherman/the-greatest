@@ -21,10 +21,12 @@ module Services
         private
 
         def start_on_list
-          held = ::ListAudit.in_progress.find_by(list_id: @list.id)
-          if held&.user_id == @user.id && !held.expired?
-            held.update!(lease_expires_at: Time.current + ::ListAudit::LEASE)
-            return success(held, resumed: true)
+          # Conditional write: renew only if the row is still ours and unexpired at
+          # write time (a concurrent Finish/Release/Start may have changed it).
+          renewed = ::ListAudit.open.where(list_id: @list.id, user_id: @user.id)
+            .update_all(lease_expires_at: Time.current + ::ListAudit::LEASE, updated_at: Time.current)
+          if renewed > 0
+            return success(::ListAudit.in_progress.find_by!(list_id: @list.id), resumed: true)
           end
 
           audit = claim(@list)
@@ -35,6 +37,7 @@ module Services
 
         def start_next
           Queue.relation.first(MAX_TRIES).each do |candidate|
+            next if ::ListAudit.finished.exists?(list_id: candidate.id) # finished since the queue was read
             audit = claim(candidate)
             return success(audit, resumed: false) if audit
           end
@@ -45,10 +48,12 @@ module Services
         # holds the list (the unique index decides, so two callers cannot both win).
         # The savepoint keeps a lost race from aborting the surrounding transaction.
         def claim(list)
-          expired = ::ListAudit.expired.find_by(list_id: list.id)
-          expired&.update!(status: :released, finished_at: Time.current, note: "lease expired")
-
+          # Conditional write: Postgres re-checks the WHERE after any row-lock wait, so
+          # a Finish that commits first is never overwritten by this release.
           now = Time.current
+          ::ListAudit.expired.where(list_id: list.id)
+            .update_all(status: ::ListAudit.statuses[:released], finished_at: now, note: "lease expired", updated_at: now)
+
           ::ListAudit.transaction(requires_new: true) do
             ::ListAudit.create!(
               list_id: list.id, user: @user, status: :in_progress, started_at: now,
