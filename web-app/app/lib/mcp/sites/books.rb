@@ -33,7 +33,7 @@ module Mcp
         name: "usage",
         title: "Using The Greatest Books admin tools",
         description: "How to use the admin tools safely: take ids from the search tools, dry-run every merge " \
-          "and delete, show the user, and run it only after they agree."
+          "and delete, check it names the right records, then run it yourself."
       ) do |_arguments, server_context: nil|
         ::MCP::Prompt::Result.new(
           description: "How to use The Greatest Books admin tools",

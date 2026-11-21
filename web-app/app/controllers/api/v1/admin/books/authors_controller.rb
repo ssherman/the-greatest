@@ -8,11 +8,13 @@ module Api
         # GET   /api/v1/admin/authors/:id -- the editable fields
         # PATCH /api/v1/admin/authors/:id -- any subset of them (Services::Books::Authors::AdminUpdate)
         # POST  /api/v1/admin/authors     -- a new author (Services::Books::Authors::AdminCreate)
+        # DELETE /api/v1/admin/authors/:id -- an author with no books and no credits (Services::Books::Authors::AdminDelete)
         class AuthorsController < BaseController
           include ::Api::V1::Admin::StrictIds
           include ::Api::V1::Admin::FieldUpdate
 
-          require_scopes index: "books:admin:read", show: "books:admin:read", update: "books:admin:write", create: "books:admin:write"
+          require_scopes index: "books:admin:read", show: "books:admin:read", update: "books:admin:write", create: "books:admin:write",
+            destroy: "books:admin:merge"
 
           FIELDS = {
             "name" => :string, "sort_name" => :string_or_null, "kind" => :enum,
@@ -69,6 +71,29 @@ module Api
             render status: :created, json: {data: AuthorDetailResource.new(::Books::Author.includes(:cleared_fields).find(author.id)).to_h}
           end
 
+          # DELETE /api/v1/admin/authors/:id -- {data: {id, name, deleted: true}}, plus meta.dry_run on a dry run
+          def destroy
+            dry_run = strict_dry_run
+            return if performed?
+
+            author = ::Books::Author.find_by(id: parse_id(params[:id]))
+            return render_problem(::Api::Problem.new(:not_found, detail: "No author #{params[:id]}.")) unless author
+            unless ::Books::AuthorPolicy.new(current_principal.user, author).destroy?
+              return render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not delete author #{author.id}."))
+            end
+
+            result = ::Services::Books::Authors::AdminDelete.call(author: author, dry_run: dry_run)
+            return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.join(", "))) unless result.success?
+
+            unless dry_run
+              Rails.logger.info("event=api_admin_author_delete outcome=succeeded token_id=#{current_principal.token.id} " \
+                "token_kind=#{current_principal.token_kind} user_id=#{current_principal.user.id} author_id=#{author.id}")
+            end
+            body = {data: {id: author.id, name: author.name, deleted: true}}
+            body[:meta] = {dry_run: true} if dry_run
+            render json: body
+          end
+
           def index
             query = required_query or return
 
@@ -83,6 +108,18 @@ module Api
           end
 
           private
+
+          def strict_dry_run
+            return false unless params.key?(:dry_run)
+
+            case params[:dry_run]
+            when true, "true" then true
+            when false, "false" then false
+            else
+              render_problem(::Api::Problem.new(:invalid_parameter, detail: "dry_run must be true or false"))
+              nil
+            end
+          end
 
           def typed_qid!(value)
             unless value.is_a?(String) && value.strip.match?(QID_FORMAT)

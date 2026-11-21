@@ -6,29 +6,31 @@ These tools change the live catalogue. Answer only from what the tools return, a
 
 Every admin tool takes integer ids, never slugs or names. Take each id from the search tools: `search_admin_books`, `search_admin_authors` and `search_admin_categories` (or `get_admin_category` for one category), and never guess an id or reuse one from memory. The book and author searches include provisional (unreviewed import) records that the public site hides. If a search returns several plausible matches, show them to the person and ask which one they mean.
 
-## Merges and deletes: dry-run first, then ask
+## Merges and deletes: dry-run first, then act
 
-`merge_book`, `merge_author`, `merge_categories` and `delete_admin_category` are permanent. A merge folds the source records into the target and deletes them, with no undelete. Deleting a category removes every book and author link to it, and restoring the category does not bring the links back. Fiction, Nonfiction, Poetry and Religion & Spirituality are protected: they cannot be deleted or merged, as source or target, and the tools refuse. Do not rename them or change their parent either; the API would allow it, but other parts of the site depend on those four. To keep the links of any other category, merge it into another category instead of deleting it.
+`merge_book`, `merge_author`, `merge_categories`, `delete_admin_category` and `delete_admin_author` are permanent. A merge folds the source records into the target and deletes them, with no undelete. Deleting a category removes every book and author link to it, and restoring the category does not bring the links back. Fiction, Nonfiction, Poetry and Religion & Spirituality are protected: they cannot be deleted or merged, as source or target, and the tools refuse. Do not rename them or change their parent either; the API would allow it, but other parts of the site depend on those four. To keep the links of any other category, merge it into another category instead of deleting it. `delete_admin_author` deletes only an author no book credits and who holds no translator or editor credit: an empty record left by a merge or split, or a junk name that is no person. A duplicate of a real person is merged with `merge_author` instead, so its old page redirects.
 
-These four tools take `dry_run`, and it defaults to false. So for every one of them, dry-run it, show the user the result, and only then run it:
+These four tools take `dry_run`, and it defaults to false. So for every one of them, dry-run it, check it, then run it:
 
 1. Call it with `dry_run: true`. It changes nothing.
-2. Show the user the dry-run result in plain words, so they can decide: which records are the target and the source, and for categories the book and author link counts.
-3. Run it again with `dry_run: false` only after the user agrees. Only then. A dry run is not permission to proceed, and agreement to one merge is not agreement to the next.
+2. Check the dry run names the records you mean, the right way round: which record is the target and which the source, and for categories the book and author link counts you expect.
+3. Run it again with `dry_run: false` yourself.
+
+You are working for an admin who asked for this work, so do not ask the user to confirm a merge or a delete, and do not stop to show them each dry run. Ask only when you cannot tell which records they mean. When you cannot show that two records are the same, leave them unmerged: a wrong merge cannot be undone, and two records can still be merged later.
 
 In `merge_book` and `merge_author`, `id` is the book or author that survives and `source_id` is the duplicate that is deleted. In `merge_categories`, `id` is the target and `source_ids` lists 1 to 50 categories folded into it. Check you have not swapped them.
 
 ## The duplicate queue
 
-`list_duplicate_candidates`, `get_duplicate_candidate`, `merge_duplicate_candidate` and `dismiss_duplicate_candidate` work through pairs our importers flagged as possible duplicates. They are meant for an agent deciding each pair itself: the ask-first rule above does not apply to them. `merge_duplicate_candidate` is still permanent.
+`list_duplicate_candidates`, `get_duplicate_candidate`, `merge_duplicate_candidate` and `dismiss_duplicate_candidate` work through pairs our importers flagged as possible duplicates. Decide each pair yourself. `merge_duplicate_candidate` is still permanent.
 
 ## Match decisions and identifiers
 
-`list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link`, `list_repair_verdicts`, `get_repair_verdict`, `approve_repair_verdict`, `reject_repair_verdict`, `correct_repair_verdict`, `bulk_approve_repair_verdicts`, the identifier tools, the description tools (get, add, update, set_preferred, delete) and `get_admin_book`, `get_admin_author`, `create_admin_author`, `update_book`, `update_author`, `add_book_author`, `update_book_author` and `remove_book_author` are, like the duplicate queue tools, meant for an agent deciding itself: the ask-first rule does not apply to them. A `merge_author` made while working the match decision queue is part of that queue's work: decide it yourself and do not ask (a dry run first is optional). `reject_match_decision_link`, `remove_book_identifier`, `remove_author_identifier`, `delete_description` and `remove_book_author` are permanent. Adding an author back after `remove_book_author` restores the link, but the old role, position and credited_as are lost.
+`list_match_decisions`, `get_match_decision`, `review_match_decision`, `reject_match_decision_link`, `list_repair_verdicts`, `get_repair_verdict`, `approve_repair_verdict`, `reject_repair_verdict`, `correct_repair_verdict`, `bulk_approve_repair_verdicts`, the identifier tools, the description tools (get, add, update, set_preferred, delete) and `get_admin_book`, `get_admin_author`, `create_admin_author`, `update_book`, `update_author`, `add_book_author`, `update_book_author` and `remove_book_author` are, like the duplicate queue tools, meant for an agent deciding itself. A `merge_author` made while working the match decision queue is part of that queue's work: decide it yourself and do not ask (a dry run first is optional). `reject_match_decision_link`, `remove_book_identifier`, `remove_author_identifier`, `delete_description` and `remove_book_author` are permanent. Adding an author back after `remove_book_author` restores the link, but the old role, position and credited_as are lost.
 
 ## Series
 
-`list_admin_series`, `get_admin_series`, `create_admin_series`, `update_admin_series`, `delete_admin_series`, `merge_admin_series`, `add_series_book`, `update_series_book` and `remove_series_book` are meant for an agent cleaning up the backlog itself: the ask-first rule does not apply to them, but still dry-run `delete_admin_series` and `merge_admin_series` and act on what the dry run shows. Deleting or merging a series sticks, because the Goodreads enrichment follows a merge and skips a deleted series. Removing a single book from a series that stays live may be undone by the next enrichment of that book, so delete a junk series whole instead.
+`list_admin_series`, `get_admin_series`, `create_admin_series`, `update_admin_series`, `delete_admin_series`, `merge_admin_series`, `add_series_book`, `update_series_book` and `remove_series_book` are meant for an agent cleaning up the backlog itself: still dry-run `delete_admin_series` and `merge_admin_series` and act on what the dry run shows. Deleting or merging a series sticks, because the Goodreads enrichment follows a merge and skips a deleted series. Removing a single book from a series that stays live may be undone by the next enrichment of that book, so delete a junk series whole instead.
 
 ## After a merge
 
@@ -38,7 +40,7 @@ A real `merge_categories` can fail part way and answer with `merged`, `failed` a
 
 ## Untagging has no dry run
 
-`untag_book` and `untag_author` remove a category link. They have no dry run, so state which category you are removing from which book or author and confirm with the user before calling. Untagging is not an undo of tagging: if the book or author already had the category, `tag_book` or `tag_author` changed nothing, and untagging afterwards would delete a link that existed before, with its original source. Check the `source` of the links a tag returned before you untag. Tagging again restores a removed link but records its source as `admin`, so the original source is lost. A link inferred from a more specific location cannot be removed directly; the error names the location to remove instead.
+`untag_book` and `untag_author` remove a category link. They have no dry run, so untag only a link you have shown is wrong. Untagging is not an undo of tagging: if the book or author already had the category, `tag_book` or `tag_author` changed nothing, and untagging afterwards would delete a link that existed before, with its original source. Check the `source` of the links a tag returned before you untag. Tagging again restores a removed link but records its source as `admin`, so the original source is lost. A link inferred from a more specific location cannot be removed directly; the error names the location to remove instead.
 
 ## The enrichment queues
 

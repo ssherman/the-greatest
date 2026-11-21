@@ -83,11 +83,19 @@ module Mcp
       test "the admin usage text states the protocol for destructive tools" do
         text = admin_usage_text
 
-        ["dry-run", "dry_run", "show the user", "only then", "permanent", "ids", "search_admin_", "merged", "failed", "not_attempted",
-          "warnings", "null"].each do |phrase|
+        ["dry-run", "dry_run", "permanent", "ids", "search_admin_", "merged", "failed", "not_attempted",
+          "warnings", "null", "do not ask the user to confirm"].each do |phrase|
           assert_includes text, phrase
         end
         assert_not_includes text.downcase, "cloudflare"
+        assert_not_includes text, "after the user agrees"
+      end
+
+      test "no admin tool description tells the agent to wait for the user's agreement" do
+        spec = Rails.root.join("config/api/v1/admin_openapi.yaml").read
+
+        assert_not_includes spec, "after the user agrees"
+        assert_not_includes spec, "show the user"
       end
 
       test "the admin usage text says an untag has no dry run" do
@@ -110,8 +118,17 @@ module Mcp
 
         assert_not_includes text, "\n"
         assert_includes text, "dry-run"
-        assert_includes text, "show the user"
+        assert_includes text, "do not ask the user to confirm"
+        assert_not_includes text, "after the user agrees"
         assert_equal Rails.root.join("config/mcp/books/admin_instructions.md").read.strip, text
+      end
+
+      test "the admin usage prompt's listed description says dry-run then act, not ask first" do
+        description = Mcp::Sites::Books::ADMIN_USAGE_PROMPT.description
+
+        assert_includes description, "dry-run"
+        assert_not_includes description, "after they agree"
+        assert_not_includes description, "show the user"
       end
 
       test "the admin document serves the methodology resource and no composites" do
