@@ -81,6 +81,30 @@ module Services
           assert_includes Report.call, "no approved verdict explaining it: 0"
         end
 
+        test "acceptance: a high-confidence match on a book since merged into the destination explains it" do
+          row_verdict(@row, @other, applied_at: Time.current)
+          gone_id = ::Books::Book.maximum(:id) + 1000
+          RecordRedirect.create!(item_type: "Books::Book", from_id: gone_id, to_id: @other.id)
+          verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"book_id" => gone_id, "ai" => {"answer" => gone_id, "confidence" => "high"}})
+
+          assert_includes Report.call, "no approved verdict explaining it: 0"
+        end
+
+        test "acceptance: a certain match (an identifier hit) explains it" do
+          row_verdict(@row, @other, applied_at: Time.current)
+          verdict(:reimport_match, "reimport:edition:#{@edition.id}", {"book_id" => @other.id, "ai" => {"answer" => nil}}, confidence: :certain)
+
+          assert_includes Report.call, "no approved verdict explaining it: 0"
+        end
+
+        test "acceptance: a destination carrying the CSV's own edition tag in its title is fine" do
+          tagged = ::Books::Book.create!(title: "Fascism (Oxford Readers)")
+          @row.update!(raw: {"Title" => "Fascism (Oxford Readers)"})
+          row_verdict(@row, tagged, applied_at: Time.current)
+
+          assert_includes Report.call, "no approved verdict explaining it: 0"
+        end
+
         test "acceptance: a destination with the CSV title is fine" do
           row_verdict(@row, @book, applied_at: Time.current)
 
