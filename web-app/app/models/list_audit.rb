@@ -39,6 +39,10 @@ class ListAudit < ApplicationRecord
   enum :status, {in_progress: 0, finished: 1, released: 2}
   enum :verdict, {verified: 0, unverifiable: 1}
 
+  # An in-progress row without a lease is in neither .open nor .expired, yet the
+  # unique index still lets it block the list.
+  validates :lease_expires_at, presence: true, if: :in_progress?
+
   scope :open, -> { in_progress.where("lease_expires_at > ?", Time.current) }
   scope :expired, -> { in_progress.where("lease_expires_at <= ?", Time.current) }
   scope :done, -> { finished }

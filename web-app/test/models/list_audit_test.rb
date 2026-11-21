@@ -67,6 +67,12 @@ class ListAuditTest < ActiveSupport::TestCase
     end
   end
 
+  test "an in-progress audit requires a lease" do
+    audit = ListAudit.new(list: lists(:books_list), user: users(:admin_user), status: :in_progress, started_at: Time.current)
+    assert_not audit.valid?
+    assert audit.errors[:lease_expires_at].present?
+  end
+
   test "done returns finished audits" do
     assert_includes ListAudit.done, list_audits(:books_verified_audit)
   end
