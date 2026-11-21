@@ -251,6 +251,7 @@ module Api
         ["GET", "/api/v1/admin/lists/{id}", "404"] => -> { get "/api/v1/admin/lists/999999999", headers: bearer(READ) },
         ["GET", "/api/v1/admin/lists/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/lists/#{lists(:books_list).id}", headers: bearer(READ) } },
         ["GET", "/api/v1/admin/lists/{id}/items", "200"] => -> { get "/api/v1/admin/lists/#{lists(:books_list).id}/items", headers: bearer(READ) },
+        ["GET", "/api/v1/admin/lists/{id}/items", "400"] => -> { get "/api/v1/admin/lists/#{lists(:books_list).id}/items?per_page=0", headers: bearer(READ) },
         ["GET", "/api/v1/admin/lists/{id}/items", "401"] => -> { get "/api/v1/admin/lists/#{lists(:books_list).id}/items" },
         ["GET", "/api/v1/admin/lists/{id}/items", "403"] => -> { get "/api/v1/admin/lists/#{lists(:books_list).id}/items", headers: bearer(MEMBER) },
         ["GET", "/api/v1/admin/lists/{id}/items", "404"] => -> { get "/api/v1/admin/lists/999999999/items", headers: bearer(READ) },

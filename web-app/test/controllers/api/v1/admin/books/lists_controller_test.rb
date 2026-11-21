@@ -134,6 +134,16 @@ module Api
             assert_equal "static", row[:kind]
           end
 
+          test "show gives value_on_primary from the application on the primary" do
+            penalty = penalties(:global_penalty)
+            ListPenalty.find_or_create_by!(list: @list, penalty: penalty)
+            PenaltyApplication.find_or_initialize_by(penalty: penalty, ranking_configuration: ranking_configurations(:books_global)).update!(value: 7)
+            get "/api/v1/admin/lists/#{@list.id}", headers: bearer(READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            assert_equal 7, json[:data][:penalties].find { |p| p[:id] == penalty.id }[:value_on_primary]
+          end
+
           test "show of a list outside books is a 404" do
             get "/api/v1/admin/lists/#{lists(:music_albums_list).id}", headers: bearer(READ)
 

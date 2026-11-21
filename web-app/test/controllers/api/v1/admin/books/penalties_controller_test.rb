@@ -28,6 +28,17 @@ module Api
             assert_nil static[:driving_field]
           end
 
+          test "value_on_primary and books_list_count are read from the data" do
+            penalty = penalties(:global_penalty)
+            ListPenalty.find_or_create_by!(list: lists(:books_list), penalty: penalty)
+            PenaltyApplication.find_or_initialize_by(penalty: penalty, ranking_configuration: ranking_configurations(:books_global)).update!(value: 7)
+            get "/api/v1/admin/penalties", headers: bearer(READ)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            row = json[:data].find { |r| r[:id] == penalty.id }
+            assert_equal [7, 1], [row[:value_on_primary], row[:books_list_count]]
+          end
+
           test "rows are ordered by category then name" do
             get "/api/v1/admin/penalties", headers: bearer(READ)
 
