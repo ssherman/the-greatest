@@ -123,6 +123,14 @@ module Mcp
         assert_equal Rails.root.join("config/mcp/books/admin_instructions.md").read.strip, text
       end
 
+      test "the admin usage prompt's listed description says dry-run then act, not ask first" do
+        description = Mcp::Sites::Books::ADMIN_USAGE_PROMPT.description
+
+        assert_includes description, "dry-run"
+        assert_not_includes description, "after they agree"
+        assert_not_includes description, "show the user"
+      end
+
       test "the admin document serves the methodology resource and no composites" do
         assert_equal [Mcp::Sites::Books::RankingMethodology], Mcp::Sites::Books.resources(:admin)
         assert_equal [], Mcp::Sites::Books.composites(:admin)
