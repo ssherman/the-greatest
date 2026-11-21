@@ -6,15 +6,31 @@ module Api
       module Books
         # GET /api/v1/admin/lists     -- search books lists with audit state and weight
         # GET /api/v1/admin/lists/:id -- one list in full
+        # PATCH /api/v1/admin/lists/:id -- any subset of the editable fields (Services::Lists::AdminUpdate)
         #
         # Root-anchor every ::Books:: reference in this namespace.
         class ListsController < BaseController
           include ::Api::V1::Admin::StrictIds
+          include ::Api::V1::Admin::FieldUpdate
 
-          require_scopes index: "books:admin:read", show: "books:admin:read"
+          require_scopes index: "books:admin:read", show: "books:admin:read", update: "books:admin:write"
 
           SORTS = %w[weight name id].freeze
           AUDITS = %w[not_audited verified unverifiable in_progress].freeze
+
+          FIELDS = {
+            "name" => :string,
+            "description" => :string_or_null, "source" => :string_or_null,
+            "source_country_origin" => :string_or_null, "url" => :string_or_null,
+            "year_published" => :year,
+            "number_of_voters" => :count_or_null, "num_years_covered" => :count_or_null,
+            "estimated_quality" => :count_or_null,
+            "yearly_award" => :boolean, "high_quality_source" => :boolean, "category_specific" => :boolean,
+            "location_specific" => :boolean, "creator_specific" => :boolean, "voter_count_estimated" => :boolean,
+            "voter_count_unknown" => :boolean, "voter_names_unknown" => :boolean
+          }.freeze
+          CLEARABLE = %w[description source source_country_origin url year_published number_of_voters
+            num_years_covered estimated_quality].freeze
 
           LATEST_DONE_AUDIT_SQL = <<~SQL.squish
             list_audits.id = (SELECT latest.id FROM list_audits latest
@@ -48,6 +64,16 @@ module Api
             return render_problem(::Api::Problem.new(:not_found, detail: "No books list #{params[:id]}.")) unless list
 
             render json: {data: ListFullResource.for(list)}
+          end
+
+          # PATCH /api/v1/admin/lists/:id -- the list as it now stands, plus `changed`
+          def update
+            list = ::Books::List.find_by(id: parse_id(params[:id]))
+            return render_problem(::Api::Problem.new(:not_found, detail: "No books list #{params[:id]}.")) unless list
+
+            update_fields(record: list, record_key: :list, fields: FIELDS, enums: {}, clearable: CLEARABLE,
+              policy: ::Books::ListPolicy, service: ::Services::Lists::AdminUpdate,
+              render_with: ->(record) { ListFullResource.for(record) })
           end
 
           private

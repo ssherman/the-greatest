@@ -786,7 +786,10 @@ Rails.application.routes.draw do
             delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
             get "lists", to: "lists#index"
             get "lists/:id", to: "lists#show", constraints: {id: /\d+/}
+            patch "lists/:id", to: "lists#update", constraints: {id: /\d+/}
             get "lists/:id/items", to: "list_items#index", constraints: {id: /\d+/}
+            post "lists/:id/penalties", to: "list_penalties#create", constraints: {id: /\d+/}
+            delete "lists/:id/penalties/:penalty_id", to: "list_penalties#destroy", constraints: {id: /\d+/, penalty_id: /\d+/}
             get "penalties", to: "penalties#index"
             get "series", to: "series#index"
             get "series/:id", to: "series#show", constraints: {id: /\d+/}

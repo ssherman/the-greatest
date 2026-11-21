@@ -10,9 +10,7 @@ module Api
         # so the shape is identical across them. Key order is the order of
         # AdminListFull in config/api/v1/admin_openapi.yaml.
         class ListFullResource < ListResource
-          FIELDS = %w[name description source source_country_origin url year_published number_of_voters
-            num_years_covered yearly_award high_quality_source category_specific location_specific
-            creator_specific voter_count_estimated voter_count_unknown voter_names_unknown estimated_quality].freeze
+          FIELDS = ::Services::Lists::AdminUpdate::FIELDS
           RECENT_AUDITS = 5
 
           def self.for(list)

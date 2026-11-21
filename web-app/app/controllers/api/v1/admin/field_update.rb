@@ -23,7 +23,9 @@ module Api
 
         # fields: {"name" => type}; enums: {"name" => [allowed names]};
         # service: responds to call(attrs:, user:, via:, explicit_nulls:, <record_key>:)
-        def update_fields(record:, record_key:, fields:, enums:, clearable:, policy:, service:, resource:)
+        # resource: a class whose new(record).to_h is the response; render_with: a
+        # callable taking the reloaded record, for a response that is not one resource.
+        def update_fields(record:, record_key:, fields:, enums:, clearable:, policy:, service:, resource: nil, render_with: nil)
           return forbidden_update(record) unless policy.new(current_principal.user, record).update?
 
           body = json_body
@@ -57,7 +59,8 @@ module Api
 
           changed = result.data[:changed]
           log_update(record, changed)
-          render json: {data: resource.new(record.reload).to_h, changed: changed}
+          data = render_with ? render_with.call(record.reload) : resource.new(record.reload).to_h
+          render json: {data: data, changed: changed}
         end
 
         # The JSON object as sent. Not request.request_parameters: ParamsWrapper
@@ -82,6 +85,12 @@ module Api
           when :year
             unless value.is_a?(Integer) && YEAR_RANGE.cover?(value)
               raise ::Api::Page::InvalidParameter, "#{key} must be an integer from #{YEAR_RANGE.min} to #{YEAR_RANGE.max}"
+            end
+            value
+          when :count_or_null
+            return nil if value.nil?
+            unless value.is_a?(Integer) && value >= 0
+              raise ::Api::Page::InvalidParameter, "#{key} must be a non-negative integer or null"
             end
             value
           when :language_id

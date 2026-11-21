@@ -3659,6 +3659,164 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateAdminList
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a books list's fields
+      description: |
+        Changes any subset of `name`, `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`, `estimated_quality` and the eight flags `yearly_award`, `high_quality_source`, `category_specific`, `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown` and `voter_names_unknown`; fields not sent are untouched. `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered` and `estimated_quality` can be cleared with `null` (clearing `estimated_quality` stores 0). The flags cannot be null. The counts are non-negative integers or null; `year_published` is an integer from -3000 to 3000. A body with no fields is 400, as is a value of the wrong JSON type. An unknown field (`status` and the imported content are not editable here) is 422, as is a failed validation (for example `num_years_covered` of 0); nothing is written then. The response is the same list as the read operation, with `changed`: the names of the fields whose value changed. The list's weight does not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
+      x-mcp:
+        description: >-
+          Edits books list `id` (from search_admin_lists): send only the fields to change among `name`, `description`,
+          `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`,
+          `estimated_quality` and the flags `yearly_award`, `high_quality_source`, `category_specific`,
+          `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown`,
+          `voter_names_unknown`. Send `null` to clear a text field, `year_published` or a count; the flags are true or
+          false, never null. Counts are non-negative integers (`num_years_covered` must be at least 1). Several
+          penalties are driven by these fields (see list_admin_penalties), so changing one can change what the list
+          costs. Read the list with get_admin_list first. A 422 names the problem and writes nothing. Returns the list
+          as get_admin_list does, plus `changed`. The list's weight does not change until an admin refreshes the ranking configuration.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListUpdateRequest"
+      responses:
+        "200":
+          description: The list as it now stands, and which fields changed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListUpdated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/lists/{id}/penalties:
+    x-domain: books
+    post:
+      operationId: attachListPenalty
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Attach a penalty to a books list
+      description: |
+        Attaches the static penalty `penalty_id` (from the penalties read) to the list. Attaching a penalty that is already attached succeeds with `changed: false`. A penalty that is not in the books catalogue, an unknown id and a dynamic penalty are refused with 422: a dynamic penalty's value comes from a list field, and the refusal names the field to set with the update operation (`percentage_western` is computed from the list's books and is never attached). A body without `penalty_id`, or with one that is not an integer, is 400. Returns the list as the read operation does, with `changed`. The list's weight does not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
+      x-mcp:
+        description: >-
+          Attaches static penalty `penalty_id` (from list_admin_penalties) to books list `id`. Already attached is a
+          success with `changed: false`. A dynamic penalty is a 422 telling you which list field drives it: set that
+          field with update_admin_list instead. Returns the list as get_admin_list does, plus `changed`. The list's weight does not change until an admin refreshes the ranking configuration.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListPenaltyAttachRequest"
+      responses:
+        "200":
+          description: The list with its penalties, and whether the attach changed anything.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListPenaltyLinked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/lists/{id}/penalties/{penalty_id}:
+    x-domain: books
+    delete:
+      operationId: detachListPenalty
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Detach a penalty from a books list
+      description: |
+        Removes the link between the list and the penalty; the penalty itself is kept. A penalty that is not attached succeeds with `changed: false`. Returns the list as the read operation does, with `changed`. The list's weight does not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
+      x-mcp:
+        description: >-
+          Detaches penalty `penalty_id` from books list `id`. Check the list's `penalties` with get_admin_list first,
+          then detach the penalty that does not apply; the penalty stays in the catalogue and can be attached again. A
+          penalty that is not attached succeeds with `changed: false`. Returns the list as get_admin_list does, plus
+          `changed`. The list's weight does not change until an admin refreshes the ranking configuration.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/penalty_id"
+      responses:
+        "200":
+          description: The list with its remaining penalties, and whether the detach changed anything.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListPenaltyLinked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/lists/{id}/items:
     x-domain: books
     get:
@@ -3822,6 +3980,14 @@ components:
       in: path
       required: true
       description: The book's integer id.
+      schema:
+        type: integer
+        minimum: 1
+    penalty_id:
+      name: penalty_id
+      in: path
+      required: true
+      description: The penalty's integer id.
       schema:
         type: integer
         minimum: 1
@@ -4554,6 +4720,57 @@ components:
               description: The last five finished or released audits, newest first.
               items:
                 $ref: "#/components/schemas/AdminListAudit"
+    AdminListUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string}
+        description: {type: [string, "null"]}
+        source: {type: [string, "null"]}
+        source_country_origin: {type: [string, "null"]}
+        url: {type: [string, "null"]}
+        year_published: {type: [integer, "null"], minimum: -3000, maximum: 3000}
+        number_of_voters: {type: [integer, "null"], minimum: 0}
+        num_years_covered: {type: [integer, "null"], minimum: 0, description: "At least 1 when set; 0 is refused with 422."}
+        estimated_quality: {type: [integer, "null"], minimum: 0, description: "null stores 0."}
+        yearly_award: {type: boolean}
+        high_quality_source: {type: boolean}
+        category_specific: {type: boolean}
+        location_specific: {type: boolean}
+        creator_specific: {type: boolean}
+        voter_count_estimated: {type: boolean}
+        voter_count_unknown: {type: boolean}
+        voter_names_unknown: {type: boolean}
+    AdminListPenaltyAttachRequest:
+      type: object
+      required: [penalty_id]
+      additionalProperties: false
+      properties:
+        penalty_id:
+          description: The penalty to attach, from the penalties read. A JSON integer, or a string of plain decimal digits.
+          oneOf:
+            - {type: integer, minimum: 1}
+            - {type: string, pattern: "^0*[1-9][0-9]*$"}
+    AdminListUpdated:
+      type: object
+      required: [data, changed]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListFull"
+        changed:
+          type: array
+          description: The names of the fields whose value changed.
+          items: {type: string}
+    AdminListPenaltyLinked:
+      type: object
+      required: [data, changed]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListFull"
+        changed:
+          type: boolean
+          description: True when a link was added or removed, false when it was already so.
     AdminListDetail:
       type: object
       required: [data]
