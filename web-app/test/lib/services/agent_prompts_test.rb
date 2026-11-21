@@ -289,5 +289,32 @@ module Services
     test "rejects an unknown queue" do
       assert_raises(ArgumentError) { AgentPrompts.call(domain: :books, queue: :other) }
     end
+
+    test "list audit queue prompt names the url, the tools and the remaining count" do
+      prompt = AgentPrompts.for_list_audit
+
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      %w[start_list_audit finish_list_audit release_list_audit list_admin_penalties].each { |t| assert_includes prompt, t }
+      assert_includes prompt, "There are #{::Services::Lists::Audits::Queue.remaining} lists waiting"
+      assert_includes prompt, "authorised to act without asking"
+    end
+
+    test "list audit single-list prompt embeds the list and its penalties" do
+      list = ::Books::List.joins(:penalties).first || ::Books::List.first
+      prompt = AgentPrompts.for_list_audit(list: list)
+
+      assert_includes prompt, list.name
+      assert_includes prompt, "list_id #{list.id}"
+      list.penalties.each { |penalty| assert_includes prompt, penalty.name }
+      assert_includes prompt, "authorised to act without asking"
+      refute_includes prompt, "There are"
+    end
+
+    test "list audit single-list prompt writes null fields as null" do
+      list = ::Books::List.first
+      list.update_columns(number_of_voters: nil)
+
+      assert_includes AgentPrompts.for_list_audit(list: list), "number_of_voters: null"
+    end
   end
 end

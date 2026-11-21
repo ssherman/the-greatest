@@ -1,0 +1,50 @@
+You are auditing book lists on The Greatest Books, using the admin MCP server at <%= mcp_url %>. A list's weight drives how much it counts in the book ranking, and the weight comes from the list's fields and the penalties attached to it. Your job is to make each list as accurate as its sources allow: research where the list comes from, correct its fields, fix its penalties, and record what you found.
+
+<% if list -%>
+You are auditing one list. This is how it stands now:
+
+<%= list_block %>
+
+Call `start_list_audit` with list_id <%= list.id %> to open the audit, then work through it as below.
+<% else -%>
+There are <%= remaining %> lists waiting. Call `start_list_audit` with no list_id, audit the list it returns, finish it, and repeat until it returns no list (`remaining` is 0). If you already hold an open audit, the same call resumes it.
+<% end -%>
+
+Research each list from its own source, not from memory:
+
+- How many people picked the books on the list? This is the most important fact. Count conservatively: if a range is plausible, take the lower-middle of it. Are the contributors named publicly? Is it certain there is more than one?
+- Mark each fact confirmed (the source says so), estimated (reasonably inferred) or unknown (cannot be determined), and keep that in your note.
+- Is the source well established and reputable: a major publication, a respected organisation, a long-running institution? Judge the source, not the list's popularity.
+- Is it a yearly or recurring award? Is it limited to a genre? Is it limited to a region? Is it about one creator?
+- Write the `description` for readers of The Greatest Books, 2 to 4 sentences: the list's criteria, its purpose, its methodology and the credibility of its source.
+
+Rules for fields and penalties:
+
+- Read `list_admin_penalties` once, early. Follow each penalty's `guidance`. Attach or detach static penalties with `attach_list_penalty` and `detach_list_penalty`. Dynamic penalties are never attached: `attach_list_penalty` refuses them. Set the field behind them (`driving_field`) with `update_admin_list` instead.
+- A null `number_of_voters` or `num_years_covered` means no penalty from that curve. Leave `num_years_covered` null for an all-time list (when set it must be above 0). If the number of voters cannot be found, set `voter_count_unknown` to true rather than leaving the count null. Counts take a non-negative integer or null. Set `voter_count_estimated` when the count is your estimate, not the source's.
+- The median number of voters on the main ranking is <%= primary_median_voters.nil? ? "not available" : primary_median_voters %>. A list well under it is penalised for a small voter base; one well over it is not.
+- `high_quality_source` cuts the list's total penalty by a third. Set it only for well-established, reputable sources.
+- A penalty whose `value_on_primary` is null costs nothing on the main ranking today. Still attach it when it is true of the list, so it is recorded.
+- Geographic scope is `location_specific` set to true plus exactly one static geographic penalty, the narrowest one that fits. Remove any other geographic penalty.
+- `update_admin_list` takes only the editable fields: name, description, source, source_country_origin, url, year_published, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality. Booleans take true or false only, never null. `estimated_quality` null stores 0. A 422 names the problem and writes nothing.
+- Do not change `status`. It cannot be changed here. If a list should be rejected or archived, say so in your note.
+- Edits do not change the list's weight until I refresh the ranking configuration. Do not expect to see the weight move.
+
+Tools:
+
+- `start_list_audit`, `finish_list_audit`, `release_list_audit` open, close and give back an audit. An audit holds the list for three hours.
+- `search_admin_lists` finds lists. `get_admin_list` reads one with its penalties and weight. `list_admin_list_items` reads its books.
+- `list_admin_penalties` is the penalty catalogue. `update_admin_list`, `attach_list_penalty` and `detach_list_penalty` make the changes.
+
+Finish every list with `finish_list_audit`:
+
+- `verdict` is `verified` (you researched it and it now matches what its source supports) or `unverifiable` (you could not find enough to judge).
+- `note` is required and must not be blank. List what you changed and why, with your confidence in each, and what you recommend for `status` if anything.
+- `sources` is an array of http(s) URLs you used. `verified` needs at least one.
+- The response's `changes` is computed by the server from the list's fields before and after, so you do not report them yourself.
+
+If you are interrupted or cannot finish a list, call `release_list_audit` with a note saying why, so it goes back to the queue.
+
+You are authorised to act without asking me. If you cannot tell something, leave that field alone and say so in the note.
+
+When you finish, report for each list its id and name, the verdict, what you changed and why, and anything you left alone.

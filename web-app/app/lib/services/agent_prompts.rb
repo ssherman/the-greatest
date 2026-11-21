@@ -34,6 +34,43 @@ module Services
       ERB.new(file.read).result_with_hash(locals.merge(type.prompt_locals))
     end
 
+    # The list audit prompt. With a list, it audits that one list and shows its
+    # current state (what get_admin_list returns); without, it works the queue.
+    def self.for_list_audit(list: nil)
+      file = Rails.root.join("config", "mcp", "books", "prompts", "list_audit.md.erb")
+      locals = {mcp_url: mcp_url, remaining: ::Services::Lists::Audits::Queue.remaining, list: list,
+                list_block: list && list_audit_block(list),
+                primary_median_voters: ::Books::RankingConfiguration.default_primary&.median_voter_count}
+      ERB.new(file.read, trim_mode: "-").result_with_hash(locals)
+    end
+
+    def self.list_audit_block(list)
+      full = ::Api::V1::Admin::Books::ListFullResource.for(list)
+      lines = ["id: #{list.id}", "name: #{list.name}", "source: #{value_text(list.source)}",
+        "url: #{value_text(list.url)}", "year_published: #{value_text(list.year_published)}"]
+      (::Api::V1::Admin::Books::ListFullResource::FIELDS - %w[name source url year_published]).each do |field|
+        lines << "#{field}: #{value_text(full[field.to_sym])}"
+      end
+      lines << "penalties attached:"
+      lines.concat(full[:penalties].map { |p| "  #{p[:id]} — #{p[:name]} (#{p[:kind]})" })
+      lines << "  none" if full[:penalties].empty?
+      lines.concat(weight_lines(full[:weight_details]))
+      lines.join("\n")
+    end
+
+    def self.weight_lines(details)
+      return ["weight on the main ranking: not calculated yet"] if details.blank?
+
+      final = details["final_calculation"] || {}
+      lines = ["weight on the main ranking: #{final["final_weight"]} (total penalty #{final["total_penalty_percentage"]&.round(1)}%)"]
+      Array(details["penalties"]).each do |p|
+        lines << "  #{p["penalty_name"]} (#{p["source"]}): #{p["value"].to_f.round(1)}%"
+      end
+      lines
+    end
+
+    def self.value_text(value) = value.nil? ? "null" : value.to_s
+
     def self.mcp_url = "#{::Api::Host.base_url}/api/mcp/admin"
 
     def initialize(domain:, queue:)
