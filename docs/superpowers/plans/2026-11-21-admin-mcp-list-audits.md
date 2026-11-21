@@ -111,7 +111,7 @@
 - Create: `web-app/app/controllers/api/v1/admin/books/lists_controller.rb` (`index`, `show`), `list_items_controller.rb` (`index`), `penalties_controller.rb` (`index`) under `app/controllers/api/v1/admin/books/`
 - Create: resources `web-app/app/lib/api/v1/admin/books/list_resource.rb` (row + `:full` trait), `list_item_resource.rb`, `penalty_resource.rb`, `list_audit_resource.rb`
 - Modify: `web-app/config/routes.rb` (admin API block near line 786), `web-app/config/api/v1/admin_openapi.yaml` (4 paths, schemas `AdminList`, `AdminListFull`, `AdminListDetail`, `AdminListCollection`, `AdminListItem`, `AdminListItemCollection`, `AdminPenalty`, `AdminPenaltyCollection`, `AdminListAudit`)
-- Test: `web-app/test/controllers/api/v1/admin/books/lists_controller_test.rb`, `list_items_controller_test.rb`, `penalties_controller_test.rb`; `web-app/test/integration/api/v1/admin_contract_coverage_test.rb` (new EXERCISES rows); `web-app/test/lib/mcp/admin_catalog_test.rb` and `web-app/test/lib/mcp/tool_directory_test.rb` (count 64 → 68 here; Task 5 and 6 bump again)
+- Test: `web-app/test/controllers/api/v1/admin/books/lists_controller_test.rb`, `list_items_controller_test.rb`, `penalties_controller_test.rb`; `web-app/test/integration/api/v1/admin_contract_coverage_test.rb` (new EXERCISES rows); `web-app/test/lib/mcp/admin_catalog_test.rb` and `web-app/test/lib/mcp/tool_directory_test.rb` (admin counts 65 → 69 here, in both files; Tasks 5 and 6 bump again)
 
 **Interfaces:**
 - Consumes: `Penalty#driving_field`, `ListAudit`, `Services::Lists::Audits::Queue` (for nothing but the `audit` filter's `not_audited` meaning, which must equal "no finished audit").
@@ -122,7 +122,7 @@
 - `list_admin_penalties`: the books catalogue, not paged (≤ 50 rows), ordered by `category` then `name`; row `id name type kind dynamic_type driving_field category category_title description guidance value_on_primary books_list_count`.
 - `x-mcp` descriptions (write them in the house style of `getAdminSeries`): `get_admin_list` says to read `list_admin_penalties` first and that `value_on_primary` null means the penalty costs nothing on the main ranking; `list_admin_penalties` says static ones are attached with `attach_list_penalty` and dynamic ones are never attached — set their `driving_field` with `update_admin_list`; and that a null `number_of_voters` or `num_years_covered` means no penalty from that curve.
 
-- [ ] **Step 1: Write the failing tests.** Controller tests (host `dev-new.thegreatestbooks.org`, `bearer(ApiTokenSecrets::ADMIN_READ)`, `assert_api_response_conform(status: 200, api: :admin)`): search returns only Books lists; `audit=verified` returns the fixture-audited list and `audit=not_audited` excludes it; `status=bogus` → 400; show of a `music_albums_list` id → 404; show carries `value_on_primary: nil` for a penalty without an application on the primary; items in position order with nulls last; penalties lists no `Movies::Penalty`/`Music::Penalty`/user-owned rows and includes `driving_field` for `dynamic_penalty`; member token → 403. Contract coverage rows for 200/400/401/403/404/429 as documented. Catalog tests: add the 4 tool names; counts 64 → 68.
+- [ ] **Step 1: Write the failing tests.** Controller tests (host `dev-new.thegreatestbooks.org`, `bearer(ApiTokenSecrets::ADMIN_READ)`, `assert_api_response_conform(status: 200, api: :admin)`): search returns only Books lists; `audit=verified` returns the fixture-audited list and `audit=not_audited` excludes it; `status=bogus` → 400; show of a `music_albums_list` id → 404; show carries `value_on_primary: nil` for a penalty without an application on the primary; items in position order with nulls last; penalties lists no `Movies::Penalty`/`Music::Penalty`/user-owned rows and includes `driving_field` for `dynamic_penalty`; member token → 403. Contract coverage rows for 200/400/401/403/404/429 as documented. Catalog tests: add the 4 tool names; counts 65 → 69.
 - [ ] **Step 2: Run, expect failures.** `bin/rails test test/controllers/api/v1/admin/books test/integration/api/v1/admin_contract_coverage_test.rb test/lib/mcp`
 - [ ] **Step 3: Implement** controllers (`BaseController` subclass; `render_page` like `SeriesController#index`; `param_in` for enums), resources, routes, OpenAPI.
 - [ ] **Step 4: Run, expect PASS**, plus `CI=1 bin/rails zeitwerk:check`.
@@ -133,7 +133,7 @@
 **Files:**
 - Modify: `web-app/app/controllers/api/v1/admin/field_update.rb` (new type `:count_or_null`), `web-app/app/controllers/api/v1/admin/books/lists_controller.rb` (`update`), routes, OpenAPI (`AdminListUpdateRequest`, `AdminListPenaltyAttachRequest`)
 - Create: `web-app/app/lib/services/lists/admin_update.rb`, `web-app/app/lib/services/lists/penalty_links.rb`, `web-app/app/controllers/api/v1/admin/books/list_penalties_controller.rb`
-- Test: `web-app/test/lib/services/lists/admin_update_test.rb`, `penalty_links_test.rb`, controller tests, contract coverage, catalog counts 68 → 71, `DESTRUCTIVE` gains `detachListPenalty`
+- Test: `web-app/test/lib/services/lists/admin_update_test.rb`, `penalty_links_test.rb`, controller tests, contract coverage, catalog counts 69 → 72, `DESTRUCTIVE` gains `detachListPenalty`
 
 **Interfaces:**
 - Produces routes: `PATCH /api/v1/admin/lists/{id}` (`updateAdminList`, `books:admin:write`), `POST /api/v1/admin/lists/{id}/penalties` body `{penalty_id}` (`attachListPenalty`, write), `DELETE /api/v1/admin/lists/{id}/penalties/{penalty_id}` (`detachListPenalty`, write, `x-mcp destructive: true`).
@@ -153,7 +153,7 @@
 
 **Files:**
 - Create: `web-app/app/controllers/api/v1/admin/books/list_audits_controller.rb`
-- Modify: routes, OpenAPI (`AdminListAuditStartRequest`, `AdminListAuditFinishRequest`, `AdminListAuditReleaseRequest`, `AdminListAuditStart`), catalog counts 71 → 74, `web-app/config/mcp/books/admin_instructions.md` (or wherever the admin server instructions file lives — grep `admin_instructions`) gains one sentence: list-audit tools may be used without asking when working the list audit queue
+- Modify: routes, OpenAPI (`AdminListAuditStartRequest`, `AdminListAuditFinishRequest`, `AdminListAuditReleaseRequest`, `AdminListAuditStart`), catalog counts 72 → 75 (no change to `config/mcp/books/admin_instructions.md`: since main 8e84d8560 admin agents already act without asking; `detach_list_penalty`'s description follows that "check, then act" wording)
 - Test: `web-app/test/controllers/api/v1/admin/books/list_audits_controller_test.rb`, contract coverage
 
 **Interfaces:**
