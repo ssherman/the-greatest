@@ -32,12 +32,6 @@ module Api
           CLEARABLE = %w[description source source_country_origin url year_published number_of_voters
             num_years_covered estimated_quality].freeze
 
-          LATEST_DONE_AUDIT_SQL = <<~SQL.squish
-            list_audits.id = (SELECT latest.id FROM list_audits latest
-              WHERE latest.list_id = list_audits.list_id AND latest.status = :finished
-              ORDER BY latest.finished_at DESC, latest.id DESC LIMIT 1)
-          SQL
-
           def index
             status = param_in(:status, ::List.statuses.keys)
             return if performed?
@@ -85,7 +79,7 @@ module Api
             when "in_progress"
               relation.where(id: ::ListAudit.open.select(:list_id))
             else
-              latest = ::ListAudit.where(verdict: audit).where(LATEST_DONE_AUDIT_SQL, finished: ::ListAudit.statuses[:finished])
+              latest = ::ListAudit.latest_done.where(verdict: audit)
               relation.where(id: latest.select(:list_id))
             end
           end

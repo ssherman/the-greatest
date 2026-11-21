@@ -36,6 +36,16 @@ module Admin
         assert_response :success
       end
 
+      test "index renders with an in-progress and a released audit" do
+        open_audit_for(@regular_user)
+        other = ::Books::List.create!(name: "Other", status: :approved)
+        ListAudit.create!(list: other, user: @regular_user, status: :released,
+          started_at: 2.hours.ago, finished_at: 1.hour.ago, lease_expires_at: 1.hour.from_now)
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_list_audits_path
+        assert_response :success
+      end
+
       test "release by an admin releases another user's audit" do
         audit = open_audit_for(@regular_user)
         sign_in_as(@admin_user, stub_auth: true)

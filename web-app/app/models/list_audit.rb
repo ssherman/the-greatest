@@ -47,6 +47,15 @@ class ListAudit < ApplicationRecord
   scope :expired, -> { in_progress.where("lease_expires_at <= ?", Time.current) }
   scope :done, -> { finished }
 
+  # Each list's most recent finished audit: the one whose verdict counts.
+  scope :latest_done, -> {
+    finished.where(<<~SQL.squish)
+      list_audits.id = (SELECT latest.id FROM list_audits latest
+        WHERE latest.list_id = list_audits.list_id AND latest.status = #{statuses[:finished].to_i}
+        ORDER BY latest.finished_at DESC, latest.id DESC LIMIT 1)
+    SQL
+  }
+
   def expired?
     in_progress? && lease_expires_at.present? && lease_expires_at <= Time.current
   end

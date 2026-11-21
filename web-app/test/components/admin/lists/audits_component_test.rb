@@ -38,6 +38,16 @@ class Admin::Lists::AuditsComponentTest < ViewComponent::TestCase
     assert_no_selector "form[action$='/release']"
   end
 
+  test "renders an in-progress and a released audit without field changes" do
+    @audit.update!(status: :in_progress, verdict: nil, finished_at: nil, field_changes: nil, lease_expires_at: 1.hour.from_now)
+    render_inline(Admin::Lists::AuditsComponent.new(list: @list, can_release: true))
+    assert_selector "[data-testid=audit]"
+
+    @audit.update!(status: :released, finished_at: Time.current)
+    render_inline(Admin::Lists::AuditsComponent.new(list: @list, can_release: true))
+    assert_selector "[data-testid=audit]"
+  end
+
   test "a list with no audits says so" do
     @audit.destroy!
     render_inline(Admin::Lists::AuditsComponent.new(list: @list, can_release: false))

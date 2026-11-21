@@ -177,9 +177,9 @@ module Admin
         assert_not_includes response.body, @list.name
       end
 
-      test "index audit=none leaves out the audited list" do
+      test "index audit=not_audited leaves out the audited list" do
         sign_in_as(@admin_user, stub_auth: true)
-        get admin_books_lists_path(audit: "none")
+        get admin_books_lists_path(audit: "not_audited")
         assert_response :success
         assert_includes response.body, @list.name
         assert_not_includes response.body, lists(:books_list).name
@@ -191,6 +191,18 @@ module Admin
         assert_response :success
         assert_select "[data-testid=copy-list-audit-prompt]"
         assert_select "[data-testid=list-audits]"
+      end
+
+      test "a re-audited list appears under its latest verdict only" do
+        sign_in_as(@admin_user, stub_auth: true)
+        audit = ListAudit.find_by!(list: lists(:books_list))
+        ListAudit.create!(list: audit.list, user: @admin_user, status: :finished, verdict: :unverifiable,
+          started_at: 1.hour.ago, finished_at: 30.minutes.ago, lease_expires_at: 1.hour.from_now, field_changes: {})
+
+        get admin_books_lists_path(audit: "verified")
+        assert_not_includes response.body, lists(:books_list).name
+        get admin_books_lists_path(audit: "unverifiable")
+        assert_includes response.body, lists(:books_list).name
       end
 
       test "index ignores an unknown audit value" do

@@ -18,7 +18,7 @@ test.describe("Books admin — list audits", () => {
   test("a list's admin page copies a prompt naming that list", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/admin/lists");
-    const link = page.locator("tbody tr td:nth-child(3) a").first();
+    const link = page.getByTestId("list-name-link").first();
     const name = (await link.innerText()).trim();
     await link.click();
 

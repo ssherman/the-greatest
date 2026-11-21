@@ -131,7 +131,7 @@
               <div class="font-bold">
                 <%= link_to list.name, domain_config[:list_path_proc].call(list),
                     class: "link link-hover",
-                    data: { turbo_frame: "_top" } %>
+                    data: { turbo_frame: "_top", testid: "list-name-link" } %>
               </div>
               <% if list.source.present? || list.url.present? %>
                 <div class="text-sm text-base-content/70">

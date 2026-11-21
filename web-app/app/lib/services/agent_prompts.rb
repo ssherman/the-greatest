@@ -38,7 +38,7 @@ module Services
     # current state (what get_admin_list returns); without, it works the queue.
     def self.for_list_audit(list: nil)
       file = Rails.root.join("config", "mcp", "books", "prompts", "list_audit.md.erb")
-      locals = {mcp_url: mcp_url, remaining: ::Services::Lists::Audits::Queue.remaining, list: list,
+      locals = {mcp_url: mcp_url, remaining: list ? nil : ::Services::Lists::Audits::Queue.remaining, list: list,
                 list_block: list && list_audit_block(list),
                 primary_median_voters: primary_median_voters}
       ERB.new(file.read, trim_mode: "-").result_with_hash(locals)

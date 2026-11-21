@@ -14,9 +14,9 @@ class Admin::Books::ListAuditsController < Admin::Books::BaseController
     result = ::Services::Lists::Audits::Release.call(audit: audit, user: current_user, admin: true)
 
     if result.success?
-      redirect_to admin_books_list_audits_path, notice: "Audit released."
+      redirect_back_or_to admin_books_list_audits_path, notice: "Audit released."
     else
-      redirect_to admin_books_list_audits_path, alert: result.errors.to_sentence
+      redirect_back_or_to admin_books_list_audits_path, alert: result.errors.to_sentence
     end
   end
 
