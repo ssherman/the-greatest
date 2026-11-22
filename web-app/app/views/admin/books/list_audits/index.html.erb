@@ -60,7 +60,7 @@
                     <% end %>
                   </td>
                   <td class="text-sm"><%= audit.finished_at ? time_tag(audit.finished_at, audit.finished_at.strftime("%b %d, %Y %H:%M")) : "—" %></td>
-                  <td><%= ((audit.field_changes || {})["fields"] || {}).size %></td>
+                  <td><%= link_to ((audit.field_changes || {})["fields"] || {}).size, admin_books_list_path(audit.list, anchor: "list-audits"), class: "link", data: {testid: "audit-changes-link"}, title: "See what changed" %></td>
                   <td class="text-right">
                     <% if audit.in_progress? && current_user_can_write? %>
                       <%= button_to "Release", release_admin_books_list_audit_path(audit), method: :post,

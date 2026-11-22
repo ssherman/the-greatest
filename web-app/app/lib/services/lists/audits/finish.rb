@@ -4,6 +4,12 @@ module Services
       class Finish
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+        # Our own sites, which show our data back to an agent and often top a
+        # search for a list. The apexes cover the legacy sites and every
+        # subdomain (new., dev., www.), so this does not follow DOMAIN config.
+        OWN_SITE_ROOTS = %w[thegreatestbooks.org thegreatestmusic.org thegreatest.games].freeze
+        ARCHIVE_HOSTS = %w[web.archive.org archive.org archive.ph archive.today].freeze
+
         def self.call(audit:, user:, verdict:, note:, sources:)
           new(audit: audit, user: user, verdict: verdict, note: note, sources: sources).call
         end
@@ -45,8 +51,28 @@ module Services
             errors << "sources must be an array of http(s) URLs"
           elsif @sources.empty? && @verdict == "verified"
             errors << "a verified audit needs at least one source"
+          elsif (own = @sources.select { |s| own_site?(s) }).any?
+            errors << "sources must not be our own site or a copy of it: #{own.join(", ")}"
           end
           errors
+        end
+
+        # A host on one of our domains, or an archive copy whose path is a URL
+        # on one of them (web.archive.org/web/<stamp>/https://thegreatestbooks.org/...).
+        def own_site?(value)
+          uri = URI.parse(value)
+          host = uri.host.to_s.downcase
+          return true if own_host?(host)
+          return false unless ARCHIVE_HOSTS.any? { |archive| host == archive || host.end_with?(".#{archive}") }
+
+          archived = uri.path.to_s[%r{(?:https?:/{1,2})?([^/]+\.[a-z]+)/?}i, 1]
+          archived.present? && own_host?(archived.downcase.delete_prefix("www."))
+        rescue URI::InvalidURIError
+          false
+        end
+
+        def own_host?(host)
+          OWN_SITE_ROOTS.any? { |root| host == root || host.end_with?(".#{root}") }
         end
 
         def http_url?(value)

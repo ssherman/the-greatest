@@ -14,6 +14,8 @@ Call `start_list_audit` with list_id <%= list.id %> to open the audit, then work
 
 Research each list from its own source, not from memory:
 
+- Never use The Greatest Books itself as a source: not thegreatestbooks.org or any of its subdomains, not our other sites (thegreatestmusic.org, thegreatest.games), and not archived copies of them. They show our own data back to you, and a search for a list often puts us first, so skip those results. `finish_list_audit` refuses them as sources.
+- A page that does not load for you is not evidence. Never clear or downgrade a recorded fact because you could not reach or confirm its source: leave the fact as it is, say in the note which page you could not open, and use `unverifiable` if nothing else could be checked. Archived pages (web.archive.org) often fail to load for automated clients; say so rather than treating the source as missing.
 - How many people picked the books on the list? This is the most important fact. Count conservatively: if a range is plausible, take the lower-middle of it. Are the contributors named publicly? Is it certain there is more than one?
 - Mark each fact confirmed (the source says so), estimated (reasonably inferred) or unknown (cannot be determined), and keep that in your note.
 - Is the source well established and reputable: a major publication, a respected organisation, a long-running institution? Judge the source, not the list's popularity.
@@ -23,7 +25,7 @@ Research each list from its own source, not from memory:
 Rules for fields and penalties:
 
 - Read `list_admin_penalties` once, early. Follow each penalty's `guidance`. Attach or detach static penalties with `attach_list_penalty` and `detach_list_penalty`. Dynamic penalties are never attached: `attach_list_penalty` refuses them, and it also refuses any penalty that is not in `list_admin_penalties`. Set the field behind them (`driving_field`) with `update_admin_list` instead.
-- A null `number_of_voters` or `num_years_covered` means no penalty from that curve. Leave `num_years_covered` null for an all-time list (when set it must be above 0). If the number of voters cannot be found, set `voter_count_unknown` to true rather than leaving the count null. Counts take a non-negative integer or null. Set `voter_count_estimated` when the count is your estimate, not the source's.
+- A null `number_of_voters` or `num_years_covered` means no penalty from that curve. Leave `num_years_covered` null for an all-time list (when set it must be above 0). Keep a recorded `number_of_voters` unless a source contradicts it; if you cannot confirm it, keep it and set `voter_count_estimated` to true. When the voters are named, the number of named voters is a conservative floor. Set `voter_count_unknown` to true only when no count was ever recorded and none can be found or estimated; it costs as much as a single voter. Counts take a non-negative integer or null. Set `voter_count_estimated` when the count is your estimate, not the source's.
 - The median number of voters on the main ranking is <%= primary_median_voters.nil? ? "not available" : primary_median_voters %>. A voter count above the median costs nothing. At or below it the voter penalty is its maximum times (1 - count / median) squared, and a count of 1 or fewer takes the full penalty.
 - `high_quality_source` cuts the list's total penalty by a third. Set it only for well-established, reputable sources.
 - A penalty whose `value_on_primary` is null costs nothing on the main ranking today. Still attach it when it is true of the list, so it is recorded.
@@ -48,6 +50,6 @@ Finish every list with `finish_list_audit`:
 
 If you are interrupted or cannot finish a list, call `release_list_audit` with a note saying why, so it goes back to the queue.
 
-You are authorised to act without asking me. If you cannot tell something, leave that field alone and say so in the note. The one exception is the voter count: when it cannot be found, set `voter_count_unknown` as above.
+You are authorised to act without asking me. If you cannot tell something, leave that field alone and say so in the note.
 
 When you finish, report for each list its id and name, the verdict, what you changed and why, and anything you left alone.
