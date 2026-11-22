@@ -64,4 +64,33 @@ test.describe("Books admin — lists", () => {
     await frame.getByRole("button", { name: "Delete" }).click();
     await expect(frame.getByText("No penalties attached to this list yet.")).toBeVisible({ timeout: 10000 });
   });
+
+  test("records who voted and shows it on the admin and public list pages", async ({ page }) => {
+    const name = `E2E Voters List ${Date.now()}`;
+    // Over 600 characters, so the public page folds it into a disclosure.
+    const roster = Array.from({ length: 40 }, (_, i) => `Voter ${i + 1}, critic`).join("\n");
+    await page.goto("/admin/lists/new");
+    await page.locator('input[name="books_list[name]"]').fill(name);
+    await page.locator('textarea[name="books_list[voter_details]"]').fill(roster);
+    await page.locator('select[name="books_list[status]"]').selectOption("active");
+    await page.getByRole("button", { name: "Create Book List" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+    await expect(page.getByTestId("admin-list-voter-details")).toContainText("Voter 40, critic");
+    const id = page.url().match(/\/admin\/lists\/(\d+)/)?.[1];
+    expect(id).toBeTruthy();
+
+    try {
+      await page.goto(`/lists/${id}`);
+      const section = page.getByTestId("list-voter-details");
+      await expect(section.getByRole("heading", { name: "Who voted" })).toBeVisible();
+      await expect(section.getByText("Voter 40, critic")).toBeHidden();
+      await section.getByText("Show voters and how they were chosen").click();
+      await expect(section.getByText("Voter 40, critic")).toBeVisible();
+    } finally {
+      await page.goto(`/admin/lists/${id}`);
+      page.on("dialog", (d) => d.accept());
+      await page.getByRole("button", { name: "Delete" }).click();
+      await expect(page).toHaveURL(/\/admin\/lists$/);
+    }
+  });
 });
