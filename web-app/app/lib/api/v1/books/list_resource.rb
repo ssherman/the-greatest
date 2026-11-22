@@ -47,7 +47,7 @@ module Api
         end
 
         trait :full do
-          attributes :description
+          attributes :description, :voter_details
 
           attribute :source_url do |list|
             list.url

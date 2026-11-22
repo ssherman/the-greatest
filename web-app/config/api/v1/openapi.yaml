@@ -777,7 +777,7 @@ paths:
       x-mcp:
         description: >-
           Returns one list by `id`, whether or not it feeds the primary ranking: its source, year,
-          description, original web address and `weight` (null when it has none on the primary ranking).
+          description, who voted (`voter_details`: names, roles, how the panel was chosen), original web address and `weight` (null when it has none on the primary ranking).
           Use list_list_items for its books.
       parameters:
         - $ref: "#/components/parameters/id"
@@ -2532,9 +2532,10 @@ components:
       allOf:
         - $ref: "#/components/schemas/List"
         - type: object
-          required: [description, source_url, penalties]
+          required: [description, voter_details, source_url, penalties]
           properties:
             description: {type: [string, "null"]}
+            voter_details: {type: [string, "null"], description: "Who voted: names, roles, how the panel was chosen and where the roster comes from. Plain text, line breaks kept; null when not recorded."}
             source_url:
               type: [string, "null"]
               description: The original list on the web, as recorded — a few carry more than one address.

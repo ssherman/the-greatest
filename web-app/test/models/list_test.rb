@@ -28,6 +28,7 @@
 #  url                   :string
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
+#  voter_details         :text
 #  voter_names_unknown   :boolean
 #  wizard_state          :jsonb
 #  year_published        :integer
@@ -526,6 +527,20 @@ class ListTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::RecordNotUnique) do
       Books::List.create!(name: "Dupe favs", status: :active, auto_generated_kind: :user_favorites)
     end
+  end
+
+  test "voter_details is capped at 20,000 characters" do
+    list = Books::List.new(name: "Panel", status: :active, voter_details: "a" * 20_000)
+    assert list.valid?
+
+    list.voter_details = "a" * 20_001
+    refute list.valid?
+    assert list.errors[:voter_details].any?
+  end
+
+  test "voter_details normalizes blank to nil and strips" do
+    assert_nil Books::List.new(name: "P", voter_details: "  \n ").voter_details
+    assert_equal "Jane", Books::List.new(name: "P", voter_details: " Jane \n").voter_details
   end
 
   test "name_with_source appends source and year when present" do

@@ -3621,10 +3621,10 @@ paths:
       operationId: getAdminList
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: One books list
-      description: The list with every editable field, its attached penalties (with their value on the default primary configuration), the weight breakdown on that configuration, the open audit and the last five finished or released audits. Only books lists answer. Requires `books:admin:read`.
+      description: The list with every editable field (`voter_details` too), its attached penalties (with their value on the default primary configuration), the weight breakdown on that configuration, the open audit and the last five finished or released audits. Only books lists answer. Requires `books:admin:read`.
       x-mcp:
         description: >-
-          Returns one books list by integer id (from search_admin_lists): its editable fields, the penalties attached to
+          Returns one books list by integer id (from search_admin_lists): its editable fields (including `voter_details`, the public who-voted record), the penalties attached to
           it, the weight breakdown on the main ranking, the open audit if someone holds one and its last five audits.
           Read list_admin_penalties first so you know what each penalty means. A penalty whose `value_on_primary` is
           null costs nothing on the main ranking. `weight_details` and `weight_computed_at` are null when the list is not
@@ -3668,7 +3668,7 @@ paths:
       x-mcp:
         description: >-
           Edits books list `id` (from search_admin_lists): send only the fields to change among `name`, `description`,
-          `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`,
+          `voter_details`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`,
           `estimated_quality` and the flags `yearly_award`, `high_quality_source`, `category_specific`,
           `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown`,
           `voter_names_unknown`. Send `null` to clear a text field, `year_published` or a count; the flags are true or
@@ -4849,9 +4849,10 @@ components:
       allOf:
         - $ref: "#/components/schemas/AdminList"
         - type: object
-          required: [description, source_country_origin, url, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality, auto_generated, has_raw_content, penalties, weight_details, weight_computed_at, open_audit, audits]
+          required: [description, voter_details, source_country_origin, url, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality, auto_generated, has_raw_content, penalties, weight_details, weight_computed_at, open_audit, audits]
           properties:
             description: {type: [string, "null"]}
+            voter_details: {type: [string, "null"], description: "Who voted: names, roles, how the panel was chosen and where the roster comes from. Shown publicly on the list page."}
             source_country_origin: {type: [string, "null"]}
             url: {type: [string, "null"]}
             number_of_voters: {type: [integer, "null"]}
@@ -4896,6 +4897,7 @@ components:
       properties:
         name: {type: string}
         description: {type: [string, "null"]}
+        voter_details: {type: [string, "null"], description: "Who voted: names, roles, how the panel was chosen, where the roster comes from. Max 20,000 characters."}
         source: {type: [string, "null"]}
         source_country_origin: {type: [string, "null"]}
         url: {type: [string, "null"]}

@@ -62,6 +62,22 @@ module Admin
         assert_response :success
       end
 
+      test "show renders with voter_details" do
+        sign_in_as(@admin_user, stub_auth: true)
+        @list.update!(voter_details: "Jane Doe, critic")
+        get admin_books_list_path(@list)
+        assert_response :success
+      end
+
+      test "create and update save voter_details from the admin form" do
+        sign_in_as(@admin_user, stub_auth: true)
+        post admin_books_lists_path, params: {books_list: {name: "Voters List", status: "unapproved", voter_details: "Jane Doe, critic"}}
+        assert_equal "Jane Doe, critic", ::Books::List.order(:id).last.voter_details
+
+        patch admin_books_list_path(@list), params: {books_list: {voter_details: "John Roe, editor"}}
+        assert_equal "John Roe, editor", @list.reload.voter_details
+      end
+
       test "show renders for an auto-generated list" do
         sign_in_as(@admin_user, stub_auth: true)
         @list.update!(auto_generated_kind: :user_favorites)

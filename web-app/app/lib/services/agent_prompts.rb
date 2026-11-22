@@ -56,7 +56,7 @@ module Services
       lines = ["id: #{list.id}", "name: #{list.name}", "source: #{value_text(list.source)}",
         "url: #{value_text(list.url)}", "year_published: #{value_text(list.year_published)}"]
       (::Api::V1::Admin::Books::ListFullResource::FIELDS - %w[name source url year_published]).each do |field|
-        lines << "#{field}: #{value_text(full[field.to_sym])}"
+        lines << "#{field}: #{value_text(full[field.to_sym]).gsub("\n", "\n  ")}"
       end
       lines << "penalties attached:"
       lines.concat(full[:penalties].map { |p| "  #{p[:id]} — #{p[:name]} (#{p[:kind]})" })

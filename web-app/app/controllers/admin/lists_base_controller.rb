@@ -138,6 +138,7 @@ class Admin::ListsBaseController < Admin::BaseController
     [
       :name,
       :description,
+      :voter_details,
       :source,
       :source_country_origin,
       :url,

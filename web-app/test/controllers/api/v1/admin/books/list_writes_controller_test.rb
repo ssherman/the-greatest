@@ -35,6 +35,25 @@ module Api
             assert_equal [12, true, nil], [@list.number_of_voters, @list.voter_count_estimated, @list.description]
           end
 
+          test "update sets and clears voter_details and the change is reported" do
+            patch_list({voter_details: "Jane Doe, critic\nJohn Roe, editor"})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["voter_details"], json[:changed]
+            assert_equal "Jane Doe, critic\nJohn Roe, editor", json[:data][:voter_details]
+            assert_equal "Jane Doe, critic\nJohn Roe, editor", @list.reload.voter_details
+
+            patch_list({voter_details: nil})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["voter_details"], json[:changed]
+            assert_nil json[:data][:voter_details]
+            assert_nil @list.reload.voter_details
+          end
+
+          test "update refuses a non-string voter_details with 400" do
+            patch_list({voter_details: 3})
+            assert_response :bad_request
+          end
+
           test "update with a read token is 403 and writes nothing" do
             assert_no_changes -> { @list.reload.attributes } do
               patch_list({number_of_voters: 12}, token: READ)

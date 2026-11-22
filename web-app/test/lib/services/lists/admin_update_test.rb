@@ -20,6 +20,13 @@ module Services
         assert_same AdminUpdate::FIELDS, ::Api::V1::Admin::Books::ListFullResource::FIELDS
       end
 
+      test "voter_details follows description in FIELDS and is editable" do
+        assert_equal "voter_details", AdminUpdate::FIELDS[AdminUpdate::FIELDS.index("description") + 1]
+        result = call({"voter_details" => "Jane Doe, critic"})
+        assert result.success?
+        assert_equal ["voter_details"], result.data[:changed]
+      end
+
       test "saves the attributes and reports only the fields whose value changed" do
         result = call({"number_of_voters" => 12, "name" => @list.name, "voter_count_estimated" => true})
 
