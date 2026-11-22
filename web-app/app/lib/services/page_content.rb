@@ -40,10 +40,6 @@ module Services
       h1 h2 h3 h4 h5 h6 header hr li main nav ol p pre section table tr ul caption details summary legend].freeze
 
     ESCAPES = {"&" => "&amp;", "<" => "&lt;", ">" => "&gt;", '"' => "&quot;"}.freeze
-    # Whitespace inside <pre> is swapped for private-use characters while the output is collapsed,
-    # then swapped back. The input never carries them (they are deleted on the way in).
-    PRE_FROM = " \n\t"
-    PRE_TO = ""
     BLANK = /[\s ]+/
     SAFE_HREF_SCHEMES = %w[http https mailto].freeze
 
@@ -52,7 +48,7 @@ module Services
     end
 
     def initialize(html:, format:)
-      @html = html.to_s.scrub.delete(PRE_TO)
+      @html = html.to_s.scrub
       @format = format.to_s
       @signal = 0
     end
@@ -111,7 +107,7 @@ module Services
     def render_simplified(doc)
       @buf = +""
       emit(doc, false)
-      collapse(@buf)
+      @buf.strip
     end
 
     def emit(node, pre)
@@ -124,33 +120,64 @@ module Services
       end
     end
 
+    # Whitespace is collapsed here, as text is written, and the assembled output is never rewritten
+    # afterwards: an attribute value is written once, untouched. Inside <pre> the text is as it came.
     def emit_text(text, pre)
       return if text.empty?
 
-      @signal += 1 if text.match?(/[^\s ]/)
-      text = pre ? text.tr(PRE_FROM, PRE_TO) : text.gsub(BLANK, " ")
-      @buf << text.gsub(/[&<>]/, ESCAPES)
+      @signal += 1 if text.match?(/[^\s\u00a0]/)
+      @buf << escape_text(pre ? text : collapse_blanks(text))
+    end
+
+    def escape_text(text) = text.gsub(/[&<>]/, ESCAPES)
+
+    # Runs of blanks become one space, and none starts a line or follows another.
+    def collapse_blanks(text)
+      text = text.gsub(BLANK, " ")
+      text = text.delete_prefix(" ") if at_line_start_or_space?
+      text
+    end
+
+    def at_line_start_or_space?
+      last = @buf.getbyte(-1)
+      last.nil? || last == 32 || last == 10
+    end
+
+    # A line break, never two in a row and never after trailing spaces.
+    def newline!
+      @buf.chop! while @buf.getbyte(-1) == 32
+      @buf << "\n" unless @buf.empty? || @buf.getbyte(-1) == 10
+    end
+
+    # Keeps emitted alt text and option labels from running into what is next to them.
+    def emit_alt(text, pre)
+      text = collapse_blanks(text).strip
+      return if text.empty?
+
+      @signal += 1
+      @buf << " " unless at_line_start_or_space? || @buf.getbyte(-1) == 62
+      @buf << escape_text(text)
     end
 
     def emit_element(el, pre)
       name = el.name
       return if DROP.include?(name)
-      return emit_text(el["alt"].to_s, pre) if name == "img"
+      return emit_alt(el["alt"].to_s, pre) if name == "img"
       return emit_options(el) if name == "select"
       return emit(el, pre) unless KEEP.include?(name)
       return emit(el, pre) if name == "a" && safe_href(el).nil?
       return emit(el, pre) if name == "div" && pure_wrapper?(el)
 
+      block = !INLINE.include?(name)
+      newline! if block
       start = @buf.bytesize
       signal = @signal
-      block = !INLINE.include?(name)
-      @buf << "\n" if block
       @buf << "<" << name << attributes(el) << ">"
       unless VOID.include?(name)
         emit(el, pre || name == "pre")
         @buf << "</" << name << ">"
       end
-      @buf << "\n" if block
+      newline! if block
 
       if KEEP_EMPTY.include?(name)
         @signal += 1
@@ -165,9 +192,11 @@ module Services
       return if labels.empty?
 
       @signal += 1
-      @buf << "\n<ul>"
-      labels.each { |label| @buf << "<li>" << label.gsub(/[&<>]/, ESCAPES) << "</li>\n" }
-      @buf << "</ul>\n"
+      newline!
+      @buf << "<ul>"
+      labels.each { |label| @buf << "<li>" << escape_text(label) << "</li>\n" }
+      @buf << "</ul>"
+      newline!
     end
 
     def option_labels(select)
@@ -184,13 +213,21 @@ module Services
 
     # The href, only when it is relative or http, https or mailto; nil otherwise. Browsers ignore
     # leading control characters and whitespace and tabs or newlines inside the scheme, so the check
-    # does too. The value is percent-escaped for whitespace, which keeps the later whitespace
-    # collapse from rewriting it.
+    # does too. Whitespace left inside the value is percent-escaped.
+    # Control characters and blanks off both ends, as a browser does. Linear: the end is trimmed on
+    # the reversed string, where it is an anchored match at the start.
+    def trim_href(value)
+      value = value.sub(/\A[\x00-\x20\u00a0]+/, "")
+      value.reverse.sub(/\A[\x00-\x20\u00a0]+/, "").reverse
+    end
+
     def safe_href(el)
-      href = el["href"].to_s.sub(/\A[\x00-\x20 ]+/, "")
+      href = trim_href(el["href"].to_s)
       return nil if href.empty?
 
-      scheme = href.delete("\x00-\x1f").match(/\A([a-z][a-z0-9+.-]*):/i)&.[](1)
+      # Whatever precedes the first colon, when no path, query or fragment comes before it, is a
+      # scheme, whatever characters it holds; only the allowlisted ones pass.
+      scheme = href.delete("\x00-\x1f").match(/\A([^\/?#:]*):/)&.[](1)
       return nil if scheme && !SAFE_HREF_SCHEMES.include?(scheme.downcase)
 
       href.gsub(/[\s ]/) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
@@ -210,13 +247,13 @@ module Services
     def render_text(doc)
       @buf = +""
       walk_text(doc, false)
-      collapse(@buf)
+      @buf.strip
     end
 
     def walk_text(node, in_pre)
       node.children.each do |child|
         if child.text? || child.cdata?
-          @buf << (in_pre ? child.text.tr(PRE_FROM, PRE_TO) : child.text.gsub(BLANK, " "))
+          @buf << (in_pre ? child.text : collapse_blanks(child.text))
         elsif child.element?
           walk_text_element(child, in_pre)
         end
@@ -226,20 +263,31 @@ module Services
     def walk_text_element(el, in_pre)
       name = el.name
       return if DROP.include?(name)
-      return @buf << el["alt"].to_s.gsub(BLANK, " ") if name == "img"
-      return option_labels(el).each { |label| @buf << "\n" << label << "\n" } if name == "select"
+      return emit_alt_text(el["alt"].to_s) if name == "img"
+      if name == "select"
+        return option_labels(el).each { |label|
+          newline!
+          @buf << label
+          newline!
+        }
+      end
 
       block = TEXT_BLOCKS.include?(name)
-      @buf << "\n" if block
-      @buf << " | " if %w[td th].include?(name) && %w[td th].include?(el.previous_element&.name)
+      newline! if block
+      if %w[td th].include?(name) && %w[td th].include?(el.previous_element&.name)
+        @buf.chop! while @buf.getbyte(-1) == 32
+        @buf << " | "
+      end
       walk_text(el, in_pre || name == "pre")
-      @buf << "\n" if block
+      newline! if block
     end
 
-    # Runs of blanks become one space and blank lines collapse, so a block never leaves more than
-    # one line break behind; whitespace inside <pre> comes back untouched.
-    def collapse(text)
-      text.gsub(/[ \t ]+/, " ").gsub(/ ?\n[ \n]*/, "\n").strip.tr(PRE_TO, PRE_FROM)
+    def emit_alt_text(alt)
+      alt = collapse_blanks(alt).strip
+      return if alt.empty?
+
+      @buf << " " unless at_line_start_or_space?
+      @buf << alt
     end
   end
 end

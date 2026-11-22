@@ -233,6 +233,40 @@ module Services
       assert_equal ["Alpha", "Beta & Co"], call("text", html).data[:content].lines.map(&:strip)
     end
 
+    test "private-use character references in an href cannot build a script scheme" do
+      ["java&#xE001;script:alert(1)", "&#xE002;javascript:alert(1)", "&#xE000;javascript:alert(1)", "java&#xE000;script:x"].each do |href|
+        content = call("simplified", %(<p><a href="#{href}">Click</a></p>)).data[:content]
+
+        assert_not_includes content, "href", href
+        assert_includes content, "Click"
+      end
+    end
+
+    test "a private-use character in text is not turned into whitespace" do
+      %w[simplified text].each do |format|
+        content = call(format, "<p>a&#xE001;b <i>&#xE002;</i>c</p>").data[:content]
+
+        assert_includes content, "a\u{E001}b", format
+        assert_not_includes content, "\n", format if format == "text"
+      end
+    end
+
+    test "an href loses trailing blanks and control characters as well as leading ones" do
+      content = call("simplified", %(<a href=" /book/1 \t">Click</a>)).data[:content]
+
+      assert_includes content, 'href="/book/1"'
+    end
+
+    test "alt text of neighbouring images does not run together" do
+      html = "<div><a href='/dune'><img alt='Dune'></a><a href='/emma'><img alt='Emma'></a></div>"
+
+      assert_includes call("text", html).data[:content], "Dune Emma"
+      simplified = call("simplified", html).data[:content]
+      assert_includes simplified, ">Dune</a>"
+      assert_includes simplified, ">Emma</a>"
+      assert_includes call("text", "<p><img alt='A'><img alt='B'></p>").data[:content], "A B"
+    end
+
     test "html keeps the markup minus the toolbar" do
       content = call("html").data[:content]
 
