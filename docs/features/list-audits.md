@@ -83,3 +83,5 @@ Two rules came out of the first production audits (2026-11-22), where an agent m
 - **Keep a recorded voter count unless a source contradicts it.** An unconfirmed count stays, with `voter_count_estimated` set. `voter_count_unknown` (which costs as much as a single voter) is for lists where no count was ever recorded and none can be estimated; named voters set a conservative floor.
 
 The guidance for penalties 13, 14 and 18 says the same. After a deploy that changes `guidance.yml`, run `bin/rails penalties:load_guidance OVERWRITE=1` in production.
+
+- **`high_quality_source` is on hold.** The agent must not change it (prompt rule, 2026-11-22): the flag cuts a list's total penalty by a third, and the first audits set it liberally. How source quality should affect weight is being redesigned separately.
