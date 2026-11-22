@@ -23,7 +23,9 @@ module Api
       conflict: [409, "Conflict"],
       unprocessable: [422, "Unprocessable"],
       rate_limited: [429, "Rate limit exceeded"],
-      search_unavailable: [503, "Search unavailable"]
+      search_unavailable: [503, "Search unavailable"],
+      bad_gateway: [502, "Bad gateway"],
+      service_unavailable: [503, "Service unavailable"]
     }.freeze
 
     CODES = DEFINITIONS.keys.freeze

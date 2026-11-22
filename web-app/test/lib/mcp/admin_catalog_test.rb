@@ -11,7 +11,7 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 75, expected.size
+      assert_equal 76, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
@@ -23,7 +23,7 @@ module Mcp
         claim_enrichment_items submit_enrichment_item skip_enrichment_item
         search_admin_lists get_admin_list list_admin_list_items list_admin_penalties
         update_admin_list attach_list_penalty detach_list_penalty
-        start_list_audit finish_list_audit release_list_audit]
+        start_list_audit finish_list_audit release_list_audit fetch_page]
 
       assert_equal expected.sort, catalog.operations.map(&:tool_name).sort
     end

@@ -305,7 +305,9 @@ codex mcp login the-greatest-books</code></pre>
               conflict: "The request names something another record already holds (an author creation with a Wikidata id another author has); detail says which.",
               unprocessable: "The request was understood but cannot be carried out; detail says why.",
               rate_limited: "A rate-limit window or the daily library change budget is exhausted; Retry-After says how long to wait.",
-              search_unavailable: "Search is temporarily unavailable; retry shortly."
+              search_unavailable: "Search is temporarily unavailable; retry shortly.",
+              bad_gateway: "A service we depend on answered but could not do what was asked (the page fetcher could not get the page); detail says why.",
+              service_unavailable: "A service we depend on is temporarily unavailable; retry shortly."
             }
           %>
           <% Api::Problem::DEFINITIONS.each do |code, (status, _title)| %>
