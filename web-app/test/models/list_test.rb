@@ -538,6 +538,11 @@ class ListTest < ActiveSupport::TestCase
     assert list.errors[:voter_details].any?
   end
 
+  test "voter_details normalizes blank to nil and strips" do
+    assert_nil Books::List.new(name: "P", voter_details: "  \n ").voter_details
+    assert_equal "Jane", Books::List.new(name: "P", voter_details: " Jane \n").voter_details
+  end
+
   test "name_with_source appends source and year when present" do
     list = Books::List.new(name: "Guardian 100", source: "The Guardian", year_published: 2003)
     assert_equal "Guardian 100 (The Guardian, 2003)", list.name_with_source

@@ -371,7 +371,7 @@ module Api
 
           @heavy.update!(voter_details: "Jane Doe, critic")
           get "/api/v1/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
-          assert_api_response_conform(status: 200) if respond_to?(:assert_api_response_conform)
+          assert_api_response_conform(status: 200)
           assert_equal "Jane Doe, critic", json[:data][:voter_details]
         end
 

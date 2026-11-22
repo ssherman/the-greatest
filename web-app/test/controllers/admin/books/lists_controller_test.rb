@@ -62,6 +62,16 @@ module Admin
         assert_response :success
       end
 
+      test "show displays who voted only when voter_details is present" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_list_path(@list)
+        assert_select "[data-testid='admin-list-voter-details']", 0
+
+        @list.update!(voter_details: "Jane Doe, critic")
+        get admin_books_list_path(@list)
+        assert_select "[data-testid='admin-list-voter-details']", 1
+      end
+
       test "show renders for an auto-generated list" do
         sign_in_as(@admin_user, stub_auth: true)
         @list.update!(auto_generated_kind: :user_favorites)

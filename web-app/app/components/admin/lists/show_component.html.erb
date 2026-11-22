@@ -158,6 +158,15 @@
               <p class="text-base-content/80 whitespace-pre-wrap"><%= list.description %></p>
             </div>
           <% end %>
+
+          <% if list.voter_details.present? %>
+            <div class="mt-4" data-testid="admin-list-voter-details">
+              <label class="label">
+                <span class="font-semibold">Who voted</span>
+              </label>
+              <p class="text-base-content/80 whitespace-pre-wrap [overflow-wrap:anywhere]"><%= list.voter_details %></p>
+            </div>
+          <% end %>
         </div>
       </div>
 
