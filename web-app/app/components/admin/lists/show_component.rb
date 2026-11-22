@@ -25,6 +25,15 @@ class Admin::Lists::ShowComponent < ViewComponent::Base
     "#{wizard_link.to_s.chomp("/")}/step/review?filter=all"
   end
 
+  # Books lists only: audits, and the prompt that hands one list to an agent.
+  def list_audits_supported?
+    list.is_a?(::Books::List)
+  end
+
+  def list_audit_prompt
+    ::Services::AgentPrompts.for_list_audit(list: list)
+  end
+
   private
 
   attr_reader :list, :domain_config

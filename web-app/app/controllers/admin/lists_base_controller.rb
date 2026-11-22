@@ -10,6 +10,7 @@ class Admin::ListsBaseController < Admin::BaseController
     @selected_status = params[:status].presence || "all"
     @selected_submitted = params[:submitted].presence
     @search_query = params[:q].presence
+    @selected_audit = audit_filter
   end
 
   def show
@@ -74,6 +75,7 @@ class Admin::ListsBaseController < Admin::BaseController
       .then { |scope| apply_status_filter(scope) }
       .then { |scope| apply_submitted_filter(scope) }
       .then { |scope| apply_search_filter(scope) }
+      .then { |scope| apply_extra_filters(scope) }
       .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as #{items_count_name}")
       .group("#{list_class.table_name}.id")
       .order("#{sort_column} #{sort_direction}")
@@ -105,6 +107,12 @@ class Admin::ListsBaseController < Admin::BaseController
     return scope if params[:q].blank?
     scope.search_by_name(params[:q])
   end
+
+  # Domain controllers override this to add filters of their own.
+  def apply_extra_filters(scope) = scope
+
+  # The audit filter value the index page reflects; only books has one.
+  def audit_filter = nil
 
   def sortable_column(column)
     allowed_columns = {
@@ -217,6 +225,11 @@ class Admin::ListsBaseController < Admin::BaseController
     []
   end
 
+  # Books lists carry audits: a filter and a Last audit column on the index.
+  def list_audits?
+    false
+  end
+
   def domain_config
     {
       item_label: item_label,
@@ -231,7 +244,8 @@ class Admin::ListsBaseController < Admin::BaseController
       country_placeholder: country_placeholder,
       info_alert_text: info_alert_text,
       extra_fields: extra_form_fields,
-      extra_show_fields: extra_show_fields
+      extra_show_fields: extra_show_fields,
+      list_audits: list_audits?
     }
   end
 end

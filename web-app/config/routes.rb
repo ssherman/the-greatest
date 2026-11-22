@@ -716,6 +716,7 @@ Rails.application.routes.draw do
           get "search/categories", to: "category_searches#index", as: :search_categories
           get "countries", to: "countries#index"
           get "languages", to: "languages#index"
+          get "penalties", to: "penalties#index"
 
           # The token holder's own lists (library scopes), not a catalogue.
           scope "my", module: :my, as: :my do
@@ -784,6 +785,16 @@ Rails.application.routes.draw do
             patch "categories/:id", to: "categories#update", constraints: {id: /\d+/}
             post "categories/:id/merge", to: "categories#merge", constraints: {id: /\d+/}
             delete "categories/:id", to: "categories#destroy", constraints: {id: /\d+/}
+            get "lists", to: "lists#index"
+            get "lists/:id", to: "lists#show", constraints: {id: /\d+/}
+            patch "lists/:id", to: "lists#update", constraints: {id: /\d+/}
+            get "lists/:id/items", to: "list_items#index", constraints: {id: /\d+/}
+            post "lists/:id/penalties", to: "list_penalties#create", constraints: {id: /\d+/}
+            delete "lists/:id/penalties/:penalty_id", to: "list_penalties#destroy", constraints: {id: /\d+/, penalty_id: /\d+/}
+            post "list_audits", to: "list_audits#start"
+            post "list_audits/:id/finish", to: "list_audits#finish", constraints: {id: /\d+/}
+            post "list_audits/:id/release", to: "list_audits#release", constraints: {id: /\d+/}
+            get "penalties", to: "penalties#index"
             get "series", to: "series#index"
             get "series/:id", to: "series#show", constraints: {id: /\d+/}
             post "series", to: "series#create"
@@ -1022,6 +1033,11 @@ Rails.application.routes.draw do
       # The enrichment queues AI agents work through the admin API (type = the kind's slug).
       resources :enrichment_queues, only: [:index, :show], param: :type do
         member { post :fill }
+      end
+
+      # List audits: the queue page and the admin's escape hatch for a stuck lease.
+      resources :list_audits, only: [:index] do
+        member { post :release }
       end
       post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
       post "enrichment_requests/:id/retry_apply", to: "enrichment_queues#retry_apply", as: :retry_apply_enrichment_request, constraints: {id: /\d+/}

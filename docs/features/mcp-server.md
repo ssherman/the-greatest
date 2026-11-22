@@ -297,6 +297,10 @@ Rulings:
 
 Known gap: the Goodreads replay's `FixIdentity.link_authors` can re-link an author from the export to a book an admin removed it from. The importers' author step does not, because it skips books that already have authors. No "cleared" record is kept for this.
 
+## List audit tools
+
+Ten admin tools let an agent audit books lists: `search_admin_lists`, `get_admin_list`, `list_admin_list_items`, `list_admin_penalties`, `update_admin_list`, `attach_list_penalty`, `detach_list_penalty`, `start_list_audit`, `finish_list_audit` and `release_list_audit` (reads `books:admin:read`, the rest `books:admin:write`). With them the admin document has 75 operations (65 before). The public document gains `list_penalties` (`GET /api/v1/penalties`) and a `penalties` member on the full `get_list` shape, taking it from 37 to 38 operations. The queue rules, penalty guidance and admin pages are in `docs/features/list-audits.md`. The audit prompt is a Copy prompt on the admin pages, not an MCP prompt.
+
 ## Logging
 
 One line per MCP POST, written before the transport runs:

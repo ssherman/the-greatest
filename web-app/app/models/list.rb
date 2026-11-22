@@ -65,6 +65,7 @@ class List < ApplicationRecord
   has_many :list_penalties, dependent: :destroy, inverse_of: :list
   has_many :penalties, through: :list_penalties, inverse_of: :lists
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :list_audits, dependent: :destroy
   # ranked_lists.list_id carries no foreign key, so without this a destroyed list
   # silently leaves an orphan RankedList row behind and the admin ranked-lists
   # view then raises on rl.list.name.
@@ -111,7 +112,7 @@ class List < ApplicationRecord
   # voter count outside a 4-byte column. Admin currently 500s here the same way.
   PG_INTEGER_RANGE = (-2_147_483_648..2_147_483_647)
 
-  validates :year_published, :number_of_voters,
+  validates :year_published, :number_of_voters, :estimated_quality,
     numericality: {only_integer: true, in: PG_INTEGER_RANGE}, allow_nil: true
   validates :num_years_covered,
     numericality: {only_integer: true, greater_than: 0, in: PG_INTEGER_RANGE}, allow_nil: true

@@ -1460,6 +1460,44 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/penalties:
+    x-domain: books
+    get:
+      operationId: listPenalties
+      security: [{bearerAuth: ["books:read"]}]
+      summary: Penalties applied to lists
+      description: |
+        The penalty catalogue for book lists, in the site's category order (as on the rankings page), then by name, uncategorized last. A penalty is a named weakness of a list (a narrow time span, a Western-only canon, an unknown voter count); each one a list carries lowers its weight. Not paged. A list's own penalties are on its `penalties` field.
+      x-mcp:
+        description: >-
+          Lists the penalties that can lower a book list's weight, with their category and what each
+          one means. Use get_list to see which of them apply to one list.
+      responses:
+        "200":
+          description: The penalty catalogue.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PenaltyCollection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/my/lists:
     x-domain: books
     get:
@@ -2494,12 +2532,17 @@ components:
       allOf:
         - $ref: "#/components/schemas/List"
         - type: object
-          required: [description, source_url]
+          required: [description, source_url, penalties]
           properties:
             description: {type: [string, "null"]}
             source_url:
               type: [string, "null"]
               description: The original list on the web, as recorded — a few carry more than one address.
+            penalties:
+              type: array
+              description: The penalties in effect on the list's weight on the configuration it was read through, in the site's category order (as on the rankings page), then by name, uncategorized last. Empty when the list has no weight there yet.
+              items:
+                $ref: "#/components/schemas/Penalty"
     ListCollection:
       type: object
       required: [data, meta, links]
@@ -2611,6 +2654,22 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    Penalty:
+      type: object
+      required: [name, category, category_title, description]
+      properties:
+        name: {type: string}
+        category: {type: [string, "null"], description: "Machine name of the penalty's category; null when uncategorized."}
+        category_title: {type: string, description: "The category as shown to readers."}
+        description: {type: [string, "null"], description: What the penalty means, in plain words.}
+    PenaltyCollection:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Penalty"
     Language:
       type: object
       required: [slug, name, book_count]

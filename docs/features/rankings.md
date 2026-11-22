@@ -163,6 +163,16 @@ With `max_age: 50` and `max_penalty_percentage: 80`:
 - Album from 1970 on list from 2000: ~40% penalty (30 years old)
 - Album from 1950 on list from 2000: No penalty (too old to penalize)
 
+### Penalty guidance and null curves (books)
+
+- `penalties.guidance` is the agent-facing rule for applying a penalty; `description` is the reader blurb. See `docs/features/list-audits.md`.
+- A null `number_of_voters` or `num_years_covered` means **no** penalty from that curve. Null is right for an all-time list's years; an unknown voter count should instead carry `voter_count_unknown`.
+- `high_quality_source` multiplies the list's total penalty by 2/3.
+- Some penalties have no application on the books primary configuration and cost nothing there. A null `value_on_primary` in `get_admin_list` or `list_admin_penalties` shows which.
+- `creator_specific` has no books penalty row.
+- Geography on books is the `location_specific` flag (penalty 15, 20 on the books configurations) plus penalty 46 (15) when the place is smaller than a country. The per-place penalties no longer exist; see `docs/features/list-audits.md`.
+- Editing a list's fields or penalties never changes its weight; refresh the ranking configuration.
+
 ## Background Processing
 
 ### Recalculation is coalesced

@@ -18,8 +18,19 @@ class Admin::Lists::TableComponent < ViewComponent::Base
       direction: direction,
       status: helpers.params[:status],
       submitted: helpers.params[:submitted],
+      audit: helpers.params[:audit],
       q: helpers.params[:q]
     }.compact.to_query
+  end
+
+  def audits?
+    domain_config[:list_audits]
+  end
+
+  # The most recent finished audit per list on this page, in one query.
+  def last_audit(list)
+    @last_audits ||= ::ListAudit.finished.where(list_id: lists.map(&:id)).order(:finished_at).index_by(&:list_id)
+    @last_audits[list.id]
   end
 
   def items_count(list)

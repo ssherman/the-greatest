@@ -106,6 +106,15 @@
                 <p class="text-base-content/80"><%= @penalty.description %></p>
               </div>
             <% end %>
+
+            <% if @penalty.guidance.present? %>
+              <div class="md:col-span-2">
+                <label class="label">
+                  <span class="font-semibold">Agent guidance</span>
+                </label>
+                <p class="text-base-content/80 whitespace-pre-line"><%= @penalty.guidance %></p>
+              </div>
+            <% end %>
           </div>
         </div>
       </div>

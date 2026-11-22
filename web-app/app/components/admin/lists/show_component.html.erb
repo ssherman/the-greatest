@@ -33,6 +33,14 @@
         </button>
       <% end %>
 
+      <% if list_audits_supported? %>
+        <div data-controller="clipboard-copy">
+          <textarea hidden readonly data-clipboard-copy-target="source"><%= list_audit_prompt %></textarea>
+          <button type="button" class="btn btn-secondary btn-outline" data-action="clipboard-copy#copy"
+                  data-clipboard-copy-target="button" data-testid="copy-list-audit-prompt">Copy audit prompt</button>
+        </div>
+      <% end %>
+
       <% wizard_link = domain_config[:wizard_path_proc].call(list) %>
       <% if wizard_link.present? %>
         <%= link_to wizard_link, class: "btn btn-secondary" do %>
@@ -196,6 +204,10 @@
             </div>
           </div>
         </div>
+      <% end %>
+
+      <% if list_audits_supported? %>
+        <%= render Admin::Lists::AuditsComponent.new(list: list, can_release: helpers.current_user_can_write?) %>
       <% end %>
 
       <% if list.high_quality_source || list.category_specific || list.location_specific || list.yearly_award || list.voter_count_estimated || list.voter_count_unknown || list.voter_names_unknown %>

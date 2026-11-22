@@ -54,6 +54,12 @@
             </label>
           <% end %>
         </div>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Guidance</legend>
+          <%= f.text_area :guidance, class: "textarea w-full", rows: 6 %>
+          <p class="label">How an agent decides whether this penalty applies. Not shown to readers.</p>
+        </fieldset>
       </div>
     </div>
   </div>

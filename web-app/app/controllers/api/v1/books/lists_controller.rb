@@ -40,19 +40,18 @@ module Api
           list = ::Books::List.active.find(params[:id])
           counts = item_counts_for([list.id])
 
+          # The list's row on the configuration: nil when the list does not feed
+          # it, and nil when there is no configuration (no primary yet). Both
+          # its weight and its penalties in effect come from it.
+          ranked_list = configuration&.ranked_lists&.find_by(list: list)
+
           render json: {
-            data: ListResource.new(list, params: {weight: weight_on(configuration, list), item_count: counts.fetch(list.id, 0)}, with_traits: :full).to_h
+            data: ListResource.new(list, params: {
+              weight: ranked_list&.weight,
+              item_count: counts.fetch(list.id, 0),
+              penalties: ::Services::Lists::PenaltiesInEffect.call(ranked_list)
+            }, with_traits: :full).to_h
           }
-        end
-
-        private
-
-        # The list's weight on a configuration: nil when the list does not feed
-        # it, and nil when there is no configuration (no primary yet).
-        def weight_on(configuration, list)
-          return if configuration.nil?
-
-          configuration.ranked_lists.find_by(list: list)&.weight
         end
       end
     end

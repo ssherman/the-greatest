@@ -71,6 +71,12 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Updated Name", @global_penalty.name
   end
 
+  test "should update penalty guidance" do
+    patch admin_penalty_url(@global_penalty), params: {penalty: {guidance: "Rule"}}
+    assert_redirected_to admin_penalty_url(@global_penalty)
+    assert_equal "Rule", @global_penalty.reload.guidance
+  end
+
   test "should not update penalty with invalid data" do
     patch admin_penalty_url(@global_penalty), params: {
       penalty: {

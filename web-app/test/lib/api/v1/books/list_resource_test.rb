@@ -38,11 +38,11 @@ module Api
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/lists/#{@list.id}/items", hash[:items_api_url]
         end
 
-        test "full trait appends description and source_url in order" do
-          hash = ListResource.new(@list, params: {weight: 42, item_count: 100}, with_traits: :full).to_h
+        test "full trait appends description, source_url and penalties in order" do
+          hash = ListResource.new(@list, params: {weight: 42, item_count: 100, penalties: []}, with_traits: :full).to_h
 
           assert_equal(
-            %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url],
+            %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url penalties],
             hash.keys
           )
           assert_equal "A century of novels.", hash[:description]
@@ -59,7 +59,7 @@ module Api
         test "nullable columns render as null" do
           list = ::Books::List.create!(name: "Bare", status: :approved)
 
-          hash = ListResource.new(list, params: {weight: nil, item_count: 0}, with_traits: :full).to_h
+          hash = ListResource.new(list, params: {weight: nil, item_count: 0, penalties: []}, with_traits: :full).to_h
 
           assert_nil hash[:source]
           assert_nil hash[:year_published]
@@ -77,7 +77,7 @@ module Api
         end
 
         test "the shape carries no editorial flags, status or weight breakdown" do
-          hash = ListResource.new(@list, params: {weight: 1, item_count: 1}, with_traits: :full).to_h
+          hash = ListResource.new(@list, params: {weight: 1, item_count: 1, penalties: []}, with_traits: :full).to_h
 
           %i[status high_quality_source category_specific location_specific creator_specific estimated_quality
             voter_count_estimated voter_count_unknown voter_names_unknown calculated_weight_details raw_content
