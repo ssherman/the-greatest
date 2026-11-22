@@ -75,7 +75,46 @@ module Services
         node.remove_attribute("class")
         node.remove_attribute("id")
       end
+      prune(fragment)
       collapse(fragment.to_html)
+    end
+
+    # Elements that stay even when they hold no text: line and rule breaks, and the table and list
+    # parts, where an empty cell or item is part of the structure.
+    KEEP_EMPTY = %w[br hr td th tr li].freeze
+    WRAPPERS = %w[div span].freeze
+
+    # Removes elements with no text and nothing worth keeping inside, and unwraps div/span that only
+    # wrap a single element, until nothing changes. Done here, not in SimplifierService, which the
+    # list wizard depends on.
+    def prune(fragment)
+      loop do
+        changed = false
+        fragment.css("*").reverse_each do |node|
+          next if node.parent.nil?
+
+          if empty_element?(node)
+            node.remove
+            changed = true
+          elsif pure_wrapper?(node)
+            node.replace(node.element_children.first)
+            changed = true
+          end
+        end
+        break unless changed
+      end
+    end
+
+    def empty_element?(node)
+      return false if KEEP_EMPTY.include?(node.name)
+
+      node.text.delete("\u00a0").strip.empty? && node.at_css(KEEP_EMPTY.join(",")).nil?
+    end
+
+    def pure_wrapper?(node)
+      return false unless WRAPPERS.include?(node.name)
+
+      node.element_children.size == 1 && node.children.none? { |child| child.text? && child.text.delete("\u00a0").strip.present? }
     end
 
     def render_text(doc)

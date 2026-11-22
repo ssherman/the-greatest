@@ -56,6 +56,21 @@ module Services
       assert_no_match(/\n{3,}/, content)
     end
 
+    test "simplified drops empty wrappers, unwraps pure wrappers and keeps links and empty cells" do
+      html = "<body><div><div><div></div></div></div><div><span><div><p>Keep me</p></div></span></div>" \
+        '<div><a href="/x">Link</a></div><div><a href="/y"></a></div>' \
+        "<table><tr><td></td><td>1</td></tr></table><ul><li></li></ul></body>"
+      content = call("simplified", html).data[:content]
+
+      assert_not_includes content, "<div"
+      assert_not_includes content, "<span"
+      assert_includes content, "<p>Keep me</p>"
+      assert_includes content, '<a href="/x">Link</a>'
+      assert_not_includes content, "/y"
+      assert_includes content, "<td></td>"
+      assert_includes content, "<li>"
+    end
+
     test "html keeps the markup minus the toolbar" do
       content = call("html").data[:content]
 
