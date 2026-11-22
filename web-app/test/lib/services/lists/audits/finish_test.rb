@@ -57,6 +57,26 @@ module Services
           assert_not result.data[:conflict]
         end
 
+        test "our own sites are refused as sources, including subdomains and archived copies" do
+          [
+            "https://thegreatestbooks.org/lists/122",
+            "https://new.thegreatestbooks.org/lists/122",
+            "http://www.thegreatestmusic.org/lists/9",
+            "https://thegreatest.games/lists/3",
+            "https://web.archive.org/web/2020/https://thegreatestbooks.org/lists/122"
+          ].each do |url|
+            result = finish(sources: ["https://example.com/a", url])
+            assert_not result.success?, url
+            assert_not result.data[:conflict]
+            assert_match(/our own site/, result.errors.join)
+          end
+          assert @audit.reload.in_progress?
+        end
+
+        test "a source that only mentions our name in its path is allowed" do
+          assert finish(sources: ["https://example.com/why-thegreatestbooks-is-wrong", "https://notthegreatestbooks.org/x"]).success?
+        end
+
         test "non-URL sources, blank note and bad verdict are refused" do
           assert_not finish(sources: ["not a url"]).success?
           assert_not finish(sources: ["ftp://example.com/x"]).success?

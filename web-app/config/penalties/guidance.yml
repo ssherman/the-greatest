@@ -37,10 +37,10 @@
   guidance: 'Set `voter_names_unknown: true` when the source does not say who chose the books. False when the panel is named, even partly.'
 - id: 13
   name: 'Voters: Voter Count'
-  guidance: Set `number_of_voters` to the number of people who chose the books, counted conservatively. 1 for a single critic. At 1 the penalty is the maximum; it shrinks to 0 at the configuration's median voter count. Null means no penalty from this curve, so never leave it null when a count or estimate exists.
+  guidance: Set `number_of_voters` to the number of people who chose the books, counted conservatively. 1 for a single critic. At 1 the penalty is the maximum; it shrinks to 0 at the configuration's median voter count. Null means no penalty from this curve, so never leave it null when a count or estimate exists. Keep a recorded count unless a source contradicts it; a source you could not open is not a contradiction. When the voters are named, their number is a conservative floor.
 - id: 14
   name: 'Voters: Unknown Count'
-  guidance: 'Set `voter_count_unknown: true` (and leave `number_of_voters` null) only when no count can be found or reasonably estimated. It costs as much as a single voter, so an honest estimate with `voter_count_estimated` is better when the source gives enough to estimate ("our 12 editors", "a panel of critics" with a byline list).'
+  guidance: 'Set `voter_count_unknown: true` (and leave `number_of_voters` null) only when no count was ever recorded and none can be found or reasonably estimated. Never replace a recorded count with this flag because you could not confirm it: keep the count and set `voter_count_estimated` instead. It costs as much as a single voter, so an honest estimate with `voter_count_estimated` is better when the source gives enough to estimate ("our 12 editors", "a panel of critics" with a byline list, a page naming each contributor).'
 - id: 15
   name: 'List: only covers 1 specific location'
   guidance: 'Set `location_specific: true` when the list limits which books were eligible by place: books from or about one country, a group of countries, a continent, a state or a city ("best Australian novels", "best African books", "best Southern novels"). Do not set it for limits that are not a place (language, translation, gender, ethnicity, religion): those have their own penalties. If the place is smaller than a country, also attach penalty 46. Setting the flag also exempts the list from the western-canon penalty (23). Where the voters live is a different question (penalty 8).'
@@ -52,7 +52,7 @@
   guidance: 'Set `num_years_covered` to the span of publication years that were eligible: 1 for a yearly award or "best of 2023", 10 for a decade, 25 for "the 21st century so far" (count to the list''s year), 100 for a century. Leave it null for an all-time list; null means no time penalty.'
 - id: 18
   name: 'Voters: Estimated Count'
-  guidance: 'Set `voter_count_estimated: true` whenever `number_of_voters` is your estimate rather than a published figure.'
+  guidance: 'Set `voter_count_estimated: true` whenever `number_of_voters` is your estimate rather than a published figure, and when you keep a recorded count you could not confirm.'
 - id: 22
   name: 'Voters: Voters seem to have an agenda/bias of some kind'
   guidance: The people choosing are promoting a viewpoint (a religious, political or advocacy organisation's list) rather than judging quality.

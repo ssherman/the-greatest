@@ -3880,13 +3880,15 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Finish a list audit
       description: |
-        Closes the audit the token's owner holds with a `verdict`, a required `note` and `sources` (an array of http(s) URLs). `verified` means the list was researched and now matches what its source supports, and needs at least one source; `unverifiable` means not enough could be found to judge. The server computes `changes`, the fields that differ between the list when the audit began and now. A finished audit takes the list out of the queue for good. An audit that is not in progress or is held by someone else is 409; a bad verdict, blank note or bad sources is 422. Requires `books:admin:write`.
+        Closes the audit the token's owner holds with a `verdict`, a required `note` and `sources` (an array of http(s) URLs). `verified` means the list was researched and now matches what its source supports, and needs at least one source; `unverifiable` means not enough could be found to judge. The server computes `changes`, the fields that differ between the list when the audit began and now. A finished audit takes the list out of the queue for good. An audit that is not in progress or is held by someone else is 409; a bad verdict, blank note or bad sources is 422, and so is a source on one of our own sites (thegreatestbooks.org, thegreatestmusic.org, thegreatest.games, any subdomain, or an archived copy of one). Requires `books:admin:write`.
       x-mcp:
         description: >-
           Finishes audit `id`, which you must hold. `verdict` is `verified` (you researched the list and it now matches what its
           source supports; needs at least one URL in `sources`) or `unverifiable` (you could not find enough to judge). `note` is
           required: say what you checked and what you changed. The response's `changes` is computed by the server from the list's
-          fields when the audit began against now, so you do not report them yourself. A finished list is not offered again.
+          fields when the audit began against now, so you do not report them yourself. Sources on our own sites (thegreatestbooks.org,
+          thegreatestmusic.org, thegreatest.games, any subdomain, or an archived copy) are refused with a 422: they repeat our data.
+          A finished list is not offered again.
           An audit that is not in progress or is not yours is a 409. The list's weight does not change until an admin refreshes the ranking configuration.
       parameters:
         - $ref: "#/components/parameters/id"

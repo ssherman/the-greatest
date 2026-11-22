@@ -338,8 +338,12 @@ module Services
       prompt = AgentPrompts.for_list_audit
       [
         "A null `number_of_voters` or `num_years_covered` means no penalty from that curve",
-        "set `voter_count_unknown` to true rather than leaving the count null",
-        "cuts the list's total penalty by a third",
+        "Keep a recorded `number_of_voters` unless a source contradicts it",
+        "Set `voter_count_unknown` to true only when no count was ever recorded",
+        "A page that does not load for you is not evidence",
+        "Never clear or downgrade a recorded fact because you could not reach or confirm its source",
+        "Never use The Greatest Books itself as a source", "`finish_list_audit` refuses them as sources",
+        "Do not change `high_quality_source`",
         "Geographic scope is the `location_specific` flag", "Add penalty 46 only when the place is smaller than a country", "Never use the flag for a limit that is not a place",
         "Do not change `status`",
         "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",

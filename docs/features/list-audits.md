@@ -36,7 +36,7 @@ Public side: `GET /api/v1/penalties` (`list_penalties`) lists the penalty catalo
 - **Order.** Lists never started come first, by weight on the books default primary configuration (heaviest first), then id. Lists with an earlier audit that was released, or whose in-progress lease expired, come after them, oldest start first; weight only breaks ties there.
 - **One open audit per list**, enforced by a partial unique index. The lease is 3 hours (`ListAudit::LEASE`) and `start_list_audit` renews it on resume. An expired lease frees the list for another admin.
 - **A start with no id always claims a new list**, so two sessions on one admin account never share one. Resume is by id only: `start_list_audit` with the `list_id` of your own open audit renews its lease (`resumed: true`). A list held by someone else is a 409. Start, finish and release also need `Books::ListPolicy#update?` for the token's owner (403 otherwise).
-- **Finish** needs a `verified`/`unverifiable` verdict, a non-blank `note` and `sources` (http(s) URLs; at least one for `verified`). Through the API only the holder may finish or release (409 otherwise). The admin page's Release lets any books admin with write access release someone else's audit.
+- **Finish** needs a `verified`/`unverifiable` verdict, a non-blank `note` and `sources` (http(s) URLs; at least one for `verified`). A source on our own sites (thegreatestbooks.org, thegreatestmusic.org, thegreatest.games, any subdomain, or an archived copy of one) is refused with a 422: those pages repeat our own data, and a search for a list often puts them first. Through the API only the holder may finish or release (409 otherwise). The admin page's Release lets any books admin with write access release someone else's audit.
 - **Snapshots.** `start` stores a `before` snapshot of the list's fields, flags and penalties; `finish` stores `after` and computes `field_changes` (returned as `changes`) from the two. The agent never reports its own diff.
 - **Release** marks the audit `released`; the list goes behind lists never started.
 
@@ -74,3 +74,14 @@ Geographic scope is the `location_specific` flag (penalty 15, dynamic): it carri
 
 - Weight is never recalculated by an audit; the refresh is manual.
 - No automated re-audit schedule: a verified list stays verified until someone asks by id.
+
+## Research rules the prompt enforces
+
+Two rules came out of the first production audits (2026-11-22), where an agent marked list 122's voter count unknown because it could not open the archived source page, although that page names all 37 contributors:
+
+- **A page that does not load is not evidence.** The agent never clears or downgrades a recorded fact because it could not reach or confirm the source; it keeps the fact, names the page in its note, and uses `unverifiable` if nothing else could be checked.
+- **Keep a recorded voter count unless a source contradicts it.** An unconfirmed count stays, with `voter_count_estimated` set. `voter_count_unknown` (which costs as much as a single voter) is for lists where no count was ever recorded and none can be estimated; named voters set a conservative floor.
+
+The guidance for penalties 13, 14 and 18 says the same. After a deploy that changes `guidance.yml`, run `bin/rails penalties:load_guidance OVERWRITE=1` in production.
+
+- **`high_quality_source` is on hold.** The agent must not change it (prompt rule, 2026-11-22): the flag cuts a list's total penalty by a third, and the first audits set it liberally. How source quality should affect weight is being redesigned separately.
