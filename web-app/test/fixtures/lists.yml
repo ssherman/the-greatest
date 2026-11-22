@@ -30,6 +30,7 @@
 #  url                   :string
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
+#  voter_details         :text
 #  voter_names_unknown   :boolean
 #  wizard_state          :jsonb
 #  year_published        :integer

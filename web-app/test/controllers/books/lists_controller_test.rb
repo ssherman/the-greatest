@@ -85,6 +85,16 @@ module Books
       assert_response :success
     end
 
+    # Presentation of the who-voted section is covered by
+    # e2e/tests/books/admin/lists.spec.ts; this pins that the page renders.
+    test "show renders with a short and a long voter_details" do
+      ["Jane Doe, critic\nJohn Roe, editor", "Jane Doe, critic. " * 40].each do |text|
+        @list.update!(voter_details: text)
+        get "/lists/#{@list.id}"
+        assert_response :success
+      end
+    end
+
     test "show 404s for a non-active list" do
       @list.update!(status: :unapproved)
 

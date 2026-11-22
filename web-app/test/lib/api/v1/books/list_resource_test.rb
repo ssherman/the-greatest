@@ -38,14 +38,15 @@ module Api
           assert_equal "https://dev-new.thegreatestbooks.org/api/v1/lists/#{@list.id}/items", hash[:items_api_url]
         end
 
-        test "full trait appends description, source_url and penalties in order" do
+        test "full trait appends description, voter_details, source_url and penalties in order" do
           hash = ListResource.new(@list, params: {weight: 42, item_count: 100, penalties: []}, with_traits: :full).to_h
 
           assert_equal(
-            %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url penalties],
+            %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description voter_details source_url penalties],
             hash.keys
           )
           assert_equal "A century of novels.", hash[:description]
+          assert_nil hash[:voter_details]
           assert_equal "https://example.com/100-novels", hash[:source_url]
         end
 
@@ -67,6 +68,7 @@ module Api
           assert_nil hash[:number_of_voters]
           assert_nil hash[:activated_at]
           assert_nil hash[:description]
+          assert_nil hash[:voter_details]
           assert_nil hash[:source_url]
         end
 

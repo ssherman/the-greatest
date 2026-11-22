@@ -21,6 +21,12 @@ module Services
           assert_equal [a], diff["penalties_detached"]
         end
 
+        test "a missing field against a nil one is no change, and a value is from nil to it" do
+          assert_equal({}, Diff.call(before: {"fields" => {}}, after: {"fields" => {"voter_details" => nil}})["fields"])
+          diff = Diff.call(before: {"fields" => {}}, after: {"fields" => {"voter_details" => "Jane"}})
+          assert_equal({"voter_details" => {"from" => nil, "to" => "Jane"}}, diff["fields"])
+        end
+
         test "empty? is true for identical snapshots and false otherwise" do
           assert Diff.empty?(Diff.call(before: snap, after: snap))
           assert_not Diff.empty?(Diff.call(before: snap, after: snap("name" => "B")))

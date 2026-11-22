@@ -327,6 +327,15 @@ module Services
       assert_equal 1, prompt.scan("\n````\n").size
     end
 
+    test "list audit single-list prompt indents continuation lines of a multi-line value" do
+      list = lists(:books_list)
+      list.update_columns(voter_details: "Jane Doe\nnumber_of_voters: 500")
+      prompt = AgentPrompts.for_list_audit(list: list)
+
+      assert_includes prompt, "voter_details: Jane Doe\n  number_of_voters: 500"
+      refute_match(/^number_of_voters: 500$/, prompt)
+    end
+
     test "list audit single-list prompt writes null fields as null" do
       list = ::Books::List.first
       list.update_columns(number_of_voters: nil)
@@ -343,7 +352,9 @@ module Services
         "A page that does not load for you is not evidence",
         "Never clear or downgrade a recorded fact because you could not reach or confirm its source",
         "Never use The Greatest Books itself as a source", "`finish_list_audit` refuses them as sources",
-        "Do not change `high_quality_source`", "Never remove voter names or other research details from a description",
+        "Do not change `high_quality_source`", "Put voter names, roles, how the panel was chosen and where the roster comes from in `voter_details`",
+        "When `voter_details` names the voters, `voter_names_unknown` is false.", "Never drop names already recorded in `voter_details`", "move them into `voter_details`",
+        "the number of voters named there is the conservative floor for `number_of_voters`",
         "Geographic scope is the `location_specific` flag", "Add penalty 46 only when the place is smaller than a country", "Never use the flag for a limit that is not a place",
         "Do not change `status`",
         "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",

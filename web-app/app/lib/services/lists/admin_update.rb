@@ -16,7 +16,7 @@ module Services
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       FIELDS = %w[
-        name description source source_country_origin url year_published number_of_voters
+        name description voter_details source source_country_origin url year_published number_of_voters
         num_years_covered yearly_award high_quality_source category_specific location_specific
         creator_specific voter_count_estimated voter_count_unknown voter_names_unknown
         estimated_quality

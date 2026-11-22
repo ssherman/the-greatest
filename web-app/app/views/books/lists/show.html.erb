@@ -24,6 +24,22 @@
       <p class="max-w-3xl text-base-content/80"><%= @list.description %></p>
     <% end %>
 
+    <% if @list.voter_details.present? %>
+      <section class="max-w-3xl" data-testid="list-voter-details">
+        <h2 class="text-lg font-semibold mb-1">Who voted</h2>
+        <% if @list.voter_details.length > 600 %>
+          <details class="collapse collapse-arrow bg-base-200">
+            <summary class="collapse-title text-sm font-medium">Show voters and how they were chosen</summary>
+            <div class="collapse-content">
+              <p class="text-base-content/80 whitespace-pre-line [overflow-wrap:anywhere]"><%= @list.voter_details %></p>
+            </div>
+          </details>
+        <% else %>
+          <p class="text-base-content/80 whitespace-pre-line [overflow-wrap:anywhere]"><%= @list.voter_details %></p>
+        <% end %>
+      </section>
+    <% end %>
+
     <% if @list.url.present? %>
       <%= link_to "View the original list", @list.url, rel: "noopener nofollow",
             target: "_blank", class: "btn btn-sm btn-primary" %>

@@ -356,12 +356,23 @@ module Api
           assert_api_conform(status: 200)
 
           assert_response :success
-          assert_equal %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description source_url penalties], json[:data].keys
+          assert_equal %i[id name source year_published yearly_award number_of_voters item_count weight activated_at url api_url items_api_url description voter_details source_url penalties], json[:data].keys
           assert_equal @heavy.id, json[:data][:id]
           assert_equal 90, json[:data][:weight]
           assert_equal 2, json[:data][:item_count]
           assert_equal "About Heavy", json[:data][:description]
           assert_equal "https://example.com/heavy", json[:data][:source_url]
+        end
+
+        test "show carries voter_details: null when empty, the text when set" do
+          get "/api/v1/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert json[:data].key?(:voter_details)
+          assert_nil json[:data][:voter_details]
+
+          @heavy.update!(voter_details: "Jane Doe, critic")
+          get "/api/v1/lists/#{@heavy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_response_conform(status: 200)
+          assert_equal "Jane Doe, critic", json[:data][:voter_details]
         end
 
         test "show carries the public penalties in effect from the ranked list's details" do

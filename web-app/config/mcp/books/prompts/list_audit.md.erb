@@ -21,7 +21,10 @@ Research each list from its own source, not from memory:
 - Is the source well established and reputable: a major publication, a respected organisation, a long-running institution? Judge the source, not the list's popularity.
 - Is it a yearly or recurring award? Is it limited to a genre? Is it limited to a region? Is it about one creator?
 - Write the `description` for readers of The Greatest Books, 2 to 4 sentences: the list's criteria, its purpose, its methodology and the credibility of its source.
-- Never remove voter names or other research details from a description. When you rewrite it, carry them over.
+- Put voter names, roles, how the panel was chosen and where the roster comes from in `voter_details` (plain text; it is shown publicly as "Who voted"). Never drop names already recorded in `voter_details`: add to it, do not replace it with less.
+- When the `description` holds voter names, move them into `voter_details` and keep the `description` to the 2 to 4 reader sentences.
+- When `voter_details` names the voters, `voter_names_unknown` is false.
+- When the voters are named there, the number of voters named there is the conservative floor for `number_of_voters`.
 
 Rules for fields and penalties:
 
@@ -31,7 +34,7 @@ Rules for fields and penalties:
 - Do not change `high_quality_source`: leave it as it is, true or false. How source quality affects a list's weight is being redesigned. Judge the source's reputation in your note instead.
 - A penalty whose `value_on_primary` is null costs nothing on the main ranking today. Still attach it when it is true of the list, so it is recorded.
 - Geographic scope is the `location_specific` flag: set it to true when the list limits which books were eligible by place. Add penalty 46 only when the place is smaller than a country (a state, city or region). Never use the flag for a limit that is not a place (language, translation, gender, ethnicity, religion).
-- `update_admin_list` takes only the editable fields: name, description, source, source_country_origin, url, year_published, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality. Booleans take true or false only, never null. `estimated_quality` null stores 0. A 422 names the problem and writes nothing.
+- `update_admin_list` takes only the editable fields: name, description, voter_details, source, source_country_origin, url, year_published, number_of_voters, num_years_covered, yearly_award, high_quality_source, category_specific, location_specific, creator_specific, voter_count_estimated, voter_count_unknown, voter_names_unknown, estimated_quality. Booleans take true or false only, never null. `estimated_quality` null stores 0. A 422 names the problem and writes nothing.
 - `percentage_western` is computed from the list's books and has no field to set. It is skipped when `location_specific` is true.
 - Do not change `status`. It cannot be changed here. If a list should be rejected or archived, say so in your note.
 - Edits do not change the list's weight until I refresh the ranking configuration. Do not expect to see the weight move.
