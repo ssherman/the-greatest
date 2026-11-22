@@ -3,7 +3,6 @@ module Services
     module Audits
       class Start
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-        MAX_TRIES = 5
 
         def self.call(user:, list: nil)
           new(user: user, list: list).call
@@ -37,13 +36,23 @@ module Services
 
         # A no-id start always claims a new list: two sessions on one admin account
         # must never share a list. Resume is by list_id only (start_on_list).
+        #
+        # Re-reads the queue after every lost race, skipping lists already tried,
+        # and answers "no audit" only when the queue itself has nothing left. A
+        # fixed number of tries would report an empty queue under contention, and
+        # the agent prompt tells agents to stop on that answer. The loop ends: each
+        # pass either returns or adds a list to `tried`, and the queue is finite.
         def start_next
-          Queue.relation.first(MAX_TRIES).each do |candidate|
+          tried = []
+          loop do
+            candidate = Queue.relation.where.not(id: tried).first
+            return success(nil, resumed: false) unless candidate
+
+            tried << candidate.id
             next if ::ListAudit.finished.exists?(list_id: candidate.id) # finished since the queue was read
             audit = claim(candidate)
             return success(audit, resumed: false) if audit
           end
-          success(nil, resumed: false)
         end
 
         # Releases an expired holder, then inserts. Returns nil when someone else

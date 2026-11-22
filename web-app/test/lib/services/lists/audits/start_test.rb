@@ -86,19 +86,51 @@ module Services
           assert_equal Queue.remaining, result.data[:remaining]
         end
 
-        test "without a list skips one a concurrent caller took" do
-          a = lists(:approved_list)
-          b = lists(:high_quality_list)
-          Queue.stubs(:relation).returns([a, b])
+        # The stubbed queue is a real relation that does NOT exclude open audits,
+        # which is what a caller sees when another caller claims a list between
+        # its queue read and its insert.
+        def queue_of(lists)
+          Queue.stubs(:relation).returns(::Books::List.where(id: lists.map(&:id)).order(:id))
           Queue.stubs(:remaining).returns(0)
-          ListAudit.create!(list: a, user: @other, started_at: Time.current, lease_expires_at: 3.hours.from_now)
+        end
+
+        def held_by_other(list)
+          ListAudit.create!(list: list, user: @other, started_at: Time.current, lease_expires_at: 3.hours.from_now)
+        end
+
+        def new_lists(count)
+          Array.new(count) { |i| ::Books::List.create!(name: "Contended #{i}", status: :approved) }
+        end
+
+        test "without a list skips one a concurrent caller took" do
+          a, b = new_lists(2)
+          queue_of([a, b])
+          held_by_other(a)
           result = Start.call(user: @user)
           assert result.success?
           assert_equal b.id, result.data[:audit].list_id
         end
 
+        test "without a list keeps looking past any number of lost races" do
+          lists = new_lists(7)
+          queue_of(lists)
+          lists.first(6).each { |list| held_by_other(list) }
+          result = Start.call(user: @user)
+          assert result.success?
+          assert_equal lists.last.id, result.data[:audit].list_id
+        end
+
+        test "without a list, when every candidate is taken, succeeds with no audit" do
+          lists = new_lists(2)
+          queue_of(lists)
+          lists.each { |list| held_by_other(list) }
+          result = Start.call(user: @user)
+          assert result.success?
+          assert_nil result.data[:audit]
+        end
+
         test "an empty queue succeeds with no audit" do
-          Queue.stubs(:relation).returns([])
+          Queue.stubs(:relation).returns(::Books::List.none)
           Queue.stubs(:remaining).returns(0)
           result = Start.call(user: @user)
           assert result.success?
