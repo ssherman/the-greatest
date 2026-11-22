@@ -125,6 +125,10 @@ module Mcp
         raise GenerationError, "#{id}: x-mcp #{key} must be true or false" unless [true, false].include?(extension[key])
       end
 
+      if extension["read_only"] == true && extension["destructive"] == true
+        raise GenerationError, "#{id}: x-mcp cannot be both read_only and destructive"
+      end
+
       if extension.key?("destructive")
         raise GenerationError, "#{id}: x-mcp destructive must be true or false" unless [true, false].include?(extension["destructive"])
         raise GenerationError, "#{id}: a GET cannot be destructive" if extension["destructive"] && http_method == "get"

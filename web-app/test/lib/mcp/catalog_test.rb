@@ -289,6 +289,14 @@ module Mcp
       end
     end
 
+    test "read_only together with destructive fails generation" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(read_only: true, destructive: true)
+
+      error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+      assert_match(/createWidget: .*both read_only and destructive/, error.message)
+    end
+
     test "fetch_page is read-only and open-world and every other admin tool keeps the default hints" do
       admin = Mcp::Catalog.for(document: :admin, domain: :books)
       fetch = admin.operations.find { |operation| operation.tool_name == "fetch_page" }

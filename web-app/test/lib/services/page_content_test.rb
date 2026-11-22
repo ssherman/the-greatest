@@ -164,6 +164,75 @@ module Services
       end
     end
 
+    test "unmatched toolbar begin markers cost linear time in every format" do
+      html = "<html><body>" + ("<!-- BEGIN WAYBACK TOOLBAR INSERT --><p>a</p>" * 20_000) + "</body></html>"
+
+      %w[simplified text html].each do |format|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        data = call(format, html).data
+        elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+        assert_operator elapsed, :<, 2.0, "#{format} took #{elapsed.round(2)}s"
+        assert_includes data[:content], "a"
+      end
+    end
+
+    test "html is read up to 2,000,000 characters and says so" do
+      html = "<html><body>" + ("<p>word</p>" * 250_000) + "</body></html>"
+      data = call("html", html).data
+
+      assert data[:truncated]
+      assert_operator data[:length], :<, 2_500_000
+    end
+
+    test "an href survives only when relative or http, https or mailto" do
+      ["vbscript:x", "data:text/html,x", "\u0001javascript:alert(1)", "java\tscript:alert(1)", " JavaScript:x"].each do |href|
+        content = call("simplified", %(<p><a href="#{href}">Click</a></p>)).data[:content]
+
+        assert_not_includes content, "href", href.inspect
+        assert_includes content, "Click"
+      end
+
+      ["/book/1", "https://example.org/a", "http://example.org", "mailto:a@example.org", "page.html"].each do |href|
+        assert_includes call("simplified", %(<a href="#{href}">Click</a>)).data[:content], %(href="#{href}")
+      end
+    end
+
+    test "whitespace in an href is escaped rather than collapsed" do
+      assert_includes call("simplified", %(<a href="/a  b">x</a>)).data[:content], 'href="/a%20%20b"'
+    end
+
+    test "pre keeps its whitespace in simplified and text" do
+      html = "<pre>line one\n  indented   gap\nline three</pre>"
+
+      assert_includes call("simplified", html).data[:content], "line one\n  indented   gap\nline three"
+      assert_includes call("text", html).data[:content], "line one\n  indented   gap\nline three"
+    end
+
+    test "a legend does not glue to the field after it" do
+      html = "<fieldset><legend>L</legend>F</fieldset>"
+
+      assert_equal %w[L F], call("text", html).data[:content].lines.map(&:strip)
+      assert_equal ["<legend>L</legend>", "F"], call("simplified", html).data[:content].lines.map(&:strip).reject(&:empty?)
+    end
+
+    test "an image's alt text stays, and a link around an image keeps its text" do
+      content = call("simplified", '<a href="/book"><img src="c.jpg" alt="Title"></a><img alt="  ">').data[:content]
+
+      assert_includes content, '<a href="/book">Title</a>'
+      assert_includes call("text", '<a href="/book"><img alt="Title"></a>').data[:content], "Title"
+    end
+
+    test "a select menu's options become a list" do
+      html = '<select name="m"><option>Alpha</option><optgroup><option>Beta &amp; Co</option></optgroup><option> </option></select>'
+
+      simplified = call("simplified", html).data[:content]
+      assert_includes simplified, "<li>Alpha</li>"
+      assert_includes simplified, "<li>Beta &amp; Co</li>"
+      assert_equal 2, simplified.scan("<li>").size
+      assert_equal ["Alpha", "Beta & Co"], call("text", html).data[:content].lines.map(&:strip)
+    end
+
     test "html keeps the markup minus the toolbar" do
       content = call("html").data[:content]
 
