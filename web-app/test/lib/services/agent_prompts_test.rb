@@ -343,7 +343,7 @@ module Services
         "A page that does not load for you is not evidence",
         "Never clear or downgrade a recorded fact because you could not reach or confirm its source",
         "Never use The Greatest Books itself as a source", "`finish_list_audit` refuses them as sources",
-        "Do not change `high_quality_source`",
+        "Do not change `high_quality_source`", "Never remove voter names or other research details from a description",
         "Geographic scope is the `location_specific` flag", "Add penalty 46 only when the place is smaller than a country", "Never use the flag for a limit that is not a place",
         "Do not change `status`",
         "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",
