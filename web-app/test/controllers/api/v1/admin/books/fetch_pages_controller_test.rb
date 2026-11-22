@@ -112,6 +112,29 @@ module Api
             end
           end
 
+          test "a url with accented characters, spaces or brackets is fetched as sent" do
+            ["https://es.wikipedia.org/wiki/Año", "https://example.org/a b/x[1]", "HTTPS://Example.org/x"].each do |url|
+              PageFetcher::Client.any_instance.expects(:fetch).with(url, timeout_ms: 45_000).returns(page)
+
+              fetch_page({url: url})
+
+              assert_response 200, url
+            end
+          end
+
+          test "a request rejected before the fetch is logged without the url" do
+            lines = []
+            Rails.logger.stubs(:info).with { |message| lines << message.to_s }
+
+            fetch_page({url: "ftp://example.org/secret"})
+            fetch_page({})
+
+            logged = lines.select { |message| message.include?("event=api_admin_fetch_page") }
+            assert_equal 2, logged.size
+            assert logged.all? { |line| line.include?("outcome=rejected") }
+            assert logged.none? { |line| line.include?("secret") }
+          end
+
           test "an unknown format is a 422 and never fetches" do
             PageFetcher::Client.any_instance.expects(:fetch).never
 

@@ -271,6 +271,34 @@ module Mcp
       assert_equal({destructiveHint: false, idempotentHint: false, openWorldHint: false, readOnlyHint: false, title: "Create a widget"}, hints)
     end
 
+    test "read_only and open_world in x-mcp override the hints of a POST" do
+      source = document
+      source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(read_only: true, open_world: true)
+      hints = Mcp::Catalog.new(source).tool("createWidget").annotations_value.to_h
+
+      assert_equal({destructiveHint: false, idempotentHint: false, openWorldHint: true, readOnlyHint: true, title: "Create a widget"}, hints)
+    end
+
+    test "read_only and open_world must be true or false" do
+      %w[read_only open_world].each do |key|
+        source = document
+        source["paths"]["/api/v1/widgets"]["post"]["x-mcp"] = mcp(key => "yes")
+
+        error = assert_raises(Mcp::Catalog::GenerationError) { Mcp::Catalog.new(source) }
+        assert_match(/createWidget: x-mcp #{key} must be true or false/, error.message)
+      end
+    end
+
+    test "fetch_page is read-only and open-world and every other admin tool keeps the default hints" do
+      admin = Mcp::Catalog.for(document: :admin, domain: :books)
+      fetch = admin.operations.find { |operation| operation.tool_name == "fetch_page" }
+
+      assert_equal [true, true, false], [fetch.annotations[:read_only_hint], fetch.annotations[:open_world_hint], fetch.annotations[:destructive_hint]]
+      others = admin.operations - [fetch]
+      assert others.none? { |operation| operation.annotations[:open_world_hint] }
+      assert_equal %w[get], others.select { |operation| operation.annotations[:read_only_hint] }.map(&:http_method).uniq
+    end
+
     test "a DELETE marked destructive is idempotent and destructive" do
       hints = catalog.tool("deleteWidget").annotations_value.to_h
 

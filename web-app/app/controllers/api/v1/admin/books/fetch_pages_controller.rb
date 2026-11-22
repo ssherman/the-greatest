@@ -13,7 +13,8 @@ module Api
         #
         # Fetcher failures: the fetcher refusing the address is a 422; the fetcher answering but not
         # getting the page is a 502; the fetcher being unreachable or unhealthy is a 503. None of them is
-        # a 500. The log line names the host, never the full URL.
+        # a 500. One log line per call, requests rejected before the fetch included, names the host and
+        # never the full URL. A call can take up to about a minute (the client's budget plus its read padding).
         class FetchPagesController < BaseController
           include ::Api::JsonBody
 
@@ -24,20 +25,23 @@ module Api
 
           def create
             body = json_body
-            return bad_body("The body must be a JSON object.") if body.nil?
+            return reject_bad("The body must be a JSON object.") if body.nil?
 
             unknown = body.keys - ALLOWED
-            return unknown_fields(unknown, ALLOWED) if unknown.any?
+            if unknown.any?
+              log("-", "-", "rejected", 422)
+              return unknown_fields(unknown, ALLOWED)
+            end
 
             url = body["url"]
-            return bad_body("url is required and must be a string") unless url.is_a?(String) && url.strip.present?
+            return reject_bad("url is required and must be a string") unless url.is_a?(String) && url.strip.present?
 
             format = body.fetch("format", "simplified")
             unless ::Services::PageContent::FORMATS.include?(format)
-              return unprocessable("format must be one of #{::Services::PageContent::FORMATS.join(", ")}")
+              return reject_unprocessable("format must be one of #{::Services::PageContent::FORMATS.join(", ")}")
             end
 
-            host = public_host(url.strip) or return unprocessable("url must be an absolute http or https URL")
+            host = http_host(url.strip) or return reject_unprocessable("url must be an absolute http or https URL")
 
             page = fetch(url.strip, host, format) or return
             content = ::Services::PageContent.call(html: page.html, format: format).data
@@ -49,13 +53,24 @@ module Api
 
           private
 
-          # The URL's host when it is an absolute http(s) URL with one; nil otherwise. Whether the
-          # address is public is the fetcher's check.
-          def public_host(url)
-            uri = URI.parse(url)
-            uri.host.presence if uri.is_a?(URI::HTTP) && uri.host.present?
-          rescue URI::InvalidURIError
+          # The URL's host when it is an absolute http(s) URL with one; nil otherwise. The parse is
+          # lenient on purpose (accented paths, spaces and brackets are an agent's everyday URLs); the
+          # URL goes to the fetcher exactly as sent, and whether the address is public is its check.
+          def http_host(url)
+            uri = Addressable::URI.parse(url)
+            uri.host.presence if %w[http https].include?(uri.scheme&.downcase)
+          rescue Addressable::URI::InvalidURIError
             nil
+          end
+
+          def reject_bad(detail)
+            log("-", "-", "rejected", 400)
+            bad_body(detail)
+          end
+
+          def reject_unprocessable(detail)
+            log("-", "-", "rejected", 422)
+            unprocessable(detail)
           end
 
           # The Page, or nil after rendering the problem.
