@@ -20,7 +20,7 @@ module Api
 
           FIELDS = {
             "name" => :string,
-            "description" => :string_or_null, "source" => :string_or_null,
+            "description" => :string_or_null, "voter_details" => :string_or_null, "source" => :string_or_null,
             "source_country_origin" => :string_or_null, "url" => :string_or_null,
             "year_published" => :year,
             "number_of_voters" => :count_or_null, "num_years_covered" => :count_or_null,
@@ -29,7 +29,7 @@ module Api
             "location_specific" => :boolean, "creator_specific" => :boolean, "voter_count_estimated" => :boolean,
             "voter_count_unknown" => :boolean, "voter_names_unknown" => :boolean
           }.freeze
-          CLEARABLE = %w[description source source_country_origin url year_published number_of_voters
+          CLEARABLE = %w[description voter_details source source_country_origin url year_published number_of_voters
             num_years_covered estimated_quality].freeze
 
           def index

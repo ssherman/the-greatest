@@ -85,6 +85,24 @@ module Books
       assert_response :success
     end
 
+    test "show renders a who-voted section when voter_details is set and none when blank" do
+      get "/lists/#{@list.id}"
+      assert_response :success
+      assert_select "[data-testid='list-voter-details']", 0
+
+      @list.update!(voter_details: "Jane Doe, critic\nJohn Roe, editor")
+      get "/lists/#{@list.id}"
+      assert_response :success
+      assert_select "[data-testid='list-voter-details']", 1
+      assert_select "[data-testid='list-voter-details'] details", 0
+    end
+
+    test "show folds a long voter_details into a disclosure" do
+      @list.update!(voter_details: "Jane Doe, critic. " * 40)
+      get "/lists/#{@list.id}"
+      assert_select "[data-testid='list-voter-details'] details", 1
+    end
+
     test "show 404s for a non-active list" do
       @list.update!(status: :unapproved)
 

@@ -54,6 +54,23 @@
         </div>
 
         <div class="md:col-span-2">
+          <%= f.label :voter_details, class: "label" do %>
+            <span class="font-semibold">Who voted</span>
+          <% end %>
+          <%= f.text_area :voter_details,
+              class: "textarea w-full h-32 #{list.errors[:voter_details].any? ? 'textarea-error' : ''}",
+              placeholder: "Names and roles of the voters, how they were chosen..." %>
+          <label class="label">
+            <span>Who chose the books (names, roles), how they were chosen, and where the roster comes from. Shown publicly on the books list page.</span>
+          </label>
+          <% if list.errors[:voter_details].any? %>
+            <label class="label">
+              <span class="text-error"><%= list.errors[:voter_details].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="md:col-span-2">
           <%= f.label :status, class: "label" do %>
             <span class="font-semibold">Status <span class="text-error">*</span></span>
           <% end %>

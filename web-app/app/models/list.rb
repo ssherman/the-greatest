@@ -28,6 +28,7 @@
 #  url                   :string
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
+#  voter_details         :text
 #  voter_names_unknown   :boolean
 #  wizard_state          :jsonb
 #  year_published        :integer
@@ -100,6 +101,7 @@ class List < ApplicationRecord
   validates :name, presence: true
   validates :type, presence: true
   validates :status, presence: true
+  validates :voter_details, length: {maximum: 20_000}
   validates :url, format: {with: %r{\Ahttps?://}i, message: "must be an http or https url"}, allow_blank: true
   # ActiveModel raises RangeError when SERIALIZING an out-of-range integer, not
   # when casting it -- so without a ceiling `valid?` returns true and `save` then
