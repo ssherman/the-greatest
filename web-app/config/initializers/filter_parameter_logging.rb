@@ -13,6 +13,12 @@ Rails.application.config.filter_parameters += [
   # possession for an authorization code, and "code_verifier" matches none of
   # the patterns above.
   :code_verifier,
+  # The URL an admin agent asks fetch_page to load (and the same key inside an
+  # MCP tool call's arguments). A signed link or a query credential in it would
+  # otherwise land in the Parameters log line before the action runs; the
+  # action's own log line records the host only. Exact match, so source_url,
+  # api_url and the other *_url params stay legible.
+  /\Aurl\z/,
   # Stripe webhook payload fields. ParameterFilter matches at any depth, so
   # these cover the nested card and customer objects in an event body.
   :last4, :exp_month, :exp_year, :postal_code, :address, :customer_details, :billing_details,
