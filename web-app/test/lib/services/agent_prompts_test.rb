@@ -340,7 +340,7 @@ module Services
         "A null `number_of_voters` or `num_years_covered` means no penalty from that curve",
         "set `voter_count_unknown` to true rather than leaving the count null",
         "cuts the list's total penalty by a third",
-        "`location_specific` set to true plus exactly one static geographic penalty",
+        "Geographic scope is the `location_specific` flag", "Add penalty 46 only when the place is smaller than a country", "Never use the flag for a limit that is not a place",
         "Do not change `status`",
         "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",
         "`sources` is an array of http(s) URLs", "`verified` needs at least one",

@@ -170,6 +170,7 @@ With `max_age: 50` and `max_penalty_percentage: 80`:
 - `high_quality_source` multiplies the list's total penalty by 2/3.
 - Some penalties have no application on the books primary configuration and cost nothing there. A null `value_on_primary` in `get_admin_list` or `list_admin_penalties` shows which.
 - `creator_specific` has no books penalty row.
+- Geography on books is the `location_specific` flag (penalty 15, 20 on the books configurations) plus penalty 46 (15) when the place is smaller than a country. The per-place penalties no longer exist; see `docs/features/list-audits.md`.
 - Editing a list's fields or penalties never changes its weight; refresh the ranking configuration.
 
 ## Background Processing

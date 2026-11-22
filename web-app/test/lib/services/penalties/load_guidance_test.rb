@@ -51,6 +51,40 @@ module Services
         assert_equal [@penalty.id], result.data[:skipped_present]
         assert_equal "Rule", @penalty.reload.guidance
       end
+
+      test "overwrite replaces differing guidance and reports it" do
+        @penalty.update_columns(guidance: "Old text")
+
+        result = LoadGuidance.call(entries: [entry], overwrite: true)
+
+        assert_equal [@penalty.id], result.data[:overwritten]
+        assert_empty result.data[:filled]
+        assert_equal "Rule", @penalty.reload.guidance
+      end
+
+      test "overwrite leaves identical guidance alone" do
+        @penalty.update_columns(guidance: "Rule")
+
+        result = LoadGuidance.call(entries: [entry], overwrite: true)
+
+        assert_equal [@penalty.id], result.data[:skipped_present]
+        assert_empty result.data[:overwritten]
+      end
+
+      test "overwrite still refuses a name mismatch" do
+        @penalty.update_columns(guidance: "Old text")
+
+        result = LoadGuidance.call(entries: [entry.merge("name" => "Other")], overwrite: true)
+
+        assert_equal 1, result.data[:mismatched].size
+        assert_equal "Old text", @penalty.reload.guidance
+      end
+
+      test "overwrite still fills a blank" do
+        result = LoadGuidance.call(entries: [entry], overwrite: true)
+
+        assert_equal [@penalty.id], result.data[:filled]
+      end
     end
   end
 end

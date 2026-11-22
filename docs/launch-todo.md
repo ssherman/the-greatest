@@ -923,17 +923,24 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
 An admin's agent audits the books lists one at a time. Details: `docs/features/list-audits.md`.
 Steps marked "Shane runs with `!`" change production, so an agent does not run them.
 
-1. **Load the penalty guidance. Shane runs with `!`.** `bin/rails penalties:load_guidance`. It fills
-   blank `guidance` columns only. Check the output: `mismatched` and `missing` must be empty, and
+1. **Consolidate the geography penalties. Shane runs with `!`.** `bin/rails penalties:consolidate` is
+   a dry run: read the report (lists flagged, attachments moved, penalties deleted with their list
+   counts, values set per books configuration, penalties renamed). Nothing may be refused. Then
+   `APPLY=1 bin/rails penalties:consolidate`. It is idempotent, so a second run reports nothing to
+   do. Weights change on the next ranking refresh (geography values move; removing 21 changes
+   nothing). Run it before the guidance load, and before `penalties:backfill`, which now expects the
+   new names of 44 and 46.
+2. **Load the penalty guidance. Shane runs with `!`.** `bin/rails penalties:load_guidance`. It fills
+   blank `guidance` columns only; add `OVERWRITE=1` to replace guidance that differs from the YAML. Check the output: `mismatched` and `missing` must be empty, and
    `filled` should hold the penalties you expect. Edit any wording on the admin penalties form.
-2. **Detach hand-attached dynamic penalties. Shane runs with `!`.** `bin/rails penalties:detach_dynamic`
+3. **Detach hand-attached dynamic penalties. Shane runs with `!`.** `bin/rails penalties:detach_dynamic`
    is a dry run that prints only `list_penalty` ids. Check it lists one row (dev had exactly one). If it
    lists more, inspect each (`ListPenalty.find(id)` with its list and penalty) before running
    `APPLY=1 bin/rails penalties:detach_dynamic`. Detaching changes no weight: the calculator skips
    non-static attachments.
-3. **Work the queue.** Open `/admin/list_audits` on the books host, use **Copy
+4. **Work the queue.** Open `/admin/list_audits` on the books host, use **Copy
    prompt**, and give it to an agent on the admin MCP endpoint with a `books:admin:write` token. A
    list is audited once; **Release** frees a list whose lease got stuck.
-4. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
+5. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
    and penalties but never the weight. Use the admin **Refresh Rankings** action on the books primary
    once the batch is done, and again after later audits.

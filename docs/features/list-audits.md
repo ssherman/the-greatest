@@ -44,17 +44,24 @@ Public side: `GET /api/v1/penalties` (`list_penalties`) lists the penalty catalo
 
 `penalties.guidance` is the rule an agent follows when deciding whether a penalty applies. `description` stays the short reader-facing blurb the website shows. Edit guidance on the admin penalties form.
 
-`config/penalties/guidance.yml` holds the starting text keyed by penalty id with the expected name as a guard. `bin/rails penalties:load_guidance` fills blanks only, never overwriting, and prints four buckets: `filled`, `skipped_present`, `mismatched` (the row at that id has a different name) and `missing` (no such id). Check `mismatched` and `missing` are empty after a production run.
+`config/penalties/guidance.yml` holds the starting text keyed by penalty id with the expected name as a guard. `bin/rails penalties:load_guidance` fills blanks only by default, and prints five buckets: `filled`, `overwritten` (only with `OVERWRITE=1`, which replaces guidance whose text differs from the YAML; the name check still applies), `skipped_present`, `mismatched` (the row at that id has a different name) and `missing` (no such id). Check `mismatched` and `missing` are empty after a production run.
 
 A dynamic penalty (its value comes from a list field) is never attached by hand. `Penalty::DRIVING_FIELDS` maps each `dynamic_type` to the list field that drives it (`Penalty#driving_field`; `percentage_western` is computed from the list's books and has none). `Penalty.books_catalogue` is the set the tools and the public endpoint expose: books and global penalties, not member-owned.
 
 `creator_specific` has no books penalty row, so setting that flag costs nothing today.
 
+### Geography penalties
+
+Geographic scope is the `location_specific` flag (penalty 15, dynamic): it carries the base cost (20 on books configurations) and exempts the list from the western-canon penalty (23). Penalty 46, "only covers an area smaller than a country", is attached in addition when the place is a state, city or region (15, so a sub-national list costs 35). The per-place penalties (31, 36, 37, 38, 39, 42), "specific voter details are lacking" (21), "genre fiction, multiple genres" (27) and "half the voters are not experts" (32, merged into 44) were removed by `penalties:consolidate`.
+
+`bin/rails penalties:consolidate` is a dry run that prints, per step, what it would do: lists flagged, attachments moved, penalties deleted with their list counts, values set per books configuration, penalties renamed. `APPLY=1` writes, in one transaction. It is idempotent and refuses the whole run if a known penalty id holds an unexpected name. Weights change at the next ranking refresh.
+
 ## Rake tasks
 
 | Task | Does |
 |---|---|
-| `bin/rails penalties:load_guidance` | Loads `guidance.yml` into blank `guidance` columns, as above |
+| `bin/rails penalties:load_guidance` | Loads `guidance.yml` into blank `guidance` columns; `OVERWRITE=1` also replaces differing text |
+| `bin/rails penalties:consolidate` | Folds the geography penalties into `location_specific` + 46, merges 32 into 44, deletes 21 and 27. Dry run; `APPLY=1` writes |
 | `bin/rails penalties:detach_dynamic` | Lists hand-attached dynamic penalties on lists; a dry run. `APPLY=1` destroys those attachments. Dynamic penalties must come from the list's fields, not from an attachment |
 
 ## Admin pages

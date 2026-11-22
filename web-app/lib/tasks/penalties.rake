@@ -30,12 +30,9 @@ module Penalties
       22 => {name: "Voters: Voters seem to have an agenda/bias of some kind",
              category: :voter_expertise,
              description: "The voters appear to be promoting a viewpoint rather than judging quality, so their picks say more about the agenda than the books."},
-      32 => {name: "Voters: half the voters are not critics, authors, or experts",
+      44 => {name: "Voters: a mix of experts and the public",
              category: :voter_expertise,
-             description: "Roughly half the panel were experts and half were general readers, so the list blends expert and popular opinion."},
-      44 => {name: "Voters: not critics, authors, or experts, but the books on the list were curated by critics/experts",
-             category: :voter_expertise,
-             description: "The public voted, but critics or experts chose and vetted the candidates, so expert judgement shaped the field even though the public ranked it."},
+             description: "Experts and general readers both shaped the list: a panel that mixed the two, or a public vote from a shortlist experts chose."},
 
       # --- How many voted --------------------------------------------------
       12 => {name: "Voters: Unknown Names",
@@ -50,9 +47,6 @@ module Penalties
       18 => {name: "Voters: Estimated Count",
              category: :voter_participation,
              description: "The number of voters was estimated rather than published, so the figure we hold is approximate."},
-      21 => {name: "Voters: specific voter details are lacking",
-             category: :voter_participation,
-             description: "The list names its voters but tells us little else about them, so we cannot judge how qualified the panel was."},
 
       # --- How much time the list covers -----------------------------------
       17 => {name: "List: number of years covered",
@@ -71,7 +65,7 @@ module Penalties
             description: "Built around an unusual angle rather than quality. Entries were chosen to fit a concept, not because they are the best."},
       15 => {name: "List: only covers 1 specific location",
              category: :list_subject_scope,
-             description: "Applied automatically to lists that declare a regional focus. Their scope is narrow, but it is stated honestly up front, which is also why they are exempt from the western-canon adjustment."},
+             description: "Applied automatically to lists that limit which books were eligible by place: a country, a group of countries, a continent, a state or a city. These lists are also exempt from the western-canon adjustment."},
       16 => {name: "List: only covers 1 specific genre",
              category: :list_subject_scope,
              description: "Applied automatically to single-genre lists. The best work in one genre is competing in a far smaller field than the best work overall."},
@@ -87,33 +81,12 @@ module Penalties
       26 => {name: "List: has a focus on a specific theme(religion, etc) but is not definite",
              category: :list_subject_scope,
              description: "Organised around a theme such as religion or politics, so books were picked for fitting the subject rather than for being the best."},
-      27 => {name: "List: only covers genre fiction(multiple genres)",
-             category: :list_subject_scope,
-             description: "Limited to genre fiction, so literary fiction and non-fiction were never eligible."},
-      31 => {name: "List: only partially covers 1 specific country",
-             category: :list_subject_scope,
-             description: "About half the entries were required to come from one country, so the field was partly reserved rather than open."},
-      36 => {name: "List: only covers 1 specific continent",
-             category: :list_subject_scope,
-             description: "Restricted to one continent, so books from everywhere else were never eligible."},
-      37 => {name: "List: only covers 1 specific country",
-             category: :list_subject_scope,
-             description: "Restricted to authors or books from a single country."},
-      38 => {name: "List: only covers 1 specific large geographical region (Asia, Latin America, etc)",
-             category: :list_subject_scope,
-             description: "Restricted to one large region, such as Asia or Latin America."},
-      39 => {name: "List: only covers 1 specific state of a country",
-             category: :list_subject_scope,
-             description: "Restricted to a single state or province, a very small pool to pick from."},
-      42 => {name: "List: only covers 1 specific city",
-             category: :list_subject_scope,
-             description: "Restricted to a single city, the smallest geographic pool we track."},
       43 => {name: "List: only covers translated or foreign books than where voters are from",
              category: :list_subject_scope,
              description: "Restricted to translated or foreign-language books relative to where the voters live."},
-      46 => {name: "List: only covers 1 specific small geographical region (Southern United States, etc)",
+      46 => {name: "List: only covers an area smaller than a country (a state, city or region)",
              category: :list_subject_scope,
-             description: "Restricted to a small region, such as the American South."},
+             description: "Restricted to an area smaller than a country, such as a state, a city or the American South, so the pool to pick from is very small."},
       47 => {name: "List: Only covers Series'",
              category: :list_subject_scope,
              description: "Restricted to books that are part of a series, so standalone works were never eligible."},
@@ -208,10 +181,10 @@ namespace :penalties do
     exit(1) if result[:mismatched].any?
   end
 
-  desc "Fill blank penalty guidance from config/penalties/guidance.yml (never overwrites)"
+  desc "Fill blank penalty guidance from config/penalties/guidance.yml; OVERWRITE=1 also replaces text that differs"
   task load_guidance: :environment do
     entries = YAML.load_file(Rails.root.join("config/penalties/guidance.yml"))
-    data = Services::Penalties::LoadGuidance.call(entries: entries).data
+    data = Services::Penalties::LoadGuidance.call(entries: entries, overwrite: ENV["OVERWRITE"] == "1").data
 
     data.each { |bucket, items| puts "#{bucket}: #{items.inspect}" }
 
@@ -224,5 +197,24 @@ namespace :penalties do
     data = Services::Penalties::DetachDynamic.call(dry_run: !apply).data
 
     puts "#{apply ? "Destroyed" : "Would destroy (dry run, APPLY=1 to apply)"} list_penalty ids: #{data[:list_penalty_ids].inspect}"
+  end
+
+  desc "Consolidate the books geography penalties (dry run; APPLY=1 writes). See docs/launch-todo.md section 19"
+  task consolidate: :environment do
+    apply = ENV["APPLY"] == "1"
+    result = Services::Penalties::Consolidate.call(dry_run: !apply)
+
+    if result.success?
+      puts(apply ? "APPLIED" : "DRY RUN (nothing written; APPLY=1 to apply)")
+      result.data.each do |bucket, items|
+        next puts("#{bucket}: #{items}") unless items.is_a?(Array)
+
+        puts "#{bucket} (#{items.size}):"
+        items.each { |item| puts "  #{item.inspect}" }
+      end
+    else
+      result.errors.each { |e| puts "REFUSED: #{e}" }
+      exit(1)
+    end
   end
 end
