@@ -306,6 +306,10 @@ Every failure is a `PageFetcher::Exceptions::Error`:
 | `ParseError` | a 200 that is not a fetch (or fetch_file) response | yes |
 | `CircuitOpenError` | five counted failures in a row; 60 s cooldown | — |
 
+### Agent access
+
+The admin MCP tool `fetch_page` (`POST /api/v1/admin/fetch_page`, scope `books:admin:read`; `Api::V1::Admin::Books::FetchPagesController`) lets an admin agent read a page that will not load for it. It is general purpose: one URL per call, no search. It calls `PageFetcher::Client#fetch` with a 45 s budget, so it shares the fetcher's concurrency, per-host spacing and circuit breaker with the Goodreads enrichment, and a call can hold a web request that long. `Services::PageContent` formats the result: `simplified` (default; `Services::Html::SimplifierService` output with `class` and `id` also stripped and whitespace collapsed), `text`, or `html`. Caps are 100,000 characters for simplified and text and 200,000 for html; the response carries `truncated` and the uncapped `length`. The Wayback Machine's injected toolbar is removed from every format. A URL that is not absolute http(s) or an unknown format is a 422 before any fetch, as is a fetcher `ClientError`. A `UpstreamError`, or a `ServerError` coded `browser_error` or `navigation_timeout`, is a 502 `bad_gateway` with the fetcher's code in `detail`. Any other fetcher error (open breaker, our timeout, network, parse, `browser_unavailable`) is a 503 `service_unavailable`. The log line carries the host, format and outcome, never the full URL.
+
 The read timeout is `timeout_ms / 1000 + 10`, so the service always answers
 first. The breaker is `Books::OpenLibrary::CircuitBreaker` under the key
 `page_fetcher`.

@@ -299,7 +299,9 @@ Known gap: the Goodreads replay's `FixIdentity.link_authors` can re-link an auth
 
 ## List audit tools
 
-Ten admin tools let an agent audit books lists: `search_admin_lists`, `get_admin_list`, `list_admin_list_items`, `list_admin_penalties`, `update_admin_list`, `attach_list_penalty`, `detach_list_penalty`, `start_list_audit`, `finish_list_audit` and `release_list_audit` (reads `books:admin:read`, the rest `books:admin:write`). With them the admin document has 75 operations (65 before). The public document gains `list_penalties` (`GET /api/v1/penalties`) and a `penalties` member on the full `get_list` shape, taking it from 37 to 38 operations. The queue rules, penalty guidance and admin pages are in `docs/features/list-audits.md`. The audit prompt is a Copy prompt on the admin pages, not an MCP prompt.
+Ten admin tools let an agent audit books lists: `search_admin_lists`, `get_admin_list`, `list_admin_list_items`, `list_admin_penalties`, `update_admin_list`, `attach_list_penalty`, `detach_list_penalty`, `start_list_audit`, `finish_list_audit` and `release_list_audit` (reads `books:admin:read`, the rest `books:admin:write`). With them the admin document had 75 operations (65 before). The public document gains `list_penalties` (`GET /api/v1/penalties`) and a `penalties` member on the full `get_list` shape, taking it from 37 to 38 operations. The queue rules, penalty guidance and admin pages are in `docs/features/list-audits.md`. The audit prompt is a Copy prompt on the admin pages, not an MCP prompt.
+
+A general-purpose admin tool, `fetch_page` (`POST /api/v1/admin/fetch_page`, `books:admin:read`), takes the admin document to 76 operations. It returns one public page, fetched through the page fetcher, as `simplified` (default), `text` or `html`, capped and with `truncated`; see "Agent access" in `docs/features/page-fetcher-service.md`. Fetcher failures are the problem codes `bad_gateway` (502) and `service_unavailable` (503), and a refused URL is a 422.
 
 ## Logging
 
