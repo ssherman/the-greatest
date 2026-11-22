@@ -65,7 +65,7 @@ module Penalties
             description: "Built around an unusual angle rather than quality. Entries were chosen to fit a concept, not because they are the best."},
       15 => {name: "List: only covers 1 specific location",
              category: :list_subject_scope,
-             description: "Applied automatically to lists that limit which books were eligible by place: a country, a group of countries, a continent, a state or a city. These lists are also exempt from the western-canon adjustment."},
+             description: "Applied automatically to lists that limit which items were eligible by place: a country, a group of countries, a continent, a state or a city. These lists are also exempt from the western-canon adjustment."},
       16 => {name: "List: only covers 1 specific genre",
              category: :list_subject_scope,
              description: "Applied automatically to single-genre lists. The best work in one genre is competing in a far smaller field than the best work overall."},

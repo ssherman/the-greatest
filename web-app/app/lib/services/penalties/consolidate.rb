@@ -12,7 +12,8 @@ module Services
     # ids. Like LoadGuidance, every id is checked against its expected name (old
     # or already-new) and a mismatch refuses the whole run before any write.
     #
-    # Idempotent: a deleted id is simply absent, a renamed penalty already has
+    # Idempotent: a deleted id is simply absent, a renamed penalty (name no longer
+    # the old one) is left alone so a later admin edit to its text survives, and
     # the new name, a flagged list needs no write. Configuration values are only
     # recomputed while there is something to derive them from (a legacy geography
     # application, a missing #15 application, or the not-yet-renamed #46), so a
@@ -111,11 +112,11 @@ module Services
 
       def flag_lists
         list_ids = attachments(present_ids(GEOGRAPHY)).pluck(:list_id)
-        unflagged = ::Books::List.where(id: list_ids).where("location_specific IS NOT TRUE").order(:id).pluck(:id)
+        unflagged = ::Books::List.where(id: list_ids).where("location_specific IS NOT TRUE").order(:id).pluck(:id, :name)
         return if unflagged.empty?
 
-        ::Books::List.where(id: unflagged).update_all(location_specific: true, updated_at: Time.current)
-        @data[:lists_flagged].concat(unflagged)
+        ::Books::List.where(id: unflagged.map(&:first)).update_all(location_specific: true, updated_at: Time.current)
+        @data[:lists_flagged].concat(unflagged.map { |id, name| {id: id, name: name} })
       end
 
       def move_attachments
@@ -130,7 +131,7 @@ module Services
           next if ::ListPenalty.exists?(list_id: attachment.list_id, penalty_id: to_id)
 
           attachment.update!(penalty_id: to_id)
-          @data[:attachments_moved] << {list_id: attachment.list_id, from: attachment.penalty_id_before_last_save, to: to_id}
+          @data[:attachments_moved] << {list_id: attachment.list_id, list: attachment.list.name, from: attachment.penalty_id_before_last_save, to: to_id}
         end
       end
 
@@ -178,7 +179,7 @@ module Services
       def rename_penalties
         RENAMES.each do |id, attrs|
           penalty = @penalties[id]
-          next if penalty.name == attrs[:name] && penalty.category == attrs[:category].to_s && penalty.description == attrs[:description]
+          next if penalty.name != NAMES[id].first
 
           @data[:penalties_renamed] << {id: id, from: penalty.name, to: attrs[:name]}
           penalty.update!(attrs)

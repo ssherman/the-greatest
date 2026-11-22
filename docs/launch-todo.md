@@ -927,8 +927,11 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    a dry run: read the report (lists flagged, attachments moved, penalties deleted with their list
    counts, values set per books configuration, penalties renamed). Nothing may be refused. Then
    `APPLY=1 bin/rails penalties:consolidate`. It is idempotent, so a second run reports nothing to
-   do. Weights change on the next ranking refresh (geography values move; removing 21 changes
-   nothing). Run it before the guidance load, and before `penalties:backfill`, which now expects the
+   do. Weights change on the next ranking refresh: geography values move, and removing #21
+   (value 40 on the books year rankings) raises the weight of the lists that carried it on those
+   rankings (Shane accepted this, 2026-11-22). Every books configuration without a #15 value gets
+   one (20), the year configurations included; that has no effect until a location-specific list
+   feeds them. Run it before the guidance load, and before `penalties:backfill`, which now expects the
    new names of 44 and 46.
 2. **Load the penalty guidance. Shane runs with `!`.** `bin/rails penalties:load_guidance`. It fills
    blank `guidance` columns only; add `OVERWRITE=1` to replace guidance that differs from the YAML. Check the output: `mismatched` and `missing` must be empty, and

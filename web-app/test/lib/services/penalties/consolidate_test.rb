@@ -66,7 +66,7 @@ module Services
 
         assert result.success?
         assert_equal before, snapshot
-        assert_equal [@list.id], result.data[:lists_flagged]
+        assert_equal [{id: @list.id, name: @list.name}], result.data[:lists_flagged]
         deleted = result.data[:penalties_deleted].index_by { |d| d[:id] }
         assert_equal 1, deleted[37][:lists]
         assert_equal 1, deleted[32][:lists]
@@ -177,6 +177,32 @@ module Services
         assert_empty result.data[:applications_set]
         assert_empty result.data[:penalties_renamed]
         assert_empty result.data[:attachments_moved]
+      end
+
+      test "an edit to the renamed penalty text survives a re-run" do
+        Consolidate.call(dry_run: false)
+        ::Penalty.find(46).update_columns(description: "Edited by an admin")
+
+        Consolidate.call(dry_run: false)
+
+        assert_equal "Edited by an admin", ::Penalty.find(46).description
+      end
+
+      test "an existing location value with no legacy geography application is kept" do
+        apply_value(@books, 15, 33)
+
+        Consolidate.call(dry_run: false)
+
+        assert_equal 33, value_of(@books, 15)
+      end
+
+      test "an existing location value is replaced from the country value when legacy applications exist" do
+        apply_value(@books, 15, 5)
+        apply_value(@books, 37, 25)
+
+        Consolidate.call(dry_run: false)
+
+        assert_equal 25, value_of(@books, 15)
       end
 
       test "a wrong name at a known id refuses the whole run" do
