@@ -83,7 +83,7 @@ Geographic scope is the `location_specific` flag (penalty 15, dynamic): it carri
 
 Two rules came out of the first production audits (2026-11-22), where an agent marked list 122's voter count unknown because it could not open the archived source page, although that page names all 37 contributors:
 
-- **A page that does not load is not evidence.** The agent never clears or downgrades a recorded fact because it could not reach or confirm the source; it keeps the fact, names the page in its note, and uses `unverifiable` if nothing else could be checked.
+- **A page that does not load is not evidence.** The agent never clears or downgrades a recorded fact because it could not reach or confirm the source; it keeps the fact, names the page in its note, and uses `unverifiable` if nothing else could be checked. The prompt also points the agent at `fetch_page` (the admin MCP tool that fetches a page through the page fetcher, see `docs/features/page-fetcher-service.md`) to try before giving up on a page.
 - **Keep a recorded voter count unless a source contradicts it.** An unconfirmed count stays, with `voter_count_estimated` set. `voter_count_unknown` (which costs as much as a single voter) is for lists where no count was ever recorded and none can be estimated; named voters set a conservative floor.
 
 The guidance for penalties 13, 14 and 18 says the same. After a deploy that changes `guidance.yml`, run `bin/rails penalties:load_guidance OVERWRITE=1` in production.

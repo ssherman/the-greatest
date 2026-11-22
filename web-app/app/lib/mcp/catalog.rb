@@ -26,7 +26,7 @@ module Mcp
     LOCATIONS = %w[path query].freeze
     JSON_CONTENT = "application/json"
 
-    ALLOWED_KEYS = %w[name description destructive].freeze
+    ALLOWED_KEYS = %w[name description destructive read_only open_world].freeze
 
     # The catalogue for one document on one site. Memoised outside development,
     # like Api::OpenapiDocument.raw: the document changes only with a deploy.
@@ -104,6 +104,8 @@ module Mcp
         path: api_operation.path,
         scope: scope,
         destructive: extension["destructive"] == true,
+        read_only: extension["read_only"],
+        open_world: extension["open_world"],
         arguments: arguments,
         input_schema: input_schema(properties, required)
       )
@@ -116,6 +118,16 @@ module Mcp
 
       unknown = extension.keys - ALLOWED_KEYS
       raise GenerationError, "#{id}: unknown x-mcp key: #{unknown.join(", ")} (allowed: #{ALLOWED_KEYS.join(", ")})" if unknown.any?
+
+      %w[read_only open_world].each do |key|
+        next unless extension.key?(key)
+
+        raise GenerationError, "#{id}: x-mcp #{key} must be true or false" unless [true, false].include?(extension[key])
+      end
+
+      if extension["read_only"] == true && extension["destructive"] == true
+        raise GenerationError, "#{id}: x-mcp cannot be both read_only and destructive"
+      end
 
       if extension.key?("destructive")
         raise GenerationError, "#{id}: x-mcp destructive must be true or false" unless [true, false].include?(extension["destructive"])

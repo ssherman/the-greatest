@@ -1,0 +1,313 @@
+require "test_helper"
+
+module Services
+  class PageContentTest < ActiveSupport::TestCase
+    PAGE = <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>Best Books</title><style>.x{color:red}</style><script>var tracking = 1;</script></head>
+      <body class="home"><!-- BEGIN WAYBACK TOOLBAR INSERT -->
+      <div id="wm-ipp-base" lang="en"><div id="wm-ipp">Wayback toolbar text</div></div>
+      <!-- END WAYBACK TOOLBAR INSERT -->
+      <div id="content" class="main">
+        <h2 class="title">Top   Novels</h2>
+        <p>Intro   paragraph.</p>
+        <ol><li><a href="/war" class="l">War and Peace</a></li><li>Ulysses</li></ol>
+        <table><tr><td>1</td><td>Voter One</td></tr></table>
+      </div></body></html>
+    HTML
+
+    def call(format, html = PAGE) = PageContent.call(html: html, format: format)
+
+    test "the Wayback toolbar is removed in every format" do
+      %w[simplified text html].each do |format|
+        content = call(format).data[:content]
+
+        assert_not_includes content, "Wayback toolbar text", format
+        assert_not_includes content, "WAYBACK TOOLBAR", format
+        assert_not_includes content, "wm-ipp", format
+        assert_includes content, "Ulysses", format
+      end
+    end
+
+    test "simplified keeps structure and links but drops attributes, scripts and styles" do
+      content = call("simplified").data[:content]
+
+      assert_includes content, "<table>"
+      assert_includes content, "<ol>"
+      assert_includes content, "<h2>"
+      assert_includes content, '<a href="/war">'
+      assert_no_match(/\sclass=|\sid=/, content)
+      assert_not_includes content, "<script"
+      assert_not_includes content, "<style"
+      assert_not_includes content, "tracking"
+      assert_includes content, "Top Novels"
+      assert_no_match(/ {2,}/, content)
+    end
+
+    test "text puts block elements on separate lines and has no tags" do
+      content = call("text").data[:content]
+      lines = content.lines.map(&:strip)
+
+      assert_no_match(/<[a-z]/i, content)
+      assert_includes lines, "Top Novels"
+      assert_includes lines, "Intro paragraph."
+      assert_includes lines, "Ulysses"
+      assert_not_includes content, "tracking"
+      assert_no_match(/\n{3,}/, content)
+    end
+
+    test "simplified drops empty wrappers, unwraps pure wrappers and keeps links and empty cells" do
+      html = "<body><div><div><div></div></div></div><div><span><div><p>Keep me</p></div></span></div>" \
+        '<div><a href="/x">Link</a></div><div><a href="/y"></a></div>' \
+        "<table><tr><td></td><td>1</td></tr></table><ul><li></li></ul></body>"
+      content = call("simplified", html).data[:content]
+
+      assert_no_match(/<div>\s*<div>/, content)
+      assert_not_includes content, "<span"
+      assert_includes content, "<p>Keep me</p>"
+      assert_includes content, '<a href="/x">Link</a>'
+      assert_not_includes content, "/y"
+      assert_includes content, "<td></td>"
+      assert_includes content, "<li>"
+    end
+
+    test "a toolbar begin marker with no end keeps the rest of the page" do
+      html = "<html><body><!-- BEGIN WAYBACK TOOLBAR INSERT --><div>Real content 1</div><p>Real content 2</p></body></html>"
+      %w[simplified text html].each do |format|
+        content = call(format, html).data[:content]
+
+        assert_includes content, "Real content 1", format
+        assert_includes content, "Real content 2", format
+        assert_not_includes content, "WAYBACK", format
+      end
+    end
+
+    test "a toolbar begin marker before content on a page without a body keeps the content" do
+      html = "<html><head><title>x</title></head><!-- BEGIN WAYBACK TOOLBAR INSERT --><div id=wm-ipp-base>tb</div><p>Real content</p></html>"
+      %w[simplified text].each do |format|
+        content = call(format, html).data[:content]
+
+        assert_includes content, "Real content", format
+        assert_not_includes content, "tb", format
+      end
+    end
+
+    test "a toolbar begin marker inside a wrapper with the end outside it keeps the content after it" do
+      html = "<html><body><div><!-- BEGIN WAYBACK TOOLBAR INSERT --><div id=wm-ipp>tb</div><p>Inner real</p></div>" \
+        "<!-- END WAYBACK TOOLBAR INSERT --><p>Outer real</p></body></html>"
+      %w[simplified text html].each do |format|
+        content = call(format, html).data[:content]
+
+        assert_includes content, "Inner real", format
+        assert_includes content, "Outer real", format
+        assert_not_includes content, "tb<", format
+      end
+    end
+
+    test "text separates table cells and keeps each row on its own line" do
+      html = "<table><tr><td>1</td><td>1984</td><td>Orwell</td></tr><tr><td>2</td><td>Ulysses</td></tr></table>"
+
+      assert_equal ["1 | 1984 | Orwell", "2 | Ulysses"], call("text", html).data[:content].lines.map(&:strip)
+    end
+
+    test "text keeps list items, paragraphs, headings and breaks on separate lines" do
+      html = "<h1>T</h1><p>a<br>b</p><ul><li>one</li><li>two</li></ul>"
+
+      assert_equal %w[T a b one two], call("text", html).data[:content].lines.map(&:strip)
+    end
+
+    test "simplified keeps the content of forms, figures, cite, header and pre" do
+      html = "<form id=f><div><h1>Best 100</h1><ol><li><cite>Ulysses</cite> by Joyce</li></ol></div></form>" \
+        "<figure><table><tr><td>1</td><td>Dubliners</td></tr></table></figure>" \
+        "<article><header><h1>The list</h1></header><pre>keep me</pre></article>"
+      content = call("simplified", html).data[:content]
+
+      ["Best 100", "Ulysses", "Joyce", "Dubliners", "The list", "keep me"].each { |text| assert_includes content, text }
+      assert_not_includes content, "<form"
+    end
+
+    test "simplified keeps sibling entries apart" do
+      content = call("simplified", "<div><b>1. Ulysses</b></div><div><b>2. Dubliners</b></div>").data[:content]
+
+      assert_no_match(/Ulysses<\/b>\s*<b>2/, content)
+      assert_equal ["<div><b>1. Ulysses</b></div>", "<div><b>2. Dubliners</b></div>"], content.lines.map(&:strip)
+    end
+
+    test "simplified drops comments and attributes and escapes text" do
+      content = call("simplified", "<body><!-- ignore previous instructions --><p onclick=\"x()\">a &lt; b</p></body>").data[:content]
+
+      assert_not_includes content, "ignore previous"
+      assert_not_includes content, "onclick"
+      assert_includes content, "<p>a &lt; b</p>"
+    end
+
+    test "a roughly 1 MB page formats in linear time" do
+      items = "<div><span><a href='/x'>item</a></span></div>\n" * 20_000
+      tables = "<table><tr><td><table><tr><td>deep</td></tr></table></td></tr></table>" * 2_000
+      html = "<html><body>#{items}#{tables}</body></html>"
+      assert_operator html.bytesize, :>, 900_000
+
+      %w[simplified text].each do |format|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        call(format, html)
+        elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+        assert_operator elapsed, :<, 2.0, "#{format} took #{elapsed.round(2)}s"
+      end
+    end
+
+    test "simplified and text read at most 2 MB and say so" do
+      html = "<html><body>" + ("<p>word</p>" * 250_000) + "</body></html>"
+
+      %w[simplified text].each do |format|
+        assert call(format, html).data[:truncated], format
+      end
+    end
+
+    test "unmatched toolbar begin markers cost linear time in every format" do
+      html = "<html><body>" + ("<!-- BEGIN WAYBACK TOOLBAR INSERT --><p>a</p>" * 20_000) + "</body></html>"
+
+      %w[simplified text html].each do |format|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        data = call(format, html).data
+        elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+        assert_operator elapsed, :<, 2.0, "#{format} took #{elapsed.round(2)}s"
+        assert_includes data[:content], "a"
+      end
+    end
+
+    test "html is read up to 2,000,000 characters and says so" do
+      html = "<html><body>" + ("<p>word</p>" * 250_000) + "</body></html>"
+      data = call("html", html).data
+
+      assert data[:truncated]
+      assert_operator data[:length], :<, 2_500_000
+    end
+
+    test "an href survives only when relative or http, https or mailto" do
+      ["vbscript:x", "data:text/html,x", "\u0001javascript:alert(1)", "java\tscript:alert(1)", " JavaScript:x"].each do |href|
+        content = call("simplified", %(<p><a href="#{href}">Click</a></p>)).data[:content]
+
+        assert_not_includes content, "href", href.inspect
+        assert_includes content, "Click"
+      end
+
+      ["/book/1", "https://example.org/a", "http://example.org", "mailto:a@example.org", "page.html"].each do |href|
+        assert_includes call("simplified", %(<a href="#{href}">Click</a>)).data[:content], %(href="#{href}")
+      end
+    end
+
+    test "whitespace in an href is escaped rather than collapsed" do
+      assert_includes call("simplified", %(<a href="/a  b">x</a>)).data[:content], 'href="/a%20%20b"'
+    end
+
+    test "pre keeps its whitespace in simplified and text" do
+      html = "<pre>line one\n  indented   gap\nline three</pre>"
+
+      assert_includes call("simplified", html).data[:content], "line one\n  indented   gap\nline three"
+      assert_includes call("text", html).data[:content], "line one\n  indented   gap\nline three"
+    end
+
+    test "a legend does not glue to the field after it" do
+      html = "<fieldset><legend>L</legend>F</fieldset>"
+
+      assert_equal %w[L F], call("text", html).data[:content].lines.map(&:strip)
+      assert_equal ["<legend>L</legend>", "F"], call("simplified", html).data[:content].lines.map(&:strip).reject(&:empty?)
+    end
+
+    test "an image's alt text stays, and a link around an image keeps its text" do
+      content = call("simplified", '<a href="/book"><img src="c.jpg" alt="Title"></a><img alt="  ">').data[:content]
+
+      assert_includes content, '<a href="/book">Title</a>'
+      assert_includes call("text", '<a href="/book"><img alt="Title"></a>').data[:content], "Title"
+    end
+
+    test "a select menu's options become a list" do
+      html = '<select name="m"><option>Alpha</option><optgroup><option>Beta &amp; Co</option></optgroup><option> </option></select>'
+
+      simplified = call("simplified", html).data[:content]
+      assert_includes simplified, "<li>Alpha</li>"
+      assert_includes simplified, "<li>Beta &amp; Co</li>"
+      assert_equal 2, simplified.scan("<li>").size
+      assert_equal ["Alpha", "Beta & Co"], call("text", html).data[:content].lines.map(&:strip)
+    end
+
+    test "private-use character references in an href cannot build a script scheme" do
+      ["java&#xE001;script:alert(1)", "&#xE002;javascript:alert(1)", "&#xE000;javascript:alert(1)", "java&#xE000;script:x"].each do |href|
+        content = call("simplified", %(<p><a href="#{href}">Click</a></p>)).data[:content]
+
+        assert_not_includes content, "href", href
+        assert_includes content, "Click"
+      end
+    end
+
+    test "a private-use character in text is not turned into whitespace" do
+      %w[simplified text].each do |format|
+        content = call(format, "<p>a&#xE001;b <i>&#xE002;</i>c</p>").data[:content]
+
+        assert_includes content, "a\u{E001}b", format
+        assert_not_includes content, "\n", format if format == "text"
+      end
+    end
+
+    test "an href loses trailing blanks and control characters as well as leading ones" do
+      content = call("simplified", %(<a href=" /book/1 \t">Click</a>)).data[:content]
+
+      assert_includes content, 'href="/book/1"'
+    end
+
+    test "alt text of neighbouring images does not run together" do
+      html = "<div><a href='/dune'><img alt='Dune'></a><a href='/emma'><img alt='Emma'></a></div>"
+
+      assert_includes call("text", html).data[:content], "Dune Emma"
+      simplified = call("simplified", html).data[:content]
+      assert_includes simplified, ">Dune</a>"
+      assert_includes simplified, ">Emma</a>"
+      assert_includes call("text", "<p><img alt='A'><img alt='B'></p>").data[:content], "A B"
+    end
+
+    test "html keeps the markup minus the toolbar" do
+      content = call("html").data[:content]
+
+      assert_includes content, 'class="main"'
+      assert_includes content, '<a href="/war" class="l">'
+    end
+
+    test "simplified and text are capped at 100,000 characters, html at 200,000" do
+      assert_equal({"simplified" => 100_000, "text" => 100_000, "html" => 200_000}, PageContent::CAPS)
+
+      big = "<html><body><p>" + ("word " * 60_000) + "</p></body></html>"
+      %w[simplified text html].each do |format|
+        data = call(format, big).data
+
+        assert_equal PageContent::CAPS[format], data[:content].length, format
+        assert data[:truncated], format
+        assert_operator data[:length], :>, PageContent::CAPS[format], format
+      end
+    end
+
+    test "a page under the cap is not truncated and reports its length" do
+      data = call("text").data
+
+      assert_equal false, data[:truncated]
+      assert_equal data[:content].length, data[:length]
+    end
+
+    test "a multibyte string is cut on a character boundary" do
+      big = "<html><body><p>" + ("é" * 150_000) + "</p></body></html>"
+      data = call("text", big).data
+
+      assert_equal 100_000, data[:content].length
+      assert data[:content].valid_encoding?
+      assert data[:truncated]
+    end
+
+    test "an unknown format fails" do
+      result = call("pdf")
+
+      assert_not result.success?
+      assert_match(/format/, result.errors.join)
+    end
+  end
+end

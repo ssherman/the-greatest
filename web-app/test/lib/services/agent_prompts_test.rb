@@ -350,6 +350,7 @@ module Services
         "Keep a recorded `number_of_voters` unless a source contradicts it",
         "Set `voter_count_unknown` to true only when no count was ever recorded",
         "A page that does not load for you is not evidence",
+        "If a page will not load for you, try `fetch_page` before giving up on it.",
         "Never clear or downgrade a recorded fact because you could not reach or confirm its source",
         "Never use The Greatest Books itself as a source", "`finish_list_audit` refuses them as sources",
         "Do not change `high_quality_source`", "Put voter names, roles, how the panel was chosen and where the roster comes from in `voter_details`",

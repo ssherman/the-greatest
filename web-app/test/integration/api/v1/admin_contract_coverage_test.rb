@@ -276,6 +276,23 @@ module Api
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "403"] => -> { delete "/api/v1/admin/lists/#{lists(:books_list).id}/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(READ) },
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "404"] => -> { delete "/api/v1/admin/lists/999999999/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(MERGE) },
         ["DELETE", "/api/v1/admin/lists/{id}/penalties/{penalty_id}", "429"] => -> { with_exhausted_limit { delete "/api/v1/admin/lists/#{lists(:books_list).id}/penalties/#{penalties(:books_one_year_penalty).id}", headers: bearer(MERGE) } },
+        ["POST", "/api/v1/admin/fetch_page", "200"] => -> {
+          stub_fetch_page
+          post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json, headers: bearer(READ)
+        },
+        ["POST", "/api/v1/admin/fetch_page", "400"] => -> { post "/api/v1/admin/fetch_page", params: {}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/fetch_page", "401"] => -> { post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json },
+        ["POST", "/api/v1/admin/fetch_page", "403"] => -> { post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json, headers: bearer(MEMBER) },
+        ["POST", "/api/v1/admin/fetch_page", "422"] => -> { post "/api/v1/admin/fetch_page", params: {url: "ftp://example.org/x"}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/fetch_page", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json, headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/fetch_page", "502"] => -> {
+          stub_fetch_page(PageFetcher::Exceptions::UpstreamError.new("upstream_unreachable", 502, nil, error_code: "upstream_unreachable"))
+          post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json, headers: bearer(READ)
+        },
+        ["POST", "/api/v1/admin/fetch_page", "503"] => -> {
+          stub_fetch_page(PageFetcher::Exceptions::CircuitOpenError.new("open"))
+          post "/api/v1/admin/fetch_page", params: {url: "https://example.org/x"}, as: :json, headers: bearer(READ)
+        },
         ["POST", "/api/v1/admin/list_audits", "200"] => -> { post "/api/v1/admin/list_audits", params: {list_id: coverage_list.id}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/list_audits", "400"] => -> { post "/api/v1/admin/list_audits", params: {list_id: "x"}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/list_audits", "401"] => -> { post "/api/v1/admin/list_audits", params: {}, as: :json },
@@ -599,6 +616,17 @@ module Api
         stub_workflow_dispatch
         ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
         ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
+      end
+
+      # The page fetcher is never called for real: a Page, or the error to raise.
+      def stub_fetch_page(error = nil)
+        if error
+          PageFetcher::Client.any_instance.stubs(:fetch).raises(error)
+        else
+          page = PageFetcher::Page.new(url: "https://example.org/x", final_url: "https://example.org/x", status: 200, title: "T",
+            html: "<html><body><h2>Hi</h2></body></html>", selector_found: nil, elapsed_ms: 1, fetched_at: Time.current)
+          PageFetcher::Client.any_instance.stubs(:fetch).returns(page)
+        end
       end
 
       # A books list nobody has audited, optionally already held by someone else.
