@@ -65,10 +65,12 @@ test.describe("Books admin — lists", () => {
       await page.goto(`/admin/lists?items_need_revision=1&q=${encodeURIComponent(name)}&status=all`);
       await expect(page.getByRole("link", { name })).toHaveCount(0);
     } finally {
-      await page.goto(`/admin/lists/${id}`);
-      page.on("dialog", (d) => d.accept());
-      await page.getByRole("button", { name: "Delete" }).click();
-      await expect(page).toHaveURL(/\/admin\/lists$/);
+      if (id) {
+        await page.goto(`/admin/lists/${id}`);
+        page.on("dialog", (d) => d.accept());
+        await page.getByRole("button", { name: "Delete" }).click();
+        await expect(page).toHaveURL(/\/admin\/lists$/);
+      }
     }
   });
 

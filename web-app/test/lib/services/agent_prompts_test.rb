@@ -367,7 +367,7 @@ module Services
         "Field values follow what the list's own source states", "Do not reason about which snapshot or edition our copy of the list came from",
         "set `items_need_revision` to true", "never set `items_need_revision` back to false", "Never edit the list's books",
         "Add a penalty only when its `guidance` clearly applies", "quote in the note the source sentence that shows it and the guidance sentence it meets",
-        "If you cannot quote both, leave the penalty as it is",
+        "If you cannot give what this rule asks for, leave the penalty or field as it is",
         "record every voter in `voter_details`", "not a sample",
         "A source that states a count (for example \"125 writers\") makes it confirmed",
         "Set `voter_count_estimated` to true only for a count you inferred yourself because the source states no number and does not name every voter",
