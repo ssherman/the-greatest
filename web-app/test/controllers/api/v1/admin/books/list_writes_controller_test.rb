@@ -49,6 +49,28 @@ module Api
             assert_nil @list.reload.voter_details
           end
 
+          test "update sets items_need_revision true and the response carries it" do
+            patch_list({items_need_revision: true})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal ["items_need_revision"], json[:changed]
+            assert_equal true, json[:data][:items_need_revision]
+            assert @list.reload.items_need_revision
+          end
+
+          test "update refuses to set items_need_revision back to false with 422 and writes nothing" do
+            @list.update!(items_need_revision: true)
+            assert_no_changes -> { @list.reload.attributes } do
+              patch_list({items_need_revision: false, number_of_voters: 99})
+              assert_response :unprocessable_entity
+            end
+            assert_includes json[:detail].to_s, "only an admin clears this flag in the admin UI"
+          end
+
+          test "update refuses a null items_need_revision with 400" do
+            patch_list({items_need_revision: nil})
+            assert_response :bad_request
+          end
+
           test "update refuses a non-string voter_details with 400" do
             patch_list({voter_details: 3})
             assert_response :bad_request

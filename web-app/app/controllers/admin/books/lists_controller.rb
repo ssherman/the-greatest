@@ -29,7 +29,10 @@ class Admin::Books::ListsController < Admin::ListsBaseController
     params[:audit].presence_in(AUDIT_FILTERS)
   end
 
+  def items_need_revision_filter = params[:items_need_revision] == "1"
+
   def apply_extra_filters(scope)
+    scope = scope.where(items_need_revision: true) if items_need_revision_filter
     case audit_filter
     when "not_audited" then scope.where.not(id: ::ListAudit.done.select(:list_id))
     when "verified" then scope.where(id: ::ListAudit.latest_done.verified.select(:list_id))

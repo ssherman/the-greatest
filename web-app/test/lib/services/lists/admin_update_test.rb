@@ -27,6 +27,28 @@ module Services
         assert_equal ["voter_details"], result.data[:changed]
       end
 
+      test "items_need_revision follows voter_details in FIELDS and can be set true" do
+        assert_equal "items_need_revision", AdminUpdate::FIELDS[AdminUpdate::FIELDS.index("voter_details") + 1]
+        result = call({"items_need_revision" => true})
+        assert result.success?
+        assert_equal ["items_need_revision"], result.data[:changed]
+        assert @list.reload.items_need_revision
+      end
+
+      test "items_need_revision cannot go from true to false through the service" do
+        @list.update!(items_need_revision: true)
+        result = call({"items_need_revision" => false, "number_of_voters" => 5})
+
+        assert_not result.success?
+        assert_includes result.errors.join, "only an admin clears this flag in the admin UI"
+        assert @list.reload.items_need_revision
+        assert_not_equal 5, @list.number_of_voters
+      end
+
+      test "items_need_revision false on a list that does not have it is a no-op, not an error" do
+        assert call({"items_need_revision" => false}).success?
+      end
+
       test "saves the attributes and reports only the fields whose value changed" do
         result = call({"number_of_voters" => 12, "name" => @list.name, "voter_count_estimated" => true})
 

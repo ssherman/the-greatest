@@ -3548,12 +3548,13 @@ paths:
       security: [{bearerAuth: ["books:admin:read"]}]
       summary: Search books lists
       description: |
-        Books lists with their status, item count, weight on the default primary ranking configuration (null when the list is not on it) and the latest finished audit. `q` is a case-insensitive substring of the name, source or url. `status` is `unapproved`, `approved`, `rejected` or `active`. `audit` is `not_audited` (no finished audit), `verified` or `unverifiable` (the latest finished audit has that verdict) or `in_progress` (an audit is open). `sort` is `weight` (default, heaviest first, unweighted last), `name` or `id`. Requires `books:admin:read`.
+        Books lists with their status, item count, weight on the default primary ranking configuration (null when the list is not on it) and the latest finished audit. `q` is a case-insensitive substring of the name, source or url. `status` is `unapproved`, `approved`, `rejected` or `active`. `audit` is `not_audited` (no finished audit), `verified` or `unverifiable` (the latest finished audit has that verdict) or `in_progress` (an audit is open). `items_need_revision=true` keeps only lists whose books were flagged as not matching their source. Each row carries `items_need_revision`. `sort` is `weight` (default, heaviest first, unweighted last), `name` or `id`. Requires `books:admin:read`.
       x-mcp:
         description: >-
           Searches books lists. `q` is a substring of the name, source or url; `status` filters by approval status;
           `audit` finds lists by audit state (`not_audited` means no finished audit, `verified` and `unverifiable`
-          look at the latest finished audit, `in_progress` means someone holds an open audit); `sort` is `weight`
+          look at the latest finished audit, `in_progress` means someone holds an open audit); `items_need_revision=true`
+          finds lists flagged as needing their books redone; `sort` is `weight`
           (default, heaviest first), `name` or `id`. Each row carries its item count, its weight on the main ranking
           and its latest finished audit. Use it to find the integer list `id` that get_admin_list takes.
       parameters:
@@ -3577,6 +3578,13 @@ paths:
           schema:
             type: string
             enum: [not_audited, verified, unverifiable, in_progress]
+        - name: items_need_revision
+          in: query
+          required: false
+          description: "`true` keeps only lists flagged `items_need_revision` (their books do not match the source). No other value is accepted."
+          schema:
+            type: string
+            enum: ["true"]
         - name: sort
           in: query
           required: false
@@ -3664,14 +3672,15 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Edit a books list's fields
       description: |
-        Changes any subset of `name`, `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`, `estimated_quality` and the eight flags `yearly_award`, `high_quality_source`, `category_specific`, `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown` and `voter_names_unknown`; fields not sent are untouched. `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered` and `estimated_quality` can be cleared with `null` (clearing `estimated_quality` stores 0). The flags cannot be null. The counts are non-negative integers or null; `year_published` is an integer from -3000 to 3000. A body with no fields is 400, as is a value of the wrong JSON type. An unknown field (`status` and the imported content are not editable here) is 422, as is a failed validation (for example `num_years_covered` of 0); nothing is written then. The response is the same list as the read operation, with `changed`: the names of the fields whose value changed. The list's weight does not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
+        Changes any subset of `name`, `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`, `estimated_quality` and the nine flags `yearly_award`, `high_quality_source`, `category_specific`, `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown`, `voter_names_unknown` and `items_need_revision` (and `voter_details`); fields not sent are untouched. `description`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered` and `estimated_quality` can be cleared with `null` (clearing `estimated_quality` stores 0). The flags cannot be null. `items_need_revision` can be set to true but never back to false here: that is 422 when the list has it true, because only an admin clears it in the admin UI. The counts are non-negative integers or null; `year_published` is an integer from -3000 to 3000. A body with no fields is 400, as is a value of the wrong JSON type. An unknown field (`status` and the imported content are not editable here) is 422, as is a failed validation (for example `num_years_covered` of 0); nothing is written then. The response is the same list as the read operation, with `changed`: the names of the fields whose value changed. The list's weight does not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
       x-mcp:
         description: >-
           Edits books list `id` (from search_admin_lists): send only the fields to change among `name`, `description`,
           `voter_details`, `source`, `source_country_origin`, `url`, `year_published`, `number_of_voters`, `num_years_covered`,
           `estimated_quality` and the flags `yearly_award`, `high_quality_source`, `category_specific`,
           `location_specific`, `creator_specific`, `voter_count_estimated`, `voter_count_unknown`,
-          `voter_names_unknown`. Send `null` to clear a text field, `year_published` or a count; the flags are true or
+          `voter_names_unknown`, `items_need_revision` (set it true when the list's books do not match its source;
+          never send false: only an admin clears it and a false is refused with 422). Send `null` to clear a text field, `year_published` or a count; the flags are true or
           false, never null. Counts are non-negative integers (`num_years_covered` must be at least 1). Several
           penalties are driven by these fields (see list_admin_penalties), so changing one can change what the list
           costs. Read the list with get_admin_list first. A 422 names the problem and writes nothing. Returns the list
@@ -4906,13 +4915,14 @@ components:
           $ref: "#/components/schemas/PaginationLinks"
     AdminList:
       type: object
-      required: [id, name, source, year_published, status, item_count, weight, last_audit]
+      required: [id, name, source, year_published, status, items_need_revision, item_count, weight, last_audit]
       properties:
         id: {type: integer}
         name: {type: string}
         source: {type: [string, "null"]}
         year_published: {type: [integer, "null"]}
         status: {type: string, enum: [unapproved, approved, rejected, active]}
+        items_need_revision: {type: boolean, description: "The list's books do not match its source (a different edition or snapshot, missing or extra entries, or a different order for ranked sources) and need redoing. An agent may set it true; only an admin clears it."}
         item_count: {type: integer, minimum: 0}
         weight: {type: [integer, "null"], description: Weight on the default primary ranking configuration; null when the list is not on it.}
         last_audit:
@@ -5007,6 +5017,7 @@ components:
         voter_count_estimated: {type: boolean}
         voter_count_unknown: {type: boolean}
         voter_names_unknown: {type: boolean}
+        items_need_revision: {type: boolean, description: "Set true when the list's books do not match its source. false is refused with 422 when the list has it true: only an admin clears it in the admin UI."}
     AdminListPenaltyAttachRequest:
       type: object
       required: [penalty_id]
