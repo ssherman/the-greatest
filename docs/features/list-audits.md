@@ -84,9 +84,9 @@ Geographic scope is the `location_specific` flag (penalty 15, dynamic): it carri
 Two rules came out of the first production audits (2026-11-22), where an agent marked list 122's voter count unknown because it could not open the archived source page, although that page names all 37 contributors:
 
 - **A page that does not load is not evidence.** The agent never clears or downgrades a recorded fact because it could not reach or confirm the source; it keeps the fact, names the page in its note, and uses `unverifiable` if nothing else could be checked. The prompt also points the agent at `fetch_page` (the admin MCP tool that fetches a page through the page fetcher, see `docs/features/page-fetcher-service.md`) to try before giving up on a page.
-- **Keep a recorded voter count unless a source contradicts it.** An unconfirmed count stays (the flag is left as it is; see the burden-of-proof section below). `voter_count_unknown` (which costs as much as a single voter) is for lists where no count was ever recorded and none can be estimated; named voters set a conservative floor.
+- **Keep a recorded voter count unless a source contradicts it.** An unconfirmed count stays (the flag is left as it is; see the burden-of-proof section below). `voter_count_unknown` (which costs as much as a single voter) is for lists where no count was ever recorded and none can be estimated; named voters give a confirmed count.
 
-The guidance for penalties 13, 14 and 18 says the same. After a deploy that changes `guidance.yml`, run `bin/rails penalties:load_guidance OVERWRITE=1` in production.
+The guidance for penalties 13, 14 and 18 says the same: keep a recorded count; a stated count, or the number of voters the source names, is confirmed; `voter_count_estimated` is only for a count the agent inferred when the source neither states a number nor names the voters. After a deploy that changes `guidance.yml`, run `bin/rails penalties:load_guidance OVERWRITE=1` in production.
 
 - **`high_quality_source` is on hold.** The agent must not change it (prompt rule, 2026-11-22): the flag cuts a list's total penalty by a third, and the first audits set it liberally. How source quality should affect weight is being redesigned separately.
 
@@ -99,17 +99,17 @@ Reviewing nine production audits showed the agent changing fields whenever it wa
 - **Penalties need a match, not a fit.** To add or remove a penalty the agent quotes, in the note, the source sentence that shows it and the guidance sentence it meets. If it cannot quote both, the penalty stays.
 - **Full rosters.** When the source lists every voter, all of them go in `voter_details`.
 
-Voter counts follow the same principle. A count the source states is confirmed. `voter_count_estimated` is only for a count the agent derived itself because the source gives no number, and only then does the "count conservatively, lower-middle of a plausible range" rule apply. Keeping a recorded count the agent could not confirm leaves the flag as it is.
+Voter counts follow the same principle. A count the source states, or the number of voters it names when it names them all, is confirmed. `voter_count_estimated` is only for a count the agent inferred because the source neither states a number nor names the voters, and only then does "count conservatively, lower-middle of a plausible range" apply. Keeping a recorded count the agent could not confirm leaves the flag as it is. The burden-of-proof rule covers factual fields, flags and counts; a blank `number_of_voters` may be filled by the voter-count rules, and `description` and `voter_details` follow their own rules.
 
 **`lists.items_need_revision`** (boolean, default false, not null; admin only, not in the public API or on a public page) marks a list whose books do not match its source (a different edition or snapshot, missing or extra entries) and need redoing. It is one of `AdminUpdate::FIELDS` (after `voter_details`), so it is snapshotted, diffed, returned by `get_admin_list` and in every `search_admin_lists` row, which also takes `items_need_revision=true` as a filter.
 
 - **Who sets it:** the agent through `update_admin_list` (true only), or an admin on the shared list form (checkbox "Items Need Revision").
 - **Who clears it:** only an admin, by unticking the form checkbox. `Services::Lists::AdminUpdate` refuses `items_need_revision: false` with a 422 ("only an admin clears this flag in the admin UI") while the list has it true; false on a list that is already false is a no-op.
-- **Where it shows:** an "Items need revision" badge by the title on the admin list page, and a "Needs item revision" option in the books lists index's audit filter (`audit=needs_revision`).
+- **Where it shows:** an "Items need revision" badge by the title on the admin list page, and a "Needs item revision" checkbox on the books lists index (`items_need_revision=1`, combinable with the audit filter). The form checkbox and the filter are books only. A mismatch includes a different order, for ranked sources only. The source that wins is the list's live website as it stands now; an archived or older edition only when no live page exists. A list flagged for revision can still be `verified`: the verdict covers fields and penalties.
 
 Guidance changes (load with `penalties:load_guidance OVERWRITE=1`):
 
-- **3** (not just best/favourite): lists of the books that mattered, moved or affected the voters most, desert-island picks, and "everyone should read" or "must read" lists count as best or favourite and do not take it.
+- **3** (not just best/favourite): lists of the books that mattered most to the voters, moved or affected them most, desert-island picks, and books everyone should read count as best or favourite and do not take it.
 - **6** (one language): a requirement that an edition exists in a language, with translations allowed, is not a language limit.
 - **15** (one location): a requirement about where a book was published or sold (for example "published in the US", translations allowed) is not a limit by place.
 - **18** (estimated count): only when the agent derived the count; a stated count is confirmed, and keeping an unconfirmed recorded count does not make it estimated.

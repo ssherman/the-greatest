@@ -193,26 +193,26 @@ module Admin
         assert_not_includes response.body, @list.name
       end
 
-      test "index audit=needs_revision returns only lists flagged for item revision" do
+      test "index items_need_revision=1 returns only flagged lists and combines with the audit filter" do
         sign_in_as(@admin_user, stub_auth: true)
         lists(:books_list).update!(items_need_revision: true)
-        get admin_books_lists_path(audit: "needs_revision", status: "all")
+        get admin_books_lists_path(items_need_revision: "1", status: "all")
         assert_response :success
         assert_includes response.body, lists(:books_list).name
         assert_not_includes response.body, @list.name
+
+        get admin_books_lists_path(items_need_revision: "1", audit: "not_audited", status: "all")
+        assert_response :success
+        assert_not_includes response.body, lists(:books_list).name
       end
 
-      test "the form can clear items_need_revision and the show page badges it" do
+      test "the form can set and clear items_need_revision" do
         sign_in_as(@admin_user, stub_auth: true)
         patch admin_books_list_path(@list), params: {books_list: {items_need_revision: "1"}}
         assert @list.reload.items_need_revision
-        get admin_books_list_path(@list)
-        assert_select "[data-testid=items-need-revision-badge]"
 
         patch admin_books_list_path(@list), params: {books_list: {items_need_revision: "0"}}
         assert_not @list.reload.items_need_revision
-        get admin_books_list_path(@list)
-        assert_select "[data-testid=items-need-revision-badge]", count: 0
       end
 
       test "index audit=not_audited leaves out the audited list" do

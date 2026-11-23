@@ -55,12 +55,15 @@
                   ["Not audited", "not_audited"],
                   ["Verified", "verified"],
                   ["Unverifiable", "unverifiable"],
-                  ["Audit in progress", "in_progress"],
-                  ["Needs item revision", "needs_revision"]
+                  ["Audit in progress", "in_progress"]
                 ], selected_audit),
                 {},
                 class: "select",
                 onchange: "this.form.requestSubmit()" %>
+            <label class="label cursor-pointer gap-2">
+              <%= f.check_box :items_need_revision, { checked: selected_items_need_revision, class: "checkbox checkbox-sm", onchange: "this.form.requestSubmit()" }, "1", nil %>
+              <span>Needs item revision</span>
+            </label>
           <% end %>
         <% end %>
       </div>

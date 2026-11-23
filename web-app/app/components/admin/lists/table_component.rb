@@ -19,6 +19,7 @@ class Admin::Lists::TableComponent < ViewComponent::Base
       status: helpers.params[:status],
       submitted: helpers.params[:submitted],
       audit: helpers.params[:audit],
+      items_need_revision: helpers.params[:items_need_revision],
       q: helpers.params[:q]
     }.compact.to_query
   end

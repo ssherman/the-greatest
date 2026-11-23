@@ -42,18 +42,35 @@ test.describe("Books admin — lists", () => {
     await expect(page).toHaveURL(/\/admin\/lists$/);
   });
 
-  test("flags a list as needing item revision and shows the badge", async ({ page }) => {
+  test("flags a list as needing item revision, filters on it, clears it through the form", async ({ page }) => {
     const name = `E2E Revision List ${Date.now()}`;
     await page.goto("/admin/lists/new");
     await page.locator('input[name="books_list[name]"]').fill(name);
-    await page.getByTestId("items-need-revision-checkbox").check();
+    await page.getByLabel("Items Need Revision").check();
     await page.getByRole("button", { name: "Create Book List" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
     await expect(page.getByTestId("items-need-revision-badge")).toBeVisible();
+    const id = page.url().match(/\/admin\/lists\/(\d+)/)?.[1];
+    expect(id).toBeTruthy();
 
-    page.on("dialog", (d) => d.accept());
-    await page.getByRole("button", { name: "Delete" }).click();
-    await expect(page).toHaveURL(/\/admin\/lists$/);
+    try {
+      await page.goto(`/admin/lists?items_need_revision=1&q=${encodeURIComponent(name)}&status=all`);
+      await expect(page.getByRole("link", { name })).toBeVisible();
+
+      await page.goto(`/admin/lists/${id}/edit`);
+      await page.getByLabel("Items Need Revision").uncheck();
+      await page.getByRole("button", { name: "Update Book List" }).click();
+      await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+      await expect(page.getByTestId("items-need-revision-badge")).toHaveCount(0);
+
+      await page.goto(`/admin/lists?items_need_revision=1&q=${encodeURIComponent(name)}&status=all`);
+      await expect(page.getByRole("link", { name })).toHaveCount(0);
+    } finally {
+      await page.goto(`/admin/lists/${id}`);
+      page.on("dialog", (d) => d.accept());
+      await page.getByRole("button", { name: "Delete" }).click();
+      await expect(page).toHaveURL(/\/admin\/lists$/);
+    }
   });
 
   test("attaches and detaches a penalty via the modal", async ({ page }) => {

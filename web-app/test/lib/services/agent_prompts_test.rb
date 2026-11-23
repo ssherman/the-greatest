@@ -355,7 +355,7 @@ module Services
         "Never use The Greatest Books itself as a source", "`finish_list_audit` refuses them as sources",
         "Do not change `high_quality_source`", "Put voter names, roles, how the panel was chosen and where the roster comes from in `voter_details`",
         "When `voter_details` names the voters, `voter_names_unknown` is false.", "Never drop names already recorded in `voter_details`", "move them into `voter_details`",
-        "the number of voters named there is the conservative floor for `number_of_voters`",
+        "the number of names is a confirmed count for `number_of_voters`",
         "Geographic scope is the `location_specific` flag", "Add penalty 46 only when the place is smaller than a country", "Never use the flag for a limit that is not a place",
         "Do not change `status`",
         "`verdict` is `verified`", "`unverifiable`", "`note` is required and must not be blank",
@@ -363,15 +363,20 @@ module Services
         "refuses any penalty that is not in `list_admin_penalties`",
         "refuses them", "resume an audit by calling `start_list_audit` with its `list_id`", "two sessions never share one",
         "`percentage_western` is computed from the list's books", "`data: null`",
-        "Change a field only when a source directly contradicts its current value", "Uncertainty is never a reason to change a field",
+        "change a field only when a source directly contradicts its current value", "Uncertainty is never a reason to change a field",
         "Field values follow what the list's own source states", "Do not reason about which snapshot or edition our copy of the list came from",
         "set `items_need_revision` to true", "never set `items_need_revision` back to false", "Never edit the list's books",
-        "Add or remove a penalty only when its `guidance` clearly applies", "quote in the note the source sentence that shows it and the guidance sentence it meets",
+        "Add a penalty only when its `guidance` clearly applies", "quote in the note the source sentence that shows it and the guidance sentence it meets",
         "If you cannot quote both, leave the penalty as it is",
         "record every voter in `voter_details`", "not a sample",
         "A source that states a count (for example \"125 writers\") makes it confirmed",
-        "Set `voter_count_estimated` to true only for a count you derived yourself, never for a count the source states",
-        "Only when the source gives no number at all, count conservatively"
+        "Set `voter_count_estimated` to true only for a count you inferred yourself because the source neither states a number nor names the voters",
+        "Only when the source states no number and names no one, count conservatively",
+        "A blank `number_of_voters` may be filled by the voter-count rules", "`description` and `voter_details` follow their own rules",
+        "on its live website as it stands now", "use an archived or older edition only when no live page exists", "`year_published` stays the list's original publication year",
+        "remove one only when its guidance clearly does not apply", "setting or clearing a field that drives a dynamic penalty",
+        "a list flagged `items_need_revision` can still be `verified`", "a different order for ranked sources",
+        "where a source shows them wrong"
       ].each { |text| assert_includes prompt, text }
     end
 

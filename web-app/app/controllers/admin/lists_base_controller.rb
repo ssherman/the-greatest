@@ -11,6 +11,7 @@ class Admin::ListsBaseController < Admin::BaseController
     @selected_submitted = params[:submitted].presence
     @search_query = params[:q].presence
     @selected_audit = audit_filter
+    @selected_items_need_revision = items_need_revision_filter
   end
 
   def show
@@ -113,6 +114,9 @@ class Admin::ListsBaseController < Admin::BaseController
 
   # The audit filter value the index page reflects; only books has one.
   def audit_filter = nil
+
+  # Whether the index is limited to lists flagged items_need_revision; only books has it.
+  def items_need_revision_filter = false
 
   def sortable_column(column)
     allowed_columns = {
