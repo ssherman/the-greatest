@@ -32,7 +32,7 @@ wikidata = ["isal>=1.7,<2", "orjson>=3.10,<4", "pyyaml>=6,<7"]
 [dependency-groups]
 dev = [
     "httpx2>=2.13.0",
-    "pytest>=8.3,<9",
+    "pytest>=9.0.3,<10",
     "ruff>=0.7,<1",
 ]
 
