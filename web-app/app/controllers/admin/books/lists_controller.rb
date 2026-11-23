@@ -1,7 +1,7 @@
 class Admin::Books::ListsController < Admin::ListsBaseController
   include Admin::DomainScopedAuth
 
-  AUDIT_FILTERS = %w[not_audited verified unverifiable in_progress].freeze
+  AUDIT_FILTERS = %w[not_audited verified unverifiable in_progress needs_revision].freeze
 
   private
 
@@ -35,6 +35,7 @@ class Admin::Books::ListsController < Admin::ListsBaseController
     when "verified" then scope.where(id: ::ListAudit.latest_done.verified.select(:list_id))
     when "unverifiable" then scope.where(id: ::ListAudit.latest_done.unverifiable.select(:list_id))
     when "in_progress" then scope.where(id: ::ListAudit.open.select(:list_id))
+    when "needs_revision" then scope.where(items_need_revision: true)
     else scope
     end
   end

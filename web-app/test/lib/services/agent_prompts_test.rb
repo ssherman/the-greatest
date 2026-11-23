@@ -362,7 +362,16 @@ module Services
         "`sources` is an array of http(s) URLs", "`verified` needs at least one",
         "refuses any penalty that is not in `list_admin_penalties`",
         "refuses them", "resume an audit by calling `start_list_audit` with its `list_id`", "two sessions never share one",
-        "`percentage_western` is computed from the list's books", "`data: null`"
+        "`percentage_western` is computed from the list's books", "`data: null`",
+        "Change a field only when a source directly contradicts its current value", "Uncertainty is never a reason to change a field",
+        "Field values follow what the list's own source states", "Do not reason about which snapshot or edition our copy of the list came from",
+        "set `items_need_revision` to true", "never set `items_need_revision` back to false", "Never edit the list's books",
+        "Add or remove a penalty only when its `guidance` clearly applies", "quote in the note the source sentence that shows it and the guidance sentence it meets",
+        "If you cannot quote both, leave the penalty as it is",
+        "record every voter in `voter_details`", "not a sample",
+        "A source that states a count (for example \"125 writers\") makes it confirmed",
+        "Set `voter_count_estimated` to true only for a count you derived yourself, never for a count the source states",
+        "Only when the source gives no number at all, count conservatively"
       ].each { |text| assert_includes prompt, text }
     end
 

@@ -42,6 +42,20 @@ test.describe("Books admin — lists", () => {
     await expect(page).toHaveURL(/\/admin\/lists$/);
   });
 
+  test("flags a list as needing item revision and shows the badge", async ({ page }) => {
+    const name = `E2E Revision List ${Date.now()}`;
+    await page.goto("/admin/lists/new");
+    await page.locator('input[name="books_list[name]"]').fill(name);
+    await page.getByTestId("items-need-revision-checkbox").check();
+    await page.getByRole("button", { name: "Create Book List" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+    await expect(page.getByTestId("items-need-revision-badge")).toBeVisible();
+
+    page.on("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page).toHaveURL(/\/admin\/lists$/);
+  });
+
   test("attaches and detaches a penalty via the modal", async ({ page }) => {
     const name = `E2E Penalty List ${Date.now()}`;
     await page.goto("/admin/lists/new");

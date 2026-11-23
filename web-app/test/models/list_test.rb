@@ -12,6 +12,7 @@
 #  estimated_quality     :integer          default(0), not null
 #  high_quality_source   :boolean
 #  items_json            :jsonb
+#  items_need_revision   :boolean          default(FALSE), not null
 #  location_specific     :boolean
 #  name                  :string           not null
 #  num_years_covered     :integer

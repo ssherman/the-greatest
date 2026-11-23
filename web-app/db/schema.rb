@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_22_190858) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_23_033218) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1199,6 +1199,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_190858) do
     t.string "submitter_ip"
     t.integer "auto_generated_year"
     t.text "voter_details"
+    t.boolean "items_need_revision", default: false, null: false
     t.index ["activated_at"], name: "index_lists_on_activated_at"
     t.index ["submitted_at"], name: "index_lists_on_submitted_at"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"

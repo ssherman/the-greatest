@@ -19,6 +19,12 @@ module Services
           assert_equal "Jane Doe, critic", Snapshot.call(@list)["fields"]["voter_details"]
         end
 
+        test "captures items_need_revision" do
+          assert_equal false, Snapshot.call(@list)["fields"]["items_need_revision"]
+          @list.update!(items_need_revision: true)
+          assert_equal true, Snapshot.call(@list)["fields"]["items_need_revision"]
+        end
+
         test "lists attached penalties sorted by id" do
           ::Penalty.where(type: %w[Books::Penalty Global::Penalty], user_id: nil).limit(2).each do |p|
             ListPenalty.find_or_create_by!(list: @list, penalty: p)

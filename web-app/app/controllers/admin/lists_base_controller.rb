@@ -153,6 +153,7 @@ class Admin::ListsBaseController < Admin::BaseController
       :voter_count_estimated,
       :voter_count_unknown,
       :voter_names_unknown,
+      :items_need_revision,
       :creator_specific,
       :num_years_covered,
       :raw_content,

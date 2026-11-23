@@ -4,7 +4,7 @@ module Api
   module V1
     module Admin
       module Books
-        # GET /api/v1/admin/lists     -- search books lists with audit state and weight
+        # GET /api/v1/admin/lists     -- search books lists with audit state and weight (filters: status, audit, items_need_revision=true)
         # GET /api/v1/admin/lists/:id -- one list in full
         # PATCH /api/v1/admin/lists/:id -- any subset of the editable fields (Services::Lists::AdminUpdate)
         #
@@ -27,7 +27,7 @@ module Api
             "estimated_quality" => :count_or_null,
             "yearly_award" => :boolean, "high_quality_source" => :boolean, "category_specific" => :boolean,
             "location_specific" => :boolean, "creator_specific" => :boolean, "voter_count_estimated" => :boolean,
-            "voter_count_unknown" => :boolean, "voter_names_unknown" => :boolean
+            "voter_count_unknown" => :boolean, "voter_names_unknown" => :boolean, "items_need_revision" => :boolean
           }.freeze
           CLEARABLE = %w[description voter_details source source_country_origin url year_published number_of_voters
             num_years_covered estimated_quality].freeze
@@ -39,14 +39,17 @@ module Api
             return if performed?
             sort = param_in(:sort, SORTS) || "weight"
             return if performed?
+            needs_revision = param_in(:items_need_revision, %w[true])
+            return if performed?
             query = params[:q].to_s.strip.presence
 
             relation = ::Books::List.search_text(query)
             relation = relation.where(status: status) if status
             relation = filter_by_audit(relation, audit) if audit
+            relation = relation.where(items_need_revision: true) if needs_revision
             relation = sorted(relation, sort)
 
-            echoed = {q: query, status: status, audit: audit, sort: (sort unless sort == "weight")}.compact
+            echoed = {q: query, status: status, audit: audit, items_need_revision: needs_revision, sort: (sort unless sort == "weight")}.compact
             render_page(relation, path: "/api/v1/admin/lists", query: echoed) do |rows|
               lookups = ListResource.lookups(rows)
               rows.map { |list| ListResource.new(list, params: lookups).to_h }

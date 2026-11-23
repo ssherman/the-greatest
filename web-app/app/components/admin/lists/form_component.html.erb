@@ -304,6 +304,14 @@
             <span>Creator Specific</span>
           </label>
         </div>
+
+        <div>
+          <label class="label cursor-pointer justify-start gap-4">
+            <%= f.check_box :items_need_revision, class: "checkbox", data: { testid: "items-need-revision-checkbox" } %>
+            <span>Items Need Revision</span>
+          </label>
+          <p class="text-sm text-base-content/70 ml-1">The books on this list don't match its source (a different edition or snapshot, or missing or extra entries) and need redoing.</p>
+        </div>
       </div>
     </div>
   </div>

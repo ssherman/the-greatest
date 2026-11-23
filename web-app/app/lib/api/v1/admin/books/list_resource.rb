@@ -40,7 +40,7 @@ module Api
             new(list, params: lookups([list])).to_h
           end
 
-          attributes :id, :name, :source, :year_published, :status
+          attributes :id, :name, :source, :year_published, :status, :items_need_revision
 
           attribute :item_count do |list|
             params[:item_counts].fetch(list.id, 0)

@@ -14,6 +14,7 @@ require "test_helper"
 #  estimated_quality     :integer          default(0), not null
 #  high_quality_source   :boolean
 #  items_json            :jsonb
+#  items_need_revision   :boolean          default(FALSE), not null
 #  location_specific     :boolean
 #  name                  :string           not null
 #  num_years_covered     :integer
@@ -62,6 +63,10 @@ module Books
 
     def add_book(book, position)
       ListItem.create!(list: @list, listable: book, position: position)
+    end
+
+    test "items_need_revision defaults to false" do
+      assert_equal false, ::Books::List.create!(name: "Fresh").items_need_revision
     end
 
     test "returns 100.0 when every book is western" do

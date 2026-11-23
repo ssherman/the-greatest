@@ -11,6 +11,11 @@
         <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %>">
           <%= list.status.titleize %>
         </span>
+        <% if list.items_need_revision? %>
+          <span class="badge badge-warning" data-testid="items-need-revision-badge" title="The books on this list don't match its source and need redoing.">
+            Items need revision
+          </span>
+        <% end %>
         <% if list.auto_generated? %>
           <span class="badge badge-info" title="Rebuilt nightly by the generator; items and the list itself are read-only here.">
             Auto-generated

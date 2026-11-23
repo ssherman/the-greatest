@@ -66,6 +66,22 @@ module Api
             assert_equal [lists(:basic_list).id], ids
           end
 
+          test "rows carry items_need_revision and items_need_revision=true filters to flagged lists" do
+            lists(:basic_list).update!(items_need_revision: true)
+            search
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [true, false], [lists(:basic_list), @list].map { |l| json[:data].find { |r| r[:id] == l.id }[:items_need_revision] }
+
+            search(items_need_revision: "true")
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [lists(:basic_list).id], ids
+          end
+
+          test "items_need_revision other than true is a 400" do
+            search(items_need_revision: "maybe")
+            assert_response :bad_request
+          end
+
           test "status and q filter, and sort orders" do
             search(status: "approved")
             assert_equal ::Books::List.approved.pluck(:id).sort, ids.sort

@@ -947,3 +947,9 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
 5. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
    and penalties but never the weight. Use the admin **Refresh Rankings** action on the books primary
    once the batch is done, and again after later audits.
+6. **Reload the penalty guidance after the burden-of-proof deploy. Shane runs with `!`.** The
+   guidance for penalties 3, 6, 15 and 18 changed. In production run
+   `bin/rails penalties:load_guidance OVERWRITE=1` and check `mismatched` and `missing` are empty.
+   The deploy also adds `lists.items_need_revision` (migration, default false). Lists the agent flags
+   show an "Items need revision" badge, and the books lists index filters them with "Needs item
+   revision"; only an admin clears the flag, on the list's edit form.

@@ -7,7 +7,7 @@
   guidance: The source list has more than 500 entries. Count the source, not how many we imported.
 - id: 3
   name: 'List: criteria is not just best/favorite'
-  guidance: 'The list ranks by something other than quality or love: most influential, most important, most read, best-selling, most challenged, most underrated, "books that changed the world". "Essential", "must-read" and "greatest" count as best and do not take this. Prefer 7 when the angle is a gimmick.'
+  guidance: 'The list ranks by something other than quality or love: most influential, most important, most read, best-selling, most challenged, most underrated, "books that changed the world". "Essential", "must-read" and "greatest" count as best and do not take this. Prefer 7 when the angle is a gimmick. Lists of the books that mattered, moved or affected the voters most, desert-island picks, and lists of books "everyone should read" or "must read" count as best or favourite and do not take this.'
 - id: 4
   name: 'List: is a follow up/honorable mention to a different list'
   guidance: The list is the overflow or sequel of another list ("100 more", "honourable mentions", "the ones that didn't make the cut").
@@ -16,7 +16,7 @@
   guidance: Only books by authors of one gender were eligible ("best books by women"). A result that merely skews one way does not count.
 - id: 6
   name: 'List: only covers 1 specific language'
-  guidance: Eligibility is limited to books originally written in one language ("best Spanish-language novels", "best novels in English"). An English-language outlet whose picks happen to be mostly English does not count.
+  guidance: Eligibility is limited to books originally written in one language ("best Spanish-language novels", "best novels in English"). An English-language outlet whose picks happen to be mostly English does not count. A requirement that an edition exists in a language, with translations allowed, is not a language limit and does not take this.
 - id: 7
   name: 'List: only covers items with a weird criteria'
   guidance: The selection is built around a concept unrelated to quality (books with dogs in them, best first lines, books set on trains, cover colours). Ordinary alternative criteria such as influence take 3 instead.
@@ -43,7 +43,7 @@
   guidance: 'Set `voter_count_unknown: true` (and leave `number_of_voters` null) only when no count was ever recorded and none can be found or reasonably estimated. Never replace a recorded count with this flag because you could not confirm it: keep the count and set `voter_count_estimated` instead. It costs as much as a single voter, so an honest estimate with `voter_count_estimated` is better when the source gives enough to estimate ("our 12 editors", "a panel of critics" with a byline list, a page naming each contributor).'
 - id: 15
   name: 'List: only covers 1 specific location'
-  guidance: 'Set `location_specific: true` when the list limits which books were eligible by place: books from or about one country, a group of countries, a continent, a state or a city ("best Australian novels", "best African books", "best Southern novels"). Do not set it for limits that are not a place (language, translation, gender, ethnicity, religion): those have their own penalties. If the place is smaller than a country, also attach penalty 46. Setting the flag also exempts the list from the western-canon penalty (23). Where the voters live is a different question (penalty 8).'
+  guidance: 'Set `location_specific: true` when the list limits which books were eligible by place: books from or about one country, a group of countries, a continent, a state or a city ("best Australian novels", "best African books", "best Southern novels"). Do not set it for limits that are not a place (language, translation, gender, ethnicity, religion): those have their own penalties. If the place is smaller than a country, also attach penalty 46. Setting the flag also exempts the list from the western-canon penalty (23). Where the voters live is a different question (penalty 8). A requirement about where a book was published or sold (for example "published in the US", translations allowed) is not a limit by place: books from anywhere qualified.'
 - id: 16
   name: 'List: only covers 1 specific genre'
   guidance: 'Set `category_specific: true` when eligibility is one genre or form (crime, science fiction, poetry, children''s books, graphic novels) or one non-fiction subject (history, science). Several genres of genre fiction together (science fiction, fantasy and horror) also count. Literary fiction as a whole, or "novels", is not a genre for this purpose.'
@@ -52,7 +52,7 @@
   guidance: 'Set `num_years_covered` to the span of publication years that were eligible: 1 for a yearly award or "best of 2023", 10 for a decade, 25 for "the 21st century so far" (count to the list''s year), 100 for a century. Leave it null for an all-time list; null means no time penalty.'
 - id: 18
   name: 'Voters: Estimated Count'
-  guidance: 'Set `voter_count_estimated: true` whenever `number_of_voters` is your estimate rather than a published figure, and when you keep a recorded count you could not confirm.'
+  guidance: 'Set `voter_count_estimated: true` only when you derived `number_of_voters` yourself because the source gives no figure. A count the source states is confirmed, not estimated, and keeping a recorded count you could not confirm does not make it estimated.'
 - id: 22
   name: 'Voters: Voters seem to have an agenda/bias of some kind'
   guidance: The people choosing are promoting a viewpoint (a religious, political or advocacy organisation's list) rather than judging quality.
