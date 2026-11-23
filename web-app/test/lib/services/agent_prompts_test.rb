@@ -370,13 +370,15 @@ module Services
         "If you cannot quote both, leave the penalty as it is",
         "record every voter in `voter_details`", "not a sample",
         "A source that states a count (for example \"125 writers\") makes it confirmed",
-        "Set `voter_count_estimated` to true only for a count you inferred yourself because the source neither states a number nor names the voters",
-        "Only when the source states no number and names no one, count conservatively",
+        "Set `voter_count_estimated` to true only for a count you inferred yourself because the source states no number and does not name every voter",
+        "Only when the source states no number and does not name every voter, count conservatively",
         "A blank `number_of_voters` may be filled by the voter-count rules", "`description` and `voter_details` follow their own rules",
         "on its live website as it stands now", "use an archived or older edition only when no live page exists", "`year_published` stays the list's original publication year",
         "remove one only when its guidance clearly does not apply", "setting or clearing a field that drives a dynamic penalty",
         "a list flagged `items_need_revision` can still be `verified`", "a different order for ranked sources",
-        "where a source shows them wrong"
+        "where a source shows them wrong", "the number named is a floor", "quote the source sentence the judgement rests on",
+        "`yearly_award` is true when the source is a recurring award or yearly list", "that edition's page is the list's source",
+        "use `fetch_page`; if that fails too, use an archived copy", "the guidance condition the list does not meet"
       ].each { |text| assert_includes prompt, text }
     end
 

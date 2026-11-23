@@ -51,9 +51,8 @@ test.describe("Books admin — lists", () => {
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
     await expect(page.getByTestId("items-need-revision-badge")).toBeVisible();
     const id = page.url().match(/\/admin\/lists\/(\d+)/)?.[1];
-    expect(id).toBeTruthy();
-
     try {
+      expect(id).toBeTruthy();
       await page.goto(`/admin/lists?items_need_revision=1&q=${encodeURIComponent(name)}&status=all`);
       await expect(page.getByRole("link", { name })).toBeVisible();
 
