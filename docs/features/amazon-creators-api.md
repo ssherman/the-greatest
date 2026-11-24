@@ -122,6 +122,13 @@ and fails the test outright rather than degrading to a `failure` result.
 
 ## Known gaps
 
+- **`Client.get_items` is unverified against the live API.** It was built from the gem's
+  `get_items(marketplace:, partner_tag:, item_ids:, **params)` signature, and the gem ships no example
+  response. It reads `itemsResult.items` by analogy with `searchResult.items`; that key has not been
+  confirmed by a real call. It is used by `Services::Books::BookSubmissions::ResolveInput` (user-added
+  books, Amazon links). Before that ships, make one real call for a known ASIN and confirm the key (a
+  wrong key reads as "Amazon has no such product", the failure "Failing loudly" above warns about),
+  then replace this note with the result.
 - **Books enrichment runs through the book workflow's `amazon` step** (`Workflows::Books::Steps::Amazon`,
   wrapping `Services::Books::AmazonProductService`; see `enrichment-workflows.md`). Two callers plan
   a book run, and with it that step:
