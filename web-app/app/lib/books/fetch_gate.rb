@@ -12,13 +12,15 @@ module Books
   # Priority lane. A reader adding one book must not wait behind a backlog
   # that was handed out hours ahead, so a priority reservation (reserve(priority:
   # true)) takes the earliest start the interval allows and never touches the
-  # ordinary line. The daily cap is split so the two together still hold it:
-  # ordinary turns get daily_fetch_cap less config.priority_reserved, priority
+  # ordinary line. Reservations split the daily cap: ordinary turns get
+  # daily_fetch_cap less config.priority_reserved (itself held to 0..cap), priority
   # turns get the slice, and a priority turn past its slice falls back to an
   # ordinary reservation. A config with no priority_reserved (the publisher
-  # intake's) reserves nothing, so its gate behaves as it always did. Spacing
-  # between real fetches is still enforced when a fetch starts (spacing_wait), so
-  # no mix of the two lanes can put two fetches closer than fetch_interval.
+  # intake's) reserves nothing. Reservations alone do not hold the cap, though:
+  # a priority turn pushes the contiguous ordinary backlog back, so a line
+  # reserved on one UTC day can run on the next. The hard guards are therefore on
+  # actual starts, in spacing_wait: fetch_interval since the last start, and no
+  # more than daily_fetch_cap starts in a UTC day (a cap of 0 holds every turn).
   #
   # Hash commands only, so CI's FakeRedis can stand in. Read-then-write is
   # not atomic; it needs no lock because only one job at a time per key
@@ -34,9 +36,11 @@ module Books
     Usage = Data.define(:day, :count)
 
     # How long ordinary turns step aside for a priority turn that is due and
-    # has not started. A priority job that reserves and dies stops holding them
-    # after this long.
-    PRIORITY_YIELD = 60
+    # has not started. It must exceed the one-minute wake latency of a workflow
+    # step waiting on the sweep, or the yield lapses before the step wakes. A
+    # priority job that reserves and dies stops holding ordinary turns after this
+    # long.
+    PRIORITY_YIELD = 90
 
     # config responds to fetch_interval, daily_fetch_cap and block_cooldown.
     # label names the caller in the block's log line.
@@ -93,22 +97,37 @@ module Books
 
     # Seconds until fetch_interval has passed since the last fetch actually
     # began. A turn only promises a start time: jobs held up by a deploy or
-    # a slow fetch come due together, and this keeps them apart. An ordinary
-    # turn also steps aside, a full interval at a time, while a priority turn
-    # is due and has not started (see PRIORITY_YIELD).
+    # a slow fetch come due together, and this keeps them apart. Once the UTC
+    # day's actual starts reach daily_fetch_cap, every turn waits for the next
+    # UTC midnight. An ordinary turn also steps aside, a full interval at a
+    # time, while a priority turn is due and has not started (see
+    # PRIORITY_YIELD).
     def spacing_wait(priority: false)
       state = read
       wait = [state["last_start"].to_i + @config.fetch_interval - now, 0].max
+      wait = [wait, next_midnight - now].max if starts_today(state) >= daily_cap
       return wait if priority || !priority_outstanding?(state)
 
       [wait, @config.fetch_interval].max
     end
 
+    # A priority turn sent back by spacing_wait re-arms its protection when
+    # nothing protects it (an ordinary fetch beat it to the slot), so a backlog
+    # cannot win the next slot too. Only a live job calls this, so a lost one
+    # still lapses after PRIORITY_YIELD.
+    def hold_priority!(wait)
+      state = read
+      write("priority_due" => now + wait) unless priority_outstanding?(state)
+    end
+
     def started!(priority: false)
-      fields = {"last_start" => now}
-      # The latest reserved priority start is the next one to protect.
-      latest = read["priority_start"].to_i
-      fields["priority_due"] = latest if priority && latest > now
+      state = read
+      day = utc_day(now)
+      count = (state["start_day"] == day) ? state["start_count"].to_i : 0
+      fields = {"last_start" => now, "start_day" => day, "start_count" => count + 1}
+      # More priority turns reserved behind this one: protect the next, no
+      # sooner than an interval from now.
+      fields["priority_due"] = now + @config.fetch_interval if priority && state["priority_start"].to_i > now
       write(fields)
     end
 
@@ -120,9 +139,16 @@ module Books
 
     private
 
-    def ordinary_cap = [@config.daily_fetch_cap - priority_reserved, 0].max
+    def daily_cap = [@config.daily_fetch_cap.to_i, 0].max
 
-    def priority_reserved = @config.priority_reserved.to_i
+    # Held to 0..daily_cap so the slice can never grant more than the cap.
+    def priority_reserved = @config.priority_reserved.to_i.clamp(0, daily_cap)
+
+    def ordinary_cap = daily_cap - priority_reserved
+
+    def starts_today(state) = (state["start_day"] == utc_day(now)) ? state["start_count"].to_i : 0
+
+    def next_midnight = Time.at(now).utc.tomorrow.beginning_of_day.to_i
 
     def reserve_ordinary(state)
       # Counted against the UTC day the fetch starts on, not the day it was
@@ -149,9 +175,10 @@ module Books
       count = (state["priority_day"] == day) ? state["priority_count"].to_i : 0
       return if count >= priority_reserved
 
-      # The earliest start still waiting is the one to protect; a newer
-      # reservation only takes over once that one has started or lapsed.
-      due = priority_outstanding?(state) ? state["priority_due"].to_i : start
+      # The earliest start still waiting is the one to protect, however far
+      # ahead it is; a newer reservation only takes over once that one has
+      # started or lapsed.
+      due = priority_waiting?(state) ? state["priority_due"].to_i : start
       write("priority_start" => start, "priority_due" => due, "priority_day" => day, "priority_count" => count + 1)
       Reservation.new(wait: start - now, refusal: nil)
     end
@@ -159,11 +186,19 @@ module Books
     # A priority start due within one interval ahead, or up to PRIORITY_YIELD
     # seconds past, that no fetch has begun at or after.
     def priority_outstanding?(state)
-      due = state["priority_due"].to_i
-      due > state["last_start"].to_i && due - now <= @config.fetch_interval && now - due <= PRIORITY_YIELD
+      priority_waiting?(state) && state["priority_due"].to_i - now <= @config.fetch_interval
     end
 
+    # A priority start no fetch has begun at or after, and not lapsed.
+    def priority_waiting?(state)
+      due = state["priority_due"].to_i
+      due > state["last_start"].to_i && now - due <= PRIORITY_YIELD
+    end
+
+    # With a cap of 0 nothing is ever granted, stored day or not, so a refusal
+    # still reopens at the next UTC midnight.
     def next_day_if_spent(day, count, cap)
+      return Time.at(next_midnight).utc if cap <= 0
       return if day.blank? || count.to_i < cap
 
       reopens = Date.strptime(day, "%Y%m%d").next_day.in_time_zone("UTC").beginning_of_day

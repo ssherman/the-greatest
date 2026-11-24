@@ -189,7 +189,7 @@ module Books
       assert_equal [0, 15], 2.times.map { g.reserve(priority: true).wait }
     end
 
-    test "an ordinary turn yields while a priority turn is due, and stops yielding 60 seconds later" do
+    test "an ordinary turn yields while a priority turn is due, and stops yielding 90 seconds later" do
       g = priority_gate(cap: 20, reserved: 5)
       g.started!
       travel 15.seconds
@@ -198,7 +198,7 @@ module Books
       assert_equal 15, g.spacing_wait
       assert_equal 0, g.spacing_wait(priority: true)
 
-      travel 59.seconds
+      travel 89.seconds
       assert_equal 15, g.spacing_wait
 
       travel 2.seconds
@@ -214,13 +214,55 @@ module Books
       assert_equal 0, g.spacing_wait
     end
 
-    test "a priority turn more than an interval ahead does not hold ordinary turns" do
+    test "nothing due within an interval does not hold ordinary turns" do
       g = priority_gate(cap: 20, reserved: 5)
-      4.times { g.reserve(priority: true) }
-      g.started!(priority: true)
-      travel 20.seconds
+      g.started!
+      travel 15.seconds
+      g.hold_priority!(100)
 
       assert_equal 0, g.spacing_wait
+    end
+
+    test "a priority turn sent back for spacing re-arms its protection when nothing protects it" do
+      g = priority_gate(cap: 20, reserved: 5)
+      g.started!
+      travel 15.seconds
+      g.hold_priority!(10)
+
+      assert_equal 15, g.spacing_wait
+    end
+
+    test "re-arming leaves a protection that is already outstanding alone" do
+      g = priority_gate(cap: 20, reserved: 5)
+      g.started!
+      travel 15.seconds
+      g.reserve(priority: true)
+      g.hold_priority!(10)
+      travel 91.seconds
+
+      assert_equal 0, g.spacing_wait
+    end
+
+    test "a new priority reservation keeps an earlier waiting start, however far ahead" do
+      g = priority_gate(cap: 20, reserved: 5)
+      g.started!
+      g.hold_priority!(40)
+      g.reserve(priority: true)
+      travel 110.seconds
+
+      assert_equal 15, g.spacing_wait
+    end
+
+    test "a priority turn that lost the slot to an ordinary fetch is protected again after it re-arms" do
+      g = priority_gate(cap: 20, reserved: 5)
+      g.reserve(priority: true)
+      g.started!
+      travel 15.seconds
+
+      assert_equal 0, g.spacing_wait
+      g.hold_priority!(1)
+
+      assert_equal 15, g.spacing_wait
     end
 
     test "ordinary turns keep yielding to the earliest waiting priority turn when more are reserved behind it" do
@@ -236,7 +278,7 @@ module Books
       g = priority_gate(cap: 20, reserved: 5)
       3.times { g.reserve(priority: true) }
       g.started!(priority: true)
-      travel 15.seconds
+      travel 14.seconds
 
       assert_equal 15, g.spacing_wait
     end
@@ -247,6 +289,64 @@ module Books
       g.reserve(priority: true)
 
       assert_equal [Time.current.utc.to_date, 1], g.usage.deconstruct
+    end
+
+    [[50, 100], [50, 50], [0, 100], [10, -5], [10, 0], [3, 2]].each do |cap, reserved|
+      test "cap #{cap} with slice #{reserved}: no more than the cap is granted, and a refusal always reopens" do
+        travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+        g = priority_gate(cap: cap, reserved: reserved)
+        granted = 0
+        300.times { granted += 1 if g.reserve.granted? }
+        300.times { granted += 1 if g.reserve(priority: true).granted? }
+
+        assert_operator granted, :<=, cap
+        assert g.reopens_at, "ordinary refusal must reopen"
+        assert g.reopens_at(priority: true), "priority refusal must reopen"
+      end
+    end
+
+    test "a cap of zero refuses on a blank gate and reopens at the next UTC midnight" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+      g = priority_gate(cap: 0, reserved: 100)
+
+      assert_equal :daily_cap, g.reserve.refusal
+      assert_equal Time.utc(2026, 11, 18, 0, 0, 0), g.reopens_at
+      assert_equal Time.utc(2026, 11, 18, 0, 0, 0), g.reopens_at(priority: true)
+    end
+
+    test "once the day's actual starts reach the cap every turn waits for the next UTC midnight" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+      g = priority_gate(cap: 3, reserved: 1)
+      3.times do
+        g.started!
+        travel 15.seconds
+      end
+      to_midnight = Time.utc(2026, 11, 18, 0, 0, 0) - Time.current
+
+      assert_equal [to_midnight, to_midnight], [g.spacing_wait, g.spacing_wait(priority: true)]
+
+      travel_to Time.utc(2026, 11, 18, 0, 0, 0)
+
+      assert_equal 0, g.spacing_wait
+
+      # The new day's count starts from zero, not from yesterday's three.
+      g.started!
+      travel 15.seconds
+
+      assert_equal 0, g.spacing_wait
+    end
+
+    test "a cap of zero holds every due turn" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+
+      assert_operator priority_gate(cap: 0, reserved: 0).spacing_wait, :>, 0
+    end
+
+    test "a gate that never stored a start day counts the day as zero" do
+      g = priority_gate(cap: 3, reserved: 1)
+      @redis.hset("x", "last_start", (Time.current - 1.hour).to_i.to_s)
+
+      assert_equal 0, g.spacing_wait
     end
 
     test "the block log line names the label" do

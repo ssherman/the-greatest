@@ -23,7 +23,10 @@ module Books
         # A turn that came due late (a deploy, a slow fetch before it) still
         # waits out the gap since the last fetch began, without a new turn.
         spacing = gate.spacing_wait(priority: priority)
-        return waiting(spacing) if spacing.positive?
+        if spacing.positive?
+          gate.hold_priority!(spacing) if priority
+          return waiting(spacing)
+        end
 
         gate.started!(priority: priority)
         Decision.new(action: :fetch, wait: nil, refusal: nil)
