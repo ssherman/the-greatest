@@ -110,6 +110,20 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_users_url
   end
 
+  test "should destroy a user who submitted, reviewed and claimed a book submission" do
+    user = User.create!(email: "submission-person@example.com", role: :user, email_verified: false)
+    submission = Books::BookSubmission.create!(
+      user: user, reviewed_by: user, claimed_by: user, input_method: :goodreads, goodreads_book_id: 5107
+    )
+
+    assert_difference("User.count", -1) do
+      delete admin_user_url(user)
+    end
+    assert_redirected_to admin_users_url
+    submission.reload
+    assert_equal [nil, nil, nil], [submission.user_id, submission.reviewed_by_id, submission.claimed_by_id]
+  end
+
   test "destroy purges cached public reading goals belonging to the user" do
     user_to_delete = User.create!(
       email: "reading-goal-owner-to-delete@example.com",

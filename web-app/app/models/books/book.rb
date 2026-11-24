@@ -126,6 +126,7 @@ class Books::Book < ApplicationRecord
   has_many :cleared_fields, as: :clearable, dependent: :delete_all
   has_many :enrichment_requests, as: :enrichable, dependent: :delete_all
   has_many :goodreads_editions, class_name: "Books::GoodreadsEdition", dependent: :nullify
+  has_many :submissions, class_name: "Books::BookSubmission", dependent: :nullify
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy

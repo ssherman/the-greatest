@@ -292,7 +292,7 @@ class IdentifierTest < ActiveSupport::TestCase
 
   test "source takes the provenance values" do
     assert_equal(
-      {"legacy" => 0, "open_library" => 1, "worldcat" => 2, "goodreads_import" => 3, "amazon" => 4, "wikidata" => 5, "viaf" => 6, "goodreads" => 7, "admin" => 8},
+      {"legacy" => 0, "open_library" => 1, "worldcat" => 2, "goodreads_import" => 3, "amazon" => 4, "wikidata" => 5, "viaf" => 6, "goodreads" => 7, "admin" => 8, "user_submission" => 9},
       Identifier.sources
     )
     identifier = Identifier.create!(identifiable: books_books(:war_and_peace), identifier_type: :books_work_isbn10,
@@ -324,6 +324,7 @@ class IdentifierTest < ActiveSupport::TestCase
     assert_equal 2, Identifier.trust_rank(:goodreads_import)
     assert_equal 2, Identifier.trust_rank(:wikidata)
     assert_equal 1, Identifier.trust_rank(:legacy)
+    assert_equal 1, Identifier.trust_rank("user_submission")
     assert_equal 0, Identifier.trust_rank(nil)
   end
 
