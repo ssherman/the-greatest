@@ -67,6 +67,28 @@ module Books
         assert_equal [:held, :not_a_book], Hold.call(facts(formats: [fmt("Calendar")]))
       end
 
+      # Labels a publisher's first production run used for bookmarks, memo pads,
+      # blank journals and postcard packs.
+      test "merchandise, diary and postcard formats are not_a_book" do
+        ["General merchandise", "General merchandise (Special Edition)", "Diary", "Postcard book or pack"].each do |label|
+          assert_equal [:held, :not_a_book], Hold.call(facts(formats: [fmt(label)])), label
+        end
+      end
+
+      # "General merchandise" says nothing about what is in the box, so a box
+      # set of books sold under it keeps the more useful reason.
+      test "a box set sold as general merchandise is a set; a card deck with a range in its title is not_a_book" do
+        assert_equal [:held, :set], Hold.call(facts(title: "The Memoirs Boxed Set", formats: [fmt("General merchandise")]))
+        assert_equal [:held, :not_a_book], Hold.call(facts(title: "Books 1-3", formats: [fmt("Cards")]))
+        assert_equal [:held, :not_a_book], Hold.call(facts(title: "Books 1-3", formats: [fmt("General merchandise"), fmt("Cards")]))
+      end
+
+      test "book formats that are not a plain binding stay ready" do
+        ["Spiral bound", "Picture Book", "Novelty book", "Leather/fine binding", "Board book"].each do |label|
+          assert_equal [:ready, nil], Hold.call(facts(formats: [fmt(label)])), label
+        end
+      end
+
       test "one calendar format plus one hardcover is ready" do
         assert_equal [:ready, nil], Hold.call(facts(formats: [fmt("Calendar"), fmt("Hardcover", isbn: "9780802169990")]))
       end

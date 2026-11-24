@@ -7,7 +7,7 @@ module Books
       # REST API (one record per ISBN); a product page is read from its JSON-LD
       # node plus the format list and the details the page shows.
       class HachetteUs < Base
-        VERSION = 2
+        VERSION = 3
 
         ENDPOINT = "https://www.hachettebookgroup.com/wp-json/wp/v2/hbg-title"
         PER_PAGE = 100
@@ -17,13 +17,17 @@ module Books
         PUBLISHER = "Hachette Book Group"
         ISBN_AT_END = %r{/(\d{13})/?\z}
 
-        # A format label carries a qualifier such as "(Unabridged)" or "(Special
-        # Edition)". A language edition is assumed to read "(Spanish Edition)";
-        # that wording has not been seen on a real page yet.
+        # A format label carries qualifiers in brackets, comma-separated:
+        # "(Unabridged)", "(Large Print)", "(Special Edition)". A language
+        # edition reads "ebook (Spanish)" or "Picture Book (Spanish, Bilingual
+        # edition)" (labels stored by the first production run, 2026-11-24);
+        # "(Spanish Edition)" is accepted too. A bilingual edition includes
+        # English, so it names no language.
         LANGUAGES = %w[Spanish French German Italian Portuguese Dutch Chinese Japanese Korean Russian Arabic
           Hebrew Polish Swedish Norwegian Danish Finnish Greek Turkish Hindi Vietnamese Thai Czech Hungarian
           English].freeze
-        LANGUAGE_EDITION = /\((\p{L}+)(?:[- ]language)? edition\)/i
+        LANGUAGE_QUALIFIER = /\A(\p{L}+)(?:(?:[- ]language)? edition)?\z/i
+        BILINGUAL = /\Abilingual\b/i
 
         # The API's `modified_after` filter is honoured: measured 2026-11-18,
         # `per_page=1` answered X-WP-Total 7140 with `modified_after` set to a
@@ -157,7 +161,7 @@ module Books
             formats: formats,
             imprint_name: clean(node.dig("brand", "name")).presence,
             publisher_name: PUBLISHER,
-            language: language_from(formats, own_isbn),
+            language: language_from(formats),
             genres: Array.wrap(node["genre"]).map { |genre| clean(genre) }.reject { |genre| genre.blank? || genre == "Genres" },
             series_name: series_name(doc),
             series_position: nil,
@@ -169,10 +173,25 @@ module Books
           reading(:found, facts, formats.map { |format| format[:isbn13] } - [own_isbn])
         end
 
-        def language_from(formats, own_isbn)
-          label = formats.find { |format| format[:isbn13] == own_isbn }&.dig(:format_label)
-          word = label.to_s[LANGUAGE_EDITION, 1]
-          LANGUAGES.find { |language| language.casecmp?(word) } && word
+        # The language every format on the page names. Each page lists all of a
+        # work's formats, so this does not depend on which of them was read. An
+        # English book with one Spanish ebook has no language (its label keeps
+        # the qualifier); a work whose every format is Spanish is Spanish.
+        def language_from(formats)
+          named = formats.map { |format| label_language(format[:format_label]) }.uniq
+          named.first if named.size == 1
+        end
+
+        def label_language(label)
+          qualifiers = label.to_s.scan(/\(([^)]*)\)/).flatten.flat_map { |text| text.split(",") }.map(&:strip)
+          return nil if qualifiers.any? { |qualifier| qualifier.match?(BILINGUAL) }
+
+          qualifiers.each do |qualifier|
+            word = qualifier[LANGUAGE_QUALIFIER, 1]
+            language = word && LANGUAGES.find { |name| name.casecmp?(word) }
+            return language if language
+          end
+          nil
         end
 
         # The site's stand-in image is not a cover.

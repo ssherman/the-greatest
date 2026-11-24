@@ -6,6 +6,10 @@ namespace :books do
     task :run, [:source] => :environment do |_task, args|
       strategy = Books::PublisherIntake::Sources.fetch(args[:source])
       abort "unknown source #{args[:source].inspect}; registered: #{Books::PublisherIntake::Sources.registry.keys.join(", ")}" if strategy.nil?
+      # A run for a source that is not enabled would never finish: its jobs skip.
+      unless Books::PublisherIntake.settings.enabled_sources.include?(strategy.key)
+        abort "#{strategy.key} is not enabled; add it to PUBLISHER_INTAKE_SOURCES first"
+      end
 
       started = Services::Books::PublisherIntake::StartRun.call(source: strategy, kind: :manual)
       abort started.errors.join(", ") unless started.success?
