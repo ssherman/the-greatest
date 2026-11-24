@@ -158,8 +158,9 @@ match wins:
 2. `placeholder`: the title or the only contributor is a stand-in ("Untitled...", "To Be
    Confirmed", "TBD").
 3. `non_english`: the page states a language and it is not English.
-4. `not_a_book`: every format is a non-book product (calendar, journal, card deck, puzzle,
-   stationery, toy, kit), by the publisher's format label.
+4. `not_a_book`: every format is a non-book product (calendar, journal, diary, card deck, postcard
+   pack, puzzle, stationery, toy, kit, or the catch-all "General merchandise"), by the publisher's
+   format label. A box set sold only as "General merchandise" is held as a `set` instead.
 5. `set`: a box set or bundle, by a format label, by the set words the verification code already
    uses (not counting a series-name word, and not a title that counts books, as "1001 Books..."
    does), or by a number range in the title ("#1-3").
@@ -285,9 +286,13 @@ collection (see Known gaps).
 
 ## Known gaps
 
-- **Hachette** takes an edition's language from a "(<Language> Edition)" qualifier on the page's
-  format label. That has not been seen on a real page, so a non-English Hachette edition may read as
-  `ready`.
+- **Hachette** names a language edition in a format label's qualifier ("ebook (Spanish)",
+  "Picture Book (Spanish, Bilingual edition)"). A title's language is the one every format on the
+  page names, so an English book with one Spanish ebook has no language and reads `ready`; the
+  format's label keeps the qualifier. A bilingual edition names no language. A Spanish book whose
+  second format carries no qualifier therefore also reads `ready`. Language belongs to a format,
+  and the table holds one per title; the later design that creates editions should read it per
+  format.
 - **Penguin Random House** detects only Spanish editions as non-English (from the genre link or the
   Spanish-language division). The page's own language field says English on Spanish editions, so
   other languages are not detected.

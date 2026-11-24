@@ -49,7 +49,7 @@ module Books
         def formats(reading) = reading.facts[:formats].map { |f| f.values_at(:isbn13, :format, :format_label) }
 
         test "identity" do
-          assert_equal ["hachette_us", "Hachette Book Group", 2, false],
+          assert_equal ["hachette_us", "Hachette Book Group", 3, false],
             [@source.key, @source.name, @source.parser_version, @source.baseline_on_first_run?]
           assert_equal HachetteUs, Sources.registry["hachette_us"]
         end
@@ -237,7 +237,7 @@ module Books
 
           spanish = read("synthetic_spanish.html", "9780316000031")
           assert_equal "Spanish", spanish.facts[:language]
-          assert_equal "Trade Paperback (Spanish Edition)", spanish.facts[:formats].first[:format_label]
+          assert_equal "Trade Paperback (Spanish)", spanish.facts[:formats].first[:format_label]
           assert_equal [:held, :non_english], Hold.call(spanish.facts)
 
           novel = read("novel_four_formats.html.gz", "9780316564861")
@@ -253,17 +253,65 @@ module Books
           assert_includes read("box_set.html.gz", "9781538789940").facts[:formats].first[:format_label], "(Special Edition)"
         end
 
-        test "an English Edition qualifier reads English and is ready; other edition words are not languages" do
+        test "a language qualifier names the language in any of its wordings; other qualifiers are not languages" do
           html = fixture_text("synthetic_spanish.html")
-          {"(English Edition)" => "English", "(Large Print Edition)" => nil, "(Media Tie-In Edition)" => nil,
-           "(Spanish-language edition)" => "Spanish", "(Klingon Edition)" => nil}.each do |qualifier, language|
+          {"(English Edition)" => "English", "(Spanish Edition)" => "Spanish", "(Spanish-language edition)" => "Spanish",
+           "(spanish)" => "Spanish", "(Large Print, Spanish)" => "Spanish",
+           "(Large Print Edition)" => nil, "(Large Print)" => nil, "(Media Tie-In Edition)" => nil, "(Unabridged)" => nil,
+           "(New edition)" => nil, "(Klingon Edition)" => nil, "(Klingon)" => nil}.each do |qualifier, language|
             page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
-              html: html.gsub("(Spanish Edition)", qualifier), selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+              html: html.gsub("(Spanish)", qualifier), selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
             reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
 
             assert_equal [qualifier, language], [qualifier, reading.facts[:language]]
             assert_equal [:ready, nil], Hold.call(reading.facts) if language == "English"
           end
+        end
+
+        # A bilingual edition includes English, so it is not a non-English title.
+        test "a bilingual qualifier names no language, with or without a language beside it" do
+          html = fixture_text("synthetic_spanish.html")
+          ["(Bilingual edition)", "(Spanish, Bilingual edition)"].each do |qualifier|
+            page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
+              html: html.gsub("(Spanish)", qualifier), selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+            reading = @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
+
+            assert_nil reading.facts[:language], qualifier
+            assert_equal [:ready, nil], Hold.call(reading.facts), qualifier
+          end
+        end
+
+        # A page lists every format of the work. The title is non-English only
+        # when each of them is: an English book with one Spanish ebook is ready.
+        test "the title's language is the one every format names" do
+          html = fixture_text("synthetic_spanish.html")
+          sibling = lambda do |label|
+            <<~HTML
+              <a href="https://www.hachettebookgroup.com/titles/elena-duarte/la-casa-del-rio/9780316000048/" class="title-formats-prices__item">
+              <span class="title-format-item">#{label}<span class="title-format-item__price" data-price-currency="USD">$9.99</span></span>
+              </a>
+            HTML
+          end
+          read_with = lambda do |own_qualifier, sibling_label|
+            body = html.gsub("(Spanish)", own_qualifier).sub("</span>\n</div>\n</section>", "</span>\n#{sibling.call(sibling_label)}</div>\n</section>")
+            page = PageFetcher::Page.new(url: "u", final_url: "u", status: 200, title: "T | Hachette Book Group",
+              html: body, selector_found: true, elapsed_ms: 1, fetched_at: Time.current)
+            @source.parse_listing(listing: ListingRef.new(url: "u", external_key: "k", signal: nil), page: page)
+          end
+
+          both = read_with.call("(Spanish)", 'ebook <span class="title-format-item__lang_edition">(Spanish)</span>')
+          assert_equal %w[9780316000031 9780316000048], both.facts[:formats].map { |f| f[:isbn13] }
+          assert_equal "Spanish", both.facts[:language]
+          assert_equal [:held, :non_english], Hold.call(both.facts)
+
+          spanish_page_english_sibling = read_with.call("(Spanish)", "ebook")
+          assert_nil spanish_page_english_sibling.facts[:language]
+          assert_equal [:ready, nil], Hold.call(spanish_page_english_sibling.facts)
+
+          english_page_spanish_sibling = read_with.call("", 'ebook <span class="title-format-item__lang_edition">(Spanish)</span>')
+          assert_nil english_page_spanish_sibling.facts[:language]
+          assert_equal "ebook (Spanish)", english_page_spanish_sibling.facts[:formats].last[:format_label]
+          assert_equal [:ready, nil], Hold.call(english_page_spanish_sibling.facts)
         end
 
         test "format words: ebook in any case is an ebook, a notebook is not" do

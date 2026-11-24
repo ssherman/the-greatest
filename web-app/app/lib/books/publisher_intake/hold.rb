@@ -8,7 +8,13 @@ module Books
     module Hold
       TITLE_PLACEHOLDER = /\A\s*(untitled|to be confirmed|tbc|tbd|title to be announced)\b/i
       CONTRIBUTOR_PLACEHOLDER = /\A(to be confirmed|tbc|tbd|author to be announced)\z/i
-      NON_BOOK_FORMAT = /\b(calendar|journal|notebook|planner|cards?|deck|puzzle|stationery|sticker|toy|kit|poster|game)\b/i
+      # Matched against a format's label only, never a title: "Diary of a
+      # Prisoner" in hardcover is a book, a "Diary" format is a blank one.
+      NON_BOOK_FORMAT = /\b(calendar|journal|notebook|diary|planner|cards?|postcards?|deck|puzzle|stationery|sticker|toy|kit|
+        poster|game)\b/ix
+      # A publisher's catch-all for bookmarks, memo pads and the like. It names
+      # no product, so a box set of books sold under it is still a set.
+      GENERIC_PRODUCT_FORMAT = /\bmerchandise\b/i
       SET_FORMAT = /\b(box(ed)?[\s-]?set|bundle)\b/i
       BOOK_COUNT = /\A\d+\s+books?\z/i
       ENGLISH = /\A(en|eng|english)\z|\Aen-/i
@@ -17,7 +23,7 @@ module Books
         reason = (incomplete?(facts) && :incomplete) ||
           (placeholder?(facts) && :placeholder) ||
           (non_english?(facts) && :non_english) ||
-          (not_a_book?(facts) && :not_a_book) ||
+          (not_a_book?(facts) && ((generic_product?(facts) && set?(facts)) ? :set : :not_a_book)) ||
           (set?(facts) && :set)
         reason ? [:held, reason] : [:ready, nil]
       end
@@ -42,7 +48,12 @@ module Books
 
       def self.not_a_book?(facts)
         all = formats(facts)
-        all.any? && all.all? { |f| f[:format_label].to_s.match?(NON_BOOK_FORMAT) }
+        all.any? && all.all? { |f| f[:format_label].to_s.match?(Regexp.union(NON_BOOK_FORMAT, GENERIC_PRODUCT_FORMAT)) }
+      end
+
+      # Every format is the catch-all label and none names a product.
+      def self.generic_product?(facts)
+        formats(facts).none? { |f| f[:format_label].to_s.match?(NON_BOOK_FORMAT) }
       end
 
       # The series name is never examined: "Omnibus Editions" as a series does
@@ -61,7 +72,7 @@ module Books
 
       def self.formats(facts) = Array(facts[:formats])
 
-      private_class_method :incomplete?, :placeholder?, :non_english?, :not_a_book?, :set?, :formats
+      private_class_method :incomplete?, :placeholder?, :non_english?, :not_a_book?, :generic_product?, :set?, :formats
     end
   end
 end
