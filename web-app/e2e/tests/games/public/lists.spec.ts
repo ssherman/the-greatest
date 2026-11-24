@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openListWithBreakdown } from '../../../helpers/lists';
 
 // The index sorts newest first, and the auto-generated "Our Users' Favorite
 // Games of All Time" list sits at the top with zero items until somebody
@@ -24,23 +25,6 @@ async function openPopulatedList(page: Page) {
   }
 
   throw new Error(`No list on /lists rendered any game cards (checked ${hrefs.length})`);
-}
-
-// A list nothing lowers has no breakdown to open, and the heaviest lists sort
-// first, so walk the index and stop at the first list that has one.
-async function openListWithBreakdown(page: Page) {
-  await page.goto('/lists');
-
-  const hrefs = await page.locator('.card h3 a').evaluateAll((links) =>
-    links.map((a) => (a as HTMLAnchorElement).getAttribute('href')).filter(Boolean) as string[]
-  );
-
-  for (const href of hrefs) {
-    await page.goto(href);
-    if (await page.getByText('See how this was worked out').isVisible()) return;
-  }
-
-  throw new Error(`No list on /lists had a breakdown to open (checked ${hrefs.length})`);
 }
 
 test.describe('Games Lists', () => {
