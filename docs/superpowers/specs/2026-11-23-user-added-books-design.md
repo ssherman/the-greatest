@@ -40,6 +40,7 @@ Why now: the old site has it, the new one does not, and books is approaching lau
 | Question | Decision |
 |---|---|
 | Inputs | **One at a time**, never combined: the existing autocomplete, or a Goodreads URL, or an Amazon URL, or title + authors, or an ISBN/EAN. |
+| Instant check | Check our own database for the Goodreads id, Amazon id or ISBN first, skipping `legacy` identifiers, and tell the reader at once. No match starts the import on a higher queue. |
 | Who | Any signed-in user, 20 a day. |
 | Expectation | Tell the reader it may take a while. |
 | Priority | User adds run on a higher queue; it should not take days. |
@@ -142,6 +143,22 @@ Add a book that isn't on the site
   (`Books::Isbn`). An EAN that is not an ISBN (not 978 or 979), a short link, or a link of the other
   kind is a form error saying what that field accepts.
 - An ASIN that is a valid ISBN-10 is stored as the ISBN as well.
+**The instant check.** On submit the server looks in Postgres only, and nothing outside:
+
+- Goodreads, Amazon, ISBN: book-level and edition-level identifiers whose `source` is set and is not
+  `legacy`. An ISBN is checked in both forms, and an ASIN that is an ISBN-10 as an ISBN too. Edition
+  hits answer with the edition's book.
+- Title and authors: the finder's exact title-and-author lookup. (Call)
+- **Hits are shown, not added**: "We already have this. Is it the one?" with title, author and year for
+  up to three books, and **Add to list** or **None of these**. (Call) Reading the title is what catches
+  a wrong id, and a few dozen values are held by more than one book. Add uses the existing add-item
+  endpoint. No submission is made and the daily cap is not touched.
+- No hits, or "None of these", creates the submission and queues the job.
+
+Measured on the dev copy (newest book 2026-11-13): non-legacy book-level identifiers reach 40,974 of
+161,304 books, and 18,815 of the 21,260 ranked ones (88%). Values held by more than one book: 9
+Goodreads ids, 27 ISBN-13s, 42 ISBN-10s, 14 ASINs. A miss costs only a background lookup.
+
 - Submitting again for the same list and same normalized input while one is open returns the open one.
 - 20 submissions in a rolling 24 hours, counted under the user's lock, whatever their outcome, plus
   the usual burst `rate_limit`.
@@ -176,8 +193,8 @@ A Sidekiq job on `critical`, idempotent and retryable. Services live in
      block or spent daily cap is waited out. A definite "no such record", or the hour running out, is
      `needs_details`: the reader can try another way, or an agent can supply the details.
 2. **Find.** `DataImporters::Books::Book::Finder` with the confirmed query and `subject:` the
-   submission, so a `MatchDecision` is kept. A book another reader already submitted resolves to that
-   provisional book, not a second one.
+   submission, so a `MatchDecision` is kept, and `identifier_sources:` every source but `legacy`. A book
+   another reader already submitted resolves to that provisional book, not a second one.
    - A `fallback` decision (the AI failed) or a failed local source is **not** "unmatched": it is
      retried with backoff and never creates. After an hour it is `failed`, which agents are handed.
    - A failed Open Library source alone is retried for the hour, then the book is created: the local
@@ -295,7 +312,8 @@ makes the mark permanent.
 ## 12. Testing
 
 Minitest for every service, job, controller and policy (outside APIs stubbed, Sidekiq inline), with
-cases for: each method; a request carrying two methods; a replaced request; a match to a catalog book, to a provisional
+cases for: each method; the instant check (a hit by each id kind, a legacy-only or sourceless id
+ignored, several holders, "None of these"); a request carrying two methods; a replaced request; a match to a catalog book, to a provisional
 book; a service down; two racing submissions; list deleted; the cap; approval over an active limited
 run; reject refused for each kind of use; merge moving list items and submissions; priority turns
 passing a backlog and using the reserved slice; a lease expiring. MCP: the pinned tool counts and
