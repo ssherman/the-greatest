@@ -23,7 +23,16 @@ module Services
           ["amazon", "https://amazon.com.evil.test/dp/0061054887"],
           ["isbn", "9780061054880"],
           ["isbn", "5012345678900"],
-          ["goodreads", "javascript:alert(1)"]
+          ["goodreads", "javascript:alert(1)"],
+          ["goodreads", "javascript:alert(1);'@www.goodreads.com/book/show/1-x'"],
+          ["amazon", "javascript:alert(1);'@www.amazon.com/dp/0061054887/x'"],
+          ["goodreads", "https://evil.test@www.goodreads.com/book/show/1"],
+          ["goodreads", "https://@www.goodreads.com/book/show/1"],
+          ["amazon", "https://@www.amazon.com/dp/0061054887"],
+          ["goodreads", "javascript:1//www.goodreads.com/book/show/1"],
+          ["goodreads", "javascript:alert(1)//www.goodreads.com/book/show/1"],
+          ["amazon", "javascript:1/www.amazon.com/dp/0061054887"],
+          ["goodreads", "user:pw@www.goodreads.com/book/show/1"]
         ]
 
         def parse(params)

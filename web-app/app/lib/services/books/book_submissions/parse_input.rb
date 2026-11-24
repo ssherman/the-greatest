@@ -123,10 +123,16 @@ module Services
           link
         end
 
-        # A link with no scheme is read as https. A string that cannot be
-        # parsed, or that is not http(s), is refused by the caller.
+        # A link with no scheme is read as https. Refused (nil): a string that
+        # cannot be parsed, is not http(s), or has an "@" in its authority
+        # (userinfo, even an empty one), so nothing but a plain host and an
+        # optional port can precede the path. That also stops a string like
+        # "javascript:x@www.goodreads.com/..." from reading as a link.
         def parse_uri(link)
           candidate = link.match?(%r{\A[a-z][a-z0-9+.-]*://}i) ? link : "https://#{link}"
+          authority = candidate.sub(%r{\A[a-z][a-z0-9+.-]*://}i, "")[%r{\A[^/?#]*}]
+          return nil if authority.include?("@")
+
           uri = URI.parse(candidate)
           (uri.is_a?(URI::HTTP) && uri.host.present?) ? uri : nil
         rescue URI::Error
