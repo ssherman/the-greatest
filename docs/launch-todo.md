@@ -971,3 +971,8 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    and its description to "Only people of one gender, race, age group or similar could vote, so the list reflects that group's preferences rather than a general consensus."
    Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 11, 13, 14 and 18 changed).
    It exits 1 and reports 11 as `mismatched` if the rename has not been done.
+8. **Rename penalty 5, then reload the guidance. Shane does both.** On the admin penalties form set
+   penalty 5's name to "List: only covers creators of one group (gender, race, ethnicity, etc.)"
+   and its description to "Restricted to creators of one gender, race, ethnicity or similar group, so it surveys part of the field rather than all of it."
+   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 1 and 5 changed). It reports
+   5 as `mismatched` if the rename has not been done.
