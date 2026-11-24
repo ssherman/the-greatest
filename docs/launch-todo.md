@@ -953,3 +953,8 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    The deploy also adds `lists.items_need_revision` (migration, default false). Lists the agent flags
    show an "Items need revision" badge, and the books lists index filters them with "Needs item
    revision"; only an admin clears the flag, on the list's edit form.
+7. **Rename penalty 11, then reload the guidance. Shane does both.** On the admin penalties form set
+   penalty 11's name to "Voters: limited to one demographic group (gender, race, age, etc.)"
+   and its description to "Only people of one gender, race, age group or similar could vote, so the list reflects that group's preferences rather than a general consensus."
+   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 11, 13, 14 and 18 changed).
+   It exits 1 and reports 11 as `mismatched` if the rename has not been done.

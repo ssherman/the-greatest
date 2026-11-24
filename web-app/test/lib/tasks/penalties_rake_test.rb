@@ -27,6 +27,16 @@ class PenaltiesRakeTest < ActiveSupport::TestCase
     @task.reenable
   end
 
+  # load_guidance refuses a row whose name differs from guidance.yml, and backfill
+  # refuses one whose name differs from ENTRIES, so a rename has to land in both.
+  test "guidance.yml and the backfill agree on every penalty's name" do
+    differing = YAML.load_file(Rails.root.join("config/penalties/guidance.yml")).select do |entry|
+      expected = Penalties::Backfill::ENTRIES[entry["id"]]
+      expected && expected[:name] != entry["name"]
+    end
+    assert_empty differing.map { |entry| entry["id"] }
+  end
+
   test "assigns a category and description to a penalty it knows when the name matches" do
     penalty = Penalty.create!(id: 990_001, type: "Global::Penalty", name: "Placeholder")
     Penalties::Backfill::ENTRIES[990_001] = {
