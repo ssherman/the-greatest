@@ -139,7 +139,7 @@ module Books
       # arriving. Ordinary jobs run before priority jobs that are due the same
       # second, and priority waits wake through wake_at (late, or on a sweep).
       # Returns the starts: {at:, priority:, arrived:}.
-      def simulate(gate:, events:, horizon:, wake_at: ->(now, wait) { now + wait })
+      def simulate(gate:, events:, horizon:, wake_at: ->(now, wait) { now + wait }, outage: nil)
         t0 = Time.current.to_i
         pending = events.sort_by(&:first)
         jobs = []
@@ -155,7 +155,8 @@ module Books
               jobs << {priority: true, due: false, wake: now, arrived: now}
             end
           end
-          jobs.select { |job| job[:wake] <= now }.sort_by { |job| job[:priority] ? 1 : 0 }.each do |job|
+          blocked = outage&.cover?(now - t0)
+          jobs.select { |job| !blocked && job[:wake] <= now }.sort_by { |job| job[:priority] ? 1 : 0 }.each do |job|
             decision = GateTurn.call(gate: gate, due: job[:due], priority: job[:priority])
             if decision.action == :wait
               job.merge!(wake: job[:priority] ? wake_at.call(now, decision.wait) : now + decision.wait, due: true)
@@ -165,6 +166,7 @@ module Books
             end
           end
           upcoming = (jobs.map { |j| j[:wake] } + pending.map { |e| t0 + e[0] }).select { |t| t > now }.min
+          upcoming = [upcoming, t0 + outage.end].compact.max if blocked
           break if upcoming.nil? || upcoming > t0 + horizon
 
           travel_to Time.at(upcoming).utc
@@ -222,6 +224,24 @@ module Books
         assert_operator per_day[Date.new(2026, 11, 24)], :<=, 40
         assert_operator per_day[Date.new(2026, 11, 25)], :<=, 40
         assert_spaced(starts)
+      end
+
+      test "ordinary turns carried past midnight and a full refill at 00:00 leave the readers' slice alone" do
+        travel_to Time.utc(2026, 11, 24, 23, 40, 0)
+        refill = 20 * 60
+        readers = Array.new(5) { |i| [refill + (8 * 3600) + (i * 900), :priority] }
+        # 35 turns are reserved on the 24th, but nothing runs until midnight (an outage).
+        events = Array.new(35) { [0, :ordinary] } + Array.new(35) { [refill, :ordinary] } + readers
+        starts = simulate(gate: sim_gate(cap: 40, reserved: 5), events: events, horizon: 3 * 86_400, outage: 0...refill)
+
+        per_day = starts.group_by { |s| Time.at(s[:at]).utc.to_date }.transform_values(&:size)
+        assert_operator per_day.values.max, :<=, 40
+        assert_spaced(starts)
+        delays = delays(starts)
+        assert_equal 5, delays.size
+        assert_operator delays.max, :<=, 60, "a reader waited #{delays.max}s"
+        displaced = starts.count { |s| !s[:priority] && s[:arrived] == starts.map { |x| x[:arrived] }.min && Time.at(s[:at]).utc.to_date == Date.new(2026, 11, 25) }
+        assert_equal 35, displaced
       end
 
       test "after_fetch leaves the gate open on an unparseable page" do

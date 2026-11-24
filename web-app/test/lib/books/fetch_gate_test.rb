@@ -336,6 +336,76 @@ module Books
       assert_equal 0, g.spacing_wait
     end
 
+    # Starts at 15 s apart on one UTC day; returns nothing, only advances the clock.
+    def start_turns(gate, ordinary: 0, priority: 0)
+      ordinary.times do
+        gate.started!
+        travel 15.seconds
+      end
+      priority.times do
+        gate.started!(priority: true)
+        travel 15.seconds
+      end
+    end
+
+    test "with no readers ordinary starts stop at the cap less the slice, and a reader still runs" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+      g = priority_gate(cap: 10, reserved: 3)
+      start_turns(g, ordinary: 6)
+
+      assert_equal 0, g.spacing_wait
+
+      start_turns(g, ordinary: 1)
+      to_midnight = Time.utc(2026, 11, 18, 0, 0, 0) - Time.current
+
+      assert_equal [to_midnight, 0], [g.spacing_wait, g.spacing_wait(priority: true)]
+    end
+
+    test "priority starts release the slice they used to ordinary turns" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+      g = priority_gate(cap: 10, reserved: 3)
+      start_turns(g, priority: 2, ordinary: 6)
+
+      assert_equal 0, g.spacing_wait
+
+      start_turns(g, ordinary: 1)
+
+      assert_operator g.spacing_wait, :>, 0
+    end
+
+    test "priority starts past the slice leave nothing to hold back, and the cap is never exceeded" do
+      travel_to Time.utc(2026, 11, 17, 6, 0, 0)
+      g = priority_gate(cap: 10, reserved: 3)
+      start_turns(g, priority: 4, ordinary: 5)
+
+      assert_equal 0, g.spacing_wait
+
+      start_turns(g, ordinary: 1)
+
+      assert_operator g.spacing_wait, :>, 0
+      assert_operator g.spacing_wait(priority: true), :>, 0
+    end
+
+    test "the day's priority starts roll over at midnight" do
+      travel_to Time.utc(2026, 11, 17, 23, 0, 0)
+      g = priority_gate(cap: 10, reserved: 3)
+      start_turns(g, priority: 3)
+      travel_to Time.utc(2026, 11, 18, 6, 0, 0)
+      start_turns(g, ordinary: 7)
+
+      assert_operator g.spacing_wait, :>, 0
+    end
+
+    test "yesterday's priority starts do not release today's slice before today's first start" do
+      travel_to Time.utc(2026, 11, 17, 23, 0, 0)
+      g = priority_gate(cap: 3, reserved: 3)
+      start_turns(g, priority: 3)
+      travel_to Time.utc(2026, 11, 18, 6, 0, 0)
+
+      assert_operator g.spacing_wait, :>, 0
+      assert_equal 0, g.spacing_wait(priority: true)
+    end
+
     test "a cap of zero holds every due turn" do
       travel_to Time.utc(2026, 11, 17, 6, 0, 0)
 

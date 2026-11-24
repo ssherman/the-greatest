@@ -21,6 +21,13 @@ module Books
   # reserved on one UTC day can run on the next. The hard guards are therefore on
   # actual starts, in spacing_wait: fetch_interval since the last start, and no
   # more than daily_fetch_cap starts in a UTC day (a cap of 0 holds every turn).
+  # The slice holds for starts too: an ordinary turn is held once the day's
+  # starts reach daily_fetch_cap less the part of the slice priority starts have
+  # not yet used, so ordinary turns displaced past midnight cannot take the
+  # readers' share. A priority turn is held only at daily_fetch_cap. Priority
+  # starts past the slice (a priority turn that fell back to an ordinary
+  # reservation still counts as one) leave nothing unused, so ordinary turns
+  # then run up to daily_fetch_cap, which no start ever exceeds.
   #
   # Hash commands only, so CI's FakeRedis can stand in. Read-then-write is
   # not atomic; it needs no lock because only one job at a time per key
@@ -98,14 +105,15 @@ module Books
     # Seconds until fetch_interval has passed since the last fetch actually
     # began. A turn only promises a start time: jobs held up by a deploy or
     # a slow fetch come due together, and this keeps them apart. Once the UTC
-    # day's actual starts reach daily_fetch_cap, every turn waits for the next
-    # UTC midnight. An ordinary turn also steps aside, a full interval at a
+    # day's actual starts reach daily_fetch_cap (for an ordinary turn, less the
+    # unused part of the priority slice), the turn waits for the next UTC
+    # midnight. An ordinary turn also steps aside, a full interval at a
     # time, while a priority turn is due and has not started (see
     # PRIORITY_YIELD).
     def spacing_wait(priority: false)
       state = read
       wait = [state["last_start"].to_i + @config.fetch_interval - now, 0].max
-      wait = [wait, next_midnight - now].max if starts_today(state) >= daily_cap
+      wait = [wait, next_midnight - now].max if starts_today(state) >= (priority ? daily_cap : ordinary_start_cap(state))
       return wait if priority || !priority_outstanding?(state)
 
       [wait, @config.fetch_interval].max
@@ -123,8 +131,11 @@ module Books
     def started!(priority: false)
       state = read
       day = utc_day(now)
-      count = (state["start_day"] == day) ? state["start_count"].to_i : 0
-      fields = {"last_start" => now, "start_day" => day, "start_count" => count + 1}
+      same_day = state["start_day"] == day
+      count = same_day ? state["start_count"].to_i : 0
+      priority_count = same_day ? state["priority_start_count"].to_i : 0
+      fields = {"last_start" => now, "start_day" => day, "start_count" => count + 1,
+                "priority_start_count" => priority_count + (priority ? 1 : 0)}
       # More priority turns reserved behind this one: protect the next, no
       # sooner than an interval from now.
       fields["priority_due"] = now + @config.fetch_interval if priority && state["priority_start"].to_i > now
@@ -145,6 +156,15 @@ module Books
     def priority_reserved = @config.priority_reserved.to_i.clamp(0, daily_cap)
 
     def ordinary_cap = daily_cap - priority_reserved
+
+    # Today's start allowance for ordinary turns: the cap less what priority
+    # starts have yet to use of their slice.
+    def ordinary_start_cap(state)
+      unused = [priority_reserved - priority_starts_today(state), 0].max
+      daily_cap - unused
+    end
+
+    def priority_starts_today(state) = (state["start_day"] == utc_day(now)) ? state["priority_start_count"].to_i : 0
 
     def starts_today(state) = (state["start_day"] == utc_day(now)) ? state["start_count"].to_i : 0
 

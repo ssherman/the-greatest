@@ -36,8 +36,9 @@ Rails.application.config.x.goodreads = ActiveSupport::OrderedOptions.new.merge(
   fetch_interval: GoodreadsEnv.integer("GOODREADS_FETCH_INTERVAL", 15),
   # Fetches reserved per UTC day. GOODREADS_DAILY_FETCH_CAP overrides it.
   daily_fetch_cap: GoodreadsEnv.integer("GOODREADS_DAILY_FETCH_CAP", 1_500),
-  # Part of daily_fetch_cap kept for priority turns (a reader adding one book);
-  # ordinary turns get the rest. GOODREADS_PRIORITY_RESERVED overrides it.
+  # Part of daily_fetch_cap kept for priority turns (a reader adding one book),
+  # both in reservations and in actual starts: ordinary turns stop that many
+  # starts short of the cap until priority turns have used the slice. GOODREADS_PRIORITY_RESERVED overrides it.
   priority_reserved: GoodreadsEnv.integer("GOODREADS_PRIORITY_RESERVED", 100),
   # How long a block stops every fetch: a 401/403/429, another status the
   # parser cannot read, or a page Goodreads did not title as its own (a
