@@ -111,13 +111,54 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
     assert_text "This list is not used for any active rankings"
   end
 
-  test "renders no penalty section when the list has none" do
-    details = full_details.merge("penalties" => [])
+  test "shows the score and the count while the rows stay closed" do
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(full_details)))
+
+    assert_text "Weight 15%"
+    assert_text "3 things lower it"
+    assert_selector "details.collapse:not([open]) > summary", text: "See how this was worked out"
+    # A selector, not assert_text: on a rendered fragment only selectors treat a
+    # closed details as hidden.
+    assert_no_selector "dt", text: "Base weight"
+    assert_selector "dt", text: "Base weight", visible: :all
+  end
+
+  test "uses the singular for one penalty" do
+    details = full_details.merge("penalties" => [{"penalty_name" => "Voters: Unknown Names", "value" => 5.0}])
 
     render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(details)))
 
-    assert_no_text "What lowers this list's weight"
-    assert_text "Final weight"
+    assert_text "1 thing lowers it"
+  end
+
+  test "no penalties: says nothing lowers it and has nothing to open" do
+    [
+      full_details.merge("penalties" => []),
+      full_details.except("penalties"),
+      full_details(quality_bonus_applied: true).merge("penalties" => [])
+    ].each do |details|
+      render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(details)))
+
+      assert_text "Nothing lowers it"
+      assert_no_selector "details"
+    end
+  end
+
+  test "the fallbacks have nothing to open" do
+    [nil, ranked_list_with(nil)].each do |ranked_list|
+      render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list))
+
+      assert_text "How good is this list?"
+      assert_no_selector "details"
+    end
+  end
+
+  # Some screen readers expose a summary as a button and drop any heading inside it.
+  test "the heading is not inside the summary" do
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(full_details)))
+
+    assert_selector "h2", text: "How good is this list?"
+    assert_no_selector "summary h2", visible: :all
   end
 
   test "renders penalties ordered by value descending regardless of input order" do
@@ -129,7 +170,7 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
 
     render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(details)))
 
-    penalty_names = page.all("dt").map(&:text) - ["Base weight", "Total penalty"]
+    penalty_names = page.all("dt", visible: :all).map { |dt| dt.text(:all) } - ["Base weight", "Total penalty", "Final weight"]
     assert_equal ["Voters: not critics or experts", "List: only covers 1 language", "Voters: Unknown Names"], penalty_names
   end
 

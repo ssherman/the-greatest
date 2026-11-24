@@ -26,6 +26,23 @@ async function openPopulatedList(page: Page) {
   throw new Error(`No list on /lists rendered any game cards (checked ${hrefs.length})`);
 }
 
+// A list nothing lowers has no breakdown to open, and the heaviest lists sort
+// first, so walk the index and stop at the first list that has one.
+async function openListWithBreakdown(page: Page) {
+  await page.goto('/lists');
+
+  const hrefs = await page.locator('.card h3 a').evaluateAll((links) =>
+    links.map((a) => (a as HTMLAnchorElement).getAttribute('href')).filter(Boolean) as string[]
+  );
+
+  for (const href of hrefs) {
+    await page.goto(href);
+    if (await page.getByText('See how this was worked out').isVisible()) return;
+  }
+
+  throw new Error(`No list on /lists had a breakdown to open (checked ${hrefs.length})`);
+}
+
 test.describe('Games Lists', () => {
   test('lists index page loads successfully', async ({ page }) => {
     await page.goto('/lists');
@@ -131,10 +148,15 @@ test.describe('Games Lists', () => {
     await expect(page).toHaveURL(/\/lists$/);
   });
 
-  test('the list page shows the full weight breakdown', async ({ page }) => {
-    await openPopulatedList(page);
+  test('the list page shows the score and opens the full weight breakdown', async ({ page }) => {
+    await openListWithBreakdown(page);
 
     await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
+    await expect(page.getByText(/^Weight -?[\d.]+%$/)).toBeVisible();
+    await expect(page.getByText('Base weight')).toBeHidden();
+
+    await page.getByText('See how this was worked out').click();
+
     await expect(page.getByText('Base weight')).toBeVisible();
   });
 });

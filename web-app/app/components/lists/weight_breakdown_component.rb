@@ -17,6 +17,14 @@ class Lists::WeightBreakdownComponent < ViewComponent::Base
     (details["penalties"] || []).sort_by { |p| -p["value"].to_f }
   end
 
+  def penalty_count_line
+    case penalties.size
+    when 0 then "Nothing lowers it"
+    when 1 then "1 thing lowers it"
+    else "#{penalties.size} things lower it"
+    end
+  end
+
   def base_weight
     pct(details.dig("base_values", "base_weight"))
   end

@@ -1,4 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+// A list nothing lowers has no breakdown to open, and the heaviest lists sort
+// first, so walk the index and stop at the first list that has one.
+async function openListWithBreakdown(page: Page) {
+  await page.goto('/lists');
+
+  const hrefs = await page.locator('.card h3 a').evaluateAll((links) =>
+    links.map((a) => (a as HTMLAnchorElement).getAttribute('href')).filter(Boolean) as string[]
+  );
+
+  for (const href of hrefs) {
+    await page.goto(href);
+    if (await page.getByText('See how this was worked out').isVisible()) return;
+  }
+
+  throw new Error(`No list on /lists had a breakdown to open (checked ${hrefs.length})`);
+}
 
 test.describe('Books lists index', () => {
   test('loads and renders the heading', async ({ page }) => {
@@ -48,11 +65,16 @@ test.describe('Books lists index', () => {
 });
 
 test.describe('Books list detail', () => {
-  test('renders the weight breakdown and a book grid', async ({ page }) => {
-    await page.goto('/lists');
-    await page.locator('.card h3 a').first().click();
+  test('shows the score, opens the breakdown by keyboard, and renders a book grid', async ({ page }) => {
+    await openListWithBreakdown(page);
 
     await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
+    await expect(page.getByText(/^Weight -?[\d.]+%$/)).toBeVisible();
+    await expect(page.getByText('Base weight')).toBeHidden();
+
+    await page.getByText('See how this was worked out').focus();
+    await page.keyboard.press('Enter');
+
     await expect(page.getByText('Base weight')).toBeVisible();
     await expect(page.locator('.card h2 a').first()).toBeVisible();
   });
