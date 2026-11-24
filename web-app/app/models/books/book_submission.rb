@@ -102,8 +102,8 @@ module Books
     # request the lookup could not finish. A row flagged needs_human is taken
     # out of the agent queue and never comes back here.
     scope :reviewable, -> {
-      where.not(review_status: :needs_human)
-        .merge(where(review_status: :pending, status: :added).or(where(status: %i[needs_details failed])))
+      where(status: :added, review_status: :pending)
+        .or(where.not(review_status: :needs_human).where(status: %i[needs_details failed]))
     }
     scope :claimable, -> { reviewable.where("lease_expires_at IS NULL OR lease_expires_at <= ?", Time.current) }
 
@@ -132,6 +132,11 @@ module Books
       (IDENTIFIER_COLUMNS - allowed).each do |column|
         errors.add(column, "does not belong with this input method") if self[column].present?
       end
+      carries_typed = typed_title.present? || typed_author_names.present?
+      if !method_title_authors? && carries_typed
+        errors.add(:typed_title, "belongs only to a title and authors request")
+      end
+      errors.add(:raw_input, "does not belong with a title and authors request") if method_title_authors? && raw_input.present?
       required = {"goodreads" => :goodreads_book_id, "amazon" => :asin}[input_method]
       errors.add(required, "can't be blank") if required && self[required].blank?
       errors.add(:isbn13, "or isbn10 is required") if method_isbn? && isbn13.blank? && isbn10.blank?

@@ -69,14 +69,21 @@ require "test_helper"
 module Books
   class BookSubmissionTest < ActiveSupport::TestCase
     def build(attrs = {})
-      Books::BookSubmission.new({user: users(:regular_user), input_method: :title_authors,
-                                 typed_title: "A Title", typed_author_names: ["An Author"]}.merge(attrs))
+      method = attrs.fetch(:input_method, :title_authors)
+      typed = (method == :title_authors) ? {typed_title: "A Title", typed_author_names: ["An Author"]} : {}
+      Books::BookSubmission.new({user: users(:regular_user), input_method: method}.merge(typed).merge(attrs))
     end
 
     test "each method needs its own input and no other" do
       assert build.valid?
 
-      assert_not build(input_method: :goodreads, typed_title: nil, typed_author_names: []).valid?
+      assert_not build(input_method: :goodreads).valid?
+      assert_not build(input_method: :goodreads, goodreads_book_id: 5107, typed_title: "A Title").valid?
+      assert_not build(input_method: :goodreads, goodreads_book_id: 5107, typed_author_names: ["An Author"]).valid?
+      assert_not build(input_method: :amazon, asin: "B000000000", typed_title: "A Title").valid?
+      assert_not build(input_method: :isbn, isbn13: "9780316769488", typed_author_names: ["An Author"]).valid?
+      assert_not build(raw_input: "A Title by An Author").valid?
+      assert build(input_method: :goodreads, goodreads_book_id: 5107, raw_input: "https://example.com/x").valid?
       assert build(input_method: :goodreads, goodreads_book_id: 5107).valid?
       assert_not build(input_method: :goodreads, goodreads_book_id: 5107, asin: "B000000000").valid?
 
@@ -95,6 +102,23 @@ module Books
       assert_not build(typed_title: "x" * 256).valid?
       assert build(typed_title: "x" * 255).valid?
       assert_not build(typed_author_names: ["x" * 256]).valid?
+    end
+
+    test "reviewable keeps needs_human out however it is chained" do
+      failed = books_book_submissions(:queued_goodreads)
+      failed.update!(status: :failed, review_status: :needs_human)
+      added = books_book_submissions(:added_title_authors)
+
+      assert_empty Books::BookSubmission.review_needs_human.reviewable
+      assert_empty Books::BookSubmission.review_needs_human.claimable
+      assert_not_includes Books::BookSubmission.where(user: failed.user).reviewable, failed
+      assert_not_includes Books::BookSubmission.reviewable.where(user: failed.user), failed
+      assert_not_includes Books::BookSubmission.where.not(review_status: :approved).reviewable, failed
+
+      [:approved, :not_needed].each do |review_status|
+        added.update!(review_status: review_status)
+        assert_not_includes Books::BookSubmission.reviewable, added
+      end
     end
 
     test "reviewable leaves out needs_human and cancelled" do
