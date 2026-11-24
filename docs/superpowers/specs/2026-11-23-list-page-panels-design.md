@@ -1,6 +1,6 @@
 # List page panels — design
 
-**Status:** awaiting Shane's approval
+**Status:** approved 2026-11-23
 **Size:** a small change
 
 ## Intent and why
