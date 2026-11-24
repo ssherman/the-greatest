@@ -101,6 +101,10 @@ class Identifier < ApplicationRecord
     user_submission: 9
   }, prefix: true
 
+  # Every source but legacy, as the enum's string keys (what
+  # Finder.new(identifier_sources:) expects). A nil source matches none of them.
+  NON_LEGACY_SOURCES = (sources.keys - ["legacy"]).freeze
+
   BOOKS_TYPES = %w[Books::Book Books::Edition Books::Author Books::Series].freeze
   VERIFIED_SOURCES = %w[open_library worldcat].freeze
 
