@@ -31,7 +31,7 @@
           </ul>
 
           <% if @list.description.present? %>
-            <p class="<%= prose_class %>"><%= @list.description %></p>
+            <p class="<%= prose_class %>"><%= @list.description.strip %></p>
           <% end %>
 
           <% if @list.url.present? %>

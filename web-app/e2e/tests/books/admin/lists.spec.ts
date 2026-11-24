@@ -107,7 +107,7 @@ test.describe("Books admin — lists", () => {
     // As long as the longest real source, with nowhere to break.
     await page.locator('input[name="books_list[source]"]').fill("x".repeat(88));
     await page.locator('input[name="books_list[number_of_voters]"]').fill("1");
-    await page.locator('textarea[name="books_list[description]"]').fill("First paragraph.\n\nSecond paragraph.");
+    await page.locator('textarea[name="books_list[description]"]').fill("\n\nFirst paragraph.\n\nSecond paragraph.\n\n");
     await page.locator('select[name="books_list[status]"]').selectOption("active");
     await page.getByRole("button", { name: "Create Book List" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
@@ -124,7 +124,7 @@ test.describe("Books admin — lists", () => {
       await expect(section.getByText("Voter 40, critic")).toBeVisible();
 
       await expect(page.getByText("1 voter", { exact: true })).toBeVisible();
-      expect(await page.getByText("First paragraph.").innerText()).toMatch(/First paragraph\.\s*\n+\s*Second paragraph\./);
+      expect(await page.getByText("First paragraph.").innerText()).toMatch(/^First paragraph\.\s*\n+\s*Second paragraph\.$/);
 
       await page.setViewportSize({ width: 320, height: 800 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
