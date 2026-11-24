@@ -13,8 +13,8 @@ list" box only searches the catalog and dead-ends. This is one of the last legac
 Why now: the old site has it, the new one does not, and books is approaching launch.
 
 ### Goals
-- A signed-in reader can ask for a book by title and authors, a Goodreads link, an Amazon link, or an
-  ISBN/EAN. **Any one is enough.**
+- A signed-in reader can ask for a book by exactly one of: a Goodreads link, an Amazon link, an
+  ISBN/EAN, or title and authors. Searching the catalog comes first and is unchanged.
 - The request remembers the list. The book goes on that list as soon as a book record exists, even
   when it is unenriched and unapproved.
 - It is quick: not behind bulk backfills.
@@ -39,7 +39,7 @@ Why now: the old site has it, the new one does not, and books is approaching lau
 
 | Question | Decision |
 |---|---|
-| Inputs | Title + authors, Goodreads URL, Amazon URL, ISBN/EAN. Any one way alone (Claude's reading of "name, authors, goodreads url, amazon url only"). |
+| Inputs | **One at a time**, never combined: the existing autocomplete, or a Goodreads URL, or an Amazon URL, or title + authors, or an ISBN/EAN. |
 | Who | Any signed-in user, 20 a day. |
 | Expectation | Tell the reader it may take a while. |
 | Priority | User adds run on a higher queue; it should not take days. |
@@ -85,8 +85,9 @@ table.
 - `user_id` nullable, `User has_many ... dependent: :nullify` (the mark outlives the account).
 - `user_list_id` nullable, nullified when the list is deleted. If the list is gone before a book
   exists, the submission closes as `cancelled`.
-- Input: `typed_title`, `typed_author_names` (jsonb array), `link` (as pasted), and the parsed
-  `goodreads_book_id`, `asin`, `isbn13`, `isbn10`.
+- `method`: `goodreads`, `amazon`, `isbn` or `title_authors`. Only that method's input is set:
+  `typed_title` and `typed_author_names` (jsonb array), or `raw_input` (as pasted) with the parsed
+  `goodreads_book_id`, `asin`, or `isbn13`/`isbn10`. The model validates it.
 - `status`: `queued`, `looking_up`, `needs_details`, `added`, `failed`, `cancelled`.
 - `book_id` nullable (`Books::Book has_many :submissions, dependent: :nullify`), `created_book`
   boolean, `user_list_item_id`, `match_decision_id`, `lookup` jsonb (what each source answered).
@@ -107,42 +108,48 @@ submissions close with it, via `system`: promoted is `approved`, merged into a c
 `merged`, deleted is `rejected`. Hooks go in `PromoteRecords`, the book merger and the book's destroy,
 so no route is missed. A merge into another provisional book leaves them pending on the survivor. (Call)
 
-**Identifiers.** Only identifiers a lookup confirmed (the source returned a record for it, and any
-typed title and authors agree with that record) are passed to the finder and stamped on the book.
-Unconfirmed ones stay on the submission for the reviewer. The finder trusts every identifier row by
-default, and a hit needs only a matching title **or** author, so a wrong pasted ISBN on a book would
-misdirect later imports. Stamped ones use a new `Identifier` source, `user_submission: 9`, trust rank
-1 (as `legacy`). Identifiers an enrichment step finds keep that step's own source.
+**Identifiers.** An identifier goes to the finder and onto the book only when a source returned a
+record for it, together with that record's title and authors. The finder is never called with an
+identifier alone: with nothing to compare it accepts any holder, and legacy stamped wrong ids on
+books. An identifier no source answered stays on the submission. Stamped ones use a new `Identifier`
+source, `user_submission: 9`, trust rank 1 (as `legacy`). Identifiers an enrichment step finds keep
+that step's own source.
 
 ## 6. The reader's side
 
 On a `Books::UserList` page the owner's "Add to this list" dropdown always ends with **"Can't find
-it? Add a book"**, results or not, so a wrong near-match does not hide it. It opens a dialog:
+it? Add a book"**, results or not, so a wrong near-match does not hide it. It opens a dialog where
+the reader picks one way, and only that way's fields show:
 
 ```
 Add a book that isn't on the site
-  Title      [ The Dispossessed   ]   (from the search text)
-  Author(s)  [ Ursula K. Le Guin  ] [+ another]
-  - or -
-  Goodreads link, Amazon link, or ISBN/EAN  [                ]
+  How do you want to add it?
+   (o) Goodreads link   ( ) Amazon link   ( ) ISBN   ( ) Title and author
+  Goodreads link  [ https://www.goodreads.com/book/show/13651      ]
   It can take a while to add a new book. We'll put it on
   "Want to Read" when it's ready.              [Cancel] [Add book]
+
+  with "Title and author" picked:
+  Title      [ The Dispossessed   ]   (from the search text)
+  Author(s)  [ Ursula K. Le Guin  ] [+ another]
 ```
 
-- Valid when there is a title plus at least one author, or a readable link/ISBN. Limits: title 255,
-  10 authors of 255, link 2,048.
-- A link parser reads Goodreads book URLs (any goodreads.com host and locale path), Amazon product
-  URLs (`/dp/`, `/gp/product/`, `/gp/aw/d/`, any Amazon store) and ISBN-10/13 with a checked digit
-  (`Books::Isbn`). An EAN that is not an ISBN (not 978 or 979), a short link, or anything else is a
-  form error saying what is accepted.
+- Radio buttons, with Goodreads link first and selected. (Call) Only the chosen way's fields are sent,
+  and the server refuses a request carrying more than one.
+- Limits: title 255, 1 to 10 authors of 255, link 2,048.
+- Goodreads: book URLs on any goodreads.com host and locale path. Amazon: product URLs (`/dp/`,
+  `/gp/product/`, `/gp/aw/d/`) on any Amazon store. ISBN: ISBN-10 or 13 with a checked digit
+  (`Books::Isbn`). An EAN that is not an ISBN (not 978 or 979), a short link, or a link of the other
+  kind is a form error saying what that field accepts.
 - An ASIN that is a valid ISBN-10 is stored as the ISBN as well.
 - Submitting again for the same list and same normalized input while one is open returns the open one.
 - 20 submissions in a rolling 24 hours, counted under the user's lock, whatever their outcome, plus
   the usual burst `rate_limit`.
 
 The list page shows the owner a strip above the items, in its own Turbo Frame, one line per
-submission that is not dismissed: "Adding: The Dispossessed", "We need a title and author" (with the
-fields inline), "Added The Dispossessed", "Already on the site: added The Dispossessed", "Could not
+submission that is not dismissed: "Adding: The Dispossessed" (the link or ISBN until a title is
+known), "We couldn't find a book from that link. Try another way" (which reopens the dialog and
+replaces the request), "Added The Dispossessed", "Already on the site: added The Dispossessed", "Could not
 add ...", and, after a rejection, "We couldn't verify ..., so it was removed." While any is in
 progress the frame polls every 10 seconds, stopping after 10 minutes. When one becomes `added`, the
 poll response reloads the `list_items` frame, and **that response** calls `mark_user_state_changed`
@@ -164,15 +171,10 @@ A Sidekiq job on `critical`, idempotent and retryable. Services live in
      queried, so an ASIN it does not know falls through.
    - **ISBN:** WorldCat by ISBN, then Open Library, then an Amazon search by ISBN. First usable wins.
      (WorldCat's creator format must be checked against real records before it is split into names.)
-   - **Title and authors:** used as typed.
-   - Both given: the record the link names supplies the title and authors, the typed text is kept,
-     and a disagreement is recorded for the reviewer.
-   - With a typed title and authors, a lookup that cannot answer now (a service down, a Goodreads
-     block, a spent daily cap) is not waited for: the typed text is used at once and the link stays on
-     the submission. (Call)
-   - With only a link or ISBN, a service being down is retried with backoff for an hour, and a
-     Goodreads block or spent cap is waited out. A definite "no such record", or the hour running
-     out, is `needs_details`.
+   - **Title and authors:** used as typed, with no lookup at this step.
+   - For a link or ISBN, a service being down is retried with backoff for an hour, and a Goodreads
+     block or spent daily cap is waited out. A definite "no such record", or the hour running out, is
+     `needs_details`: the reader can try another way, or an agent can supply the details.
 2. **Find.** `DataImporters::Books::Book::Finder` with the confirmed query and `subject:` the
    submission, so a `MatchDecision` is kept. A book another reader already submitted resolves to that
    provisional book, not a second one.
@@ -205,13 +207,14 @@ Other errors end as `failed` with the reason stored, retryable from the admin pa
   this only orders it.)
 - Workflow steps take their queue from the definition; a run started for a user add plans its steps
   on the priority queues.
-- A Goodreads block (6 hours) or an outage can still delay a link-only add.
+- A Goodreads block (6 hours), a spent cap or an outage can still delay a Goodreads-link add.
 
 ## 9. Enrichment
 
 **Before approval** (Call; Shane was offered this and has not answered): a run limited to the
 `goodreads` and `amazon` steps (`only:`), no author runs. It can supply a cover, year, page count and
-identifiers. The Amazon step and the Goodreads search pick each make an AI call.
+identifiers. The Amazon step makes an AI call. The Goodreads step makes one when it has to search;
+a Goodreads-link add already holds its id and page, so it skips the search and that call.
 
 A site-wide ceiling (100 limited runs a day, ENV) and an off switch (ENV) bound it, because the
 20-a-day cap is per account. Past the ceiling a book is still created and listed, without lookups. (Call)
@@ -239,7 +242,7 @@ admin page.
 | Tool | Scope | Does |
 |---|---|---|
 | `list_book_submissions` | admin:read | Filter by `status` and `review_status`; default pending review plus `needs_details`. Meta carries counts. |
-| `get_book_submission` | admin:read | Input, parsed ids, lookup answers, disagreement, the finder's decision and candidates, the book, its lists, the submitter's approved and rejected counts. No email, name or user id. |
+| `get_book_submission` | admin:read | Method and input, parsed id, lookup answers, the finder's decision and candidates, the book, its lists, the submitter's approved and rejected counts. No email, name or user id. |
 | `claim_book_submissions` | admin:write | Hands out pending reviews, `needs_details` and `failed` rows, each saying which it needs. 1 to 25 (default 10), 30 minute lease, `FOR UPDATE SKIP LOCKED`, so several agents can run. |
 | `supply_book_submission_details` | admin:write | Only while no book exists (`needs_details`, `failed`): title, authors, identifiers; queues the job again. After that, `update_book` is the fix. |
 | `approve_book_submission` | admin:merge | Promotes the book and its provisional authors. |
@@ -292,7 +295,7 @@ makes the mark permanent.
 ## 12. Testing
 
 Minitest for every service, job, controller and policy (outside APIs stubbed, Sidekiq inline), with
-cases for: each input alone; both given and disagreeing; a match to a catalog book, to a provisional
+cases for: each method; a request carrying two methods; a replaced request; a match to a catalog book, to a provisional
 book; a service down; two racing submissions; list deleted; the cap; approval over an active limited
 run; reject refused for each kind of use; merge moving list items and submissions; priority turns
 passing a backlog and using the reserved slice; a lease expiring. MCP: the pinned tool counts and
