@@ -49,6 +49,65 @@ module Books
         assert_equal :fetch, GateTurn.call(gate: g, due: false).action
       end
 
+      test "priority reaches the reservation, the spacing check and the start" do
+        g = mock
+        g.expects(:reserve).with(priority: true).returns(FetchGate::Reservation.new(wait: 0, refusal: nil))
+        g.expects(:blocked?).returns(false)
+        g.expects(:spacing_wait).with(priority: true).returns(0)
+        g.expects(:started!).with(priority: true)
+
+        assert_equal :fetch, GateTurn.call(gate: g, due: false, priority: true).action
+      end
+
+      test "an ordinary turn leaves priority off" do
+        g = mock
+        g.expects(:reserve).with(priority: false).returns(FetchGate::Reservation.new(wait: 0, refusal: nil))
+        g.expects(:blocked?).returns(false)
+        g.expects(:spacing_wait).with(priority: false).returns(0)
+        g.expects(:started!).with(priority: false)
+
+        GateTurn.call(gate: g, due: false)
+      end
+
+      # Plays a backlog of ordinary turns and priority arrivals through the real
+      # gate, a second at a time, the way the capsule's jobs reschedule themselves.
+      test "priority turns start soon after a backlog, and the interval and the day's total hold" do
+        travel_to Time.utc(2026, 11, 24, 10, 0, 0)
+        config = ActiveSupport::OrderedOptions.new.merge(fetch_interval: 15, daily_fetch_cap: 40, priority_reserved: 5, block_cooldown: 3600)
+        real = FetchGate.new(redis: ::Books::OpenLibrary::FakeRedis.new, config: config)
+        t0 = Time.current.to_i
+        arrivals = [100, 200, 205, 210, 700] # seconds after t0
+        jobs = []
+        60.times do
+          reservation = real.reserve
+          jobs << {priority: false, due: true, wake: t0 + reservation.wait, arrived: t0} if reservation.granted?
+        end
+        starts = []
+        1800.times do |tick|
+          now = Time.current.to_i
+          arrivals.each { |a| jobs << {priority: true, due: false, wake: now, arrived: now} if tick == a }
+          jobs.select { |job| job[:wake] <= now }.each do |job|
+            decision = GateTurn.call(gate: real, due: job[:due], priority: job[:priority])
+            case decision.action
+            when :fetch
+              starts << {at: now, priority: job[:priority], arrived: job[:arrived]}
+              jobs.reject! { |j| j.equal?(job) }
+            when :wait then job.merge!(wake: now + decision.wait, due: true)
+            else jobs.reject! { |j| j.equal?(job) }
+            end
+          end
+          travel 1.second
+        end
+
+        times = starts.map { |s| s[:at] }
+        assert_equal 35 + 5, starts.size
+        assert times.each_cons(2).all? { |a, b| b - a >= 15 }, "starts closer than the interval"
+        assert_operator starts.size, :<=, config.daily_fetch_cap
+        priority = starts.select { |s| s[:priority] }
+        assert_equal 5, priority.size
+        assert priority.all? { |s| s[:at] - s[:arrived] <= 4 * 15 }, "a priority turn waited more than four intervals"
+      end
+
       test "after_fetch leaves the gate open on an unparseable page" do
         g = mock
         g.expects(:block!).never

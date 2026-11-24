@@ -15,14 +15,14 @@ Sidekiq.configure_server do |config|
   # This ensures jobs requiring serial processing (like API rate limiting) run one at a time
   config.capsule("serial") do |cap|
     cap.concurrency = 1
-    cap.queues = %w[serial]
+    cap.queues = %w[serial_priority serial]
   end
 
   # Goodreads page fetches, one at a time across the app (production runs one
   # Sidekiq process), paced by Books::Goodreads::FetchGate.
   config.capsule("goodreads_fetch") do |cap|
     cap.concurrency = 1
-    cap.queues = %w[goodreads_fetch]
+    cap.queues = %w[goodreads_fetch_priority goodreads_fetch]
   end
 
   # Publisher intake page fetches, one at a time, paced by the intake's own gate.

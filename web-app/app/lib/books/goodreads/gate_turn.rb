@@ -6,14 +6,15 @@ module Books
     # fetches a Goodreads page (FetchPageJob and the enrichment step), so the
     # order cannot drift between them: reserve unless the turn is already due,
     # refuse, wait for the reservation, refuse if blocked, wait out the spacing
-    # since the last fetch, then start. The caller reschedules itself for a
+    # since the last fetch, then start. priority: true is a reader's turn, which
+    # passes the backlog (see FetchGate). The caller reschedules itself for a
     # :wait (with due: true) and never sleeps.
     module GateTurn
       Decision = Data.define(:action, :wait, :refusal)
 
-      def self.call(gate:, due:)
+      def self.call(gate:, due:, priority: false)
         unless due
-          reservation = gate.reserve
+          reservation = gate.reserve(priority: priority)
           return refused(reservation.refusal) unless reservation.granted?
           return waiting(reservation.wait) if reservation.wait.positive?
         end
@@ -21,10 +22,10 @@ module Books
 
         # A turn that came due late (a deploy, a slow fetch before it) still
         # waits out the gap since the last fetch began, without a new turn.
-        spacing = gate.spacing_wait
+        spacing = gate.spacing_wait(priority: priority)
         return waiting(spacing) if spacing.positive?
 
-        gate.started!
+        gate.started!(priority: priority)
         Decision.new(action: :fetch, wait: nil, refusal: nil)
       end
 
