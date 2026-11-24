@@ -6,7 +6,10 @@ class Books::PublisherIntake::DailyJobTest < ActiveSupport::TestCase
   include PublisherIntakeFetchHelper
 
   setup do
-    freeze_time
+    # A fixed midday: the cadence counts calendar days, so a test that ran in
+    # the last seconds of a day would see "7 days ago plus 5 seconds" land on
+    # the next one.
+    travel_to Time.utc(2026, 11, 24, 12)
     setup_intake_fetching
     PublisherIntakeFetchHelper::TestStrategy.discovery_requests_value =
       [Books::PublisherIntake::Request.page("https://x.test/a")]
