@@ -1,7 +1,8 @@
 # User-added books: design
 
-Status: draft for Shane's approval. Branch `worktree-user-added-books`.
-"(Call)" marks a choice Claude made that Shane has not explicitly confirmed.
+Status: approved by Shane 2026-11-24 ("yes sounds good"). Branch `worktree-user-added-books`.
+"(Call)" marks a choice Claude made; Shane approved the document with them in it, without discussing
+each one.
 
 ## 1. Intent
 
@@ -228,7 +229,7 @@ Other errors end as `failed` with the reason stored, retryable from the admin pa
 
 ## 9. Enrichment
 
-**Before approval** (Call; Shane was offered this and has not answered): a run limited to the
+**Before approval** (Call, approved with the document): a run limited to the
 `goodreads` and `amazon` steps (`only:`), no author runs. It can supply a cover, year, page count and
 identifiers. The Amazon step makes an AI call. The Goodreads step makes one when it has to search;
 a Goodreads-link add already holds its id and page, so it skips the search and that call.
