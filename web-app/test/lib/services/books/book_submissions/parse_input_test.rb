@@ -8,7 +8,8 @@ module Services
           "https://www.goodreads.com/book/show/13651" => 13651,
           "https://www.goodreads.com/book/show/13651-the-dispossessed?ref=x" => 13651,
           "http://goodreads.com/en/book/show/13651.The_Dispossessed" => 13651,
-          "www.goodreads.com/book/show/13651" => 13651
+          "www.goodreads.com/book/show/13651" => 13651,
+          "HTTPS://WWW.Goodreads.com:443/book/show/13651" => 13651
         }
         AMAZON = {
           "https://www.amazon.com/Dispossessed/dp/0061054887/ref=sr_1_1" => ["0061054887", "0061054887"],
@@ -32,7 +33,16 @@ module Services
           ["goodreads", "javascript:1//www.goodreads.com/book/show/1"],
           ["goodreads", "javascript:alert(1)//www.goodreads.com/book/show/1"],
           ["amazon", "javascript:1/www.amazon.com/dp/0061054887"],
-          ["goodreads", "user:pw@www.goodreads.com/book/show/1"]
+          ["goodreads", "user:pw@www.goodreads.com/book/show/1"],
+          ["goodreads", "evil.test%40www.goodreads.com/book/show/1-x"],
+          ["goodreads", "https://evil.test%40www.goodreads.com/book/show/1-x"],
+          ["goodreads", "%40www.goodreads.com/book/show/1-x"],
+          ["goodreads", "javascript%3Aalert(1)%40www.goodreads.com/book/show/1-x"],
+          ["goodreads", "javascript%3Aalert(1);'.www.goodreads.com/book/show/1-x"],
+          ["goodreads", "javascript;alert(1).www.goodreads.com/book/show/1-x"],
+          ["goodreads", "'onx='.www.goodreads.com/book/show/1-x"],
+          ["goodreads", "evil.test%2f.www.goodreads.com/book/show/1-x"],
+          ["goodreads", "evil.test%00.www.goodreads.com/book/show/1-x"]
         ]
 
         def parse(params)
