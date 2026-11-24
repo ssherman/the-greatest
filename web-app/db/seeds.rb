@@ -24,7 +24,7 @@ penalty_definitions = [
   {name: "Voters: are mostly from a single country/location", dynamic_type: nil},
   {name: "Voters: diversity of voters is very low", dynamic_type: nil},
   {name: "Voters: not critics, authors, or experts", dynamic_type: nil},
-  {name: "Voters: restricted to a distinct criteria(race, gender, etc)", dynamic_type: nil},
+  {name: "Voters: limited to one demographic group (gender, race, age, etc.)", dynamic_type: nil},
 
   # Dynamic penalties (mapped to dynamic_types)
   {name: "Voters: Unknown Names", dynamic_type: :voter_names_unknown},
