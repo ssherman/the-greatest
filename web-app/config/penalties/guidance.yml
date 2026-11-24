@@ -1,7 +1,7 @@
 ---
 - id: 1
   name: 'List: Creator of the list, sells the items on the list'
-  guidance: 'The organisation that published the list sells the books on it: a bookseller (Amazon, Barnes & Noble, Waterstones, a bookshop), a publisher ranking its own titles, a book club ranking its picks. A newspaper or magazine that only carries affiliate links does not count.'
+  guidance: 'The organisation that published the list sells the books on it: a bookseller (Amazon, Barnes & Noble, Waterstones, a bookshop), a publisher ranking its own titles, a book club ranking its picks. A newspaper or magazine that only carries affiliate links does not count. Nor does a list an independent panel chose when the seller only ran the poll (writers or critics polled by a book club or a newspaper group that owns a bookshop): the seller did not pick the books.'
 - id: 2
   name: 'List: contains over 500 items(Quantity over Quality)'
   guidance: 'The source list has more than 500 entries. Count the source, not how many we imported.'
@@ -12,8 +12,8 @@
   name: 'List: is a follow up/honorable mention to a different list'
   guidance: 'The list is the overflow or sequel of another list ("100 more", "honourable mentions", "the ones that didn''t make the cut").'
 - id: 5
-  name: 'List: only covers 1 specific gender'
-  guidance: 'Only books by authors of one gender were eligible ("best books by women"). A result that merely skews one way does not count.'
+  name: 'List: only covers creators of one group (gender, race, ethnicity, etc.)'
+  guidance: 'Only books by authors of one gender, race, ethnicity, sexual orientation, religion or similar group were eligible ("best books by women", "books by Black authors"). Attach it once, even when the list limits authors in two of these ways. A limit to authors from one place is the `location_specific` flag (15) instead, and books about a group or theme, whoever wrote them, are 26. A result that merely skews one way does not count.'
 - id: 6
   name: 'List: only covers 1 specific language'
   guidance: 'Eligibility is limited to books originally written in one language ("best Spanish-language novels", "best novels in English"). An English-language outlet whose picks happen to be mostly English does not count. A requirement that an edition exists in a language, with translations allowed, is not a language limit and does not take this.'

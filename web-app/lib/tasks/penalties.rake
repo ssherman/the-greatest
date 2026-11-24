@@ -54,9 +54,9 @@ module Penalties
              description: "Applied automatically based on how much of history a list covers. A list spanning a few years can only find the best of those years; one spanning centuries competes against everything ever published."},
 
       # --- How narrow the list's subject is ---------------------------------
-      5 => {name: "List: only covers 1 specific gender",
+      5 => {name: "List: only covers creators of one group (gender, race, ethnicity, etc.)",
             category: :list_subject_scope,
-            description: "Restricted to creators of one gender, so it surveys part of the field rather than all of it."},
+            description: "Restricted to creators of one gender, race, ethnicity or similar group, so it surveys part of the field rather than all of it."},
       6 => {name: "List: only covers 1 specific language",
             category: :list_subject_scope,
             description: "Restricted to one language, so work in every other language was never eligible."},
