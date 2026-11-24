@@ -18,11 +18,15 @@ module Services
       class PromoteRecords
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-        def self.call(books:, authors:)
-          new(books: books, authors: authors).call
+        # initiated_by and lane are stamped on the runs; the defaults are the
+        # Goodreads import's. A lane (e.g. "priority") is a run option.
+        def self.call(books:, authors:, initiated_by: "goodreads_promote", lane: nil)
+          new(books: books, authors: authors, initiated_by: initiated_by, lane: lane).call
         end
 
-        def initialize(books:, authors:)
+        def initialize(books:, authors:, initiated_by: "goodreads_promote", lane: nil)
+          @initiated_by = initiated_by
+          @lane = lane
           @books = Array(books).select(&:provisional?)
           @authors = Array(authors)
         end
@@ -41,14 +45,15 @@ module Services
               # and the others have their own book, or their own run below.
               credited = book.book_authors.map(&:author_id).select { |id| author_ids.include?(id) }
               credited_to_a_book.merge(credited)
-              ::Workflows::Books::BookEnrichment.start(book, initiated_by: "goodreads_promote", new_author_ids: credited)
+              ::Workflows::Books::BookEnrichment.start(book, initiated_by: @initiated_by, new_author_ids: credited,
+                options: @lane ? {lane: @lane} : {})
               # Public goal pages count catalog books only, so a promoted
               # book's readers' pages change; at the new count these URLs
               # cover the old pages too.
               goal_urls.concat(::Services::Books::ReadingGoals::DestructionInvalidator.for_book(book: book))
             end
             authors.reject { |author| credited_to_a_book.include?(author.id) }.each do |author|
-              ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: "goodreads_promote")
+              ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: @initiated_by)
             end
             on_favorites = @books.any? &&
               ::UserListItem.joins(:user_list).merge(::Books::UserList.favorites).where(listable: @books).exists?

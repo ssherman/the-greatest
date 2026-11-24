@@ -165,6 +165,37 @@ module Workflows
         assert_equal %w[succeeded succeeded], [facts, amazon].map { it.reload.state }
       end
 
+      test "a full run supersedes a limited book submission run, which is cancelled" do
+        limited = BookEnrichment.start(@book, initiated_by: BookEnrichment::LIMITED_BY, options: {only: ["goodreads"], lane: "priority"})
+
+        full = BookEnrichment.start(@book, initiated_by: "goodreads_promote")
+
+        assert_not_equal limited.id, full.id
+        assert_equal ["cancelled", "running"], [limited.reload.status, full.status]
+        assert_equal "superseded", limited.step(:goodreads).outcome
+        assert_equal "ready", full.step(:goodreads).state
+      end
+
+      test "a full run over an active full run returns it" do
+        first = BookEnrichment.start(@book, initiated_by: BookEnrichment::LIMITED_BY)
+
+        assert_equal first.id, BookEnrichment.start(@book, initiated_by: "goodreads_promote").id
+        assert_equal "running", first.reload.status
+      end
+
+      test "a full run over an adopt_deferred only run returns it" do
+        first = BookEnrichment.start(@book, initiated_by: "adopt_deferred", options: {only: ["book_facts"]})
+
+        assert_equal first.id, BookEnrichment.start(@book, initiated_by: "goodreads_promote").id
+        assert_equal "running", first.reload.status
+      end
+
+      test "a limited run does not supersede another limited submission run" do
+        first = BookEnrichment.start(@book, initiated_by: BookEnrichment::LIMITED_BY, options: {only: ["goodreads"]})
+
+        assert_equal first.id, BookEnrichment.start(@book, initiated_by: "x", options: {only: ["book_facts"]}).id
+      end
+
       test "start dispatches the ready steps after commit" do
         Workflows::Dispatcher.unstub(:dispatch)
         dispatched = false

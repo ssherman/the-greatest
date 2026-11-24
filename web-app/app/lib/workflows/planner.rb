@@ -11,7 +11,8 @@ module Workflows
 
     # options: engine keys are "only" (step keys to run; the rest are planned
     # skipped) and "start_at" (a step key; the steps before it are planned
-    # skipped). Anything else is kept on the run for adapters.
+    # skipped). "lane" ("priority") moves the paced queues to their priority
+    # twins (Workflows::Lanes). Anything else is kept on the run for adapters.
     # waits: {step_key => [WorkflowStep]} extra cross-run prerequisites, always
     # release edges. skips: {step_key => outcome} steps planned skipped.
     # start_after: steps that could start now wait until this time instead.
@@ -85,7 +86,7 @@ module Workflows
       now = Time.current
       @definition.steps.to_h do |declared|
         key = declared.key.to_s
-        attributes = {key: key, queue: declared.queue.to_s, max_attempts: declared.max_attempts,
+        attributes = {key: key, queue: Workflows::Lanes.queue_for(declared.queue, @options["lane"]), max_attempts: declared.max_attempts,
                       lease_seconds: declared.lease.to_i}
         if (outcome = planned_skip(key))
           attributes.merge!(state: :skipped, outcome: outcome, released_at: now, finished_at: now)

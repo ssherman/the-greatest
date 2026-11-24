@@ -38,7 +38,7 @@ module Workflows
         end
 
         def gate_decisions(*decisions)
-          ::Books::Goodreads::GateTurn.stubs(:call).with { |gate:, due:| @dues << due }.returns(*decisions)
+          ::Books::Goodreads::GateTurn.stubs(:call).with { |gate:, due:, priority:| @dues << due }.returns(*decisions)
         end
 
         def waiting(seconds = 15) = Decision.new(action: :wait, wait: seconds, refusal: nil)
@@ -219,6 +219,47 @@ module Workflows
             outcome = execute
 
             assert_equal [Time.utc(2026, 10, 26), false, "search"], [outcome.run_after, outcome.result.dig("progress", "due"), outcome.result.dig("progress", "phase")]
+          end
+        end
+
+        test "an ordinary run takes every gate turn without priority" do
+          priorities = []
+          ::Books::Goodreads::GateTurn.stubs(:call).with { |gate:, due:, priority:| priorities << priority }.returns(waiting, waiting)
+
+          execute
+          execute
+
+          assert_equal [false, false], priorities
+        end
+
+        test "a priority run takes every gate turn, the one after a wait included, with priority" do
+          @run = Struct.new(:options).new({"lane" => "priority"})
+          priorities = []
+          ::Books::Goodreads::GateTurn.stubs(:call).with { |gate:, due:, priority:| priorities << priority }.returns(waiting, waiting)
+
+          execute
+          execute
+
+          assert_equal [true, true], priorities
+        end
+
+        test "a priority run refused wakes when the gate says a priority turn could succeed" do
+          @run = Struct.new(:options).new({"lane" => "priority"})
+          ::Books::Goodreads::GateTurn.stubs(:call).returns(refused(:daily_cap))
+          @gate.stubs(:reopens_at).with(priority: true).returns(Time.utc(2026, 10, 25, 23))
+
+          travel_to(Time.utc(2026, 10, 25, 22)) do
+            assert_equal Time.utc(2026, 10, 25, 23), execute.run_after
+          end
+        end
+
+        test "a priority run refused falls back to the midnight or block computation when the gate has no time" do
+          @run = Struct.new(:options).new({"lane" => "priority"})
+          @gate.stubs(:reopens_at).returns(nil)
+          ::Books::Goodreads::GateTurn.stubs(:call).returns(refused(:daily_cap))
+
+          travel_to(Time.utc(2026, 10, 25, 22)) do
+            assert_equal Time.utc(2026, 10, 26), execute.run_after
           end
         end
 

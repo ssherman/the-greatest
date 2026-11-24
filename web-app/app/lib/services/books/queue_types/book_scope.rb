@@ -18,12 +18,13 @@ module Services
           ])
         end
 
-        # Titled books with no running import or categorize run (those judge the
+        # Titled, reviewed (not provisional) books with no running import or categorize run (those judge the
         # book themselves), joined to the rank. "ranked" keeps only ranked books.
         def base_relation(scope:)
           raise ArgumentError, "unknown scope: #{scope.inspect}" unless Services::EnrichmentQueue::Type::SCOPES.include?(scope.to_s)
 
           relation = ::Books::Book
+            .where(provisional: false)
             .where("books_books.title IS NOT NULL AND btrim(books_books.title) <> ''")
             .where("NOT EXISTS (#{running_runs.to_sql})")
             .joins(ranked_join_sql)

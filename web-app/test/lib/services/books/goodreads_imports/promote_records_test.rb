@@ -70,6 +70,32 @@ module Services
           end
         end
 
+        test "a submission promotion stamps the initiator and the priority lane on the run" do
+          PromoteRecords.call(books: [@book], authors: [], initiated_by: "book_submission", lane: "priority")
+
+          run = run_for(@book, "books.book_enrichment")
+          assert_equal ["book_submission", "priority", "goodreads_fetch_priority"], [run.initiated_by, run.options["lane"], run.step(:goodreads).queue]
+          assert_equal "book_submission", run_for(@author, "books.author_enrichment").initiated_by
+        end
+
+        test "the defaults add no lane to the run" do
+          PromoteRecords.call(books: [@book], authors: [])
+
+          run = run_for(@book, "books.book_enrichment")
+          assert_not run.options.key?("lane")
+          assert_equal "goodreads_fetch", run.step(:goodreads).queue
+        end
+
+        test "an import approval of a book with an active limited submission run supersedes it" do
+          limited = ::Workflows::Books::BookEnrichment.start(@plain, initiated_by: "book_submission", options: {only: ["goodreads"], lane: "priority"})
+
+          PromoteRecords.call(books: [@plain], authors: [])
+
+          assert_equal "cancelled", limited.reload.status
+          full = WorkflowRun.running.find_by!(enrichable: @plain, workflow: "books.book_enrichment")
+          assert_equal ["goodreads_promote", "ready"], [full.initiated_by, full.step(:goodreads).state]
+        end
+
         test "the old queue-based enrichment is gone: no job is enqueued and no deferral row is written" do
           ::Books::Authors::WikidataJob.expects(:perform_async).never
           ::Books::EnrichBookJob.expects(:perform_async).never

@@ -24,6 +24,10 @@ module Workflows
     class BookEnrichment < Workflows::Definition
       workflow "books.book_enrichment"
       version 5
+
+      # initiated_by of a run started by a reader's book submission. Such a run
+      # carries an "only" option, and a full run replaces it (see start).
+      LIMITED_BY = "book_submission"
       target_class ::Books::Book
 
       # On the goodreads_fetch capsule, one job at a time: FetchGate pacing relies on it.
@@ -63,7 +67,8 @@ module Workflows
       # linked to the book, and on every one of them, in any order. A created
       # author with no book_authors row holds nothing, as before.
       #
-      # An active book run is returned untouched. The author runs are still
+      # An active book run is returned untouched, except a limited submission
+      # run that a full run supersedes (supersedes_limited_run?). The author runs are still
       # started, but they are not waited on and not given that run as their
       # parent: the reused run was planned for an earlier import.
       def self.start(book, initiated_by:, new_author_ids: [], author_names: [], options: {})
@@ -73,8 +78,10 @@ module Workflows
 
           linked_ids = book.book_authors.pluck(:author_id)
           waited_on = author_runs.select { |author, _| linked_ids.include?(author.id) }.values
+          run_options = options.stringify_keys
           result = Workflows::Planner.call(definition: self, enrichable: book, initiated_by: initiated_by,
-            options: options.stringify_keys.merge("author_names" => author_names),
+            options: run_options.merge("author_names" => author_names),
+            supersede: supersedes_limited_run?(book, run_options),
             waits: {book_facts: waited_on.map { |author_run| author_run.step(:author_facts) }},
             skips: linked_ids.empty? ? {goodreads: "no_authors", amazon: "no_authors"} : {})
           raise ArgumentError, result.errors.join("; ") unless result.success?
@@ -92,6 +99,16 @@ module Workflows
           run
         end
       end
+
+      # Only a limited run started by a book submission is replaced, and only by
+      # a run that is not itself limited: any other active run is returned.
+      def self.supersedes_limited_run?(book, run_options)
+        return false unless run_options["only"].nil?
+
+        active = WorkflowRun.running.find_by(workflow: workflow, enrichable: book)
+        !!active && active.initiated_by == LIMITED_BY && !active.options["only"].nil?
+      end
+      private_class_method :supersedes_limited_run?
 
       # A book that joins an author run planned with start_after (a backfill's
       # pacing, which can be days off) would sit in book_facts for all of it. The
