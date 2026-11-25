@@ -6,7 +6,9 @@ module Services
       # The admin page's tabs and the prompt's counts: one definition of which
       # rows are waiting for what. "Needs review" and "needs details" are the
       # agent queue (`reviewable`) split by whether a book exists, as the
-      # claim and the API's `needs` split it.
+      # claim and the API's `needs` split it. "Failed" leaves a rejected row out:
+      # Retry refuses it, and it has its own tab. So every row in those two,
+      # "needs human" and "failed" has something to do.
       module QueueTabs
         TABS = {
           "needs_review" => -> { ::Books::BookSubmission.reviewable.where.not(book_id: nil) },
@@ -15,7 +17,7 @@ module Services
           "approved" => -> { ::Books::BookSubmission.review_approved },
           "merged" => -> { ::Books::BookSubmission.review_merged },
           "rejected" => -> { ::Books::BookSubmission.review_rejected },
-          "failed" => -> { ::Books::BookSubmission.failed },
+          "failed" => -> { ::Books::BookSubmission.failed.where.not(review_status: :rejected) },
           "all" => -> { ::Books::BookSubmission.all }
         }.freeze
         KEYS = TABS.keys.freeze

@@ -65,6 +65,24 @@ module Services
 
           assert decision.reload.needs_review
         end
+
+        test "a cancelled needs_human row leaves the review tabs and keeps its note" do
+          submission = row(status: :needs_details, review_status: :needs_human, review_note: "abandoned by agents")
+
+          assert Cancel.call(user: @user, id: submission.id).success?
+
+          submission.reload
+          assert_equal ["cancelled", "not_needed", "abandoned by agents"], [submission.status, submission.review_status, submission.review_note]
+        end
+
+        test "a cancel changes no other review status" do
+          (::Books::BookSubmission.review_statuses.keys - %w[needs_human]).each do |review|
+            submission = row(status: :needs_details, review_status: review)
+
+            assert Cancel.call(user: @user, id: submission.id).success?
+            assert_equal review, submission.reload.review_status
+          end
+        end
       end
     end
   end

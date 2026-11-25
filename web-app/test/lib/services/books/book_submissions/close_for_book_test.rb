@@ -165,6 +165,29 @@ module Services
           assert_equal "looking_up", looking.reload.status
         end
 
+        test "a rejection shows a dismissed row to its reader again, in the same one UPDATE" do
+          dismissed = submission(dismissed_at: 1.day.ago)
+          matched = submission(review_status: :not_needed, created_book: false, user: @admin, dismissed_at: 1.day.ago)
+          queries = []
+          callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+
+          ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { close(review_status: :rejected, include_matched: true) }
+
+          assert_equal [nil, nil], [dismissed, matched].map { it.reload.dismissed_at }
+          assert_equal 1, queries.size
+        end
+
+        test "an approval or a merge leaves a dismissed row dismissed" do
+          at = 1.day.ago.change(usec: 0)
+          %i[approved merged].each do |review_status|
+            row = submission(dismissed_at: at)
+
+            close(review_status: review_status)
+
+            assert_equal at, row.reload.dismissed_at
+          end
+        end
+
         test "a note is kept when none is given, and replaced when one is" do
           flagged = submission(review_status: :needs_human, review_note: "needs a person")
 

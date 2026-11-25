@@ -23,6 +23,9 @@ module Services
       # queued or looking_up row becomes cancelled, so a job that resumes after
       # the book was deleted finds nothing to do instead of making a second book.
       # The reader's strip still shows a cancelled row whose review is rejected.
+      # A row its reader had dismissed ("Added X") is shown again: the book is
+      # gone from their list, and they must be told once. Dismissing it again
+      # hides it for good, because a rejected row never closes again.
       # A note is written only when given, so a needs_human row keeps its own.
       #
       # submission_ids narrows the close to rows the caller captured earlier: the
@@ -53,6 +56,7 @@ module Services
           if review_status.to_s == "rejected"
             open = ::Books::BookSubmission::IN_PROGRESS_STATUSES.map { |name| statuses.fetch(name) }.join(", ")
             changes[:status] = Arel.sql("CASE WHEN status IN (#{open}) THEN #{statuses.fetch("cancelled")} ELSE status END")
+            changes[:dismissed_at] = nil
           end
           scope.update_all(changes)
         end

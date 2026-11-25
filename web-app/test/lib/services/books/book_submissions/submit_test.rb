@@ -169,6 +169,16 @@ module Services
           assert_equal "cancelled", old.reload.status
         end
 
+        test "replacing a needs_human row takes it out of the review tabs and keeps its note" do
+          %i[needs_details failed].each_with_index do |status, index|
+            old = row(status: status, review_status: :needs_human, review_note: "a person must look")
+
+            assert_equal :created, submit(goodreads(300 + index), replaces: old.id).data[:outcome]
+            old.reload
+            assert_equal ["cancelled", "not_needed", "a person must look"], [old.status, old.review_status, old.review_note]
+          end
+        end
+
         test "replaces works for a needs_details row, even when the new input is the old row's input" do
           fingerprint = ParseInput.call(GOODREADS).data[:fingerprint]
           old = row(status: :needs_details, goodreads_book_id: 13651, fingerprint: fingerprint)

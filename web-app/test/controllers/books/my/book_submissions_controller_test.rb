@@ -683,6 +683,46 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "a book rejected after both readers dismissed it is shown as removed once, and dismissing again hides it" do
+    ::Books::PurgeShowPagesJob.stubs(:perform_async)
+    ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+    book = ::Books::Book.create!(title: "Dismissed Then Doomed", provisional: true)
+    second_user = users(:editor_user)
+    second_list = ::Books::UserList.create!(user: second_user, name: "Second reader list", list_type: :custom)
+    first = row(status: :added, book: book, created_book: true, review_status: :pending, resolved_title: "Dismissed Then Doomed")
+    second = row(status: :added, book: book, user: second_user, list: second_list, review_status: :not_needed, resolved_title: "Dismissed Then Doomed")
+    readers = [[@user, @list, first], [second_user, second_list, second]]
+    removed = "We couldn&#39;t verify Dismissed Then Doomed, so it was removed."
+    dismiss = lambda do |submission|
+      post dismiss_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
+      assert_response :success
+    end
+
+    readers.each do |user, list, submission|
+      sign_in_as user, stub_auth: true
+      dismiss.call(submission)
+      strip(list)
+      refute_includes response.body, "Dismissed Then Doomed"
+    end
+
+    sign_in_as users(:admin_user), stub_auth: true
+    post reject_admin_books_book_submission_path(first), params: {note: "not a real book", dry_run: "false"}, headers: {"HOST" => @host}
+    assert_not ::Books::Book.exists?(book.id)
+
+    readers.each do |user, list, submission|
+      sign_in_as user, stub_auth: true
+      strip(list)
+      assert_response :success
+      assert_includes response.body, removed
+      dismiss.call(submission)
+      refute_includes response.body, removed
+      2.times do
+        strip(list)
+        refute_includes response.body, removed
+      end
+    end
+  end
+
   test "a book deleted while its request was in progress shows the removed copy, stops polling and offers no Cancel" do
     book = ::Books::Book.create!(title: "Deleted In Flight", provisional: true)
     submission = row(status: :looking_up, book: book, created_book: true, review_status: :pending, resolved_title: "Deleted In Flight")
