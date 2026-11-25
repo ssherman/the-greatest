@@ -146,11 +146,16 @@ module Api
 
           # -- create and update ----------------------------------------
 
-          def send_json(method, path, body = nil, token: write_token)
+          def send_json(method, path, body = nil, token: ApiTokenSecrets::ADMIN)
             public_send(method, path, params: body, as: :json, headers: bearer(token))
           end
 
-          def write_token = ApiTokenSecrets::ADMIN
+          # books:admin:write and nothing more: proves that scope alone is enough.
+          def write_token
+            @write_token ||= Services::Api::Tokens.generate(
+              user: users(:admin_user), name: "write", scopes: ["books:admin:write"], expires_at: 1.day.from_now
+            ).data[:secret]
+          end
 
           # The purge jobs a block enqueues, with nothing run.
           def purges
@@ -163,7 +168,7 @@ module Api
 
           test "create makes a draft owned by the token's user, with the body exactly as sent" do
             body = "  Line one\r\nLine two  \n"
-            send_json :post, "/api/v1/admin/news_posts", {title: "  Fresh News ", body: body, summary: " ", topic_ids: [news_topics(:books_rankings).id] * 2}
+            send_json :post, "/api/v1/admin/news_posts", {title: "  Fresh News ", body: body, summary: " ", topic_ids: [news_topics(:books_rankings).id] * 2}, token: write_token
             assert_api_response_conform(status: 201, api: :admin)
             post = NewsPost.find(json.dig(:data, :id))
             assert_equal ["Fresh News", body, "books", users(:admin_user), "draft"], [post.title, post.body, post.domain, post.user, post.status]
@@ -216,7 +221,7 @@ module Api
 
           test "update edits a live post in place and purges it" do
             post = news_posts(:books_december_update)
-            jobs = purges { send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Retitled", summary: nil} }
+            jobs = purges { send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Retitled", summary: nil}, token: write_token }
             assert_api_response_conform(status: 200, api: :admin)
             post.reload
             assert_equal ["Retitled", "december-update", "published"], [post.title, post.slug, post.status]
@@ -227,7 +232,7 @@ module Api
 
           test "topic_ids replaces the set and an empty list clears it" do
             post = news_posts(:books_december_update)
-            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {topic_ids: [news_topics(:books_new_lists).id]}
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {topic_ids: [news_topics(:books_new_lists).id]}, token: write_token
             assert_equal [[news_topics(:books_new_lists).id], ["topic_ids"]], [post.reload.news_topic_ids, json[:changed]]
             send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {topic_ids: []}
             assert_empty post.reload.news_topic_ids
