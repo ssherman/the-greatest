@@ -25,13 +25,13 @@ module Api
 
         def show
           post = find_post
-          render_post(post) if post
+          render_full(post) if post
         end
 
         def topics
           topics = ::NewsTopic.where(domain: news_domain).sorted_by_name.to_a
           counts = ::NewsPostTopic.where(news_topic_id: topics.map(&:id)).group(:news_topic_id).count
-          render json: {data: topics.map { |topic| {id: topic.id, name: topic.name, slug: topic.slug, posts_count: counts.fetch(topic.id, 0)} }}
+          render json: {data: topics.map { |topic| ::Api::V1::Admin::NewsTopicResource.new(topic).to_counted_h(counts.fetch(topic.id, 0)) }}
         end
 
         private
@@ -50,10 +50,14 @@ module Api
           nil
         end
 
-        # The post as it now stands, re-read so a write is reflected, with any
-        # extra top-level keys beside `data`.
+        # After a write: the post as it now stands, re-read so the write is
+        # reflected, with any extra top-level keys beside `data`.
         def render_post(post, status: :ok, **extra)
-          post.reload
+          render_full(post.reload, status: status, **extra)
+        end
+
+        # A read has just loaded the post, so it is not fetched again.
+        def render_full(post, status: :ok, **extra)
           render status: status, json: {data: resource(post).to_full_h, **extra}
         end
       end

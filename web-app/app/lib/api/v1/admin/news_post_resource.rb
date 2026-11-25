@@ -23,7 +23,7 @@ module Api
             url: "#{::Api::Host.base_url(@post.domain.to_sym)}/news/#{@post.slug}",
             admin_url: @admin_url,
             summary: @post.summary,
-            topics: @post.news_topics.sort_by(&:name).map { |topic| {id: topic.id, name: topic.name, slug: topic.slug} },
+            topics: @post.news_topics.sort_by(&:name).map { |topic| ::Api::V1::Admin::NewsTopicResource.new(topic).to_h },
             has_share_image: @post.share_image.attached?,
             body_images_count: @post.body_images.size,
             created_at: time(@post.created_at),
