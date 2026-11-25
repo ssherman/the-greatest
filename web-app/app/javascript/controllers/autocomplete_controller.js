@@ -53,10 +53,7 @@ export default class extends Controller {
           return this.searchPaused ? new Error("search paused") : results
         },
         keys: [this.displayKeyValue],
-        // autocomplete.js writes each result's `match` into the page as HTML.
-        // A title is text, so the match is escaped before the library sees it;
-        // the selected value (`value`) stays the raw record, which is what
-        // lands in the input and the events.
+        // Results are text.
         filter: (matches) => matches.map((result) => ({ ...result, match: escapeHtml(result.match) })),
         cache: false
       },

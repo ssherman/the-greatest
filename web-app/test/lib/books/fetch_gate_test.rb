@@ -5,7 +5,9 @@ require "test_helper"
 module Books
   class FetchGateTest < ActiveSupport::TestCase
     setup do
-      freeze_time
+      # Not freeze_time: several reservations are seconds apart, and at the end of a
+      # UTC day they would cross midnight, where the gate starts a new count.
+      travel_to Time.utc(2026, 11, 17, 10, 0, 0)
       @redis = ::Books::OpenLibrary::FakeRedis.new
       @config = ActiveSupport::OrderedOptions.new.merge(fetch_interval: 15, daily_fetch_cap: 3, block_cooldown: 6.hours.to_i)
     end
