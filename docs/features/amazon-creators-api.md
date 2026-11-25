@@ -130,17 +130,10 @@ and fails the test outright rather than degrading to a `failure` result.
   wrong key reads as "Amazon has no such product", the failure "Failing loudly" above warns about),
   then replace this note with the result. Also call one unknown ASIN: an empty answer is what
   `ResolveInput` expects; a non-2xx raises `Client::Error`, which it treats as "Amazon is down" and retries for
-  an hour. To check, run this from a production console (it prints the status, the top-level keys and the
-  titles, never headers or credentials; change the ASIN for the second call, e.g. `B0ZZZZZZZZ`). It uses none of the new code, only the existing client, so it can be run before the user-added books merge. Put it in a file and run it with `bin/rails runner`, since a console echoes every assignment:
+  an hour. To check, run this with `bin/rails runner` on a production host, not in a console (it prints the status, the top-level keys and the titles, never headers or credentials; run it again with `ASIN=B0ZZZZZZZZ` for the unknown ASIN). It uses none of the new code, only the existing client, so it can be run before the user-added books merge:
 
-  ```ruby
-  amazon = Services::Amazon::Client.new
-  response = amazon.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE,
-    partner_tag: amazon.send(:partner_tag), item_ids: ["0143039431"],
-    resources: Services::Books::AmazonProductService::AMAZON_RESOURCES)
-  body = response.parse
-  puts response.status.code, body.keys.inspect
-  puts body.values.flat_map { |part| part.is_a?(Hash) ? Array(part["items"]) : [] }.map { |item| item.dig("itemInfo", "title", "displayValue") }
+  ```
+  ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV["ASIN"]], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'
   ```
 
   The key holding the items must be `itemsResult`. If it is another name, change it in

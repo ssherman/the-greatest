@@ -969,8 +969,11 @@ so they are safe to run live and need no downtime.
    `goodreads_fetch_priority` is not served, a Goodreads add never fetches and the sweep fails the row as
    "lost job"; if `serial_priority` is not served, the Amazon step of the early lookups stalls.
 2. **Check Amazon's `get_items` response. Shane runs with `!`.** This uses none of the new code, so it can run before the merge. One real call for a known ASIN and one
-   for an unknown one, from a production console. The command is in `docs/features/amazon-creators-api.md`
-   ("Known gaps"); it prints only the status, the top-level keys and the titles, never headers. The known
+   for an unknown one, each with `bin/rails runner` on a production host (not a console):
+   `ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV["ASIN"]], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'`
+   Run it once as shown, then again with `ASIN=B0ZZZZZZZZ`. It prints only the status, the top-level keys
+   and the titles, never headers or credentials (the same command is in
+   `docs/features/amazon-creators-api.md`, "Known gaps"). The known
    ASIN must answer with the key `itemsResult` and the right title. The unknown ASIN (`B0ZZZZZZZZ`)
    must come back as an empty answer, not an error: an error is read as "Amazon is down" and the request
    retries for an hour. If the key is different, fix `Client#get_items` before relying on Amazon links.
@@ -979,7 +982,7 @@ so they are safe to run live and need no downtime.
    Add a book". Pick an ISBN of a book the site lacks, then a Goodreads link to another, then an Amazon `/dp/` link to a
    third (the by-ASIN path that step 2 checks). Each should appear on the list within a few minutes
    with the strip saying it was added. Each is under "Needs review" in `/admin/book_submissions` as soon
-   as it is added; the Goodreads and Amazon details arrive after the early lookups. Delete both from the admin page afterwards with Reject, which also removes the list item.
+   as it is added; the Goodreads and Amazon details arrive after the early lookups. Delete all three from the admin page afterwards with Reject, which also removes the list item.
 4. **Mint an admin token for the agent. Shane runs with `!`.** At `/developers/tokens` on the books host,
    with the scope `books:admin:merge` (it implies read and write) and an expiry; an admin token must expire.
    Then use **Copy prompt** on `/admin/book_submissions` and give it to an agent on the admin MCP endpoint.
