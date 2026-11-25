@@ -155,6 +155,49 @@ module Services
           assert_empty PromoteRecords.call(books: [@plain], authors: []).data[:book_ids]
           assert_equal 0, WorkflowRun.where(enrichable: @plain).count
         end
+
+        test "promoting closes the book's open submissions approved, the second reader's too" do
+          first = submission_for(@book, :pending)
+          second = submission_for(@book, :not_needed, created_book: false)
+          other = submission_for(@plain, :pending)
+          Current.acting_user = users(:admin_user)
+          Current.acting_via = "admin_ui"
+
+          PromoteRecords.call(books: [@book], authors: [])
+
+          assert_equal ["approved", "admin_ui", users(:admin_user).id, nil], [first.reload.review_status, first.reviewed_via, first.reviewed_by_id, first.lease_token]
+          assert_equal "approved", second.reload.review_status
+          assert_equal "pending", other.reload.review_status
+        ensure
+          Current.reset
+        end
+
+        test "a row already stamped by an approve keeps its own review" do
+          row = submission_for(@book, :approved)
+          row.update!(reviewed_via: :api, reviewed_by: users(:editor_user), review_note: "approved by hand")
+
+          PromoteRecords.call(books: [@book], authors: [])
+
+          assert_equal ["api", users(:editor_user).id, "approved by hand"], [row.reload.reviewed_via, row.reviewed_by_id, row.review_note]
+        end
+
+        test "a failed promotion closes nothing" do
+          row = submission_for(@book, :pending)
+          loner = ::Books::Author.create!(name: "Uncredited Provisional", provisional: true)
+          ::Workflows::Books::AuthorEnrichment.stubs(:start).raises("boom")
+
+          assert_raises(RuntimeError) { PromoteRecords.call(books: [@book], authors: [loner]) }
+
+          assert_equal "pending", row.reload.review_status
+        end
+
+        def submission_for(book, review_status, created_book: true)
+          ::Books::BookSubmission.create!(
+            user: users(:regular_user), input_method: :goodreads, goodreads_book_id: rand(1_000_000..9_999_999),
+            fingerprint: SecureRandom.hex(4), status: :added, review_status: review_status, created_book: created_book,
+            book: book, lease_token: "tok", lease_expires_at: 1.hour.from_now
+          )
+        end
       end
     end
   end

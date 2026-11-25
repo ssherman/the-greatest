@@ -156,6 +156,9 @@ class Books::Book < ApplicationRecord
   before_validation :normalize_title
   before_validation :derive_book_length,
     if: -> { book_length.blank? && (page_range_changed? || word_count_changed?) }
+  # Prepended so it runs before the submissions' dependent: :nullify drops book_id,
+  # which is how it finds them. One UPDATE, whether or not the book has any.
+  before_destroy :close_submissions, prepend: true
   after_destroy { Services::BooksMigration::RedirectRecorder.deleted(item_type: "Books::Book", from_id: id) }
 
   scope :selectable, -> { where(book_kind: :standalone) }
@@ -281,6 +284,12 @@ class Books::Book < ApplicationRecord
   end
 
   private
+
+  # Deleted: the reader's request is rejected, and a second reader's row on a
+  # provisional book goes with it. A catalog book's not_needed rows stay.
+  def close_submissions
+    Services::Books::BookSubmissions::CloseForBook.call(book_ids: [id], review_status: :rejected, include_matched: provisional?)
+  end
 
   def normalize_title
     return if title.blank?

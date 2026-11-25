@@ -72,6 +72,7 @@ module Books
           collect_affected_ranking_configurations
           merge_all_associations
           reconcile_scalars
+          close_submissions
           target_book.save! if target_book.changed?
           resolve_duplicate_candidates
           record_redirect
@@ -155,6 +156,42 @@ module Books
         repoint_series_representative
         merge_book_authors
         merge_credits
+        merge_submissions
+      end
+
+      # A reader's submission follows the book it was made for. The ids are read
+      # before the move, because afterwards the survivor's own rows and the moved
+      # ones sit under one book_id. Inside the transaction (and the survivor and
+      # source are locked), so a rollback changes nothing here.
+      def merge_submissions
+        @source_provisional = source_book.provisional?
+        @target_provisional = target_book.provisional?
+        @moved_submission_ids = source_book.submissions.pluck(:id)
+        @own_submission_ids = target_book.submissions.pluck(:id)
+        @stats[:submissions] = ::Books::BookSubmission.where(id: @moved_submission_ids).update_all(book_id: target_book.id)
+      end
+
+      # After reconcile_scalars, which settles whether the survivor is public. A
+      # provisional survivor leaves every row as it was. A public one closes the
+      # moved rows as merged (the survivor is where their book went) and, if it
+      # only became public through this merge, its own rows as approved. A
+      # matched not_needed row shares the fate of a provisional book it sat on,
+      # never of a catalog one.
+      def close_submissions
+        closed = 0
+        unless target_book.provisional?
+          if @target_provisional
+            closed += close_submission_rows(@own_submission_ids, :approved, @target_provisional)
+          end
+          closed += close_submission_rows(@moved_submission_ids, :merged, @source_provisional)
+        end
+        @stats[:submissions_closed] = closed
+      end
+
+      def close_submission_rows(ids, review_status, include_matched)
+        ::Services::Books::BookSubmissions::CloseForBook.call(
+          book_ids: [target_book.id], submission_ids: ids, review_status: review_status, include_matched: include_matched
+        )
       end
 
       # books_editions has no unique index on book_id, so there is no collision

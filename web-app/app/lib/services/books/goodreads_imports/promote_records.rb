@@ -52,6 +52,11 @@ module Services
               # cover the old pages too.
               goal_urls.concat(::Services::Books::ReadingGoals::DestructionInvalidator.for_book(book: book))
             end
+            # The book is public now, so the readers' requests for it are done.
+            # Inside the transaction, so a failure leaves them open.
+            ::Services::Books::BookSubmissions::CloseForBook.call(
+              book_ids: @books.map(&:id), review_status: :approved, include_matched: true
+            )
             authors.reject { |author| credited_to_a_book.include?(author.id) }.each do |author|
               ::Workflows::Books::AuthorEnrichment.start(author, initiated_by: @initiated_by)
             end

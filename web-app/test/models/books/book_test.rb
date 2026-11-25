@@ -477,5 +477,60 @@ module Books
       assert_equal [books_books(:clash).id, books_books(:got).id], books.map(&:id)
       assert_equal [nil, nil], books.map(&:primary_rank)
     end
+
+    # Submissions close with their book (user-added books, spec section 5)
+
+    def book_submission(book, review_status, created_book: true)
+      ::Books::BookSubmission.create!(
+        user: users(:regular_user), input_method: :goodreads, goodreads_book_id: rand(1_000_000..9_999_999),
+        fingerprint: SecureRandom.hex(4), status: :added, review_status: review_status, created_book: created_book,
+        book: book, lease_token: "tok", lease_expires_at: 1.hour.from_now
+      )
+    end
+
+    test "destroying a provisional book rejects its open submissions, the matched ones too, and nulls book_id" do
+      book = ::Books::Book.create!(title: "Doomed Provisional", provisional: true)
+      first = book_submission(book, :pending)
+      flagged = book_submission(book, :needs_human)
+      second_reader = book_submission(book, :not_needed, created_book: false)
+      approved = book_submission(book, :approved)
+
+      book.destroy!
+
+      [first, flagged, second_reader].each do |row|
+        row.reload
+        assert_equal ["rejected", "system", nil, nil], [row.review_status, row.reviewed_via, row.book_id, row.lease_token]
+        assert_not row.user_added?
+      end
+      assert_equal ["approved", nil], [approved.reload.review_status, approved.book_id]
+    end
+
+    test "destroying a catalog book leaves a reader's not_needed row alone" do
+      book = ::Books::Book.create!(title: "Doomed Catalog")
+      matched = book_submission(book, :not_needed, created_book: false)
+
+      book.destroy!
+
+      assert_equal ["not_needed", nil], [matched.reload.review_status, matched.book_id]
+    end
+
+    test "a destroy that rolls back closes nothing" do
+      book = ::Books::Book.create!(title: "Survivor", provisional: true)
+      row = book_submission(book, :pending)
+
+      ::Books::Book.transaction do
+        book.destroy!
+        raise ActiveRecord::Rollback
+      end
+
+      assert_equal ["pending", book.id], [row.reload.review_status, row.book_id]
+    end
+
+    test "user_added? is false once the book was merged away or rejected" do
+      book = ::Books::Book.create!(title: "Flagged")
+      assert book_submission(book, :pending).user_added?
+      assert_not book_submission(book, :merged).user_added?
+      assert_not book_submission(book, :rejected).user_added?
+    end
   end
 end

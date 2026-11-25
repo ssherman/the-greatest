@@ -663,6 +663,26 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'action="replace" target="book_submissions"'
   end
 
+  test "a destroyed provisional book's rows read as removed for the first and the second reader" do
+    book = ::Books::Book.create!(title: "Provisional Doomed", provisional: true)
+    second_user = users(:editor_user)
+    second_list = ::Books::UserList.create!(user: second_user, name: "Second reader list", list_type: :custom)
+    first = row(status: :added, book: book, created_book: true, review_status: :pending, resolved_title: "Provisional Doomed")
+    second = row(status: :added, book: book, user: second_user, list: second_list, review_status: :not_needed, resolved_title: "Provisional Doomed")
+
+    book.destroy!
+
+    assert_equal %w[rejected rejected], [first, second].map { it.reload.review_status }
+    {@user => @list, second_user => second_list}.each do |user, list|
+      sign_in_as user, stub_auth: true
+
+      strip(list)
+
+      assert_response :success
+      assert_includes response.body, "We couldn&#39;t verify Provisional Doomed, so it was removed."
+    end
+  end
+
   test "a signed-out frame request gets an empty strip frame and a 401, never a redirect" do
     strip(headers: frame_headers)
 

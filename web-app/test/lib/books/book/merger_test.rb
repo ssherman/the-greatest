@@ -51,6 +51,109 @@ module Books
         assert_not ::Books::Book.exists?(source_id)
       end
 
+      # Submissions follow the book they were made for (user-added books, spec section 5)
+
+      def provisional_book(title)
+        ::Books::Book.create!(title: title, provisional: true)
+      end
+
+      def sub(book, review_status, created_book: true)
+        ::Books::BookSubmission.create!(
+          user: users(:regular_user), input_method: :goodreads, goodreads_book_id: rand(1_000_000..9_999_999),
+          fingerprint: SecureRandom.hex(4), status: :added, review_status: review_status, created_book: created_book,
+          book: book, lease_token: "tok", lease_expires_at: 1.hour.from_now
+        )
+      end
+
+      def review(row) = row.reload.review_status
+
+      test "a provisional source merged into a catalog target: its rows follow and close merged, matched ones too" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        pending = sub(source, :pending)
+        flagged = sub(source, :needs_human)
+        matched = sub(source, :not_needed, created_book: false)
+        own = sub(@target, :not_needed, created_book: false)
+
+        result = ::Books::Book::Merger.call(source: source, target: @target)
+
+        assert result.success?, result.errors.inspect
+        assert_equal %w[merged merged merged not_needed], [pending, flagged, matched, own].map { review(it) }
+        assert_equal [@target.id], [pending, flagged, matched].map { it.reload.book_id }.uniq
+        assert_equal ["system", nil], [pending.reviewed_via, pending.lease_token]
+        assert_not pending.user_added?
+      end
+
+      test "a provisional source merged into a provisional target: its rows follow and stay as they were" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        target = provisional_book("Target P")
+        pending = sub(source, :pending)
+        matched = sub(source, :not_needed, created_book: false)
+        own = sub(target, :pending)
+
+        assert ::Books::Book::Merger.call(source: source, target: target).success?
+
+        assert_equal %w[pending not_needed pending], [pending, matched, own].map { review(it) }
+        assert_equal [target.id], [pending, matched, own].map { it.reload.book_id }.uniq
+        assert pending.user_added?
+        assert_equal "tok", pending.lease_token
+      end
+
+      test "a catalog source folded into a provisional target makes the target public: its own rows close approved" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        target = provisional_book("Target P")
+        own = sub(target, :pending)
+        own_matched = sub(target, :not_needed, created_book: false)
+        from_catalog = sub(@source, :not_needed, created_book: false)
+
+        assert ::Books::Book::Merger.call(source: @source, target: target).success?
+
+        assert_not target.reload.provisional?
+        assert_equal %w[approved approved not_needed], [own, own_matched, from_catalog].map { review(it) }
+        assert_equal "system", own.reviewed_via
+        assert_nil own.lease_token
+      end
+
+      test "a catalog source merged into a catalog target changes no submission" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        matched = sub(@source, :not_needed, created_book: false)
+        own = sub(@target, :not_needed, created_book: false)
+
+        assert ::Books::Book::Merger.call(source: @source, target: @target).success?
+
+        assert_equal %w[not_needed not_needed], [matched, own].map { review(it) }
+        assert_equal [@target.id, @target.id], [matched.book_id, own.book_id]
+      end
+
+      test "the acting admin and surface are recorded on rows the merge closes" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        row = sub(source, :pending)
+        Current.acting_user = users(:admin_user)
+        Current.acting_via = "api"
+
+        assert ::Books::Book::Merger.call(source: source, target: @target).success?
+
+        assert_equal ["api", users(:admin_user).id], [row.reload.reviewed_via, row.reviewed_by_id]
+      ensure
+        Current.reset
+      end
+
+      test "a merge that rolls back changes no submission" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        row = sub(source, :pending)
+        matched = sub(source, :not_needed, created_book: false)
+        ::Services::DuplicateCandidates::RecordMerge.stubs(:call).raises("boom")
+
+        assert_not ::Books::Book::Merger.call(source: source, target: @target).success?
+
+        assert_equal [source.id, source.id], [row.reload.book_id, matched.reload.book_id]
+        assert_equal %w[pending not_needed], [row.review_status, matched.review_status]
+        assert_equal "tok", row.lease_token
+      end
+
       test "refuses to merge a book with itself" do
         result = ::Books::Book::Merger.call(source: @source, target: @source)
 
