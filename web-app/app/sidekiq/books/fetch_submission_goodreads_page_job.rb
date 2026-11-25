@@ -12,7 +12,8 @@
 # use up the submission's retry window (RetrySchedule.wait_until). A page
 # nobody could answer (Goodreads' error page, a timeout, a fetcher that is
 # down) is tried again through a new turn within the window. An error after
-# the turn was taken is a different thing (see `raised`): three of them fail
+# the turn was taken is a different thing (see `raised`): three of them, over the
+# whole life of the submission, fail
 # the submission. A page that
 # loaded but cannot be read needs details from the reader.
 class Books::FetchSubmissionGoodreadsPageJob
@@ -31,9 +32,7 @@ class Books::FetchSubmissionGoodreadsPageJob
     ::Services::Books::BookSubmissions::ProcessSubmission.record_unexpected_failure(job["args"].first, exception)
   end
 
-  # raises: how many times the work after the turn has raised for this
-  # submission, carried through the reschedules.
-  def perform(submission_id, due = false, raises = 0)
+  def perform(submission_id, due = false)
     submission = ::Books::BookSubmission.find_by(id: submission_id)
     return unless submission&.in_progress? && submission.method_goodreads?
     return process_later(submission) if submission.book_id || page_cached?(submission)
@@ -50,7 +49,7 @@ class Books::FetchSubmissionGoodreadsPageJob
     begin
       handle(submission, fetch(submission))
     rescue => error
-      raised(submission, error, raises + 1)
+      raised(submission, error)
     end
   end
 
@@ -73,18 +72,29 @@ class Books::FetchSubmissionGoodreadsPageJob
     end
   end
 
-  # An error is a bug or a failing store, not a source that is down: the job
-  # tries again through a new turn a minute later, and the third error fails
-  # the submission with the error stored. If this method's own write or
-  # reschedule raises, it propagates to Sidekiq: Redis or Postgres is down, and
-  # the gate's spacing and daily start cap still hold for a retry.
-  def raised(submission, error, count)
-    Rails.logger.error "Books::FetchSubmissionGoodreadsPageJob: submission #{submission.id} raised #{error.class}: #{error.message} (#{count} of #{MAX_RAISES})"
-    return ::Services::Books::BookSubmissions::ProcessSubmission.record_unexpected_failure(submission.id, error) if count >= MAX_RAISES
+  # An error is a bug or a failing store, not a source that is down. It is
+  # counted on the row (fetch_errors, cumulative: waits, refusals, blocks and
+  # sweeps in between do not reset it), and the job tries again through a new
+  # turn a minute later. The third error fails the submission with the error
+  # stored, but only a row still open with no book: a book that landed
+  # meanwhile, or a cancel, is left alone. If this method's own write or
+  # reschedule raises, it propagates to Sidekiq: Redis or Postgres is down,
+  # and the gate's spacing and daily start cap still hold for a retry.
+  def raised(submission, error)
+    Rails.logger.error "Books::FetchSubmissionGoodreadsPageJob: submission #{submission.id} raised #{error.class}: #{error.message}"
+    open_rows = ::Books::BookSubmission.where(id: submission.id, status: ::Books::BookSubmission::IN_PROGRESS_STATUSES, book_id: nil)
+    return if open_rows.update_all(["fetch_errors = fetch_errors + 1, updated_at = ?", Time.current]).zero?
+    return fail_after_errors(submission, error) if open_rows.pick(:fetch_errors).to_i >= MAX_RAISES
 
     at = RAISE_DELAY.from_now
     written = ::Services::Books::BookSubmissions::Settle.call(submission, next_attempt_at: at, status: :looking_up)
-    self.class.perform_at(at, submission.id, false, count) if written.positive?
+    self.class.perform_at(at, submission.id, false) if written.positive?
+  end
+
+  def fail_after_errors(submission, error)
+    message = ::Services::Books::BookSubmissions::ProcessSubmission.failure_message(error)
+    written = ::Services::Books::BookSubmissions::Settle.call(submission, status: :failed, error: message, next_attempt_at: nil)
+    Rails.logger.error "Books::BookSubmission #{submission.id} failed: #{message}" if written.positive?
   end
 
   def page_cached?(submission)

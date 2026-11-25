@@ -61,11 +61,15 @@ module Services
         # recorded, unless it has finished meanwhile, and its flagged decisions
         # leave the review queue.
         def self.record_unexpected_failure(submission_id, error)
-          message = "#{error.class.name}: #{Lookups::Names.scrubbed(error.message)}".first(MAX_ERROR_LENGTH)
+          message = failure_message(error)
           Rails.logger.error "Books::BookSubmission #{submission_id} failed: #{message}"
           ::Books::BookSubmission.where(id: submission_id, status: ::Books::BookSubmission::IN_PROGRESS_STATUSES)
             .update_all(status: :failed, error: message, updated_at: Time.current)
           clear_flags(submission_id)
+        end
+
+        def self.failure_message(error)
+          "#{error.class.name}: #{Lookups::Names.scrubbed(error.message)}".first(MAX_ERROR_LENGTH)
         end
 
         # Reads the decision the submission holds from the row, never from a

@@ -235,12 +235,12 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
   test "an error after the turn reschedules a minute later, not due, with the raise counted, and the sweep leaves the row alone" do
     FETCH.stubs(:call).raises(RuntimeError, "boom")
     Rails.logger.expects(:error).with(regexp_matches(/RuntimeError: boom/)).at_least_once
-    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false, 1)
+    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false)
 
     assert_nothing_raised { perform(true) }
 
     @submission.reload
-    assert_equal ["looking_up", 1.minute.from_now, 0], [@submission.status, @submission.next_attempt_at, @submission.attempts]
+    assert_equal ["looking_up", 1.minute.from_now, 0, 1], [@submission.status, @submission.next_attempt_at, @submission.attempts, @submission.fetch_errors]
   end
 
   test "the rescheduled job takes a fresh reservation before it fetches again" do
@@ -249,19 +249,19 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
     perform(true)
     @gate.expects(:reserve).with(priority: true).once.returns(Books::FetchGate::Reservation.new(wait: 0, refusal: nil))
 
-    JOB.new.perform(@submission.id, false, 1)
+    JOB.new.perform(@submission.id, false)
   end
 
   test "an unparseable page whose write raises is rescheduled through a new turn, not retried as due" do
     FETCH.stubs(:call).returns(fetched(:unparseable))
     Services::Books::BookSubmissions::Settle.stubs(:call).raises(RuntimeError, "write failed").then.returns(1)
-    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false, 1)
+    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false)
 
     perform(true)
     Services::Books::BookSubmissions::Settle.unstub(:call)
     @gate.expects(:reserve).with(priority: true).once.returns(Books::FetchGate::Reservation.new(wait: 0, refusal: nil))
     @gate.stubs(:spacing_wait).returns(0)
-    JOB.new.perform(@submission.id, false, 1)
+    JOB.new.perform(@submission.id, false)
   end
 
   test "an unavailable page whose reschedule raises is rescheduled through a new turn, not retried as due" do
@@ -289,7 +289,7 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
       scheduled << args
       true
     }
-    args = [@submission.id, true, 0]
+    args = [@submission.id, true]
 
     loop do
       JOB.new.perform(*args)
@@ -314,7 +314,7 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
 
     perform(true)
 
-    assert_equal "cancelled", @submission.reload.status
+    assert_equal ["cancelled", 0], [@submission.reload.status, @submission.fetch_errors], "a closed row is not counted"
   end
 
   test "a cancel committed during the third raising fetch is not failed over" do
@@ -323,9 +323,113 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
       true
     }.raises(RuntimeError, "boom")
 
-    JOB.new.perform(@submission.id, false, 2)
+    @submission.update!(fetch_errors: 2)
+    JOB.new.perform(@submission.id, false)
 
     assert_equal ["cancelled", nil], [@submission.reload.status, @submission.error]
+  end
+
+  # Runs the jobs the job under test schedules, in time order, on the real gate,
+  # until nothing is left. Returns how many ran.
+  def drive(ids, limit: 600)
+    queue = ids.map { |id| [Time.current, id, false] }
+    JOB.stubs(:perform_at).with { |at, id, due|
+      queue << [at, id, due]
+      true
+    }
+    JOB.stubs(:perform_in).with { |wait, id, due|
+      queue << [Time.current + wait, id, due]
+      true
+    }
+    runs = 0
+    until queue.empty? || runs >= limit
+      at, id, due = queue.min_by(&:first).tap { |entry| queue.delete(entry) }
+      travel_to at if at > Time.current
+      JOB.new.perform(id, due)
+      runs += 1
+    end
+    runs
+  end
+
+  test "a busy line and a fetch that always raises end failed after exactly three fetches" do
+    3.times { @gate.reserve(priority: true) }
+    FETCH.expects(:call).times(3).raises(RuntimeError, "boom")
+
+    drive([@submission.id])
+
+    @submission.reload
+    assert_equal ["failed", 3], [@submission.status, @submission.fetch_errors]
+    assert_includes @submission.error, "RuntimeError: boom"
+  end
+
+  test "eight submissions whose fetch always raises all end after exactly 24 fetches" do
+    others = Array.new(7) do |index|
+      book_submission(input_method: :goodreads, raw_input: "x", goodreads_book_id: 6000 + index, typed_title: nil,
+        typed_author_names: nil, status: :looking_up, processing_started_at: Time.current)
+    end
+    all = [@submission, *others]
+    FETCH.expects(:call).times(24).raises(RuntimeError, "boom")
+
+    drive(all.map(&:id))
+
+    assert_equal ["failed"], all.map { |row| row.reload.status }.uniq
+  end
+
+  test "raises alternating with an unavailable page end failed at the third raise with the error stored" do
+    FETCH.expects(:call).times(5)
+      .raises(RuntimeError, "boom").then.returns(fetched(:unavailable))
+      .then.raises(RuntimeError, "boom").then.returns(fetched(:unavailable))
+      .then.raises(RuntimeError, "boom")
+
+    drive([@submission.id])
+
+    @submission.reload
+    assert_equal ["failed", 3], [@submission.status, @submission.fetch_errors]
+    assert_includes @submission.error, "RuntimeError: boom"
+  end
+
+  test "a raise, then a block refusal, then raises still ends at three" do
+    calls = 0
+    FETCH.expects(:call).times(3).with { |**|
+      calls += 1
+      @gate.block! if calls == 1
+      true
+    }.raises(RuntimeError, "boom")
+
+    drive([@submission.id])
+
+    @submission.reload
+    assert_equal ["failed", 3], [@submission.status, @submission.fetch_errors]
+  end
+
+  test "a book that lands during the third raising fetch leaves the row alone" do
+    @submission.update!(fetch_errors: 2)
+    book = books_books(:war_and_peace)
+    FETCH.stubs(:call).with { |**|
+      ::Books::BookSubmission.where(id: @submission.id).update_all(book_id: book.id)
+      true
+    }.raises(RuntimeError, "boom")
+    JOB.expects(:perform_at).never
+
+    perform(true)
+
+    @submission.reload
+    assert_equal ["looking_up", book.id, nil, 2], [@submission.status, @submission.book_id, @submission.error, @submission.fetch_errors]
+  end
+
+  test "a book that lands between the third error being counted and the failure being written is not failed over" do
+    @submission.update!(fetch_errors: 2)
+    book = books_books(:war_and_peace)
+    FETCH.stubs(:call).raises(RuntimeError, "boom")
+    Services::Books::BookSubmissions::ProcessSubmission.stubs(:failure_message).with { |_error|
+      ::Books::BookSubmission.where(id: @submission.id).update_all(book_id: book.id)
+      true
+    }.returns("RuntimeError: boom")
+
+    perform(true)
+
+    @submission.reload
+    assert_equal ["looking_up", book.id, nil], [@submission.status, @submission.book_id, @submission.error]
   end
 
   test "the first blocked fetch is counted and waits for the gate; the second needs details and holds nothing" do

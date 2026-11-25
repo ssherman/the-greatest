@@ -12,6 +12,7 @@ require "test_helper"
 #  created_book          :boolean          default(FALSE), not null
 #  dismissed_at          :datetime
 #  error                 :text
+#  fetch_errors          :integer          default(0), not null
 #  fingerprint           :string
 #  input_method          :integer          not null
 #  isbn10                :string
