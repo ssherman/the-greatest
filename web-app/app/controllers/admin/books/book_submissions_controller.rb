@@ -17,10 +17,19 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   before_action :require_domain_write!, only: [:supply_details, :retry]
   before_action :set_submission, only: [:approve, :merge, :reject, :supply_details, :retry]
 
-  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label, :return_params
+  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label, :return_params, :queue_path
 
   def index
     load_page
+    if params.key?(:submission_id)
+      # One submission, as it is now, whatever its status and whether or not its book exists: where
+      # every action lands, with its notice or alert. An id that is not digits, or names nothing, is an empty page.
+      id = params[:submission_id].to_s[/\A\d{1,18}\z/]
+      @single_view = true
+      @submissions = ::Books::BookSubmission.where(id: id&.to_i).includes(*PRELOADS).to_a
+      return
+    end
+
     rows = Submissions::QueueTabs.scope(@tab).includes(*PRELOADS)
     rows = rows.where(book_id: @book_id) if @book_id
     rows = open_tab? ? rows.order(:created_at, :id) : rows.order(updated_at: :desc, id: :desc)
@@ -41,7 +50,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
     if dry_run?
       target = ::Books::Book.includes(:authors).find(result.data[:target_id])
       render_preview("Dry run: would merge #{book_label(@submission.book)} into #{book_label(target)}. " \
-        "The first is deleted and its readers' list entries move to the second. Nothing changed.", target: target)
+        "The first is deleted and its readers' list entries move to the second. Nothing changed.", action: :merge, target: target)
     else
       warnings = Array(result.data[:warnings]).map { |warning| warning.is_a?(Hash) ? (warning[:detail] || warning["detail"]).to_s : warning.to_s }.compact_blank
       finish(result, "Merged into #{book_label(result.data[:target])}.#{" Warnings: #{warnings.join(" ")}" if warnings.any?}")
@@ -57,7 +66,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
     data = result.data
     if dry_run?
       render_preview("Dry run: would delete #{label} with #{view_context.pluralize(data[:author_ids].size, "provisional author")} " \
-        "and close #{view_context.pluralize(data[:submission_ids].size, "request")} as rejected. Nothing changed.")
+        "and close #{view_context.pluralize(data[:submission_ids].size, "request")} as rejected. Nothing changed.", action: :reject)
     else
       finish(result, "Rejected. #{label} is deleted.")
     end
@@ -79,16 +88,17 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   def set_submission
     @submission = ::Books::BookSubmission.find_by(id: params[:id])
-    redirect_to admin_books_book_submissions_path(**return_params), alert: "That submission no longer exists." unless @submission
+    redirect_to admin_books_book_submissions_path(submission_id: params[:id], **return_params), alert: "That submission no longer exists." unless @submission
   end
 
-  # Every action comes back to the page the admin was on (tab, page and book filter), so the queue
-  # carries on where it was. The notice says where a settled row went, so it is not lost.
+  # Every action lands on that one submission as it now is (its row, its status, its book or the
+  # lack of one), with the notice or the alert, and the way back to the tab and page the admin came from.
   def finish(result, notice)
+    path = admin_books_book_submissions_path(submission_id: @submission.id, **return_params)
     if result.success?
-      redirect_to admin_books_book_submissions_path(**return_params), notice: "#{notice}#{moved_note}"
+      redirect_to path, notice: "#{notice}#{moved_note}"
     else
-      redirect_to admin_books_book_submissions_path(**return_params), alert: result.errors.map { |error| error[:detail] }.to_sentence
+      redirect_to path, alert: result.errors.map { |error| error[:detail] }.to_sentence
     end
   end
 
@@ -100,10 +110,10 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   # A preview is answered in place, 422 as Turbo wants for a form that does not redirect, with the
   # one submission shown and the form filled in from what was posted: the note, sources and target
-  # never travel in a URL or a cookie, and nothing is dropped. Back to the queue keeps tab, page and filter.
-  def render_preview(notice, target: nil)
+  # never travel in a URL or a cookie, and nothing is dropped. Back to the queue keeps the tab and page.
+  def render_preview(notice, action:, target: nil)
     load_page
-    @prefill = {submission_id: @submission.id, note: params[:note].to_s, sources: params[:sources].to_s, target: target}
+    @prefill = {submission_id: @submission.id, action: action, note: params[:note].to_s, sources: params[:sources].to_s, target: target}
     @submissions = ::Books::BookSubmission.where(id: @submission.id).includes(*PRELOADS).to_a
     @preview_only = true
     flash.now[:notice] = notice
@@ -112,18 +122,25 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   def load_page
     @tab = return_params[:tab]
-    @book_id = return_params[:book_id]
+    @book_id = params[:book_id].to_s[/\A\d{1,18}\z/]&.to_i
     @counts = Submissions::QueueTabs.counts
     @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :book_submissions)
   end
 
-  # Where to come back to: the tab (one of ours), the page and the book filter (digits only).
+  # Where "Back to the queue" goes: the tab (one of ours) and the page (digits only), never a filter.
   def return_params
     @return_params ||= {
       tab: Submissions::QueueTabs.valid(params[:tab]),
-      page: params[:page].to_s[/\A[1-9]\d{0,6}\z/]&.to_i,
-      book_id: params[:book_id].to_s[/\A\d{1,18}\z/]&.to_i
+      page: params[:page].to_s[/\A[1-9]\d{0,6}\z/]&.to_i
     }.compact
+  end
+
+  # The queue as the admin left it. A page past the end (its last row was settled) is the last page.
+  def queue_path
+    tab = return_params[:tab]
+    last = [(Submissions::QueueTabs.scope(tab).count / PER_PAGE.to_f).ceil, 1].max
+    page = [return_params[:page] || 1, last].min
+    admin_books_book_submissions_path(tab: tab, **((page > 1) ? {page: page} : {}))
   end
 
   def open_tab? = %w[needs_review needs_details].include?(@tab)

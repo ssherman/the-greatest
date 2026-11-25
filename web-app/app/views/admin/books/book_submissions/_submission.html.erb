@@ -98,14 +98,14 @@
             <summary class="btn btn-sm btn-success btn-outline">Approve</summary>
             <%= form_with url: approve_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96",
                   data: {turbo_confirm: "Approve this book? It becomes public."} do %>
-              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3 %>
+              <%= render "admin/books/book_submissions/decision_fields", rows: 3 %>
               <%= submit_tag "Approve", class: "btn btn-sm btn-success" %>
             <% end %>
           </details>
         <% end %>
 
         <% if actions.include?(:merge) && current_user_can_delete? %>
-          <% preview = prefill if prefill&.dig(:target) %>
+          <% preview = prefill if prefill&.dig(:action) == :merge %>
           <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="merge" <%= "open" if preview %>>
             <summary class="btn btn-sm btn-warning btn-outline">Merge</summary>
             <%= form_with url: merge_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
@@ -115,9 +115,9 @@
                 <div class="rounded-box border border-base-300 p-3 text-sm [overflow-wrap:anywhere]" data-testid="merge-target">
                   <p>Merge <strong><%= book_label(book) %></strong></p>
                   <p>into <strong data-testid="merge-target-label"><%= book_label(preview[:target]) %></strong></p>
-                  <%= link_to "Pick a different book", admin_books_book_submissions_path(**return_params), class: "link" %>
+                  <%= link_to "Pick a different book", queue_path, class: "link" %>
                 </div>
-                <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2, note: preview[:note], sources: preview[:sources] %>
+                <%= render "admin/books/book_submissions/decision_fields", rows: 2, note: preview[:note], sources: preview[:sources] %>
                 <p class="text-sm text-base-content/70">This deletes the provisional book permanently and moves its readers' list entries to the target.</p>
                 <%= button_tag "Merge", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-warning", data: {testid: "merge-confirm",
                       turbo_confirm: "Merge #{book_label(book)} into #{book_label(preview[:target])}? This cannot be undone."} %>
@@ -128,7 +128,7 @@
                         url: search_admin_books_books_path(exclude_id: submission.book_id, public_only: 1),
                         placeholder: "Search for the book we already hold…", required: true) %>
                 </fieldset>
-                <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2 %>
+                <%= render "admin/books/book_submissions/decision_fields", rows: 2 %>
                 <p class="text-sm text-base-content/70">Preview first: it names both books, then you confirm the merge.</p>
                 <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "merge-preview"} %>
               <% end %>
@@ -137,10 +137,10 @@
         <% end %>
 
         <% if actions.include?(:reject) && current_user_can_delete? %>
-          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="reject" <%= "open" if prefill && !prefill[:target] %>>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="reject" <%= "open" if prefill&.dig(:action) == :reject %>>
             <summary class="btn btn-sm btn-error btn-outline">Reject</summary>
             <%= form_with url: reject_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
-              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3, note: prefill&.dig(:note), sources: prefill&.dig(:sources) %>
+              <%= render "admin/books/book_submissions/decision_fields", rows: 3, note: (prefill[:note] if prefill&.dig(:action) == :reject), sources: (prefill[:sources] if prefill&.dig(:action) == :reject) %>
               <p class="text-sm text-base-content/70">Preview shows what would be deleted. Reject deletes the provisional book and its provisional authors permanently.</p>
               <div class="flex gap-2">
                 <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "reject-preview"} %>

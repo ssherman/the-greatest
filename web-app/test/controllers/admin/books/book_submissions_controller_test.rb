@@ -25,6 +25,19 @@ module Admin
         reviewable_submission(user: @reader, book: nil, status: :needs_details, review_status: :not_needed, created_book: false)
       end
 
+      # Where every action lands: that one submission, with the way back to the tab and page.
+      def landing(row, **query) = admin_books_book_submissions_path(submission_id: row.id, **query)
+
+      # Follows the redirect and asserts the page shows exactly that row, as it now is.
+      def assert_lands_on(row, tab: "needs_review", page: nil)
+        assert_redirected_to landing(row, tab: tab, **{page: page}.compact)
+        follow_redirect!
+        assert_response :success
+        assert_select "#submission-#{row.id}"
+        assert_select "[data-submission-id]", count: 1
+        assert_select "[data-testid=no-submissions]", count: 0
+      end
+
       def post_action(action, row = @row, **params)
         post public_send(:"#{action}_admin_books_book_submission_path", row), params: params
       end
@@ -65,7 +78,7 @@ module Admin
 
         row = stuck_row
         post_action(:supply_details, row, note: "found", title: "T", authors: "A")
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review")
+        assert_redirected_to landing(row, tab: "needs_review")
         assert_equal "queued", fresh(row).status
       end
 
@@ -186,7 +199,7 @@ module Admin
         sign_in_as(@admin, stub_auth: true)
         post_action(:approve, note: "Open Library holds it", sources: "https://openlibrary.org/works/OL1W")
 
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review")
+        assert_lands_on(@row)
         row = fresh(@row)
         assert_equal ["approved", @admin.id, "admin_ui", "Open Library holds it", ["https://openlibrary.org/works/OL1W"]],
           [row.review_status, row.reviewed_by_id, row.reviewed_via, row.review_note, row.review_sources]
@@ -216,18 +229,21 @@ module Admin
         sign_in_as(@admin, stub_auth: true)
         post approve_admin_books_book_submission_path(id: 0), params: {note: "n"}
 
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review")
+        assert_redirected_to admin_books_book_submissions_path(submission_id: "0", tab: "needs_review")
+        follow_redirect!
+        assert_select "[data-testid=no-submissions]"
+        assert_select "[data-testid=submission-tabs]"
         assert flash[:alert].present?
       end
 
       test "the tab the admin was on is kept, and a tab that is not one is not" do
         sign_in_as(@admin, stub_auth: true)
         post_action(:approve, note: "ok", tab: "all")
-        assert_redirected_to admin_books_book_submissions_path(tab: "all")
+        assert_redirected_to landing(@row, tab: "all")
 
         other = reviewable_submission(user: @reader)
         post_action(:approve, other, note: "ok", tab: "//evil.example")
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review")
+        assert_redirected_to landing(other, tab: "needs_review")
       end
 
       # Merge
@@ -402,11 +418,12 @@ module Admin
         assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review", page: 2)
 
         post_action(:merge, last, note: "same", target_id: @target.id, dry_run: "false", tab: "needs_review", page: "2")
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review", page: 2)
+        assert_lands_on(last, page: 2)
         assert_equal "merged", fresh(last).review_status
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review", page: 2)
       end
 
-      test "a row reached through the book filter can be previewed and merged, and the filter is kept" do
+      test "a row reached through the book filter can be previewed and merged, and the admin lands on it" do
         many_rows(55)
         sign_in_as(@admin, stub_auth: true)
         book_id = @row.book_id
@@ -418,10 +435,11 @@ module Admin
         post_action(:merge, note: "same", target_id: @target.id, dry_run: "true", tab: "all", book_id: book_id)
         assert_response :unprocessable_entity
         assert_select "#submission-#{@row.id} [data-testid=merge-confirm]"
-        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "all", book_id: book_id)
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "all")
 
         post_action(:merge, note: "same", target_id: @target.id, dry_run: "false", tab: "all", book_id: book_id)
-        assert_redirected_to admin_books_book_submissions_path(tab: "all", book_id: book_id)
+        assert_lands_on(@row, tab: "all")
+        assert_select "[data-testid=book-filter]", count: 0
       end
 
       test "a reject preview is answered in place with the form filled and the way back kept" do
@@ -440,14 +458,108 @@ module Admin
         assert ::Books::Book.exists?(last.book_id)
       end
 
-      test "every action's redirect keeps the tab, the page and the book filter, and drops what is not digits" do
+      test "every action lands on its submission with the way back kept, and drops what is not digits" do
         sign_in_as(@admin, stub_auth: true)
         post_action(:approve, note: "ok", tab: "all", page: "3", book_id: @row.book_id.to_s)
-        assert_redirected_to admin_books_book_submissions_path(tab: "all", page: 3, book_id: @row.book_id)
+        assert_redirected_to landing(@row, tab: "all", page: 3)
 
         other = reviewable_submission(user: @reader)
         post_action(:approve, other, note: "ok", tab: "all", page: "3x", book_id: "7;8")
-        assert_redirected_to admin_books_book_submissions_path(tab: "all")
+        assert_redirected_to landing(other, tab: "all")
+      end
+
+      # Landing on the submission, whatever happened to it
+
+      test "after a reject under the book filter the admin lands on the rejected row, not an empty page" do
+        many_rows(55)
+        sign_in_as(@admin, stub_auth: true)
+        book_id = @row.book_id
+
+        post_action(:reject, note: "not a book", dry_run: "false", tab: "all")
+        assert_lands_on(@row, tab: "all")
+        assert_not ::Books::Book.exists?(book_id)
+        assert_select "#submission-#{@row.id} [data-testid=submission-review]", text: "Rejected"
+        assert_select "[data-testid=book-filter]", count: 0
+      end
+
+      test "after a reject from page two the admin lands on the rejected row" do
+        many_rows(52)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:reject, last, note: "not a book", dry_run: "false", tab: "needs_review", page: "2")
+        assert_lands_on(last, page: 2)
+        assert_select "#submission-#{last.id} [data-testid=submission-review]", text: "Rejected"
+      end
+
+      test "after supply details and retry the admin lands on the queued row, from page two and from the all tab" do
+        many_rows_matching = ->(count) { count.times { stuck_row } }
+        many_rows_matching.call(52)
+        last = stuck_row
+        failed = reviewable_submission(user: @reader, book: nil, status: :failed, review_status: :not_needed, created_book: false)
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:supply_details, last, note: "found", title: "T", authors: "A", tab: "needs_details", page: "2")
+        assert_lands_on(last, tab: "needs_details", page: 2)
+        assert_select "#submission-#{last.id} [data-testid=submission-status]", text: "Queued"
+
+        post_action(:retry, failed, tab: "all", page: "2")
+        assert_lands_on(failed, tab: "all", page: 2)
+        assert_select "#submission-#{failed.id} [data-testid=submission-status]", text: "Queued"
+      end
+
+      test "a refused action lands on the row with the alert" do
+        sign_in_as(@admin, stub_auth: true)
+        post_action(:approve, note: " ", tab: "all", page: "2")
+
+        assert_redirected_to landing(@row, tab: "all", page: 2)
+        follow_redirect!
+        assert_select "#submission-#{@row.id}"
+        assert_select ".alert", text: /note/
+      end
+
+      test "the way back is clamped to the last page when the settled row was the only one on the last" do
+        many_rows(49)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:approve, last, note: "ok", tab: "needs_review", page: "2")
+        follow_redirect!
+
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review")
+        get css_select("[data-testid=back-to-queue]").first["href"]
+        assert_select "[data-submission-id]", minimum: 1
+      end
+
+      test "an unknown or non-digit submission id shows an empty page with the tabs, not an error" do
+        sign_in_as(@admin, stub_auth: true)
+
+        ["999999999", "abc", "#{@row.id}abc", "#{@row.id};1", ""].each do |id|
+          get admin_books_book_submissions_path(submission_id: id)
+          assert_response :success, id
+          assert_select "[data-testid=no-submissions]"
+          assert_select "[data-testid=submission-tabs]"
+        end
+      end
+
+      test "tab links carry no filter and a filter whose book is gone shows no dead link" do
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(tab: "all", book_id: @row.book_id)
+        assert_select "[data-testid=submission-tabs] a[href*=book_id]", count: 0
+        assert_select "[data-testid=book-filter] a[href=?]", admin_books_book_path(@row.book_id)
+
+        get admin_books_book_submissions_path(tab: "all", book_id: 999_999_999)
+        assert_select "[data-testid=book-filter] a.link", count: 0
+        assert_select "[data-testid=book-filter]", text: /deleted/
+      end
+
+      test "after a merge preview the reject form is not filled with the merge's note and sources" do
+        sign_in_as(@admin, stub_auth: true)
+        post_action(:merge, note: "the merge note", sources: "https://example.com/m", target_id: @target.id, dry_run: "true")
+
+        assert_equal "the merge note", field("note", "merge")
+        assert_equal "", field("note", "reject")
+        assert_equal "", field("sources", "reject")
       end
 
       test "a settled row's notice says which tab it moved to" do
@@ -502,7 +614,7 @@ module Admin
         post_action(:supply_details, row, note: "Found on a library site", title: "  The Book  ", authors: "First Author\n\nSecond Author\n",
           isbn: "978-0-14-044793-4", asin: "", goodreads_id: "")
 
-        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review")
+        assert_lands_on(row)
         row = fresh(row)
         assert_equal "queued", row.status
         assert_equal "The Book", row.supplied["title"]
