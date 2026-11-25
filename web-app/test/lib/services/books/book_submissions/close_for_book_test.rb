@@ -124,12 +124,14 @@ module Services
         end
 
         test "a failed or needs_details row that is open still shows in the queue, and a needs_human one does not" do
-          open = %i[failed needs_details].map { |status| submission(status: status, review_status: :not_needed, created_book: false) }
+          open = %i[failed needs_details].map { |status| submission(book: nil, status: status, review_status: :not_needed, created_book: false) }
           pending = submission(status: :failed)
           flagged = submission(status: :failed, review_status: :needs_human)
+          resumable = submission(status: :failed, review_status: :not_needed, created_book: false)
 
           assert_equal [], (open + [pending]) - ::Books::BookSubmission.reviewable.to_a
           assert_not_includes ::Books::BookSubmission.reviewable, flagged
+          assert_not_includes ::Books::BookSubmission.reviewable, resumable
         end
 
         test "reviewable and claimable still compose in a chain" do

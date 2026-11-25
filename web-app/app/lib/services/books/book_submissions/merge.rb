@@ -14,10 +14,19 @@ module Services
       #      attributed to the reviewer through Current;
       #   3. the note and sources are written on the rows that moved.
       #
-      # Two limits follow from that, both accepted:
-      # - The lease is checked before the merge and cannot be part of it. One
-      #   that lapses during the merge still lets this merge finish; the next
-      #   caller sees a closed row.
+      # The reads in 1 can be stale by the time the merger holds its locks
+      # (another reviewer's approve may have held the book meanwhile), so the
+      # merger is handed a precondition, evaluated right after its own row
+      # locks inside its transaction: the source still provisional, the target
+      # still not, this submission still open on this book and the lease still
+      # live. A miss rolls the merge back, changes nothing and is a :conflict.
+      # The rows to close are read there, and the note, sources and reviewer go
+      # on those rows only, and only while they are `merged`: never over an
+      # approver's stamp.
+      #
+      # Limits that remain:
+      # - The lease is judged under the lock, so one that lapses after that
+      #   still lets this merge finish; the next caller sees a closed row.
       # - If the process dies between 2 and 3, the book is already merged and the
       #   rows are already closed (`merged`, the acting user and via, a time,
       #   lease cleared) but carry no note or sources. Nothing needs undoing and
@@ -77,7 +86,7 @@ module Services
 
         # The target book, or a failed Result.
         def target_for(source)
-          id = Integer(@target_id, exception: false) if @target_id.is_a?(Integer) || @target_id.is_a?(String)
+          id = target_id_digits
           target = id && ::Books::Book.find_by(id: id)
           return Lease.failure(:invalid, "target_id names no book") unless target
           return Lease.failure(:invalid, "a book cannot be merged into itself") if target.id == source.id
@@ -86,22 +95,49 @@ module Services
           target
         end
 
+        # Base-10 digits only: "010" or "0x1f" must never resolve to another
+        # book, because a merge is permanent.
+        def target_id_digits
+          return @target_id if @target_id.is_a?(Integer)
+
+          @target_id.to_i if @target_id.is_a?(String) && @target_id.match?(/\A[1-9]\d{0,17}\z/)
+        end
+
         def merge(row, source, target)
-          # The rows the merger will close: read before the move, because
-          # afterwards the target's own rows sit under the same book_id.
-          moving = ::Books::BookSubmission.where(book_id: source.id, review_status: %w[pending needs_human not_needed]).pluck(:id)
-          result = ::Services::Books::AdminMerge.call(source: source, target: target)
+          moving = []
+          precondition = ->(locked_source, locked_target) { still_allowed(row, locked_source, locked_target, moving) }
+          result = ::Services::Books::AdminMerge.call(source: source, target: target, precondition: precondition)
           return merge_failure(row, result) unless result.success?
 
-          ::Books::BookSubmission.where(id: moving, review_status: :merged)
-            .update_all(review_note: @note, review_sources: @sources || [], updated_at: Time.current)
+          # Only the rows this merge closed (read under the lock, before the
+          # move), and only as merged: never over another reviewer's stamp.
+          ::Books::BookSubmission.where(id: moving, review_status: :merged).update_all(
+            review_note: @note, review_sources: @sources || [], reviewed_by_id: @user.id, reviewed_via: @via, updated_at: Time.current
+          )
           Lease.success(submission: ::Books::BookSubmission.find(row.id), target: target, warnings: result.data[:warnings])
         end
 
-        # A merge that fails because the row was settled meanwhile (another
-        # reviewer's approve took the book) is a conflict; any other is the
-        # merger's own refusal.
+        # Decided again under the merger's row locks, in its transaction: the
+        # reads before them can be stale, because another reviewer's approve
+        # may have held the book while this merge waited for it. A String is
+        # the reason to stop. Fills `moving` with the rows the merger is about
+        # to close.
+        def still_allowed(row, source, target, moving)
+          return "the book is no longer a provisional book" unless ::Books::Book.where(id: source.id, provisional: true).exists?
+          return "the target is a provisional book" unless ::Books::Book.where(id: target.id, provisional: false).exists?
+
+          open = Lease.guard(::Books::BookSubmission.where(id: row.id, book_id: source.id, review_status: Lease::OPEN_REVIEWS), @token, @via)
+          return "the submission was settled or its lease lost while the merge waited" unless open.exists?
+
+          moving.replace(::Books::BookSubmission.where(book_id: source.id, review_status: %w[pending needs_human not_needed]).pluck(:id))
+          nil
+        end
+
+        # A precondition that failed under the lock is a conflict; so is a merge
+        # whose row was settled meanwhile. Any other failure is the merger's own.
         def merge_failure(row, result)
+          return Lease.failure(:conflict, Array(result.errors).join("; ")) if result.data.is_a?(Hash) && result.data[:precondition]
+
           fresh = ::Books::BookSubmission.find_by(id: row.id)
           return Lease.failure(:conflict, "the submission was settled while it was being merged") unless fresh && Lease::OPEN_REVIEWS.include?(fresh.review_status) && fresh.book_id == row.book_id
 

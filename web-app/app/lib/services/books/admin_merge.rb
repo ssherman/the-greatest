@@ -20,11 +20,13 @@ module Services
         "Books::Author" => "Books::Author::Merger"
       }.freeze
 
-      def self.call(source:, target:, dry_run: false)
-        new(source:, target:, dry_run:).call
+      def self.call(source:, target:, dry_run: false, precondition: nil)
+        new(source:, target:, dry_run:, precondition:).call
       end
 
-      def initialize(source:, target:, dry_run: false)
+      # precondition: see Books::Book::Merger. Books only.
+      def initialize(source:, target:, dry_run: false, precondition: nil)
+        @precondition = precondition
         raise ArgumentError, "source and target must be the same class" unless source.instance_of?(target.class)
         raise ArgumentError, "#{source.class} cannot be merged" unless MERGERS.key?(source.class.name)
 
@@ -37,9 +39,10 @@ module Services
         return failure(["Cannot merge a record with itself"]) if @source.id == @target.id
         return success([]) if @dry_run
 
-        merger = MERGERS.fetch(@source.class.name).constantize.new(source: @source, target: @target)
+        merger_class = MERGERS.fetch(@source.class.name).constantize
+        merger = @precondition ? merger_class.new(source: @source, target: @target, precondition: @precondition) : merger_class.new(source: @source, target: @target)
         result = merger.call
-        return failure(result.errors) unless result.success?
+        return failure(result.errors, result.data) unless result.success?
 
         success(warnings_for(merger.stats))
       end
@@ -72,7 +75,7 @@ module Services
 
       def success(warnings) = Result.new(success?: true, data: {warnings: warnings}, errors: [])
 
-      def failure(errors) = Result.new(success?: false, data: nil, errors: errors)
+      def failure(errors, data = nil) = Result.new(success?: false, data: data, errors: errors)
     end
   end
 end

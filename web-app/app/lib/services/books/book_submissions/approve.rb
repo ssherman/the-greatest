@@ -75,8 +75,19 @@ module Services
             raise ActiveRecord::Rollback if refusal
 
             ::Services::Books::GoodreadsImports::PromoteRecords.call(books: [book], authors: [], initiated_by: "book_submission", lane: "priority")
+            resume(row)
           end
           refusal || Lease.success(submission: ::Books::BookSubmission.find(row.id), book: book)
+        end
+
+        # A row that failed after it got its book never put the book on the
+        # reader's list. Approving it resumes it: counters reset, status queued,
+        # and the job (which resumes at the list step) queued after the commit.
+        # Its review state is the approval just stamped.
+        def resume(row)
+          return unless Requeue.reset(::Books::BookSubmission.where(status: :failed), id: row.id).positive?
+
+          ActiveRecord.after_all_transactions_commit { Requeue.enqueue(row.id) }
         end
 
         def lock_readers(book_id)

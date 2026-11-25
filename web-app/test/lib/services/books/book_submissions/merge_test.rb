@@ -181,6 +181,78 @@ module Services
           assert_equal [@admin.id, "api"], [fresh(@submission).reviewed_by_id, fresh(@submission).reviewed_via]
           assert_equal [users(:editor_user), "admin_ui"], [Current.acting_user, Current.acting_via]
         end
+
+        test "the target id is read as base-10 numerals only" do
+          octal_target = ::Books::Book.create!(id: 15, title: "Octal Target")
+
+          ["017", "0xF", "0b1111", "1_5", " 15", "15 ", "-15", "15.0", "1e1"].each do |text|
+            assert_failure merge(target_id: text), :invalid, "target"
+          end
+          assert ::Books::Book.exists?(@source.id)
+          assert_success merge(target_id: octal_target.id.to_s)
+          assert_equal octal_target.id, fresh(@submission).book_id
+        end
+
+        test "a note with NUL or invalid UTF-8 is refused before the merge" do
+          assert_failure merge(note: "a \u0000 b"), :invalid, "note"
+          assert_failure merge(note: "a \xFF b".b.force_encoding("UTF-8")), :invalid, "note"
+          assert_failure merge(sources: ["https://example.com/\u0000"]), :invalid, "sources"
+          assert ::Books::Book.exists?(@source.id)
+        end
+
+        test "a row settled by someone else while the merge waited for its locks is a conflict and nothing changes" do
+          ::Books::Book::Merger.any_instance.stubs(:lock_books).with do
+            ::Books::BookSubmission.where(id: @submission.id).update_all(review_status: ::Books::BookSubmission.review_statuses[:approved])
+            true
+          end
+
+          assert_failure merge, :conflict
+          assert ::Books::Book.exists?(@source.id)
+          assert_nil fresh(@submission).review_note
+        end
+
+        test "a lease lost while the merge waited for its locks is a conflict and nothing changes" do
+          ::Books::Book::Merger.any_instance.stubs(:lock_books).with do
+            ::Books::BookSubmission.where(id: @submission.id).update_all(lease_token: "taken")
+            true
+          end
+
+          assert_failure merge, :conflict
+          assert ::Books::Book.exists?(@source.id)
+          assert_equal "pending", fresh(@submission).review_status
+        end
+
+        test "the note lands only on rows this merge closed, never on a row an approver stamped" do
+          approved = reviewable_submission(user: users(:editor_user), book: @source, review_status: :approved, review_note: "approver",
+            reviewed_by: users(:editor_user), reviewed_via: :admin_ui, reviewed_at: 1.hour.ago)
+          other = reviewable_submission(user: users(:contractor_user), book: @source)
+
+          merge
+
+          assert_equal ["approver", users(:editor_user).id], [approved.reload.review_note, approved.reviewed_by_id]
+          assert_equal "Same book, other title", other.reload.review_note
+        end
+
+        test "a book made public while the merge waited for its locks is a conflict" do
+          ::Books::Book::Merger.any_instance.stubs(:lock_books).with do
+            ::Books::Book.where(id: @source.id).update_all(provisional: false)
+            true
+          end
+
+          assert_failure merge, :conflict, "provisional"
+          assert ::Books::Book.exists?(@source.id)
+          assert_equal "pending", fresh(@submission).review_status
+        end
+
+        test "a target that became provisional while the merge waited is a conflict" do
+          ::Books::Book::Merger.any_instance.stubs(:lock_books).with do
+            ::Books::Book.where(id: @target.id).update_all(provisional: true)
+            true
+          end
+
+          assert_failure merge, :conflict, "provisional"
+          assert ::Books::Book.exists?(@source.id)
+        end
       end
     end
   end

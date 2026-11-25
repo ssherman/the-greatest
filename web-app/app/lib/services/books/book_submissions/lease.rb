@@ -79,10 +79,13 @@ module Services
            review_note: note, review_sources: sources, lease_token: nil, lease_expires_at: nil, updated_at: Time.current}
         end
 
-        # nil when the note (and, if required, the sources) are usable.
+        # nil when the note (and, if required, the sources) are usable. Everything
+        # that will be written is checked here, before anything permanent: text
+        # with a NUL or invalid UTF-8 would raise at the write, and in Merge
+        # that is after the merge.
         def input_failure(note:, sources:, sources_required: false)
-          unless note.is_a?(String) && note.strip.present? && note.length <= MAX_NOTE
-            return failure(:invalid, "note must be 1 to #{MAX_NOTE} characters")
+          unless note.is_a?(String) && clean?(note) && note.strip.present? && note.length <= MAX_NOTE
+            return failure(:invalid, "note must be 1 to #{MAX_NOTE} characters of valid text")
           end
           sources = [] if sources.nil?
           unless sources.is_a?(Array) && sources.size <= MAX_SOURCES
@@ -94,8 +97,10 @@ module Services
           failure(:invalid, "every one of sources must be an http or https url of at most #{MAX_URL} characters")
         end
 
+        def clean?(text) = text.dup.force_encoding(Encoding::UTF_8).valid_encoding? && !text.include?("\u0000")
+
         def url?(source)
-          return false unless source.is_a?(String) && source.length <= MAX_URL
+          return false unless source.is_a?(String) && clean?(source) && source.length <= MAX_URL
 
           uri = URI.parse(source)
           uri.is_a?(URI::HTTP) && uri.host.present?

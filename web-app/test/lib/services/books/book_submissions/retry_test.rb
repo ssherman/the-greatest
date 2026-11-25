@@ -33,17 +33,41 @@ module Services
           assert_equal "pending", fresh(@row).review_status
         end
 
-        test "refuses a row that is not failed, has a book, or was rejected" do
+        test "refuses a row that is not failed or was rejected" do
           ::Books::ProcessBookSubmissionJob.expects(:perform_async).never
           @row.update_columns(status: ::Books::BookSubmission.statuses[:needs_details])
           assert_failure Retry.call(submission: @row, user: @admin), :conflict
 
-          failed_with_book = reviewable_submission(status: :failed, review_status: :not_needed)
-          assert_failure Retry.call(submission: failed_with_book, user: @admin), :conflict
-
           rejected = reviewable_submission(book: nil, status: :failed, review_status: :rejected)
           assert_failure Retry.call(submission: rejected, user: @admin), :conflict
+          rejected_with_book = reviewable_submission(status: :failed, review_status: :rejected)
+          assert_failure Retry.call(submission: rejected_with_book, user: @admin), :conflict
           assert_equal "failed", fresh(rejected).status
+        end
+
+        test "a bookless row flagged needs_human goes back to not_needed" do
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).with(@row.id).once
+          @row.update_columns(review_status: ::Books::BookSubmission.review_statuses[:needs_human])
+
+          assert_success Retry.call(submission: @row, user: @admin)
+          assert_equal ["queued", "not_needed"], [fresh(@row).status, fresh(@row).review_status]
+        end
+
+        test "a row that failed after it got a book keeps the book and its review, and the job is queued" do
+          withbook = reviewable_submission(status: :failed, review_status: :not_needed, attempts: 5)
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).with(withbook.id).once
+
+          assert_success Retry.call(submission: withbook, user: @admin)
+          row = fresh(withbook)
+          assert_equal ["queued", "not_needed", withbook.book_id, 0], [row.status, row.review_status, row.book_id, row.attempts]
+        end
+
+        test "a needs_human row that has a book keeps its review state" do
+          flagged = reviewable_submission(status: :failed, review_status: :needs_human)
+          ::Books::ProcessBookSubmissionJob.stubs(:perform_async)
+
+          assert_success Retry.call(submission: flagged, user: @admin)
+          assert_equal "needs_human", fresh(flagged).review_status
         end
 
         test "a job that cannot be queued does not undo the retry" do

@@ -50,6 +50,24 @@ module Services
           assert_equal "needs_details", fresh(@submission).status
         end
 
+        test "the admin page may supply details to a bookless row flagged needs_human, which goes back to not_needed" do
+          row = reviewable_submission(book: nil, status: :needs_details, review_status: :needs_human)
+
+          assert_success supply(row, via: "admin_ui", lease_token: nil)
+          assert_equal ["queued", "not_needed"], [fresh(row).status, fresh(row).review_status]
+        end
+
+        test "the API may not supply details to a needs_human row, even holding a lease" do
+          row = lease(reviewable_submission(book: nil, status: :needs_details, review_status: :needs_human))
+
+          assert_failure supply(row), :conflict
+          assert_equal "needs_human", fresh(row).review_status
+        end
+
+        test "invalid UTF-8 and NUL in identifiers are scrubbed, never raised" do
+          assert_success supply(identifiers: {asin: "B00ABC12\xFF34".b.force_encoding("UTF-8"), goodreads_id: "656\u0000".dup, isbn13: "978\xFF0140447934".b.force_encoding("UTF-8")})
+        end
+
         test "the API needs a live matching lease, judged before input; the admin page needs none" do
           assert_failure supply(lease_token: "x", title: ""), :conflict
           assert_failure supply(lease_token: nil), :conflict
@@ -98,6 +116,9 @@ module Services
         test "note is 1 to 1,000 characters" do
           assert_failure supply(note: ""), :invalid, "note"
           assert_failure supply(note: "x" * 1_001), :invalid, "note"
+          assert_failure supply(note: "bad \u0000 note"), :invalid, "note"
+          assert_failure supply(note: "bad \xFF note".b.force_encoding("UTF-8")), :invalid, "note"
+          assert_equal "needs_details", fresh(@submission).status
         end
 
         test "a job that cannot be queued does not undo the reset" do

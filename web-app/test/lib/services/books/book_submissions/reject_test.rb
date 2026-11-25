@@ -243,6 +243,63 @@ module Services
           assert_equal [@admin.id, "api"], [fresh(other).reviewed_by_id, fresh(other).reviewed_via]
           assert_equal [other_reader, "admin_ui"], [Current.acting_user, Current.acting_via]
         end
+
+        test "an author who is also this book's illustrator is destroyed, and the dry run says so" do
+          ::Books::Credit.create!(author: @author, creditable: @book, role: :illustrator, position: 1)
+          edition = ::Books::Edition.create!(book: @book, title: "Edition")
+          other = ::Books::Author.create!(name: "Edition Translator", provisional: true)
+          ::Books::BookAuthor.create!(book: @book, author: other, position: 2)
+          ::Books::Credit.create!(author: other, creditable: edition, role: :translator, position: 1)
+
+          preview = reject(dry_run: true)
+          assert_equal [@author.id, other.id].sort, preview.data[:author_ids].sort
+
+          real = reject
+          assert_success real
+          assert_equal preview.data[:author_ids].sort, real.data[:author_ids].sort
+        end
+
+        test "an author credited on another record is kept in the preview and the real run" do
+          ::Books::Credit.create!(author: @author, creditable: ::Books::Book.create!(title: "Elsewhere"), role: :translator, position: 1)
+
+          assert_equal [], reject(dry_run: true).data[:author_ids]
+          assert_equal [], reject.data[:author_ids]
+          assert ::Books::Author.exists?(@author.id)
+        end
+
+        # The checks run again under the locks; each of these changes the world
+        # after the first checks, inside the call, and the book must survive.
+        def change_after_first_checks(&change)
+          ::Services::Books::ReadingGoals::DestructionInvalidator.stubs(:for_book).with { change.call && true }.returns([])
+        end
+
+        test "a lease lost after the first checks stops the reject" do
+          change_after_first_checks { ::Books::BookSubmission.where(id: @submission.id).update_all(lease_token: "taken") }
+
+          assert_failure reject, :conflict
+          assert ::Books::Book.exists?(@book.id)
+        end
+
+        test "a row closed after the first checks stops the reject" do
+          change_after_first_checks { ::Books::BookSubmission.where(id: @submission.id).update_all(review_status: ::Books::BookSubmission.review_statuses[:approved]) }
+
+          assert_failure reject, :conflict
+          assert ::Books::Book.exists?(@book.id)
+        end
+
+        test "a use added after the first checks stops the reject" do
+          change_after_first_checks { Review.create!(user: other_reader, reviewable: @book, rating: 3) }
+
+          assert_failure reject, :invalid, "review"
+          assert ::Books::Book.exists?(@book.id)
+        end
+
+        test "a book made public after the first checks stops the reject" do
+          change_after_first_checks { ::Books::Book.where(id: @book.id).update_all(provisional: false) }
+
+          assert_failure reject, :conflict
+          assert ::Books::Book.exists?(@book.id)
+        end
       end
     end
   end

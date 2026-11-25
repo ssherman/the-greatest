@@ -53,7 +53,7 @@ module Services
           supplied = build
           return supplied if supplied.is_a?(Result)
 
-          scope = Lease.guard(::Books::BookSubmission.where(status: STATUSES), @token, @via)
+          scope = Lease.guard(::Books::BookSubmission.where(book_id: nil, status: STATUSES, review_status: reviews), @token, @via)
           changed = Requeue.call(scope, id: row.id, supplied: supplied, review_note: @note)
           return Lease.failure(:conflict, "the submission changed while the details were being supplied") if changed.zero?
 
@@ -65,10 +65,15 @@ module Services
         def state_failure(row)
           return Lease.failure(:conflict, "the submission already has a book") if row.book_id
           return Lease.failure(:conflict, "the submission is #{row.status}, not waiting for details") unless STATUSES.include?(row.status)
-          return Lease.failure(:conflict, "the submission is #{row.review_status}") unless Requeue::REVIEWS.include?(row.review_status)
+          return Lease.failure(:conflict, "the submission is #{row.review_status}") unless reviews.include?(row.review_status)
 
           nil
         end
+
+        # Reviews a request may be supplied in. The admin page may also take one
+        # flagged needs_human (a skip, or abandoned by agents), which goes back
+        # to not_needed; the API never holds a lease on it.
+        def reviews = (@via == "admin_ui") ? %w[not_needed pending needs_human] : %w[not_needed pending]
 
         # The stored hash, or a failed Result.
         def build
@@ -107,7 +112,7 @@ module Services
 
         # Adds a normalized value (an ISBN also adds its other form); false when it is not one.
         def add(found, key, value)
-          raw = value.to_s
+          raw = scrub(value.to_s)
           case key
           when "isbn13", "isbn10"
             isbn = ::Books::Isbn.normalize(raw)
@@ -129,10 +134,12 @@ module Services
           true
         end
 
+        def scrub(text) = text.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000")
+
         def squish(value)
           return "" unless value.is_a?(String)
 
-          value.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000").gsub(/[[:space:]]+/, " ").strip
+          scrub(value).gsub(/[[:space:]]+/, " ").strip
         end
 
         def invalid(detail) = Lease.failure(:invalid, detail)

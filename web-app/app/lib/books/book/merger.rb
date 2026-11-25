@@ -28,15 +28,22 @@ module Books
 
       attr_reader :source_book, :target_book, :stats, :affected_ranking_configurations
 
-      def self.call(source:, target:, defer_rankings: false)
-        new(source: source, target: target, defer_rankings: defer_rankings).call
+      def self.call(source:, target:, defer_rankings: false, precondition: nil)
+        new(source: source, target: target, defer_rankings: defer_rankings, precondition: precondition).call
       end
 
       # defer_rankings: a bulk caller (the Goodreads replay's apply step) merges
       # many books in one run and queues each ranking recalculation and the
       # favorites rebuild once at the end, from affected_ranking_configurations,
       # instead of once per merge.
-      def initialize(source:, target:, defer_rankings: false)
+      # precondition: an optional callable, given (source, target) right after
+      # both rows are locked and inside the transaction. A String it returns is
+      # the reason the merge must not go ahead: nothing is changed and the
+      # result is a failure whose data is {precondition: true}. A caller that
+      # decided on stale reads (a reviewer racing another) uses it to decide
+      # again under the lock.
+      def initialize(source:, target:, defer_rankings: false, precondition: nil)
+        @precondition = precondition
         @source_book = source
         @target_book = target
         @defer_rankings = defer_rankings
@@ -69,6 +76,9 @@ module Books
 
         ActiveRecord::Base.transaction do
           lock_books
+          @precondition_failure = @precondition&.call(source_book, target_book)
+          raise ActiveRecord::Rollback if @precondition_failure
+
           collect_affected_ranking_configurations
           merge_all_associations
           reconcile_scalars
@@ -78,6 +88,10 @@ module Books
           record_redirect
           destroy_source_book
           @transaction_body_completed = true
+        end
+
+        if @precondition_failure
+          return Result.new(success?: false, data: {precondition: true}, errors: [@precondition_failure])
         end
 
         run_post_commit_steps

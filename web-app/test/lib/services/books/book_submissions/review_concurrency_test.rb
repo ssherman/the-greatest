@@ -209,6 +209,70 @@ module Services
           end
         end
 
+        # An approve holds the book (and has paused with its locks); a merge of
+        # the same provisional book passes its first checks, blocks in the
+        # merger's own row locks, and wakes up after the approve committed. It
+        # must find the book public and change nothing.
+        def merge_behind_approve(approving:, merging:, book:)
+          Hooks.after_locks = -> {
+            @paused << true
+            @release.pop(timeout: TIMEOUT)
+          }
+          approver = in_thread {
+            Approve.call(submission: ::Books::BookSubmission.find(approving[:submission].id), user: @admin, via: "api", lease_token: approving[:token],
+              note: "Real book", sources: ["https://example.com/x"])
+          }
+          await @paused
+          Hooks.after_locks = nil
+          target = ::Books::Book.create!(title: "Concurrent Catalog Copy #{serial}")
+          @made[:books] << target
+          merger = in_thread {
+            Merge.call(submission: ::Books::BookSubmission.find(merging[:submission].id), target_id: target.id, user: @admin, via: "api",
+              lease_token: merging[:token], note: "Same book", sources: ["https://example.com/y"])
+          }
+          assert wait_until_blocked_or_done(merger), "the merge never blocked, so the interleaving was not forced"
+          @release << true
+          approved, merged = waiting { [approver.value, merger.value] }
+          [approved, merged, target]
+        end
+
+        test "a merge that waited behind an approve of the same submission is a conflict and the approved book survives" do
+          submission, book, _ = make_pending(read_item: false)
+
+          approved, merged, _ = merge_behind_approve(approving: {submission: submission, token: TOKEN}, merging: {submission: submission, token: TOKEN}, book: book)
+
+          assert approved.success?, approved.errors.inspect
+          assert_not merged.is_a?(Exception), merged.inspect
+          assert_not merged.success?
+          assert_equal :conflict, merged.errors.first[:code]
+          assert_not book.reload.provisional?
+          row = ::Books::BookSubmission.find(submission.id)
+          assert_equal ["approved", book.id, "Real book"], [row.review_status, row.book_id, row.review_note]
+        end
+
+        test "with two submissions on one book leased to two agents, a merge behind the other agent's approve changes nothing" do
+          first, book, _ = make_pending(read_item: false)
+          second = ::Books::BookSubmission.create!(
+            user: users(:editor_user), user_list: first.user_list, input_method: :goodreads, goodreads_book_id: 8_100_000 + serial,
+            fingerprint: SecureRandom.hex(4), status: :looking_up, review_status: :pending, created_book: false, book: book,
+            lease_token: "lease-of-agent-b", lease_expires_at: 30.minutes.from_now
+          )
+          @made[:submissions] << second.id
+
+          approved, merged, _ = merge_behind_approve(approving: {submission: second, token: "lease-of-agent-b"}, merging: {submission: first, token: TOKEN}, book: book)
+
+          assert approved.success?, approved.errors.inspect
+          assert_not merged.is_a?(Exception), merged.inspect
+          assert_equal :conflict, merged.errors.first[:code]
+          assert ::Books::Book.exists?(book.id)
+          assert_not book.reload.provisional?
+          rows = ::Books::BookSubmission.where(id: [first.id, second.id]).order(:id)
+          assert_equal %w[approved approved], rows.map(&:review_status)
+          assert_equal ["Real book", "Real book"].first, rows.find { it.id == second.id }.review_note
+          assert_not_equal "Same book", rows.find { it.id == first.id }.review_note
+          assert_equal [book.id, book.id], rows.map(&:book_id)
+        end
+
         test "two agents claiming at once are handed no row twice" do
           mine = Array.new(6) { |i| make_pending(read_item: false).first.tap { it.update_columns(created_at: (10.years + (6 - i).days).ago, lease_token: nil, lease_expires_at: nil, status: ::Books::BookSubmission.statuses[:added]) } }
           paused = Queue.new

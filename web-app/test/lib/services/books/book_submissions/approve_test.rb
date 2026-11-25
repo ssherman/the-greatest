@@ -161,6 +161,31 @@ module Services
           assert @book.reload.provisional?
           assert_equal 0, WorkflowRun.where(enrichable: @book).count
         end
+
+        test "approving a row that failed after it got a book resumes it: queued, counters reset, job queued after the commit" do
+          failed = lease(reviewable_submission(status: :failed, attempts: 4, error: "boom"))
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).with(failed.id).once
+
+          assert_success approve(failed)
+
+          row = fresh(failed)
+          assert_equal ["queued", "approved", 0, nil, nil], [row.status, row.review_status, row.attempts, row.error, row.lease_token]
+        end
+
+        test "approving a row that is not failed does not queue the job" do
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).never
+
+          assert_success approve
+          assert_equal "added", fresh(@submission).status
+        end
+
+        test "a note or source with NUL or invalid UTF-8 is refused before anything is written" do
+          assert_failure approve(note: "a \u0000 b"), :invalid, "note"
+          assert_failure approve(note: "a \xFF b".b.force_encoding("UTF-8")), :invalid, "note"
+          assert_failure approve(sources: ["https://example.com/\u0000"]), :invalid, "sources"
+          assert_failure approve(sources: ["https://example.com/\xFF".b.force_encoding("UTF-8")]), :invalid, "sources"
+          assert_equal "pending", fresh(@submission).review_status
+        end
       end
     end
   end

@@ -107,9 +107,12 @@ module Books
     # out of the agent queue and never comes back here, and neither is one an
     # admin, a merge, a promotion or a delete has closed (approved, merged,
     # rejected), whatever its status.
+    # A failed row that got a book and has no review pending (not_needed) is
+    # left out: an agent can do nothing with it, the admin page's Retry resumes it.
     scope :reviewable, -> {
       where(status: :added, review_status: :pending)
-        .or(where(review_status: %i[not_needed pending], status: %i[needs_details failed]))
+        .or(where(review_status: %i[not_needed pending], status: %i[needs_details failed])
+          .where("books_book_submissions.book_id IS NULL OR books_book_submissions.review_status = ?", review_statuses[:pending]))
     }
     scope :claimable, -> { reviewable.where("lease_expires_at IS NULL OR lease_expires_at <= ?", Time.current) }
 

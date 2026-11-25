@@ -27,7 +27,9 @@ module Services
       # that ends in the close above.
       #
       # An author is destroyed only when nothing could still point at it: no
-      # book_authors, no credit (translator and the like), no author
+      # book_authors, no credit on a record that survives (credits on this book and its
+      # editions go with it, so they are no reason: the preview and the real run
+      # agree on that), no author
       # relationship, no import record, and no merge redirect to it. When in
       # doubt it stays; the admin author delete is the way to remove one.
       #
@@ -142,21 +144,36 @@ module Services
           ::Books::BookSubmission.where(id: ids).update_all(review_sources: @sources || [], updated_at: Time.current)
         end
 
+        # The authors a real run would destroy, as the preview says them. A
+        # credit on this book or on one of its editions (an illustrator, a
+        # translator) goes with the book (dependent: :destroy), so it is no
+        # reason to keep the author: the real run decides after the destroy and
+        # so ignores such credits, and the preview ignores them too, so the two
+        # agree. A credit on any other record keeps the author in both.
         def orphan_candidates(book)
-          book.authors.where(provisional: true).order(:id).select { orphan?(it, besides: book) }
+          book.authors.where(provisional: true).order(:id).select { orphan?(it, going: book) }
         end
 
-        def orphan?(author, besides: nil)
+        def orphan?(author, going: nil)
           credited = ::Books::BookAuthor.where(author_id: author.id)
-          credited = credited.where.not(book_id: besides.id) if besides
-          !credited.exists? && !kept_for_other_reasons?(author)
+          credited = credited.where.not(book_id: going.id) if going
+          !credited.exists? && !kept_for_other_reasons?(author, going)
         end
 
-        def kept_for_other_reasons?(author)
-          ::Books::Credit.where(author_id: author.id).exists? ||
+        def kept_for_other_reasons?(author, going)
+          credits(author, going).exists? ||
             ::Books::AuthorRelationship.where(from_author_id: author.id).or(::Books::AuthorRelationship.where(to_author_id: author.id)).exists? ||
             ::Books::GoodreadsImportRecord.where(record: author).exists? ||
             RecordRedirect.where(item_type: "Books::Author", to_id: author.id).exists?
+        end
+
+        def credits(author, going)
+          credits = ::Books::Credit.where(author_id: author.id)
+          return credits unless going
+
+          going_to_destroy = ::Books::Credit.where(creditable_type: "Books::Book", creditable_id: going.id)
+            .or(::Books::Credit.where(creditable_type: "Books::Edition", creditable_id: ::Books::Edition.where(book_id: going.id).select(:id)))
+          credits.where.not(id: going_to_destroy.select(:id))
         end
 
         # Locked and re-read, so a book credited since the check is kept.
