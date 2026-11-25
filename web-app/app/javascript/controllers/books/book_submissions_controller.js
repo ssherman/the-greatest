@@ -1,6 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 
-// The strip of "Adding: ..." lines above a books list's items. This element
+// The strip of "Adding ..." alerts above a books list's items. This element
 // wraps the Turbo Frame `book_submissions`; the frame itself is replaced by the
 // write streams, so the controller lives outside it and watches it.
 //
@@ -8,7 +8,9 @@ import { Controller } from "@hotwired/stimulus"
 // data-poll-url, data-in-progress and data-reload-list. While data-in-progress
 // is true the frame is reloaded from the poll url every 10 seconds, for at most
 // 10 minutes from when polling began on this page, and only while the tab is
-// visible. data-reload-list is consumed once, by removing it, so a Turbo cache
+// visible. When it gives up on a request still in progress, data-stalled on this
+// element turns the spinners into "Reload the page to check".
+// data-reload-list is consumed once, by removing it, so a Turbo cache
 // restore or a second connect() cannot reload the list again.
 const POLL_INTERVAL_MS = 10_000
 const POLL_LIMIT_MS = 10 * 60 * 1000
@@ -155,6 +157,7 @@ export default class extends Controller {
   sync() {
     const state = this.element.querySelector(STATE_SELECTOR)
     if (!state) {
+      this.stalled = false
       this.idle()
       return
     }
@@ -164,7 +167,9 @@ export default class extends Controller {
       this.reloadList()
     }
 
-    if (state.dataset.inProgress === "true" && state.dataset.pollUrl && !this.stopped) {
+    const inProgress = state.dataset.inProgress === "true" && Boolean(state.dataset.pollUrl)
+    this.stalled = inProgress && this.stopped
+    if (inProgress && !this.stopped) {
       this.schedule()
     } else {
       this.idle()
@@ -173,7 +178,8 @@ export default class extends Controller {
 
   schedule() {
     if (!this.startedAtValue) this.startedAtValue = Date.now()
-    if (Date.now() - this.startedAtValue >= POLL_LIMIT_MS) {
+    if (this.timedOut) {
+      this.stalled = true
       this.clearTimer()
       return
     }
@@ -182,6 +188,16 @@ export default class extends Controller {
       this.timer = null
       this.poll()
     }, POLL_INTERVAL_MS)
+  }
+
+  get timedOut() {
+    return Date.now() - this.startedAtValue >= POLL_LIMIT_MS
+  }
+
+  // An attribute, so it changes nothing the observer or the live region's
+  // children see.
+  set stalled(value) {
+    this.element.toggleAttribute("data-stalled", value)
   }
 
   idle() {
@@ -198,7 +214,8 @@ export default class extends Controller {
     const state = this.element.querySelector(STATE_SELECTOR)
     const frame = document.getElementById(FRAME_ID)
     if (!state?.dataset.pollUrl || !frame) return
-    if (Date.now() - this.startedAtValue >= POLL_LIMIT_MS || document.hidden) return
+    if (this.timedOut) this.stalled = true
+    if (this.timedOut || document.hidden) return
 
     const url = new URL(state.dataset.pollUrl, window.location.href).href
     const current = frame.getAttribute("src")
@@ -214,14 +231,18 @@ export default class extends Controller {
   // a server error. The server answers those with an empty frame.
   fetchResponded(event) {
     if (!this.isStripFrame(event.target) || event.detail?.fetchResponse?.succeeded) return
-    this.stopped = true
-    this.clearTimer()
+    this.stop()
   }
 
   fetchFailed(event) {
     if (!this.isStripFrame(event.target)) return
+    this.stop()
+  }
+
+  stop() {
     this.stopped = true
     this.clearTimer()
+    this.stalled = this.element.querySelector(STATE_SELECTOR)?.dataset.inProgress === "true"
   }
 
   // Cancel and dismiss forms inside the frame raise the same events; only the

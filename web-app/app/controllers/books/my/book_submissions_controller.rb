@@ -102,7 +102,7 @@ class Books::My::BookSubmissionsController < ApplicationController
   def strip_submissions(list)
     base = Books::BookSubmission.visible.where(user_id: current_user.id, user_list_id: list.id)
     base.where.not(status: :cancelled).or(base.where(review_status: :rejected))
-      .order(created_at: :desc, id: :desc).limit(STRIP_LIMIT)
+      .includes(:book).order(created_at: :desc, id: :desc).limit(STRIP_LIMIT)
   end
 
   # Rows first, then the announcement (see index). in_progress covers every
