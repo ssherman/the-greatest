@@ -765,6 +765,14 @@ Rails.application.routes.draw do
             post "enrichment_queues/:type/claims", to: "enrichment_queues#claim", constraints: {type: /[a-z_]+/}
             post "enrichment_items/:id/submit", to: "enrichment_items#submit", constraints: {id: /\d+/}
             post "enrichment_items/:id/skip", to: "enrichment_items#skip", constraints: {id: /\d+/}
+            get "book_submissions", to: "book_submissions#index"
+            post "book_submissions/claims", to: "book_submissions#claim"
+            get "book_submissions/:id", to: "book_submissions#show", constraints: {id: /\d+/}
+            post "book_submissions/:id/details", to: "book_submissions#details", constraints: {id: /\d+/}
+            post "book_submissions/:id/skip", to: "book_submissions#skip", constraints: {id: /\d+/}
+            post "book_submissions/:id/approve", to: "book_submissions#approve", constraints: {id: /\d+/}
+            post "book_submissions/:id/merge", to: "book_submissions#merge", constraints: {id: /\d+/}
+            post "book_submissions/:id/reject", to: "book_submissions#reject", constraints: {id: /\d+/}
             get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
             get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
             get "identifiers", to: "identifiers#lookup"
