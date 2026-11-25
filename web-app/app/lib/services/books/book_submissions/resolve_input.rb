@@ -149,7 +149,7 @@ module Services
         # Client errors embed a response body, which can be binary or hold a
         # NUL; neither can be stored as JSON.
         def storable(message)
-          message.to_s.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000").first(MAX_ERROR_MESSAGE)
+          Lookups::Names.scrubbed(message).first(MAX_ERROR_MESSAGE)
         end
 
         def record(source, answer)

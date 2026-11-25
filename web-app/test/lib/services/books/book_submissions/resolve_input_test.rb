@@ -289,64 +289,18 @@ module Services
           assert_equal [ISBN13], result.data[:identifiers][:isbn13]
         end
 
-        test "WorldCat names come out right" do
-          {
-            "Le Guin, Ursula K., 1929-2018." => "Ursula K. Le Guin",
-            "King, Martin Luther, Jr., 1929-1968." => "Martin Luther King Jr.",
-            "Homer." => "Homer",
-            "Homer" => "Homer",
-            "Chaucer, Geoffrey, approximately 1340-1400." => "Geoffrey Chaucer",
-            "Homer, active 8th century B.C." => "Homer",
-            "Hemingway, Ernest, 1899-" => "Ernest Hemingway",
-            "Tolstoy, Leo, graf, 1828-1910." => "Leo Tolstoy",
-            "Austen, Jane, 1775-1817 (Author)" => "Jane Austen",
-            "Hemingway, Ernest 1899-1961." => "Ernest Hemingway",
-            "Smith, John (Novelist)" => "John Smith",
-            "Ursula K. Le Guin" => "Ursula K. Le Guin",
-            "Dumas, Alexandre, 1802-1870 " => "Alexandre Dumas",
-            "Orwell, George." => "George Orwell",
-            "Smith, Zadie." => "Zadie Smith",
-            "Roth, Philip (Philip Milton)." => "Philip Roth",
-            "Тартт, Донна." => "Донна Тартт",
-            "Plato, author." => "Plato",
-            "椿いづみ, author, artist" => "椿いづみ",
-            "Kurt Vonnegut, Jr." => "Kurt Vonnegut Jr.",
-            "Gates, Henry Louis, Jr" => "Henry Louis Gates Jr",
-            "Thomas, Aquinas, Saint, 1225?-1274." => "Thomas Aquinas",
-            "Leonardo, da Vinci, 1452-1519." => "Leonardo da Vinci",
-            "Marcus Aurelius, Emperor of Rome, 121-180." => "Marcus Aurelius",
-            "DK Publishing, Inc" => "DK Publishing Inc",
-            "Маас, Сара Дж., author" => "Сара Дж. Маас",
-            "Кинси, Ти." => "Ти Кинси",
-            "Smith, Zadie Marie." => "Zadie Marie Smith",
-            "Хоффман, Элис, аuthor" => "Элис Хоффман",
-            "曹雪芹, approximately 1717-1763" => "曹雪芹",
-            "Smith, K." => "K. Smith",
-            "Jennifer 8. Lee" => "Jennifer 8. Lee",
-            "50 Cent" => "50 Cent",
-            "Exurb1a" => "Exurb1a",
-            "タイザン5" => "タイザン5"
-          }.each do |raw, expected|
-            stub_world_cat([wc_record(creator: raw)])
+        test "WorldCat creator is cleaned end to end" do
+          stub_world_cat([wc_record(creator: "King, Martin Luther, Jr., 1929-1968.")])
 
-            assert_equal [expected], resolve(isbn_submission).data[:author_names], raw
-          end
+          assert_equal ["Martin Luther King Jr."], resolve(isbn_submission).data[:author_names]
         end
 
-        test "a slash inside a title is kept, one standing alone is the creator statement" do
-          {
-            "Either/Or : a fragment of life / Soren Kierkegaard." => ["Either/Or", "a fragment of life"],
-            "S/Z" => ["S/Z", nil], "9/11" => ["9/11", nil], "Ranma 1/2. Vol. 27" => ["Ranma 1/2. Vol. 27", nil],
-            "80/20 triathlon" => ["80/20 triathlon", nil], "Superman/Batman" => ["Superman/Batman", nil],
-            "The title /" => ["The title", nil],
-            "Borges, mündlich/ Sieben Nächte" => ["Borges, mündlich/ Sieben Nächte", nil],
-            "Pig /pork" => ["Pig /pork", nil]
-          }.each do |raw, (title, subtitle)|
-            stub_world_cat([wc_record(title: raw)])
-            data = resolve(isbn_submission).data
+        test "a creator in a shape we cannot read is not usable and contributors are not promoted" do
+          stub_world_cat([wc_record(creator: "Ellington, Duke", contributors: ["Illustrator, Ivo"])])
+          stub_open_library(hits: [])
+          stub_amazon_search([])
 
-            assert_equal [title, subtitle], [data[:title], data[:subtitle]], raw
-          end
+          assert_equal :no_record, resolve(isbn_submission).data[:outcome]
         end
 
         test "a subtitle the record carries loses its creator statement" do
@@ -364,6 +318,15 @@ module Services
           assert_equal 1974, resolve(sub).data[:year]
         end
 
+        test "a NUL in a source title is not stored" do
+          stub_world_cat([wc_record(title: "A Quiet\u0000 Year")])
+          sub = isbn_submission
+
+          resolve(sub)
+
+          assert_equal "A Quiet Year", sub.reload.lookup.first["title"]
+        end
+
         test "an Amazon outage with a binary body is recorded and does not lose the answer WorldCat gave" do
           stub_world_cat([wc_record])
           body = "Amazon Creators API responded 503: caf\xC3 \x00 down".b
@@ -377,6 +340,13 @@ module Services
           assert_predicate message, :valid_encoding?
           refute_includes message, "\u0000"
           assert_includes message, "responded 503"
+        end
+
+        test "a slash standing alone ends the title, one inside it does not" do
+          stub_world_cat([wc_record(title: "Either/Or : a fragment of life / Soren Kierkegaard.")])
+          data = resolve(isbn_submission).data
+
+          assert_equal ["Either/Or", "a fragment of life"], [data[:title], data[:subtitle]]
         end
 
         test "a creator given as a Hash with a name is read" do

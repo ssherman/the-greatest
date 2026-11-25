@@ -5,34 +5,46 @@ module Services
     module BookSubmissions
       module Lookups
         # Text cleaning shared by the sources.
+        #
+        # A wrong author is worse than no answer: the submission falls through
+        # to the next source for the cost of one lookup. So a WorldCat creator
+        # is accepted only in a few shapes we can read with certainty, and is
+        # nil in every other shape (see world_cat_person).
         module Names
           module_function
 
-          # Jr/Sr/II/III/IV and company suffixes: they follow the name whichever
-          # way round the heading is written.
-          SUFFIXES = /\A(?:Jr|Sr|II|III|IV|Inc|Ltd|LLC|Co|Corp)\.?\z/i
-          # A trailing period stays on an initial or abbreviation ("K.", "Jr.",
-          # "Дж." in "Сара Дж."): a single letter, a known abbreviation, or a
-          # word of up to three letters after another word. A heading's own
-          # closing period ("Zadie.", "Ти.") goes.
-          ABBREVIATIONS = /\A(?:Jr|Sr|St|Dr)\z/i
-
-          # What a person did on the book, written after the name in a heading.
-          ROLES = /\A(?:(?:joint|cover|co-?)\s*)?(?:author|artist|illustrator|editor|translator|compiler|writer|photographer|narrator|composer|creator|contributor|adapter|reader|ed|tr|trans|ill)s?(?:\s+of\b.*)?\.?\z/i
-          # What is left of a date once DATES has taken the numbers.
-          DATE_WORDS = /\A(?:approximately|active|born|died|flourished|fl|ca|circa|b|d)\.?\z/i
-          # Rank or sanctity that follows a name, and is dropped. After a saint
-          # or a ruler the heading is "Thomas, Aquinas, Saint": the name before
-          # it is already in given-name-first order and is not flipped. After
-          # nobility it is "Tolstoy, Leo, graf": surname first, flipped as usual.
-          DIRECT_EPITHETS = /\A(?:saint|st|emperor|empress|king|queen|pope|prince|princess|bishop)\b/i
-          EPITHETS = /#{DIRECT_EPITHETS.source}|\A(?:sir|duke|duchess|baron|count|graf|lord|lady|dame)\b/i
-          # PARENTHESES and DATES are applied first; this is a slash that stands
-          # alone ("Title / creator"), not one inside "Either/Or" or "9/11".
+          PARENTHESES = ::Services::Books::Verification::WorldCatCheck::PARENTHESES
+          DATES = ::Services::Books::Verification::WorldCatCheck::DATES
+          SQUARE_BRACKETS = /\s*\[[^\]]*\]/
+          # A comma part that is only life dates, once its closing period is gone.
+          LIFE_DATES = /\A\d{3,4}\??\s*-\s*(?:\d{3,4}\??)?\z/
+          ROLES = %w[author artist illustrator editor translator writer creator narrator compiler].freeze
+          SUFFIX = /\A(?:Jr|Sr|II|III|IV)\.?\z/i
+          PARTICLES = %w[de da di do du des del della la le van von der den ten ter zu y e al el bin ibn].freeze
+          # Titles, epithets, companies and connectives: a given-name part that
+          # holds one as a whole word is not a given name.
+          BLOCKED_WORDS = %w[saint st sir dame lord lady king queen emperor empress pope prince princess duke duchess
+            count countess baron baroness earl marquis bishop archbishop cardinal rabbi of and inc ltd llc co company
+            press publishing university ministry department &].freeze
+          # Scripts with no case in ordinary use: a word cannot be "lowercase" there.
+          UNCASED_SCRIPTS = %w[Han Hiragana Katakana Hangul Georgian Hebrew Arabic Thai Lao Devanagari Bengali Gurmukhi
+            Gujarati Tamil Telugu Kannada Malayalam Sinhala Khmer Myanmar Tibetan Ethiopic Syriac Thaana Mongolian].freeze
+          UNCASED_START = Regexp.new("\\A[#{UNCASED_SCRIPTS.map { |script| "\\p{#{script}}" }.join}]")
+          INITIAL = /\A\p{L}\p{M}*\.\z/
+          DOTTED_INITIALS = /\A(?:\p{L}\p{M}*\.-?){2,}\z/
+          SUFFIX_ABBREVIATION = /\A(?:Jr|Sr)\.\z/i
+          # A slash standing alone ("Title / creator"), not one inside "Either/Or" or "9/11".
           SLASH_STATEMENT = %r{\s+/(?=\s|\z).*}m
 
           def text(value)
-            value.to_s.squish.first(::Books::BookSubmission::MAX_LENGTH).presence
+            scrubbed(value).squish.first(::Books::BookSubmission::MAX_LENGTH).presence
+          end
+
+          # Outside text can be binary or hold a NUL; neither can be stored as JSON.
+          def scrubbed(value)
+            string = value.to_s
+            string = string.dup.force_encoding(Encoding::UTF_8) unless string.encoding == Encoding::UTF_8
+            string.scrub("").delete("\u0000")
           end
 
           # Integers (including years before 1000 and BC ones, negative) pass
@@ -43,56 +55,102 @@ module Services
             value.to_s[/\A\s*(\d{4})/, 1]&.to_i
           end
 
-          # A WorldCat creator. Most are already in direct order and come out
-          # unchanged; "Last, First" is flipped only when the second part looks
-          # like a given name. The first part is kept whatever it holds ("50
-          # Cent", "Jennifer 8. Lee"); later parts that hold a digit are dates
-          # ("approximately 1340-1400", "active 8th century B.C.") and go, as do
-          # role words ("author"). Epithets are dropped; after a saint or a ruler
-          # ("Thomas, Aquinas, Saint") the name is already in direct order. A second part
-          # that is not a given name ("Leonardo, da Vinci") is joined as
-          # written: "Leonardo da Vinci".
+          # A WorldCat creator, or nil when it is not in a shape we are sure of.
+          # A bracketed part, trailing life dates and a closing period go.
+          # - No comma: the text as it is.
+          # - "Last, First": the given-name part is accepted only when every
+          #   word is capitalised or in a script without case, with lowercase
+          #   particles ("van", "de") only trailing, and holds no title,
+          #   epithet, company or connective word. Life dates and a closed list
+          #   of role words may follow, and Jr/Sr/II/III/IV as a whole part.
+          #   Output is "First Last" (or "First Last Jr.").
+          # - Anything else with a comma (an epithet part, a part mixing words
+          #   and dates, a lowercase given name) is nil.
           def world_cat_person(raw)
-            name = raw.to_s.gsub(::Services::Books::Verification::WorldCatCheck::PARENTHESES, "")
-              .sub(::Services::Books::Verification::WorldCatCheck::DATES, "")
-            first, *rest = name.split(",").map { |part| tidy(part) }
-            return nil if first.nil?
+            name = scrubbed(raw).gsub(PARENTHESES, "").gsub(SQUARE_BRACKETS, "").sub(DATES, "").squish
+            return nil if name.empty?
+            return strip_closing_period(name).presence unless name.include?(",")
 
-            rest = rest.compact.reject { |part| part.match?(/\d/) || part.match?(ROLES) || part.match?(DATE_WORDS) }
-            suffixes, rest = rest.partition { |part| part.match?(SUFFIXES) }
-            epithets, rest = rest.partition { |part| part.match?(EPITHETS) }
-            direct = epithets.any? { |part| part.match?(DIRECT_EPITHETS) }
-            given = rest.first
-            ordered = if given && !direct && given_name?(given)
-              [given, first]
-            else
-              [first, *rest]
-            end
-            tidy((ordered + suffixes).join(" "))
-          end
-
-          def given_name?(part)
-            part.match?(/\A[[:alpha:]]/) && !part.match?(/\A\p{Ll}/) && !part.split.first.match?(SUFFIXES)
+            comma_person(name)
           end
 
           # "Title / creator" loses everything after the slash and "Title : subtitle"
           # splits. A subtitle the record carries wins over the split one.
           def world_cat_title(title, subtitle)
-            main, _, rest = title.to_s.sub(SLASH_STATEMENT, "").partition(" : ")
-            [tidy(main), tidy((subtitle.presence || rest).to_s.sub(SLASH_STATEMENT, ""))]
+            main, _, rest = scrubbed(title).sub(SLASH_STATEMENT, "").partition(" : ")
+            [tidy_title(main), tidy_title((subtitle.presence || rest).to_s.sub(SLASH_STATEMENT, ""))]
           end
 
-          def tidy(value)
-            cleaned = value.to_s.squish.sub(%r{\s*[,;:/]+\z}, "")
-            cleaned = cleaned.chomp(".") unless keeps_period?(cleaned)
-            cleaned.strip.presence
+          def tidy_title(value)
+            cleaned = scrubbed(value).squish.sub(%r{\s*[,;:/]+\z}, "")
+            closing_period_stays?(cleaned) ? cleaned.presence : cleaned.chomp(".").strip.presence
           end
 
-          def keeps_period?(text)
-            return false unless text.end_with?(".")
+          # A plain closing period goes ("The Civil War."). It stays when the
+          # last word holds another period ("U.S.A.", "B.C."), is Inc, Ltd, Co,
+          # Jr or Sr (an ellipsis is a word holding other periods).
+          def closing_period_stays?(text)
+            return true unless text.end_with?(".")
 
-            word = text.split.last.chomp(".")
-            word.length == 1 || word.match?(ABBREVIATIONS) || (text.include?(" ") && word.length <= 3)
+            word = text.split.last
+            word.chomp(".").include?(".") || word.match?(/\A(?:Inc|Ltd|Co|Jr|Sr)\.\z/i)
+          end
+
+          # A closing period goes unless the last word is an initial ("K."),
+          # dotted initials ("M.C.") or Jr./Sr.
+          def strip_closing_period(text)
+            return text unless text.end_with?(".")
+
+            word = text.split.last
+            return text if word.match?(INITIAL) || word.match?(DOTTED_INITIALS) || word.match?(SUFFIX_ABBREVIATION)
+
+            text.chomp(".").rstrip
+          end
+
+          def comma_person(name)
+            surname, *parts = name.split(",", -1).map { |part| tidy_part(part) }
+            parts.pop while parts.last == ""
+            return nil if surname.empty?
+
+            given = suffix = nil
+            parts.each_with_index do |part, index|
+              if part.match?(LIFE_DATES) || ROLES.include?(part)
+                next
+              elsif part.match?(SUFFIX) && suffix.nil? && (index.zero? || given)
+                suffix = part
+              elsif index.zero? && given_name?(part)
+                given = part
+              else
+                return nil
+              end
+            end
+            [given, surname, suffix].compact.join(" ")
+          end
+
+          # A period standing alone between words is dropped, then the closing period.
+          def tidy_part(part)
+            strip_closing_period(part.squish.gsub(/(?<=\S)\s+\.\s+(?=\S)/, " "))
+          end
+
+          def given_name?(part)
+            words = part.split
+            return false if words.empty? || words.first.match?(SUFFIX)
+            return false if words.any? { |word| BLOCKED_WORDS.include?(word.downcase.delete_suffix(".")) }
+
+            particles = false
+            names = 0
+            words.each do |word|
+              if word.match?(/\A[\p{Lu}\p{Lt}]/) || word.match?(UNCASED_START)
+                return false if particles
+
+                names += 1
+              elsif PARTICLES.include?(word)
+                particles = true
+              else
+                return false
+              end
+            end
+            names.positive?
           end
         end
       end
