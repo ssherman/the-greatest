@@ -124,7 +124,7 @@ module Api
         end
 
         # The service-ready attributes from the body's writable keys, or nil after
-        # rendering a 422. A wrong JSON type or null byte raises a 400 first.
+        # rendering a 422 (too long, or an unknown topic). A wrong JSON type or null byte raises a 400 first.
         # Title is stripped, a blank summary is none, the body is stored as sent.
         def write_attrs(body)
           attrs = {}
@@ -133,20 +133,31 @@ module Api
           attrs["summary"] = text_field(body, "summary", nullable: true)&.strip.presence if body.key?("summary")
           attrs["news_topic_ids"] = topic_ids_field(body["topic_ids"]) if body.key?("topic_ids")
 
-          too_long = LIMITS.find { |key, limit| attrs[key].is_a?(String) && attrs[key].length > limit }
-          if too_long
-            render_problem(::Api::Problem.new(:unprocessable, detail: "#{too_long.first} must be at most #{too_long.last} characters."))
-            return
-          end
+          return if over_limit?(attrs)
+          return if unknown_topics?(attrs["news_topic_ids"])
 
-          return attrs unless attrs.key?("news_topic_ids")
+          attrs
+        end
 
-          ids = attrs["news_topic_ids"]
-          unknown = ids - ::NewsTopic.where(domain: news_domain, id: ids.select { |id| id.between?(1, MAX_ID) }).ids
-          return attrs if unknown.empty?
+        # True after rendering a 422 for the first value past its limit.
+        def over_limit?(attrs)
+          key, limit = LIMITS.find { |name, max| attrs[name].is_a?(String) && attrs[name].length > max }
+          return false unless key
+
+          render_problem(::Api::Problem.new(:unprocessable, detail: "#{key} must be at most #{limit} characters."))
+          true
+        end
+
+        # True after rendering a 422 naming the ids that are not topics of this site.
+        def unknown_topics?(ids)
+          return false if ids.nil?
+
+          known = ::NewsTopic.where(domain: news_domain, id: ids.select { |id| id.between?(1, MAX_ID) }).ids
+          unknown = ids - known
+          return false if unknown.empty?
 
           render_problem(::Api::Problem.new(:unprocessable, detail: "Unknown topic_ids for this site: #{unknown.join(", ")}. List them with list_news_topics."))
-          nil
+          true
         end
 
         def text_field(body, key, nullable: false)

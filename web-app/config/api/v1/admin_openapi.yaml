@@ -4195,7 +4195,7 @@ paths:
       security: [{bearerAuth: ["books:admin:write"]}]
       summary: Create a draft news post
       description: |
-        Creates a news post on the books site from a required `title` and `body`, with an optional `summary` and `topic_ids`. The post is always a draft owned by the token's user; it goes live only when published. The title is stripped (1 to 200 characters), the body is stored exactly as sent (1 to 100,000 characters) and a blank summary is none (up to 500). A title whose URL slug is already taken on the site is 409 and names the post that has it; a title with no usable slug (no Latin letters or numbers, or a reserved word such as `topic`) is 422. A wrong JSON type, a null byte or a missing `title` or `body` is 400; an unknown key (`published_at` included), a blank or too long value, or a `topic_ids` entry that is not a topic of this site is 422. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
+        Creates a news post on the books site from a required `title` and `body`, with an optional `summary` and `topic_ids`. The post is always a draft owned by the token's user; it goes live only when published. The title is stripped (1 to 200 characters), the body is stored exactly as sent (1 to 100,000 characters) and a summary is stripped, up to 500 characters, and null or blank means none. A title whose URL slug is already taken on the site is 409 and names the post that has it; a title with no usable slug (no Latin letters or numbers, or a reserved word such as `topic`) is 422. A wrong JSON type, a null byte or a missing `title` or `body` is 400; an unknown key (`published_at` included), a blank or too long value, or a `topic_ids` entry that is not a topic of this site is 422. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
       x-mcp:
         description: >-
           Creates a news post for the books site. It is always a draft: use publish_news_post to make it live. The body is
@@ -5513,7 +5513,7 @@ components:
       minProperties: 1
       properties:
         title: {type: string, description: "Stripped, 1 to 200 characters. The URL does not change."}
-        body: {type: string, description: "Markdown, stored as sent. Needs expected_updated_at."}
+        body: {type: string, description: "Markdown, stored as sent, 1 to 100,000 characters. Needs expected_updated_at."}
         summary: {type: [string, "null"], description: "Up to 500 characters; null or blank clears it."}
         topic_ids:
           type: array

@@ -10,8 +10,8 @@ module Api
           setup do
             host! "dev-new.thegreatestbooks.org"
             # Sidekiq runs inline and this machine's .env can hold a real
-            # Cloudflare token; no endpoint here purges, but a post written
-            # through a service in a later test must not reach the network.
+            # Cloudflare token; the create and update endpoints enqueue a purge,
+            # which must not reach the network.
             @original_purge_token = ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"]
             ENV.delete("CLOUDFLARE_CACHE_PURGE_TOKEN")
           end
@@ -186,7 +186,10 @@ module Api
           test "a taken title is a 409 naming the post that has it" do
             assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "December Update", body: "x"} }
             assert_api_response_conform(status: 409, api: :admin)
-            assert_includes json[:detail], news_posts(:books_december_update).id.to_s
+            existing = news_posts(:books_december_update)
+            assert_includes json[:detail], existing.id.to_s
+            assert_includes json[:detail], existing.title
+            assert_includes json[:detail], existing.status
           end
 
           test "a retried create makes one post" do
@@ -197,7 +200,9 @@ module Api
 
           BAD_CREATES = {
             400 => [{title: "T"}, {body: "x"}, {title: 5, body: "x"}, {title: "T", body: ["x"]}, {title: "T", body: "a\u0000b"},
-              {title: "T", body: "x", summary: 1}, {title: "T", body: "x", topic_ids: "1"}, {title: "T", body: "x", topic_ids: ["1"]}],
+              {title: "T", body: "x", summary: 1}, {title: "T", body: "x", topic_ids: "1"}, {title: "T", body: "x", topic_ids: ["1"]},
+              {title: nil, body: "x"}, {title: "T", body: nil}, {title: "T", body: "x", topic_ids: nil}, {title: "T", body: "x", topic_ids: [true]},
+              {title: "T", body: "x", topic_ids: [1.0]}, {title: "T\u0000", body: "x"}, {title: "T", body: "x", summary: "s\u0000"}],
             422 => [{title: " ", body: "x"}, {title: "T", body: " \n"}, {title: "T" * 201, body: "x"}, {title: "T", body: "x" * 100_001},
               {title: "T", body: "x", summary: "s" * 501}, {title: "T", body: "x", published_at: "2030-01-01T00:00:00Z"},
               {title: "T", body: "x", topic_ids: [2**70]}, {title: "日本語", body: "x"}, {title: "Topic", body: "x"}]
@@ -213,10 +218,17 @@ module Api
           end
 
           test "another site's topic is a 422 on create and update" do
-            send_json :post, "/api/v1/admin/news_posts", {title: "T", body: "x", topic_ids: [news_topics(:music_site_news).id]}
+            foreign = news_topics(:music_site_news).id
+            assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "T", body: "x", topic_ids: [foreign]} }
             assert_api_response_conform(status: 422, api: :admin)
-            send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", {topic_ids: [news_topics(:music_site_news).id]}
+            assert_includes json[:detail], foreign.to_s
+
+            live = news_posts(:books_december_update)
+            before = live.news_topic_ids.sort
+            send_json :patch, "/api/v1/admin/news_posts/#{live.id}", {topic_ids: [foreign]}
             assert_api_response_conform(status: 422, api: :admin)
+            assert_includes json[:detail], foreign.to_s
+            assert_equal before, live.reload.news_topic_ids.sort
           end
 
           test "update edits a live post in place and purges it" do
@@ -316,10 +328,68 @@ module Api
             NewsPostPolicy.any_instance.stubs(:create?).returns(false)
             NewsPostPolicy.any_instance.stubs(:update?).returns(false)
             assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "Denied", body: "x"} }
-            assert_equal 403, response.status
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
             send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", {title: "Denied"}
-            assert_equal 403, response.status
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
             assert_not_equal "Denied", news_posts(:books_draft).reload.title
+          end
+
+          test "a books editor with only the write scope can create and update" do
+            editor = users(:regular_user)
+            DomainRole.create!(user: editor, domain: :books, permission_level: :editor)
+            secret = Services::Api::Tokens.generate(user: editor, name: "editor", scopes: ["books:admin:write"], expires_at: 1.day.from_now).data[:secret]
+
+            send_json :post, "/api/v1/admin/news_posts", {title: "Editor Post", body: "x"}, token: secret
+            assert_api_response_conform(status: 201, api: :admin)
+            id = json.dig(:data, :id)
+            assert_equal editor, NewsPost.find(id).user
+            send_json :patch, "/api/v1/admin/news_posts/#{id}", {title: "Editor Post Two"}, token: secret
+            assert_api_response_conform(status: 200, api: :admin)
+          end
+
+          test "a null expected_updated_at is a 400 and writes nothing" do
+            post = news_posts(:books_draft)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {body: "x", expected_updated_at: nil}
+            assert_api_response_conform(status: 400, api: :admin)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "T", expected_updated_at: nil}
+            assert_api_response_conform(status: 400, api: :admin)
+            assert_equal ["Something Unfinished", "Not ready yet."], [post.reload.title, post.body]
+          end
+
+          test "create and update each log one line without the text sent" do
+            lines = []
+            Rails.logger.stubs(:info).with { |line| lines << line.to_s }
+            send_json :post, "/api/v1/admin/news_posts", {title: "Secret Title", body: "Secret body text", summary: "Secret summary"}
+            id = json.dig(:data, :id)
+            send_json :patch, "/api/v1/admin/news_posts/#{id}", {title: "Secret Title Two", summary: "Secret summary two"}
+
+            ours = lines.grep(/event=api_admin_news_post/)
+            assert_equal 2, ours.size
+            token = ApiToken.find_by!(token_prefix: ApiTokenSecrets::ADMIN[0, 12])
+            assert_match(/action=create changed= token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{id}\z/, ours.first)
+            assert_match(/action=update changed=title,summary token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{id}\z/, ours.last)
+            ours.each { |line| assert_no_match(/secret/i, line) }
+          end
+
+          test "changed lists only the fields that differ" do
+            post = news_posts(:books_december_update)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Different", summary: post.summary, topic_ids: post.news_topic_ids}
+            assert_equal ["title"], json[:changed]
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Different", summary: "New summary"}
+            assert_equal ["summary"], json[:changed]
+          end
+
+          test "values at exactly the limits are accepted" do
+            send_json :post, "/api/v1/admin/news_posts", {title: "T" * 200, body: "b" * 100_000, summary: "s" * 500}
+            assert_api_response_conform(status: 201, api: :admin)
+            assert_equal [200, 100_000, 500], json[:data].values_at(:title, :body, :summary).map(&:length)
+          end
+
+          test "a summary is stripped" do
+            send_json :post, "/api/v1/admin/news_posts", {title: "Stripped Summary", body: "x", summary: "  Padded  "}
+            assert_equal "Padded", json.dig(:data, :summary)
           end
         end
       end
