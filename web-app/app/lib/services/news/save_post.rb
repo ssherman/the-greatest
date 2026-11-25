@@ -10,6 +10,11 @@ module Services
     # code:}, code being :invalid or the guard's. A refusal rolls everything
     # back, including the topic join rows (assigning news_topic_ids on a persisted
     # record writes the join table immediately).
+    #
+    # The service opens its own savepoint-backed transaction (requires_new), so
+    # a refusal undoes its writes even inside a caller's transaction. The purge
+    # is enqueued when that transaction ends, not when a caller's outer one
+    # commits, so callers must not wrap this call in a transaction of their own.
     class SavePost
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -31,9 +36,9 @@ module Services
         @result = nil
 
         if @news_post.persisted?
-          @news_post.with_lock { write }
+          @news_post.with_lock(requires_new: true) { write }
         else
-          NewsPost.transaction { write }
+          NewsPost.transaction(requires_new: true) { write }
         end
         return @result if @result
 
@@ -67,8 +72,9 @@ module Services
         # topic index its 11th, REMOVES /news/page/2 (or the topic's page 2), so a
         # set derived only from the saved state sees 10 rows, derives one page, and
         # leaves the disappearing page cached with the retracted post on it for the
-        # full 6-hour TTL. Create can only grow the set, so one snapshot on the
-        # correct side of the write covers both. Must precede assign_attributes:
+        # full 6-hour TTL. A create can only grow the set, and the after-save
+        # set covers that, so the before-snapshot is needed only on an update,
+        # and it must be taken before the write. Must precede assign_attributes:
         # assigning news_topic_ids on a persisted record writes the join table.
         @urls_before = @news_post.persisted? ? Services::News::CachedUrls.call(@news_post) : []
         before = snapshot

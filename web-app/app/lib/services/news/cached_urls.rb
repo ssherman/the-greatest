@@ -74,7 +74,7 @@ module Services
       end
 
       # ALL of the domain's topics, not only this post's. An update can change
-      # topic membership, and by the time the controller enqueues, the OLD topic
+      # topic membership, and by the time the purge is enqueued, the OLD topic
       # set is unrecoverable -- purging every topic index removes the
       # distinction rather than making the caller capture before-state.
       def topic_urls(host)

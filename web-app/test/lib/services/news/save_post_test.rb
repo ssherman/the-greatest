@@ -29,16 +29,47 @@ module Services
 
       test "a guard refusal changes nothing and carries its code" do
         post = news_posts(:books_december_update)
-        result = SavePost.call(news_post: post, attrs: {body: "new"}, guard: ->(_post) { [:stale, "read again"] })
-        assert_equal [false, :stale, ["read again"]], [result.success?, result.data[:code], result.errors]
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          result = SavePost.call(news_post: post, attrs: {body: "new"}, guard: ->(_post) { [:stale, "read again"] })
+          assert_equal [false, :stale, ["read again"]], [result.success?, result.data[:code], result.errors]
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
         assert_not_equal "new", post.reload.body
+      end
+
+      test "a refused call inside a caller's transaction still leaves the topics as they were" do
+        post = news_posts(:books_december_update)
+        before = post.news_topic_ids.sort
+        assert_not_empty before
+        ActiveRecord::Base.transaction do
+          result = SavePost.call(news_post: post, attrs: {title: "", news_topic_ids: []})
+          assert_equal :invalid, result.data[:code]
+        end
+        assert_equal before, NewsPost.find(post.id).news_topic_ids.sort
+      end
+
+      test "a disallowed body image refuses the save and leaves topics and attachments alone" do
+        post = news_posts(:books_december_update)
+        before = post.news_topic_ids.sort
+        svg = {io: StringIO.new(%(<svg xmlns="http://www.w3.org/2000/svg"></svg>)), filename: "x.svg", content_type: "image/svg+xml"}
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          result = SavePost.call(news_post: post, attrs: {body: "new", news_topic_ids: []}, body_images: [svg])
+          assert_equal [false, :invalid], [result.success?, result.data[:code]]
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+        stored = NewsPost.find(post.id)
+        assert_equal before, stored.news_topic_ids.sort
+        assert_not_equal "new", stored.body
+        assert_equal 0, stored.body_images.count
       end
 
       test "the guard sees the stored row, not the caller's copy" do
         post = news_posts(:books_december_update)
         NewsPost.find(post.id).update!(body: "changed elsewhere")
         seen = nil
-        SavePost.call(news_post: post, attrs: {summary: "s"}, guard: ->(locked) {
+        SavePost.call(news_post: post, attrs: {body: "mine"}, guard: ->(locked) {
           seen = locked.body
           nil
         })
