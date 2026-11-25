@@ -110,6 +110,38 @@ module Admin
         assert_response :success
       end
 
+      test "a decision made for a book submission lists and shows, naming the submission as its subject" do
+        submission = ::Books::BookSubmission.create!(user: @regular, input_method: :title_authors, typed_title: "The Quiet Year",
+          typed_author_names: ["Anna Brenner"])
+        decision = MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: submission, record: books_books(:got),
+          outcome: :unmatched, confidence: :medium, decided_by: :ai, needs_review: true)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_match_decisions_path
+        assert_response :success
+        assert_includes row_ids, decision.id
+
+        get admin_books_match_decision_path(decision)
+        assert_response :success
+        assert_select "dd", text: /Books::BookSubmission ##{submission.id}/
+      end
+
+      test "recheck of a book submission's unmatched decision excludes the record it created" do
+        submission = ::Books::BookSubmission.create!(user: @regular, input_method: :title_authors, typed_title: "The Quiet Year",
+          typed_author_names: ["Anna Brenner"])
+        decision = MatchDecision.create!(finder: "DataImporters::Books::Book::Finder", subject: submission, record: books_books(:got),
+          outcome: :unmatched, confidence: :medium, decided_by: :ai, needs_review: true,
+          query: {"title" => "The Quiet Year", "author_names" => ["Anna Brenner"]})
+        sign_in_as(@admin, stub_auth: true)
+        DataImporters::Books::Book::Finder.any_instance.expects(:call)
+          .with { |args| args[:subject] == submission && args[:exclude] == books_books(:got) && args[:verify] == true }
+          .returns(DataImporters::Match.new(outcome: :unmatched, confidence: :high, decided_by: :rule, decision: @pending))
+
+        post recheck_admin_books_match_decision_path(decision)
+
+        assert_redirected_to admin_books_match_decision_path(@pending, compare: decision.id)
+      end
+
       test "show renders the decision, its candidates with the selected row marked, and the shared identifier" do
         sign_in_as(@admin, stub_auth: true)
         get admin_books_match_decision_path(@pending)
