@@ -18,13 +18,13 @@ penalty_definitions = [
   {name: "List: contains over 500 items(Quantity over Quality)", dynamic_type: nil},
   {name: "List: criteria is not just best/favorite", dynamic_type: nil},
   {name: "List: is a follow up/honorable mention to a different list", dynamic_type: nil},
-  {name: "List: only covers 1 specific gender", dynamic_type: nil},
+  {name: "List: only covers creators of one group (gender, race, ethnicity, etc.)", dynamic_type: nil},
   {name: "List: only covers 1 specific language", dynamic_type: nil},
   {name: "List: only covers items with a weird criteria", dynamic_type: nil},
   {name: "Voters: are mostly from a single country/location", dynamic_type: nil},
   {name: "Voters: diversity of voters is very low", dynamic_type: nil},
   {name: "Voters: not critics, authors, or experts", dynamic_type: nil},
-  {name: "Voters: restricted to a distinct criteria(race, gender, etc)", dynamic_type: nil},
+  {name: "Voters: limited to one demographic group (gender, race, age, etc.)", dynamic_type: nil},
 
   # Dynamic penalties (mapped to dynamic_types)
   {name: "Voters: Unknown Names", dynamic_type: :voter_names_unknown},

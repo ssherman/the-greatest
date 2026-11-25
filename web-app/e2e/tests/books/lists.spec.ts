@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openListWithBreakdown } from '../../helpers/lists';
 
 test.describe('Books lists index', () => {
   test('loads and renders the heading', async ({ page }) => {
@@ -48,11 +49,16 @@ test.describe('Books lists index', () => {
 });
 
 test.describe('Books list detail', () => {
-  test('renders the weight breakdown and a book grid', async ({ page }) => {
-    await page.goto('/lists');
-    await page.locator('.card h3 a').first().click();
+  test('shows the score, opens the breakdown by keyboard, and renders a book grid', async ({ page }) => {
+    await openListWithBreakdown(page);
 
     await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
+    await expect(page.getByText(/^Weight -?[\d.]+%$/)).toBeVisible();
+    await expect(page.getByText('Base weight')).toBeHidden();
+
+    await page.getByText('See how this was worked out').focus();
+    await page.keyboard.press('Enter');
+
     await expect(page.getByText('Base weight')).toBeVisible();
     await expect(page.locator('.card h2 a').first()).toBeVisible();
   });

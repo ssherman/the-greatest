@@ -382,7 +382,11 @@ module Services
         "a list flagged `items_need_revision` can still be `verified`", "a different order for ranked sources",
         "where a source shows them wrong", "never go below the number of voters the source names", "quote the source sentence the judgement rests on",
         "`yearly_award` is true when the source is a recurring award or yearly list", "that edition's page is the list's source",
-        "use `fetch_page`; if that fails too, use an archived copy", "the guidance condition the list does not meet"
+        "use `fetch_page`; if that fails too, use an archived copy", "the guidance condition the list does not meet",
+        "A penalty needs a reason, not only matching words", "say in the note how this makes this list a weaker guide",
+        "Do not attach a penalty for a limit that another penalty or flag on the list already charges",
+        "says the kept count was worked out, guessed or only a minimum", "how a recorded count was worked out",
+        "or for a kept count our own record says was an estimate"
       ].each { |text| assert_includes prompt, text }
     end
 

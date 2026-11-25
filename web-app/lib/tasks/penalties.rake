@@ -24,9 +24,9 @@ module Penalties
       10 => {name: "Voters: not critics, authors, or experts",
              category: :voter_expertise,
              description: "Voted on by the general public rather than critics, experts or scholars. Popular opinion is worth something, but it is not expert judgement."},
-      11 => {name: "Voters: restricted to a distinct criteria(race, gender, etc)",
+      11 => {name: "Voters: limited to one demographic group (gender, race, age, etc.)",
              category: :voter_expertise,
-             description: "Voting was limited to a specific group of people, so the list describes that group's preferences rather than a general consensus."},
+             description: "Only people of one gender, race, age group or similar could vote, so the list reflects that group's preferences rather than a general consensus."},
       22 => {name: "Voters: Voters seem to have an agenda/bias of some kind",
              category: :voter_expertise,
              description: "The voters appear to be promoting a viewpoint rather than judging quality, so their picks say more about the agenda than the books."},
@@ -54,9 +54,9 @@ module Penalties
              description: "Applied automatically based on how much of history a list covers. A list spanning a few years can only find the best of those years; one spanning centuries competes against everything ever published."},
 
       # --- How narrow the list's subject is ---------------------------------
-      5 => {name: "List: only covers 1 specific gender",
+      5 => {name: "List: only covers creators of one group (gender, race, ethnicity, etc.)",
             category: :list_subject_scope,
-            description: "Restricted to creators of one gender, so it surveys part of the field rather than all of it."},
+            description: "Restricted to creators of one gender, race, ethnicity or similar group, so it surveys part of the field rather than all of it."},
       6 => {name: "List: only covers 1 specific language",
             category: :list_subject_scope,
             description: "Restricted to one language, so work in every other language was never eligible."},

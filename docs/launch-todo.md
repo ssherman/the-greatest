@@ -878,44 +878,57 @@ through the page fetcher. Details: `docs/features/publisher-intake.md`.
 
 Steps marked "Shane runs with `!`" change production, so an agent does not run them.
 
-1. **Confirm the production fetcher answers `POST /fetch_file`.** The home-server fetcher must be
-   running an image built after the file-fetch work merged on 2026-11-18. Intake's sitemap and API
-   requests use that route and fail without it.
-2. **Enable the first source. Shane runs with `!`.** Set `PUBLISHER_INTAKE_SOURCES=hachette_us` in
-   the environment of both the web process and the Sidekiq process (`deployment/ENV.md`, "Publisher
-   intake": the admin screen reads it too) and restart both. Enabling a source is that one variable: the daily job (06:20 UTC) starts its first
-   run, and the sweep reads what it finds every ten minutes. `PUBLISHER_INTAKE_FETCH_INTERVAL` and
-   `PUBLISHER_INTAKE_DAILY_FETCH_CAP` stay at their defaults (10 seconds, 2,000 a day).
-3. **Watch the first run.** Open `/admin/publisher_intake` (or run `bin/rails
+**How a source is switched on or off.** `PUBLISHER_INTAKE_SOURCES` lives in
+`secrets/.env.production` (`deployment/SECRETS.md`). That one file becomes the `.env` both the web
+and the Sidekiq container read, and a deploy recreates both, so the change is: edit the file with
+`sops`, commit it on a branch, merge. The Sidekiq side does the fetching; the web side needs the
+value too because the admin screen's "Enabled" column is computed there. After the deploy the daily
+job (06:20 UTC) starts the source's first run; to start it sooner run
+`bin/rails "books:publisher_intake:run[<source>]"` on the worker, which refuses a source that is not
+enabled or already has a run running.
+
+1. **Confirm the production fetcher answers `POST /fetch_file`. DONE 2026-11-24** (Hachette's
+   discovery used it). The home-server fetcher must be running an image built after the file-fetch
+   work merged on 2026-11-18. Intake's sitemap and API requests use that route and fail without it.
+2. **Enable the first source. Shane runs with `!`. DONE 2026-11-24.**
+   `PUBLISHER_INTAKE_SOURCES=hachette_us`. The sweep reads what a run finds every ten minutes.
+   `PUBLISHER_INTAKE_FETCH_INTERVAL` and `PUBLISHER_INTAKE_DAILY_FETCH_CAP` stay at their defaults
+   (10 seconds, 2,000 a day).
+3. **Watch the first run. DONE 2026-11-24** for Hachette: 5.5 hours, 2,669 listings, 1,397 titles,
+   nothing unparseable or blocked. Open `/admin/publisher_intake` (or run `bin/rails
    books:publisher_intake:status`): the run's status, listings by state, titles ready and held by
    reason, and today's fetches against the cap. Look at a few titles. `unparseable` listings mean the
    site's markup differs from what the parser expects: run
    `bin/rails "books:publisher_intake:reparse[<source>]"` after a parser fix, no new fetch needed.
    A blocked source shows "blocked until" and resumes by itself.
-4. **Add Penguin Random House. Shane runs with `!`.** Its first run is about 10,000 reads, roughly
-   five days at the default cap, so add it only after the first source looks right. Set
-   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us` for the web and Sidekiq processes
-   and restart both. A sitemap file over the fetcher's file size cap shows on the run as
-   `unavailable`; the size reason is only in the log. The remedy is raising the fetcher's
-   `FETCHER_MAX_FILE_BYTES`.
-5. **Add Macmillan. Shane runs with `!`.** Set
-   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us` for the web and
-   Sidekiq processes and restart both. Its first run only reads the first 20 titles of its "Coming
-   Soon" and "New Releases" collections; every other already-listed title is held as `baseline`.
-   Its product sitemap files were not measured in the rehearsal, and discovery writes one row per
-   URL, so watch the first (baseline) run's duration.
-6. **Release Macmillan's baseline titles after its first run finishes. Shane runs with `!`.** Once
+4. **Re-classify Hachette's stored pages, once, after the deploy that carries the hold fixes. Shane
+   runs with `!`.** On the worker: `bin/rails "books:publisher_intake:reparse[hachette_us]"`. It
+   re-reads the 1,470 stored pages with the current parser and fetches nothing. Expect about 46
+   titles to move from ready to held `not_a_book` (bookmarks, memo pads, blank journals sold as
+   "General merchandise", "Diary" or "Postcard book or pack") and one all-Spanish title to
+   `non_english`. Running it again changes nothing.
+5. **Add Penguin Random House. Shane runs with `!`.** Its first run is about 10,000 reads, roughly
+   five days at the default cap, so add it only after the first source looks right.
+   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us`. A sitemap file over the fetcher's
+   file size cap shows on the run as `unavailable`; the size reason is only in the log. The remedy
+   is raising the fetcher's `FETCHER_MAX_FILE_BYTES`.
+6. **Add Macmillan. Shane runs with `!`.**
+   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us`. Its first run only
+   reads the first 20 titles of its "Coming Soon" and "New Releases" collections; every other
+   already-listed title is held as `baseline`. Its product sitemap files were not measured in the
+   rehearsal, and discovery writes one row per URL, so watch the first (baseline) run's duration.
+7. **Release Macmillan's baseline titles after its first run finishes. Shane runs with `!`.** Once
    `status` shows its last run `finished`, run
    `bin/rails "books:publisher_intake:release_baseline[macmillan_us,<limit>]"`, highest ISBN first,
    in slices small enough for the daily cap. This step repeats: each call releases at most `limit`
    more, so run it again until `status` shows no `baseline` listings you want read. Titles that
    appear after the first run are read without it.
-7. **To stop a source. Shane runs with `!`.** Remove its key from `PUBLISHER_INTAKE_SOURCES` for
-   both processes and restart both; jobs already queued for it then skip without fetching. A run
+8. **To stop a source. Shane runs with `!`.** Remove its key from `PUBLISHER_INTAKE_SOURCES` in
+   `secrets/.env.production` and deploy; jobs already queued for it then skip without fetching. A run
    the switched-off source left `running` is failed by the three-day rule on the next day when
    some other source is still enabled; with none enabled the daily job does nothing, so that run
    stays `running` until a source is enabled again.
-8. **Nothing here touches the catalog.** Creating books from stored titles is a later design; until
+9. **Nothing here touches the catalog.** Creating books from stored titles is a later design; until
    then the tables only grow, in the private imports storage.
 
 ## 19. List audits (after the deploy that adds them)
@@ -953,6 +966,16 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    The deploy also adds `lists.items_need_revision` (migration, default false). Lists the agent flags
    show an "Items need revision" badge, and the books lists index filters them with "Needs item
    revision"; only an admin clears the flag, on the list's edit form.
+7. **Rename penalty 11, then reload the guidance. Shane does both.** On the admin penalties form set
+   penalty 11's name to "Voters: limited to one demographic group (gender, race, age, etc.)"
+   and its description to "Only people of one gender, race, age group or similar could vote, so the list reflects that group's preferences rather than a general consensus."
+   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 11, 13, 14 and 18 changed).
+   It exits 1 and reports 11 as `mismatched` if the rename has not been done.
+8. **Rename penalty 5, then reload the guidance. Shane does both.** On the admin penalties form set
+   penalty 5's name to "List: only covers creators of one group (gender, race, ethnicity, etc.)"
+   and its description to "Restricted to creators of one gender, race, ethnicity or similar group, so it surveys part of the field rather than all of it."
+   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 1 and 5 changed). It reports
+   5 as `mismatched` if the rename has not been done.
 
 ## 20. User-added books (after the deploy that adds them)
 

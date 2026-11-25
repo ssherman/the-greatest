@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openListWithBreakdown } from '../../../helpers/lists';
 
 // The index sorts newest first, and the auto-generated "Our Users' Favorite
 // Games of All Time" list sits at the top with zero items until somebody
@@ -131,10 +132,15 @@ test.describe('Games Lists', () => {
     await expect(page).toHaveURL(/\/lists$/);
   });
 
-  test('the list page shows the full weight breakdown', async ({ page }) => {
-    await openPopulatedList(page);
+  test('the list page shows the score and opens the full weight breakdown', async ({ page }) => {
+    await openListWithBreakdown(page);
 
     await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
+    await expect(page.getByText(/^Weight -?[\d.]+%$/)).toBeVisible();
+    await expect(page.getByText('Base weight')).toBeHidden();
+
+    await page.getByText('See how this was worked out').click();
+
     await expect(page.getByText('Base weight')).toBeVisible();
   });
 });
