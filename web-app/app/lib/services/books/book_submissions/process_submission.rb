@@ -177,22 +177,35 @@ module Services
           ::MatchDecision.where(id: decision.id, reviewed_at: nil).update_all(needs_review: true)
         end
 
-        # The list add runs under two locks, taken in this order: the owner's user
-        # row (the one OwnerMutation takes, and the one a book delete holds while
-        # its cascade removes list items), then the book, FOR KEY SHARE, read back
-        # after the lock. The book delete locks the book row first (Book#close_submissions)
-        # and the merger locks both books before it moves anything, so a merge or
-        # delete either finished before this lock (the book is gone, and nothing is
-        # added) or waits for this transaction. An item is never made for a book that
-        # is gone. A book merged away since CreateBook is replaced by its survivor
-        # (the merger moved the row); a deleted one leaves no item, and a provisional
-        # book's delete already closed the row (rejected and cancelled), so there
-        # is nothing to mark added.
+        # The list add runs under two locks, taken in this order: the reader's user
+        # row, then the book FOR KEY SHARE (read back after the lock). The book's
+        # delete and the merger lock the book row first (Book#close_submissions,
+        # Merger#lock_books), so a merge or delete either finished before the book
+        # lock (the book is gone, and nothing is added) or waits for this
+        # transaction. An item is never made for a book that is gone. A book merged
+        # away since CreateBook is replaced by its survivor (the merger moved the
+        # row); a deleted one leaves no item, and a provisional book's delete
+        # already closed the row (rejected and cancelled), so there is nothing to
+        # mark added.
+        #
+        # The user lock is FOR NO KEY UPDATE, not FOR UPDATE. A delete or merge that
+        # holds the book updates a submission row a second time (the close and then
+        # the nullify; the move and then the close), and Postgres re-checks that
+        # row's foreign keys on the second UPDATE, taking FOR KEY SHARE on the
+        # reader's users row. FOR UPDATE here conflicts with that, so the delete
+        # waits for this run's user lock while this run waits for the book it holds:
+        # a deadlock. FOR NO KEY UPDATE does not conflict with KEY SHARE, yet still
+        # conflicts with the FOR UPDATE that DestructionInvalidator and OwnerMutation
+        # take, so a reader's list mutations still take turns. OwnerMutation's own
+        # FOR UPDATE, later in this transaction, is an upgrade of this lock: it can
+        # only wait for a KEY SHARE held by a delete or merge, and those take the
+        # book before anything of the reader's, which this run already holds, so
+        # they cannot have reached it.
         def finish(book)
           settled = nil
           item = nil
           ActiveRecord::Base.transaction do
-            ::User.lock.where(id: @submission.user_id).pick(:id)
+            ::User.lock("FOR NO KEY UPDATE").where(id: @submission.user_id).pick(:id)
             settled = lock_book(book)
             item = add_to_list(settled) if settled
           end

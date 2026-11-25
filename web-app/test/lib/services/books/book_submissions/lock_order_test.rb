@@ -35,11 +35,47 @@ module Services
         end
         ProcessSubmission.prepend(FinishGate)
 
+        # Stops a delete or a merge between its first write to the submission rows
+        # and its second, with the book row already locked. That gap is where
+        # Postgres re-checks the row's foreign keys and wants the reader's users row.
+        module HookPause
+          class << self
+            attr_accessor :after_first_write
+
+            def fire
+              hook = after_first_write
+              self.after_first_write = nil
+              hook&.call
+            end
+          end
+
+          module BookHook
+            private
+
+            def close_submissions
+              super
+              HookPause.fire
+            end
+          end
+
+          module MergerHook
+            private
+
+            def merge_submissions
+              super
+              HookPause.fire
+            end
+          end
+        end
+        ::Books::Book.prepend(HookPause::BookHook)
+        ::Books::Book::Merger.prepend(HookPause::MergerHook)
+
         TIMEOUT = 10
 
         setup do
           ::Books::PurgeShowPagesJob.stubs(:perform_async)
           ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+          GenerateUserFavoritesListsJob.stubs(:perform_async)
           @user = users(:regular_user)
           @read = user_lists(:regular_user_books_read)
           @custom = ::Books::UserList.create!(user: @user, name: "Lock order custom", list_type: :custom)
@@ -56,6 +92,8 @@ module Services
         teardown do
           Pause.after_cascade = nil
           FinishGate.before_finish = nil
+          HookPause.after_first_write = nil
+          clean_extras
           ::Books::BookSubmission.where(id: @submission.id).delete_all
           UserListItem.where(listable_type: "Books::Book", listable_id: @book.id).delete_all
           ::Books::Book.where(id: @book.id).delete_all
@@ -108,7 +146,68 @@ module Services
           end
         end
 
-        def finish_run = ProcessSubmission.call(submission: ::Books::BookSubmission.find(@submission.id))
+        def finish_run(submission = @submission) = ProcessSubmission.call(submission: ::Books::BookSubmission.find(submission.id))
+
+        # A provisional book with a pending row the run is about to put on a list,
+        # and a catalog book to merge it into.
+        def provisional_setup(on_read: false)
+          @extra_books = []
+          @provisional = ::Books::Book.create!(title: "Lock Order Provisional", provisional: true)
+          @catalog = ::Books::Book.create!(title: "Lock Order Catalog")
+          @extra_books.push(@provisional, @catalog)
+          UserListItem.create!(user_list: @read, listable: @provisional) if on_read
+          @pending = ::Books::BookSubmission.create!(
+            user: @user, user_list: @custom, input_method: :goodreads, goodreads_book_id: 4_242_425,
+            fingerprint: SecureRandom.hex(4), status: :looking_up, review_status: :pending, created_book: true, book: @provisional
+          )
+        end
+
+        def clean_extras
+          return unless @extra_books
+
+          ids = @extra_books.map(&:id)
+          ::Books::BookSubmission.where(id: @pending&.id).delete_all
+          UserListItem.where(listable_type: "Books::Book", listable_id: ids).delete_all
+          SearchIndexRequest.where(parent_type: "Books::Book", parent_id: ids).delete_all
+          RecordRedirect.where(item_type: "Books::Book", from_id: ids).delete_all
+          ::Books::Book.where(id: ids).delete_all
+        end
+
+        # The run stops on entering the list step with nothing locked; the writer
+        # (a delete or a merge) takes the book, makes its first write to the row and
+        # stops; the run is released, takes the reader's lock and must block on the
+        # book; then the writer carries on. Returns the two threads.
+        def interleave(&writer_body)
+          at_finish = Queue.new
+          go = Queue.new
+          FinishGate.before_finish = -> {
+            at_finish << true
+            go.pop(timeout: TIMEOUT)
+          }
+          finisher = in_thread { finish_run(@pending) }
+          await at_finish
+          FinishGate.before_finish = nil
+          HookPause.after_first_write = -> {
+            @paused << true
+            @release.pop(timeout: TIMEOUT)
+          }
+          writer = in_thread(&writer_body)
+          await @paused
+
+          go << true
+          assert wait_until_blocked_or_done(finisher), "the run never blocked on the book, so the interleaving was not forced"
+          @release << true
+          [writer, finisher]
+        end
+
+        def assert_no_errors(*threads)
+          assert_equal [nil] * threads.size, waiting { threads.map(&:value) }.map { it&.message }
+        end
+
+        def merge!
+          result = ::Books::Book::Merger.call(source: ::Books::Book.find(@provisional.id), target: ::Books::Book.find(@catalog.id))
+          raise result.errors.inspect unless result.success?
+        end
 
         def assert_clean(deleter, finisher)
           errors = waiting { [deleter.value, finisher.value] }
@@ -137,7 +236,7 @@ module Services
           Pause.after_cascade = nil
 
           go << true
-          wait_until_blocked_or_done(finisher)
+          assert wait_until_blocked_or_done(finisher), "the run never blocked, so the interleaving was not forced"
           @release << true
 
           assert_clean deleter, finisher
@@ -155,10 +254,33 @@ module Services
           await @paused
           finisher = in_thread { finish_run }
 
-          wait_until_blocked_or_done(finisher)
+          assert wait_until_blocked_or_done(finisher), "the run never blocked, so the interleaving was not forced"
           @release << true
 
           assert_clean deleter, finisher
+        end
+
+        test "a bare delete of a provisional book with a pending row, reader off Read, and a list add do not deadlock" do
+          provisional_setup
+          writer, finisher = interleave { ::Books::Book.find(@provisional.id).destroy! }
+
+          assert_no_errors writer, finisher
+          @pending.reload
+          assert_equal ["cancelled", "rejected", nil, nil], [@pending.status, @pending.review_status, @pending.book_id, @pending.user_list_item_id]
+          assert_equal 0, UserListItem.where(user_list_id: @custom.id).count
+        end
+
+        [false, true].each do |on_read|
+          test "a merge of a provisional book into a catalog book (reader #{on_read ? "on" : "off"} Read) and a list add do not deadlock" do
+            provisional_setup(on_read: on_read)
+            writer, finisher = interleave { merge! }
+
+            assert_no_errors writer, finisher
+            @pending.reload
+            assert_equal ["added", "merged", @catalog.id], [@pending.status, @pending.review_status, @pending.book_id]
+            assert_equal [@catalog.id], UserListItem.where(user_list_id: @custom.id).pluck(:listable_id)
+            assert_equal 0, UserListItem.where(listable_type: "Books::Book", listable_id: @provisional.id).count
+          end
         end
 
         test "the delete locks the book row before anything else and the list add locks the reader before the book" do
@@ -167,7 +289,7 @@ module Services
 
           ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") { finish_run }
           book_lock = statements.index { it.include?("books_books") && it.include?("FOR KEY SHARE") }
-          user_lock = statements.index { it.include?('FROM "users"') && it.include?("FOR UPDATE") }
+          user_lock = statements.index { it.include?('FROM "users"') && it.include?("FOR NO KEY UPDATE") }
           assert user_lock && book_lock && user_lock < book_lock, "the reader is locked before the book"
 
           statements.clear
