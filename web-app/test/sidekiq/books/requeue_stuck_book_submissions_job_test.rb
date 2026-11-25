@@ -25,12 +25,38 @@ class Books::RequeueStuckBookSubmissionsJobTest < ActiveSupport::TestCase
   test "queued and looking up rows idle for over 30 minutes with no future attempt are requeued" do
     queued = stale
     looking_up = stale(status: :looking_up)
-    past_attempt = stale(next_attempt_at: 5.minutes.ago)
+    past_attempt = stale(next_attempt_at: 31.minutes.ago)
     Books::ProcessBookSubmissionJob.expects(:perform_async).with(queued.id)
     Books::ProcessBookSubmissionJob.expects(:perform_async).with(looking_up.id)
     Books::ProcessBookSubmissionJob.expects(:perform_async).with(past_attempt.id)
 
     Books::RequeueStuckBookSubmissionsJob.new.perform
+  end
+
+  test "a row whose attempt is due now, or came due within 30 minutes, is held by its own job and is not requeued" do
+    due_now = stale(next_attempt_at: Time.current)
+    just_due = stale(next_attempt_at: 29.minutes.ago)
+    [due_now, just_due].each { |row| Books::ProcessBookSubmissionJob.expects(:perform_async).with(row.id).never }
+
+    Books::RequeueStuckBookSubmissionsJob.new.perform
+  end
+
+  test "a requeue is counted, and a row still stuck after three requeues is failed as a lost job" do
+    row = stale
+    flagged = finder_match(subject: row, needs_review: true).decision
+    Books::ProcessBookSubmissionJob.expects(:perform_async).with(row.id).times(3)
+
+    3.times do
+      Books::RequeueStuckBookSubmissionsJob.new.perform
+      row.reload.update_columns(updated_at: 31.minutes.ago)
+    end
+    assert_equal [3, "queued"], [row.sweeps, row.status]
+
+    Books::RequeueStuckBookSubmissionsJob.new.perform
+
+    row.reload
+    assert_equal ["failed", "lost job", 3], [row.status, row.error, row.sweeps]
+    assert_not flagged.reload.needs_review?
   end
 
   test "a row waiting on a future attempt is not requeued" do

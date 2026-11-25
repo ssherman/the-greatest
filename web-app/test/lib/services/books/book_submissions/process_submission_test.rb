@@ -227,7 +227,7 @@ module Services
           submission.reload
           assert_equal [:done, "failed", nil], [result.data[:outcome], submission.status, submission.book_id]
           assert_predicate submission.error, :present?
-          assert last.decision.reload.needs_review?, "the final failure keeps its flag for an admin"
+          assert_not last.decision.reload.needs_review?, "a row that ends with no book leaves nothing in the review queue"
         end
 
         test "the backoff doubles from 30 seconds and stops at 10 minutes" do
@@ -301,8 +301,10 @@ module Services
           match = finder_match(subject: submission, needs_review: true)
           stub_finder(match)
           importer = Class.new do
-            def self.call(title:, **)
-              Struct.new(:item, :created_author_ids) { def created? = true }.new(::Books::Book.create!(title: title, provisional: true), [])
+            def self.call(title:, match:, **)
+              book = ::Books::Book.create!(title: title, provisional: true)
+              match.decision.update!(record: book)
+              Struct.new(:item, :created_author_ids) { def created? = true }.new(book, [])
             end
           end
 
@@ -311,6 +313,8 @@ module Services
           assert_equal ["needs_details", nil], [submission.reload.status, submission.book_id]
           assert_equal 0, books_called("The Quiet Year").count
           assert_not match.decision.reload.needs_review?, "the unused decision leaves the review queue"
+          assert_nil match.decision.record_id, "and does not name the book that was rolled back"
+          assert_nil match.decision.record_type
         end
 
         test "cancelled, failed, needs_details and added submissions are left alone" do
@@ -338,6 +342,219 @@ module Services
           assert_equal ["cancelled", nil], [submission.reload.status, submission.book_id]
           assert_equal 0, books_called("The Quiet Year").count
           assert_not match.decision.reload.needs_review?
+        end
+
+        # ---- a match wins over a failed source ------------------------------
+
+        test "a matched book is used at once even when a local source failed" do
+          submission = book_submission
+          stub_finder(finder_match(subject: submission, record: books_books(:war_and_peace), sources_failed: ["opensearch"],
+            confidence: :medium, needs_review: true))
+
+          assert_equal :done, process(submission).data[:outcome]
+          assert_equal [books_books(:war_and_peace), "added"], [submission.reload.book, submission.status]
+        end
+
+        # ---- concurrency: a second run or a cancel commits inside a step ----
+
+        # A finder whose nth call runs the nth step, which returns the match.
+        def finder_that(*steps)
+          calls = 0
+          fake = Object.new
+          fake.define_singleton_method(:call) do |**|
+            step = steps.fetch(calls)
+            calls += 1
+            step.call
+          end
+          ::DataImporters::Books::Book::Finder.stubs(:new).returns(fake)
+        end
+
+        def cancel_row(submission)
+          ::Books::BookSubmission.where(id: submission.id).update_all(status: ::Books::BookSubmission.statuses[:cancelled])
+        end
+
+        def no_record = ResolveInput::Result.new(success?: true, data: {outcome: :no_record}, errors: [])
+
+        test "a second job that commits first leaves this run's flagged decision, whatever its id, out of the queue" do
+          submission = book_submission
+          twin = ::Books::BookSubmission.find(submission.id)
+          twins = nil
+          mine = nil
+          finder_that(
+            -> {
+              process(twin)
+              mine = finder_match(subject: submission, needs_review: true, confidence: :medium)
+            },
+            -> { twins = finder_match(subject: twin, needs_review: true, confidence: :medium) }
+          )
+
+          process(submission)
+
+          assert_equal twins.decision, submission.reload.match_decision
+          assert_equal [false, true], [mine.decision.reload.needs_review?, twins.decision.reload.needs_review?]
+          assert_equal 1, books_called("The Quiet Year").count
+          assert_equal "added", submission.status
+        end
+
+        test "a flag a second job's clear wiped while this run was creating the book is put back on the decision it holds" do
+          submission = book_submission
+          match = finder_match(subject: submission, needs_review: true, confidence: :medium)
+          stub_finder(match)
+          importer = Object.new
+          importer.define_singleton_method(:call) do |title:, match:, **|
+            ProcessSubmission.clear_flags(match.decision.subject_id)
+            book = ::Books::Book.create!(title: title, provisional: true)
+            ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Anna Brenner"), position: 1)
+            match.decision.update!(record: book)
+            Struct.new(:item, :created_author_ids) { def created? = true }.new(book, [])
+          end
+
+          process(submission, importer: importer)
+
+          assert match.decision.reload.needs_review?
+          assert_equal match.decision, submission.reload.match_decision
+        end
+
+        test "an error raised after the finder leaves no flagged decision behind" do
+          submission = book_submission
+          match = finder_match(subject: submission, needs_review: true, confidence: :medium)
+          stub_finder(match)
+          importer = Class.new do
+            def self.call(**) = raise("boom")
+          end
+
+          assert_raises(RuntimeError) { process(submission, importer: importer) }
+
+          assert_not match.decision.reload.needs_review?
+        end
+
+        test "a Postgres error is raised without touching the decision" do
+          submission = book_submission
+          match = finder_match(subject: submission, needs_review: true, confidence: :medium)
+          stub_finder(match)
+          importer = Class.new do
+            def self.call(**) = raise(ActiveRecord::StatementInvalid, "connection gone")
+          end
+
+          assert_raises(ActiveRecord::StatementInvalid) { process(submission, importer: importer) }
+
+          assert match.decision.reload.needs_review?
+        end
+
+        test "flagged decisions a crashed run left behind are cleared when the row turns out to be cancelled" do
+          submission = book_submission(status: :cancelled)
+          left = finder_match(subject: submission, needs_review: true).decision
+
+          process(submission)
+
+          assert_not left.reload.needs_review?
+        end
+
+        test "a list deleted while the finder ran cancels the submission and creates no book" do
+          list = ::Books::UserList.create!(user: @user, name: "Mine", list_type: :custom)
+          submission = book_submission(list: list)
+          match = finder_match(subject: submission, needs_review: true)
+          finder_that(-> {
+            list.destroy!
+            match
+          })
+
+          process(submission)
+
+          assert_equal ["cancelled", nil], [submission.reload.status, submission.book_id]
+          assert_equal 0, books_called("The Quiet Year").count
+          assert_not match.decision.reload.needs_review?
+        end
+
+        test "a matched book is not recorded when the list went before it was" do
+          list = ::Books::UserList.create!(user: @user, name: "Mine", list_type: :custom)
+          submission = book_submission(list: list)
+          match = finder_match(subject: submission, record: books_books(:war_and_peace))
+          finder_that(-> {
+            list.destroy!
+            match
+          })
+
+          process(submission)
+
+          assert_equal ["cancelled", nil], [submission.reload.status, submission.book_id]
+        end
+
+        test "a cancel during the resolve step is not overwritten by needs_details" do
+          submission = book_submission
+          ResolveInput.stubs(:call).with { |**|
+            cancel_row(submission)
+            true
+          }.returns(no_record)
+
+          process(submission)
+
+          assert_equal "cancelled", submission.reload.status
+        end
+
+        test "a cancel during the finder is not overwritten by a retry" do
+          submission = book_submission
+          finder_that(-> {
+            cancel_row(submission)
+            finder_match(subject: submission, decided_by: :fallback)
+          })
+
+          result = process(submission)
+
+          submission.reload
+          assert_equal [:done, "cancelled", 0, nil], [result.data[:outcome], submission.status, submission.attempts, submission.next_attempt_at]
+        end
+
+        test "a cancel during the finder is not overwritten by a failure" do
+          submission = book_submission(processing_started_at: 2.hours.ago)
+          finder_that(-> {
+            cancel_row(submission)
+            finder_match(subject: submission, decided_by: :fallback)
+          })
+
+          process(submission)
+
+          assert_equal ["cancelled", nil], [submission.reload.status, submission.error]
+        end
+
+        test "a run that finds no record cannot turn a row another run finished into needs_details" do
+          submission = book_submission
+          book = books_books(:war_and_peace)
+          ResolveInput.stubs(:call).with { |**|
+            ::Books::BookSubmission.where(id: submission.id).update_all(book_id: book.id, status: ::Books::BookSubmission.statuses[:added])
+            true
+          }.returns(no_record)
+
+          process(submission)
+
+          assert_equal ["added", book.id], [submission.reload.status, submission.book_id]
+        end
+
+        test "a run that finds no record cannot turn an open row another run already gave a book into needs_details" do
+          submission = book_submission
+          book = books_books(:war_and_peace)
+          ResolveInput.stubs(:call).with { |**|
+            ::Books::BookSubmission.where(id: submission.id).update_all(book_id: book.id)
+            true
+          }.returns(no_record)
+
+          process(submission)
+
+          assert_equal ["looking_up", book.id], [submission.reload.status, submission.book_id]
+        end
+
+        test "a no-owner answer cannot cancel a row that got its book in the meantime" do
+          submission = book_submission
+          book = books_books(:war_and_peace)
+          stub_finder(finder_match(subject: submission))
+          CreateBook.stubs(:call).with { |**|
+            ::Books::BookSubmission.where(id: submission.id).update_all(book_id: book.id)
+            true
+          }.returns(CreateBook::Result.new(success?: false, data: {outcome: :no_owner}, errors: []))
+
+          process(submission)
+
+          assert_equal ["looking_up", book.id], [submission.reload.status, submission.book_id]
         end
 
         # ---- resumable order -----------------------------------------------

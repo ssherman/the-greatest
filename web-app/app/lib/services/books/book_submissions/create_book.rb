@@ -25,8 +25,9 @@ module Services
       #
       # data[:outcome] is :created, :matched, :adopted or :resumed (the
       # submission already had its book), each with data[:book] and
-      # data[:created]; or, with success? false, :aborted (no longer open) or
-      # :no_author.
+      # data[:created]; or, with success? false, :aborted (no longer open),
+      # :no_owner (the reader or the list is gone, and nobody is left to want
+      # the book: nothing is created) or :no_author.
       class CreateBook
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         NoAuthor = Class.new(StandardError)
@@ -59,6 +60,7 @@ module Services
             @submission.lock!
             next result(false, :aborted, nil, false) unless @submission.in_progress?
             next result(true, :resumed, @submission.book, @submission.created_book?) if @submission.book
+            next result(false, :no_owner, nil, false) unless @submission.user_id && @submission.user_list_id
 
             racer = @match.matched? ? nil : book_created_since_the_finder_looked
             if racer

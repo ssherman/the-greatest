@@ -93,7 +93,73 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
     perform
 
     @submission.reload
-    assert_equal [15.seconds.from_now, 15.seconds.from_now], [@submission.next_attempt_at, @submission.processing_started_at]
+    assert_equal [15.seconds.from_now, 2.hours.ago + 15.seconds], [@submission.next_attempt_at, @submission.processing_started_at],
+      "the window is pushed back by the wait; the time left is what it was"
+  end
+
+  test "a gate wait with no start time yet still leaves a window" do
+    @submission.update_columns(processing_started_at: nil)
+    @gate.reserve(priority: true)
+    JOB.expects(:perform_in).with(15, @submission.id, true)
+
+    perform
+
+    assert_equal 15.seconds.from_now, @submission.reload.processing_started_at
+  end
+
+  test "a refusal does not reschedule a row cancelled while the gate was asked" do
+    @gate.stubs(:reserve).with { |**|
+      ::Books::BookSubmission.where(id: @submission.id).update_all(status: ::Books::BookSubmission.statuses[:cancelled])
+      true
+    }.returns(Books::FetchGate::Reservation.new(wait: nil, refusal: :daily_cap))
+    JOB.expects(:perform_at).never
+
+    perform
+
+    assert_equal "cancelled", @submission.reload.status
+  end
+
+  test "a cancel during the fetch is not overwritten, and nothing is rescheduled" do
+    FETCH.stubs(:call).with { |**|
+      ::Books::BookSubmission.where(id: @submission.id).update_all(status: ::Books::BookSubmission.statuses[:cancelled])
+      true
+    }.returns(fetched(:unparseable))
+    JOB.expects(:perform_at).never
+
+    perform
+
+    assert_equal "cancelled", @submission.reload.status
+  end
+
+  test "a cancel during the fetch is not overwritten by a retry either" do
+    FETCH.stubs(:call).with { |**|
+      ::Books::BookSubmission.where(id: @submission.id).update_all(status: ::Books::BookSubmission.statuses[:cancelled])
+      true
+    }.returns(fetched(:unavailable))
+    JOB.expects(:perform_at).never
+
+    perform
+
+    assert_equal ["cancelled", 0], [@submission.reload.status, @submission.attempts]
+  end
+
+  test "a page that always answers 503 ends even while the gate keeps making the job wait" do
+    # Each pass: a gate wait of ten minutes, then a 503 and its backoff. The
+    # waits push the window back, but only by their own length.
+    FETCH.stubs(:call).returns(fetched(:unavailable))
+    passes = 0
+    until @submission.reload.needs_details? || passes > 60
+      passes += 1
+      Services::Books::BookSubmissions::RetrySchedule.wait_until(@submission, 10.minutes.from_now)
+      travel 10.minutes
+      perform(true)
+      next if @submission.reload.needs_details?
+
+      travel_to @submission.next_attempt_at
+    end
+
+    assert @submission.reload.needs_details?, "still looking up after #{passes} passes"
+    assert_operator passes, :<=, 12
   end
 
   test "a refusal reschedules at the gate's reopening time" do
@@ -164,12 +230,56 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
     assert_equal "needs_details", @submission.reload.status
   end
 
-  test "an unexpected error is raised for Sidekiq to retry" do
-    FETCH.expects(:call).raises(RuntimeError, "boom")
+  test "a turn already taken is never reused: an error after it reschedules through a new turn" do
+    FETCH.stubs(:call).raises(RuntimeError, "boom")
+    JOB.expects(:perform_at).with(30.seconds.from_now, @submission.id, false)
 
-    assert_raises(RuntimeError) { perform }
+    assert_nothing_raised { perform(true) }
 
-    assert_equal "looking_up", @submission.reload.status
+    @submission.reload
+    assert_equal ["looking_up", 1], [@submission.status, @submission.attempts]
+  end
+
+  test "the rescheduled job, not due, takes a fresh reservation before it fetches again" do
+    FETCH.stubs(:call).raises(RuntimeError, "boom").then.returns(fetched(:found))
+    @gate.stubs(:spacing_wait).returns(0)
+    perform(true)
+    @gate.expects(:reserve).with(priority: true).once.returns(Books::FetchGate::Reservation.new(wait: 0, refusal: nil))
+
+    perform(false)
+  end
+
+  test "an error after the turn with the window spent needs details" do
+    @submission.update!(processing_started_at: Time.current - @window - 1.second)
+    FETCH.stubs(:call).raises(RuntimeError, "boom")
+
+    perform(true)
+
+    assert_equal "needs_details", @submission.reload.status
+  end
+
+  test "the first blocked fetch is counted and waits for the gate; the second needs details and holds nothing" do
+    FETCH.stubs(:call).returns(fetched(:blocked))
+    JOB.expects(:perform_at).with(6.hours.from_now, @submission.id, false).once
+
+    perform
+    assert_equal [1, "looking_up"], [@submission.reload.blocked_fetches, @submission.status]
+
+    travel 7.hours
+    perform
+
+    @submission.reload
+    assert_equal [1, "needs_details"], [@submission.blocked_fetches, @submission.status]
+  end
+
+  test "refusals that never fetched are not counted and wait without limit" do
+    @gate.stubs(:reserve).returns(Books::FetchGate::Reservation.new(wait: nil, refusal: :daily_cap))
+    @gate.stubs(:reopens_at).returns(1.hour.from_now)
+    JOB.stubs(:perform_at)
+
+    3.times { perform }
+
+    assert_equal [0, "looking_up"], [@submission.reload.blocked_fetches, @submission.status]
   end
 
   test "once the retries are used up the submission fails with the error recorded" do

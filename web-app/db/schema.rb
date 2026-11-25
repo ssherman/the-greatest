@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_24_213650) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_010903) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -236,6 +236,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_24_213650) do
     t.integer "attempts", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "blocked_fetches", default: 0, null: false
+    t.integer "sweeps", default: 0, null: false
     t.index ["book_id"], name: "index_books_book_submissions_on_book_id"
     t.index ["claimed_by_id"], name: "index_books_book_submissions_on_claimed_by_id"
     t.index ["match_decision_id"], name: "index_books_book_submissions_on_match_decision_id"

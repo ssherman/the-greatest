@@ -80,6 +80,15 @@ class Books::ProcessBookSubmissionJobTest < ActiveSupport::TestCase
     assert_includes submission.error, "lost  connection here"
   end
 
+  test "once the retries are used up the submission's flagged decisions leave the review queue" do
+    submission = book_submission(status: :looking_up)
+    flagged = finder_match(subject: submission, needs_review: true).decision
+
+    Books::ProcessBookSubmissionJob.sidekiq_retries_exhausted_block.call({"args" => [submission.id]}, RuntimeError.new("x"))
+
+    assert_not flagged.reload.needs_review?
+  end
+
   test "retries running out never overwrite a submission that has finished" do
     submission = book_submission(status: :added)
 

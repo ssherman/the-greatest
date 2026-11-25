@@ -18,6 +18,35 @@ module Services
           CreateBook.call(submission: submission, resolved: resolved, match: match || finder_match(subject: submission), **options)
         end
 
+        def other_submission
+          list = ::Books::UserList.create!(user: users(:editor_user), name: "Books I've Read", list_type: :read)
+          book_submission(user: users(:editor_user), list: list, status: :looking_up)
+        end
+
+        test "a reader or list that is gone means no book is created, even for a match" do
+          before = ::Books::Book.count
+          [nil, books_books(:war_and_peace)].each do |record|
+            submission = book_submission(status: :looking_up)
+            ::Books::BookSubmission.where(id: submission.id).update_all(user_list_id: nil)
+
+            result = create(submission: submission, match: finder_match(subject: submission, record: record))
+
+            assert_not result.success?
+            assert_equal :no_owner, result.data[:outcome]
+            assert_nil submission.reload.book_id
+          end
+          assert_equal before, ::Books::Book.count
+        end
+
+        test "a submission that already has its book resumes even when its list is gone" do
+          first = create.data[:book]
+          ::Books::BookSubmission.where(id: @submission.id).update_all(user_list_id: nil)
+
+          result = create
+
+          assert_equal [first, :resumed], [result.data[:book], result.data[:outcome]]
+        end
+
         test "creates a provisional book and author and records what it made on the submission, leaving it looking up" do
           result = create(resolved: resolved_facts(year: 1977))
 
@@ -63,7 +92,7 @@ module Services
         end
 
         test "adopts the book a submission with the same signature created since the finder looked" do
-          first = book_submission(user: users(:editor_user), list: nil, status: :looking_up)
+          first = other_submission
           created = create(submission: first).data[:book]
 
           result = create
@@ -85,7 +114,7 @@ module Services
         end
 
         test "a book the finder already considered and turned down is not adopted" do
-          first = book_submission(user: users(:editor_user), list: nil, status: :looking_up)
+          first = other_submission
           turned_down = create(submission: first).data[:book]
           considered = ::DataImporters::Candidate.new(record: turned_down, sources: [:exact])
 
@@ -120,7 +149,7 @@ module Services
         end
 
         test "a same-signature submission that matched a book rather than creating one is not adopted" do
-          other = book_submission(user: users(:editor_user), list: nil, status: :looking_up)
+          other = other_submission
           create(submission: other, match: finder_match(subject: other, record: books_books(:war_and_peace)))
 
           result = create
