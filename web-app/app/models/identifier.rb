@@ -97,8 +97,13 @@ class Identifier < ApplicationRecord
     wikidata: 5,
     viaf: 6,
     goodreads: 7,
-    admin: 8
+    admin: 8,
+    user_submission: 9
   }, prefix: true
+
+  # Every source but legacy, as the enum's string keys (what
+  # Finder.new(identifier_sources:) expects). A nil source matches none of them.
+  NON_LEGACY_SOURCES = (sources.keys - ["legacy"]).freeze
 
   BOOKS_TYPES = %w[Books::Book Books::Edition Books::Author Books::Series].freeze
   VERIFIED_SOURCES = %w[open_library worldcat].freeze
@@ -109,12 +114,12 @@ class Identifier < ApplicationRecord
   scope :unverified, -> { where(source: nil).or(where.not(source: VERIFIED_SOURCES)) }
 
   # For keeping the better of two rows holding the same value (mergers):
-  # verified 3, any other source 2, legacy 1, nil 0.
+  # verified 3, any other source 2, legacy and a reader's submission 1, nil 0.
   def self.trust_rank(source)
     source = source&.to_s
     return 0 if source.nil?
     return 3 if VERIFIED_SOURCES.include?(source)
-    return 1 if source == "legacy"
+    return 1 if %w[legacy user_submission].include?(source)
 
     2
   end

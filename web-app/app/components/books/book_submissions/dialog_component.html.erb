@@ -1,0 +1,95 @@
+<dialog id="book-submission-dialog"
+        class="modal"
+        aria-labelledby="book-submission-dialog-title"
+        data-testid="book-submission-dialog"
+        data-controller="books--book-submission-dialog"
+        data-books--book-submission-dialog-add-item-selector-value="[data-controller~='user-list-add-item']"
+        data-action="autocomplete:footer@window->books--book-submission-dialog#openFromFooter
+                     book-submission:open@window->books--book-submission-dialog#openForRetry
+                     turbo:submit-end->books--book-submission-dialog#submitted
+                     turbo:before-stream-render@document->books--book-submission-dialog#mirrorToast
+                     close->books--book-submission-dialog#closed">
+  <div class="modal-box [overflow-wrap:anywhere]">
+    <h2 id="book-submission-dialog-title" class="text-lg font-bold">Add a book that isn't on the site</h2>
+
+    <div id="book-submission-errors"
+         role="alert"
+         class="[&:not(:empty)]:mt-3 text-error font-semibold [&:not(:empty)]:before:content-['Problem:_'] [&:not(:empty)]:before:font-bold"
+         data-books--book-submission-dialog-target="errors"></div>
+
+    <div id="book-submission-hits"
+         class="[&:not(:empty)]:mt-3"
+         aria-live="polite"
+         data-testid="book-submission-hits"
+         data-books--book-submission-dialog-target="hits"></div>
+
+    <%= form_with url: books_my_list_book_submissions_path(list), scope: :book_submission, class: "mt-3",
+          data: {turbo_frame: "book_submissions", books__book_submission_dialog_target: "form"} do %>
+      <%= hidden_field_tag :replaces, "", id: "book-submission-replaces", disabled: true,
+            data: {books__book_submission_dialog_target: "replaces"} %>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">How do you want to add it?</legend>
+        <div class="flex flex-wrap gap-x-5 gap-y-1">
+          <% METHODS.each do |method, label| %>
+            <label class="label cursor-pointer gap-2 text-base-content" for="book_submission_method_<%= method %>">
+              <input type="radio" class="radio radio-sm" name="book_submission[method]" value="<%= method %>"
+                     id="book_submission_method_<%= method %>"
+                     <%= "checked" if selected?(method) %>
+                     data-books--book-submission-dialog-target="radio"
+                     data-action="change->books--book-submission-dialog#methodChanged">
+              <%= label %>
+            </label>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <div class="mt-3" data-method-group="goodreads" <%= "hidden" if group_hidden?("goodreads") %> data-books--book-submission-dialog-target="group">
+        <label class="label" for="book_submission_goodreads_url">Goodreads link</label>
+        <input type="text" inputmode="url" class="input w-full" id="book_submission_goodreads_url" name="book_submission[goodreads_url]"
+               maxlength="<%= max_link_length %>" placeholder="https://www.goodreads.com/book/show/13651"
+               autocomplete="off" <%= "disabled" if group_hidden?("goodreads") %>>
+      </div>
+
+      <div class="mt-3" data-method-group="amazon" <%= "hidden" if group_hidden?("amazon") %> data-books--book-submission-dialog-target="group">
+        <label class="label" for="book_submission_amazon_url">Amazon link</label>
+        <input type="text" inputmode="url" class="input w-full" id="book_submission_amazon_url" name="book_submission[amazon_url]"
+               maxlength="<%= max_link_length %>" placeholder="https://www.amazon.com/dp/0441478123"
+               autocomplete="off" <%= "disabled" if group_hidden?("amazon") %>>
+      </div>
+
+      <div class="mt-3" data-method-group="isbn" <%= "hidden" if group_hidden?("isbn") %> data-books--book-submission-dialog-target="group">
+        <label class="label" for="book_submission_isbn">ISBN</label>
+        <input type="text" inputmode="text" class="input w-full" id="book_submission_isbn" name="book_submission[isbn]"
+               maxlength="32" placeholder="978-0-441-47812-5"
+               autocomplete="off" <%= "disabled" if group_hidden?("isbn") %>>
+      </div>
+
+      <div class="mt-3" data-method-group="title_authors" <%= "hidden" if group_hidden?("title_authors") %> data-books--book-submission-dialog-target="group">
+        <label class="label" for="book_submission_title">Title</label>
+        <input type="text" class="input w-full" id="book_submission_title" name="book_submission[title]"
+               maxlength="<%= max_length %>" autocomplete="off"
+               data-books--book-submission-dialog-target="title" <%= "disabled" if group_hidden?("title_authors") %>>
+
+        <label class="label mt-2" for="book_submission_authors_0">Author(s)</label>
+        <div class="space-y-2" data-books--book-submission-dialog-target="authors">
+          <input type="text" class="input w-full" id="book_submission_authors_0" name="book_submission[authors][]"
+                 maxlength="<%= max_length %>" autocomplete="off" <%= "disabled" if group_hidden?("title_authors") %>>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost mt-2"
+                data-action="click->books--book-submission-dialog#addAuthor"
+                data-books--book-submission-dialog-target="addAuthor">+ another</button>
+      </div>
+
+      <p class="mt-4 text-sm">
+        It can take a while to add a new book. We'll put it on "<%= list.name %>" when it's ready.
+      </p>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" data-action="click->books--book-submission-dialog#close">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add book</button>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button aria-label="Close the dialog">close</button></form>
+</dialog>

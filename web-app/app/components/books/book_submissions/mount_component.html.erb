@@ -1,0 +1,9 @@
+<%# The strip loads lazily: it must never redirect or 404 the page, only fill or empty its own frame. %>
+<div data-controller="books--book-submissions"
+     data-testid="book-submission-strip"
+     aria-live="polite"
+     tabindex="-1"
+     class="mb-4 empty:hidden focus:outline-none">
+  <%= helpers.turbo_frame_tag "book_submissions", src: books_my_list_book_submissions_path(list), target: "_top" %>
+</div>
+<%= render Books::BookSubmissions::DialogComponent.new(list: list) %>

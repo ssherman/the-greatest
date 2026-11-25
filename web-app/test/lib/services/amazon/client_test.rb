@@ -33,6 +33,11 @@ module Services
           @calls << params
           @response
         end
+
+        def get_items(**params)
+          @calls << params
+          @response
+        end
       end
 
       def setup
@@ -112,6 +117,40 @@ module Services
         ).returns(FakeVacuum.new(FakeResponse.new(code: 200, payload: {"searchResult" => {"items" => []}})))
 
         with_env { Client.search_items(keywords: "Kid A") }
+      end
+
+      test "get_items returns the items from a successful response" do
+        fake = stub_vacuum(code: 200, payload: {"itemsResult" => {"items" => [{"asin" => "B001"}]}})
+
+        items = with_env { Client.get_items(item_ids: ["B001"], resources: ["itemInfo.title"]) }
+
+        assert_equal ["B001"], items.map { |i| i["asin"] }
+        assert_equal ["B001"], fake.calls.first[:item_ids]
+        assert_equal ["itemInfo.title"], fake.calls.first[:resources]
+        assert_equal "www.amazon.com", fake.calls.first[:marketplace]
+        assert_equal "testtag-20", fake.calls.first[:partner_tag]
+      end
+
+      test "get_items returns an empty array when the response carries no items" do
+        stub_vacuum(code: 200, payload: {"itemsResult" => {}})
+
+        assert_equal [], with_env { Client.get_items(item_ids: ["B000NOPE00"]) }
+      end
+
+      test "get_items raises on a non-success response instead of returning no items" do
+        stub_vacuum(code: 429, payload: {"message" => "Too many requests"})
+
+        error = assert_raises(Client::Error) { with_env { Client.get_items(item_ids: ["B001"]) } }
+
+        assert_match(/429/, error.message)
+      end
+
+      test "get_items raises when credentials are not configured" do
+        stub_vacuum(code: 200, payload: {"itemsResult" => {"items" => []}})
+
+        assert_raises(Client::Error) do
+          with_env("AMAZON_PRODUCT_API_SECRET" => nil) { Client.get_items(item_ids: ["B001"]) }
+        end
       end
     end
   end

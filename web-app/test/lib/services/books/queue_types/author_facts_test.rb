@@ -47,6 +47,14 @@ module Services
           author.enrichments.create!(kind: KIND, mode: :research, outcome: :skipped, reason: "budget_exhausted")
         end
 
+        test "a provisional author is not offered, though its newest row is a research skip" do
+          pending = new_author("Pending Review", provisional: true)
+          skip_research(pending)
+          assert_not_includes candidate_ids, pending.id
+          pending.update!(provisional: false)
+          assert_includes candidate_ids, pending.id
+        end
+
         test "an author whose newest row is a research skip is a candidate, other states are not" do
           skipped = new_author("Skipped One")
           skip_research(skipped)

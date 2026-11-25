@@ -77,4 +77,19 @@ class AutocompleteComponentTest < ViewComponent::TestCase
     assert_selector "input#row_5_record_autocomplete[type=search]"
     assert_selector "input#row_5_record[type=hidden][name=record_id]", visible: :all
   end
+
+  test "without a footer label nothing about the footer is rendered" do
+    render_inline(AutocompleteComponent.new(name: "test[field]", url: "/search"))
+
+    assert_no_selector "[data-autocomplete-footer-label-value]"
+    assert_no_selector "[data-autocomplete-footer-testid-value]"
+  end
+
+  test "a footer label is handed to the controller with its test id" do
+    render_inline(AutocompleteComponent.new(name: "test[field]", url: "/search",
+      footer_label: "Can't find it? Add a book", footer_testid: "add-missing-book"))
+
+    assert_selector "[data-controller='autocomplete'][data-autocomplete-footer-label-value=\"Can't find it? Add a book\"]"
+    assert_selector "[data-autocomplete-footer-testid-value='add-missing-book']"
+  end
 end

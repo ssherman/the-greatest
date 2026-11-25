@@ -37,6 +37,53 @@ module Services
           assert_equal({started: 1, remaining: 0}, result.data)
         end
 
+        def limited_run(book, initiated_by: "book_submission")
+          finished_run(book, outcome: "unparseable", options: {"only" => ["goodreads", "amazon"], "lane" => "priority"})
+            .tap { |run| run.update!(initiated_by: initiated_by) }
+        end
+
+        test "a limited submission run is neither rerun nor counted, but the same run by another initiator is" do
+          submitted = book("Submitted")
+          limited_run(submitted)
+          other = book("Other")
+          limited_run(other, initiated_by: "goodreads_rebuild")
+          started = []
+          BOOK_ENRICHMENT.expects(:start).with { |b, **| started << b }.returns(stub)
+
+          result = RerunUnparseable.call(limit: 10)
+
+          assert_equal [[other], {started: 1, remaining: 0}], [started, result.data]
+        end
+
+        test "a rerun of a full submission run is on the ordinary queues and carries no lane" do
+          stub_workflow_dispatch
+          full = book("Full")
+          finished_run(full, outcome: "unparseable", options: {"lane" => "priority"}).update!(initiated_by: "book_submission")
+
+          RerunUnparseable.call(limit: 10)
+
+          run = WorkflowRun.running.find_by!(enrichable: full)
+          assert_equal [false, {"goodreads" => "goodreads_fetch", "amazon" => "serial"}],
+            [run.options.key?("lane"), run.steps.where(key: %w[goodreads amazon]).pluck(:key, :queue).to_h]
+        end
+
+        test "limited run, rerun, then approval ends with a full run planned" do
+          stub_workflow_dispatch
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          pending = ::Books::Book.create!(title: "Pending Submission", provisional: true)
+          ::Books::BookAuthor.create!(book: pending, author: books_authors(:tolstoy), position: 1)
+          limited = ::Workflows::Books::BookEnrichment.start(pending, initiated_by: "book_submission", options: {only: ["goodreads", "amazon"], lane: "priority"})
+          limited.update!(status: :completed)
+          limited.step(:goodreads).update_columns(state: WorkflowStep.states[:succeeded], outcome: "unparseable")
+
+          RerunUnparseable.call(limit: 10)
+          ::Services::Books::GoodreadsImports::PromoteRecords.call(books: [pending], authors: [], initiated_by: "book_submission", lane: "priority")
+
+          full = WorkflowRun.running.find_by!(enrichable: pending)
+          assert_equal [nil, "priority"], [full.options["only"], full.options["lane"]]
+          assert_equal 0, WorkflowRun.where(enrichable: pending, initiated_by: "goodreads_unparseable_rerun").count
+        end
+
         test "a book whose newer run did not end unparseable is not run again" do
           b = book("Catch-22")
           finished_run(b, outcome: "unparseable", created_at: 3.days.ago)

@@ -122,6 +122,22 @@ and fails the test outright rather than degrading to a `failure` result.
 
 ## Known gaps
 
+- **`Client.get_items` is unverified against the live API.** It was built from the gem's
+  `get_items(marketplace:, partner_tag:, item_ids:, **params)` signature, and the gem ships no example
+  response. It reads `itemsResult.items` by analogy with `searchResult.items`; that key has not been
+  confirmed by a real call. It is used by `Services::Books::BookSubmissions::ResolveInput` (user-added
+  books, Amazon links). Before that is relied on, make one real call for a known ASIN and confirm the key (a
+  wrong key reads as "Amazon has no such product", the failure "Failing loudly" above warns about),
+  then replace this note with the result. Also call one unknown ASIN: an empty answer is what
+  `ResolveInput` expects; a non-2xx raises `Client::Error`, which it treats as "Amazon is down" and retries for
+  an hour. To check, run this with `bin/rails runner` in a shell inside the worker container, not in a console, and not as `ASIN=x docker compose exec ...`, which does not pass the variable in (it prints the status, the top-level keys and the titles, never headers or credentials; run it again with `ASIN=B0ZZZZZZZZ` for the unknown ASIN). It uses none of the new code, only the existing client, so it can be run before the user-added books merge:
+
+  ```
+  ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV.fetch("ASIN")], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'
+  ```
+
+  The key holding the items must be `itemsResult`. If it is another name, change it in
+  `Client#get_items`.
 - **Books enrichment runs through the book workflow's `amazon` step** (`Workflows::Books::Steps::Amazon`,
   wrapping `Services::Books::AmazonProductService`; see `enrichment-workflows.md`). Two callers plan
   a book run, and with it that step:

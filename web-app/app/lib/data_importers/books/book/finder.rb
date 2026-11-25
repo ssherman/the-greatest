@@ -176,30 +176,9 @@ module DataImporters
           end
         end
 
-        # Normalized title equality (served by the lower(title) expression
-        # index), joined to an author whose name keys
-        # (Services::Text::PersonNameKey, GIN-indexed books_authors.name_keys)
-        # meet the query's when the query names authors. A title-only query still yields
-        # title matches: they are candidates for the AI, never a rule-4
-        # match, because creators_required? is true for books.
-        #
-        # The filtered ids are plucked first, with no ORDER BY or LIMIT on
-        # the filtered query: measured on 158k books, ORDER BY id + LIMIT 5
-        # on the filtered relation makes the planner walk the primary key
-        # (59 ms, every row filtered) instead of using
-        # index_books_books_on_lower_title (0.01 ms). A title matches a
-        # handful of rows, so plucking them all is cheap.
+        # See ExactLookup for the query shape and why it is built that way.
         def exact_scope(query)
-          return ::Books::Book.none if query.title.blank?
-
-          filtered = ::Books::Book.where("LOWER(books_books.title) = ?", normalize(query.title))
-          keys = ::Services::Text::PersonNameKey.all(query.author_names)
-          if keys.any?
-            filtered = filtered.joins(book_authors: :author)
-              .where("books_authors.name_keys && ARRAY[:keys]::varchar[]", keys: keys)
-          end
-          ids = filtered.distinct.pluck(:id).sort.first(EXACT_LIMIT)
-          ::Books::Book.where(id: ids).includes(:authors, :identifiers).order(:id)
+          ExactLookup.call(title: query.title, author_names: query.author_names, limit: EXACT_LIMIT)
         end
 
         def search_params(query)

@@ -5,7 +5,10 @@
     <%# Generic table row shared across listables. %>
     <tr class="hover" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
       <td class="text-center text-base-content/60"><%= position %></td>
-      <td><span class="font-bold"><%= title %></span></td>
+      <td>
+        <span class="font-bold"><%= title %></span>
+        <%= not_yet_reviewed_badge %>
+      </td>
       <td class="text-base-content/70"><%= by_line %></td>
       <td class="text-base-content/60"><%= year %></td>
       <% if completed_on_column? %>
@@ -19,10 +22,13 @@
     </tr>
   <% end %>
 <% else %>
-  <% if completed_on_column? %>
+  <% if completed_on_column? || not_yet_reviewed_badge %>
     <div class="flex flex-col gap-2">
       <%= render listable_card %>
-      <%= render UserLists::CompletionDateComponent.new(item: item, variant: :text) %>
+      <%= not_yet_reviewed_badge %>
+      <% if completed_on_column? %>
+        <%= render UserLists::CompletionDateComponent.new(item: item, variant: :text) %>
+      <% end %>
     </div>
   <% else %>
     <%= render listable_card %>

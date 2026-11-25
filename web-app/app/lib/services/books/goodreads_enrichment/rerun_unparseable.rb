@@ -14,7 +14,8 @@ module Services
       # still going is left to it. At most `limit` books per call, oldest miss
       # first: every started run joins the Goodreads fetch line.
       #
-      # The new run is a whole run, carrying the old one's options: book_facts
+      # The new run is a whole run, carrying the old one's options (never its
+      # lane: the priority lane is for a waiting reader, not a bulk rerun): book_facts
       # (the AI step) and amazon run again too. That is the point when Goodreads
       # now matches, since both use the page; for a book that misses again it
       # costs one more AI and Amazon pass, which is why each call is limited.
@@ -32,6 +33,14 @@ module Services
           )
         SQL
 
+        # A limited run started by a book submission is never rerun: the
+        # approval plans the full run, and replaying the limited one would
+        # block that run (BookEnrichment.start returns the active run).
+        NOT_LIMITED_SUBMISSION_SQL = <<~SQL.squish
+          NOT (workflow_runs.initiated_by = '#{::Workflows::Books::BookEnrichment::LIMITED_BY}'
+            AND COALESCE(jsonb_typeof(workflow_runs.options -> 'only') = 'array', false))
+        SQL
+
         def self.call(limit:) = new(limit: limit).call
 
         def initialize(limit:)
@@ -47,7 +56,7 @@ module Services
             next false unless book
 
             ::Workflows::Books::BookEnrichment.start(book, initiated_by: initiated_by,
-              author_names: Array(run.options["author_names"]), options: run.options.except("author_names"))
+              author_names: Array(run.options["author_names"]), options: run.options.except("author_names", "lane"))
             true
           end
           Result.new(success?: true, data: {started: started, remaining: total - started}, errors: [])
@@ -66,6 +75,7 @@ module Services
         def eligible
           WorkflowRun.where(workflow: WORKFLOW, enrichable_type: "Books::Book").where.not(status: :running)
             .where(LATEST_RUN_SQL)
+            .where(NOT_LIMITED_SUBMISSION_SQL)
             .where(id: goodreads_steps.select(:workflow_run_id))
             .where(enrichable_id: ::Books::Book.select(:id))
         end

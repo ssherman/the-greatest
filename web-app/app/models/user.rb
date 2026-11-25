@@ -61,6 +61,11 @@ class User < ApplicationRecord
   has_many :goodreads_imports, class_name: "Books::GoodreadsImport", dependent: :destroy
   has_many :reviewed_goodreads_imports, class_name: "Books::GoodreadsImport", foreign_key: :reviewed_by_id,
     dependent: :nullify
+  has_many :book_submissions, class_name: "Books::BookSubmission", dependent: :nullify
+  has_many :reviewed_book_submissions, class_name: "Books::BookSubmission", foreign_key: :reviewed_by_id,
+    dependent: :nullify
+  has_many :claimed_book_submissions, class_name: "Books::BookSubmission", foreign_key: :claimed_by_id,
+    dependent: :nullify
 
   # Every foreign key into users needs one of these. Postgres rejects a DELETE
   # that would orphan a referencing row, so a missing has_many turns

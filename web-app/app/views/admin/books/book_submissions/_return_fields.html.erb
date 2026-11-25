@@ -1,0 +1,2 @@
+<%# Where the admin was (tab and page), sent back with every action so the redirect returns there. %>
+<% return_params.each do |key, value| %><%= hidden_field_tag key, value, id: nil %><% end %>
