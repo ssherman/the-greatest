@@ -1,7 +1,7 @@
 # Books: provisional records
 
-A provisional book or author is a real row that an import created and that no admin has approved
-yet. `books_books.provisional` and `books_authors.provisional` (boolean, default false) carry the
+A provisional book or author is a real row that an import or a reader's book submission created
+and that no admin has approved yet. `books_books.provisional` and `books_authors.provisional` (boolean, default false) carry the
 flag. The design is §9 of `docs/superpowers/specs/2026-10-03-goodreads-import-design.md`.
 
 Three things set the flag: the Goodreads resolver and member import, the legacy replay's apply step
@@ -10,7 +10,7 @@ creates a provisional book through the book importer. An approval clears it, alw
 `Services::Books::GoodreadsImports::PromoteRecords`: an admin approving an import, an admin
 approving a submission on the admin page, or an agent holding a token with `books:admin:merge`
 (`approve_book_submission`). Approving a submission also closes every other submission on the book.
-A merge into a public book, or a delete, ends a provisional record without clearing the flag.
+The legacy replay's revert of a `mark_provisional` verdict, and a merge that folds a real book into a provisional one (`Books::Book::Merger#reconcile_provisional`), also clear it. A merge into a public book, or a delete, ends a provisional record without clearing the flag.
 
 ## The rule
 

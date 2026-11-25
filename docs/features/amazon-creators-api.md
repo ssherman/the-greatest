@@ -126,12 +126,12 @@ and fails the test outright rather than degrading to a `failure` result.
   `get_items(marketplace:, partner_tag:, item_ids:, **params)` signature, and the gem ships no example
   response. It reads `itemsResult.items` by analogy with `searchResult.items`; that key has not been
   confirmed by a real call. It is used by `Services::Books::BookSubmissions::ResolveInput` (user-added
-  books, Amazon links). Before that ships, make one real call for a known ASIN and confirm the key (a
+  books, Amazon links). Before that is relied on, make one real call for a known ASIN and confirm the key (a
   wrong key reads as "Amazon has no such product", the failure "Failing loudly" above warns about),
   then replace this note with the result. Also call one unknown ASIN: an empty answer is what
   `ResolveInput` expects; a non-2xx raises `Client::Error`, which it treats as "Amazon is down" and retries for
   an hour. To check, run this from a production console (it prints the status, the top-level keys and the
-  titles, never headers or credentials; change the ASIN for the second call, e.g. `B0ZZZZZZZZ`):
+  titles, never headers or credentials; change the ASIN for the second call, e.g. `B0ZZZZZZZZ`). It uses none of the new code, only the existing client, so it can be run before the user-added books merge. Put it in a file and run it with `bin/rails runner`, since a console echoes every assignment:
 
   ```ruby
   amazon = Services::Amazon::Client.new

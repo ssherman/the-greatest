@@ -965,19 +965,21 @@ so they are safe to run live and need no downtime.
    and be serving `goodreads_fetch_priority` and `serial_priority` (they sit in the `goodreads_fetch` and
    `serial` capsules). If it still runs the old config, a reader's Goodreads link waits for nothing.
    Check the Sidekiq admin page's Busy tab, or from a console
-   `Sidekiq::ProcessSet.new.flat_map { |p| p["queues"] }.uniq.sort`, for both names.
-2. **Check Amazon's `get_items` response. Shane runs with `!`.** One real call for a known ASIN and one
+   `Sidekiq::ProcessSet.new.flat_map { |p| p["queues"] }.uniq.sort`, for both names. If
+   `goodreads_fetch_priority` is not served, a Goodreads add never fetches and the sweep fails the row as
+   "lost job"; if `serial_priority` is not served, the Amazon step of the early lookups stalls.
+2. **Check Amazon's `get_items` response. Shane runs with `!`.** This uses none of the new code, so it can run before the merge. One real call for a known ASIN and one
    for an unknown one, from a production console. The command is in `docs/features/amazon-creators-api.md`
    ("Known gaps"); it prints only the status, the top-level keys and the titles, never headers. The known
    ASIN must answer with the key `itemsResult` and the right title. The unknown ASIN (`B0ZZZZZZZZ`)
    must come back as an empty answer, not an error: an error is read as "Amazon is down" and the request
    retries for an hour. If the key is different, fix `Client#get_items` before relying on Amazon links.
-3. **Add one book by ISBN and one by Goodreads link, end to end. Shane runs with `!`.** Signed in on the
+3. **Add one book by ISBN, one by Goodreads link and one by Amazon link, end to end. Shane runs with `!`.** Signed in on the
    books site, open one of your own lists, search for a book that is not there, and use "Can't find it?
-   Add a book". Pick an ISBN of a book the site lacks, then a Goodreads link to another. Each should
-   appear on the list within a few minutes with the strip saying it was added, and show in
-   `/admin/book_submissions` under "Needs review" (after the lookups, with their Goodreads and Amazon
-   details). Delete both from the admin page afterwards with Reject, which also removes the list item.
+   Add a book". Pick an ISBN of a book the site lacks, then a Goodreads link to another, then an Amazon `/dp/` link to a
+   third (the by-ASIN path that step 2 checks). Each should appear on the list within a few minutes
+   with the strip saying it was added. Each is under "Needs review" in `/admin/book_submissions` as soon
+   as it is added; the Goodreads and Amazon details arrive after the early lookups. Delete both from the admin page afterwards with Reject, which also removes the list item.
 4. **Mint an admin token for the agent. Shane runs with `!`.** At `/developers/tokens` on the books host,
    with the scope `books:admin:merge` (it implies read and write) and an expiry; an admin token must expire.
    Then use **Copy prompt** on `/admin/book_submissions` and give it to an agent on the admin MCP endpoint.
