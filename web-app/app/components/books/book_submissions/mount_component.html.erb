@@ -2,7 +2,8 @@
 <div data-controller="books--book-submissions"
      data-testid="book-submission-strip"
      aria-live="polite"
-     class="mb-4 empty:hidden">
+     tabindex="-1"
+     class="mb-4 empty:hidden focus:outline-none">
   <%= helpers.turbo_frame_tag "book_submissions", src: books_my_list_book_submissions_path(list), target: "_top" %>
 </div>
 <%= render Books::BookSubmissions::DialogComponent.new(list: list) %>

@@ -38,6 +38,9 @@ export default class extends Controller {
       placeHolder: this.inputTarget.placeholder,
       threshold: this.minLengthValue,
       debounce: this.debounceValue,
+      // A search still pending when the footer was chosen must not bring the
+      // dropdown back over the page (typing or a real focus lifts the pause).
+      trigger: (query) => !this.searchPaused && query.length >= this.minLengthValue,
 
       data: {
         src: async () => {
@@ -138,6 +141,9 @@ export default class extends Controller {
           },
 
           focus: () => {
+            // Focus returned by code (a closed dialog) must not search again.
+            if (this.inputTarget.hasAttribute("data-skip-focus-search")) return
+            this.searchPaused = false
             if (this.inputTarget.value.length >= this.minLengthValue) {
               this.autoComplete.start()
             }
@@ -192,11 +198,15 @@ export default class extends Controller {
     if (!list) return
     if (!list.querySelector("[data-autocomplete-footer]")) list.appendChild(this.buildFooter())
     // autocomplete.js navigation reads feedback.results; it is unset until the first search.
-    if (!this.autoComplete.feedback) this.autoComplete.feedback = { query: "", matches: [], results: [] }
+    if (!this.autoComplete.feedback) {
+      this.autoComplete.feedback = { query: "", matches: [], results: [] }
+      this.autoComplete.cursor = -1
+    }
     if (!this.autoComplete.isOpen) this.autoComplete.open()
   }
 
   chooseFooter() {
+    this.searchPaused = true
     this.element.dispatchEvent(
       new CustomEvent("autocomplete:footer", {
         detail: { query: this.inputTarget.value.trim() },
@@ -206,6 +216,7 @@ export default class extends Controller {
   }
 
   handleInput(event) {
+    this.searchPaused = false
     const currentValue = event.target.value.trim()
     if (this.footerLabelValue && currentValue.length >= this.minLengthValue) this.showFooterEarly()
 

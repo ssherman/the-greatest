@@ -10,6 +10,7 @@ import { Controller } from "@hotwired/stimulus"
 // strip into its frame. Reader text only ever goes into the page as `value` or
 // `textContent`, never as markup.
 const MAX_AUTHORS = 10
+const DEFAULT_METHOD = "goodreads"
 const AUTHOR_MAX_LENGTH = 255
 // Where "Try another way" goes first, by the way that failed.
 const RETRY_ORDER = ["title_authors", "isbn", "goodreads", "amazon"]
@@ -50,12 +51,18 @@ export default class extends Controller {
   open({ opener = null, text = "", replaces = null, method = null, title = "", authors = [] } = {}) {
     if (this.element.open) return
     this.opener = opener || document.activeElement
+    this.accepted = false
+    // The browser puts focus back on the search box when the dialog closes,
+    // before our close handler runs; that focus must not search again.
+    this.quietSearch = this.opener?.matches?.('input[type="search"]') ? this.opener : null
+    this.quietSearch?.setAttribute("data-skip-focus-search", "")
     this.reset()
 
-    if (text) this.titleTarget.value = text
-    if (title) this.titleTarget.value = title
-    if (authors.length) this.setAuthors(authors)
-    if (method) this.chooseMethod(method)
+    // Title, authors and method come from this opening alone: what an earlier
+    // row or search left in the fields never reaches this request.
+    this.titleTarget.value = title || text
+    this.setAuthors(authors.length ? authors : [""])
+    this.chooseMethod(method || DEFAULT_METHOD)
     if (replaces) {
       this.replacesTarget.value = String(replaces)
       this.replacesTarget.disabled = false
@@ -73,9 +80,30 @@ export default class extends Controller {
   // backdrop, a finished submission).
   closed() {
     this.reset()
-    const target = this.opener?.isConnected ? this.opener : this.addItemSearch()
+    let target
+    if (this.accepted && this.opener?.closest?.("#book_submissions")) {
+      // The row this button was on is replaced by the answer; the strip's
+      // wrapper is what survives.
+      target = document.querySelector('[data-testid="book-submission-strip"]')
+    } else if (this.opener?.isConnected) {
+      target = this.opener
+    } else {
+      target = this.addItemSearch()
+    }
     this.opener = null
-    target?.focus?.()
+    this.focusQuietly(target)
+    this.quietSearch?.removeAttribute("data-skip-focus-search")
+    this.quietSearch = null
+  }
+
+  // Focus the autocomplete's input without its focus handler searching again
+  // and putting the dropdown back over the page.
+  focusQuietly(element) {
+    if (!element) return
+    const search = element.matches?.('input[type="search"]')
+    if (search) element.setAttribute("data-skip-focus-search", "")
+    element.focus({ preventScroll: true })
+    if (search) element.removeAttribute("data-skip-focus-search")
   }
 
   methodChanged() {
@@ -109,16 +137,34 @@ export default class extends Controller {
   // the strip frame, and then the dialog is done.
   async submitted(event) {
     const { success, fetchResponse, error } = event.detail
-    if (error && !fetchResponse) {
-      this.errorsTarget.textContent = SERVER_ERROR
+    if (!fetchResponse) {
+      if (error) this.errorsTarget.textContent = SERVER_ERROR
       return
     }
-    if (!success || !fetchResponse) return
+    if (!success) {
+      // A refusal we sent is a stream and has put its message in place. Anything
+      // else (a 500 page, a proxy error) has said nothing to the reader.
+      const type = fetchResponse.response?.headers?.get("content-type") || ""
+      if (!type.includes("turbo-stream")) this.errorsTarget.textContent = SERVER_ERROR
+      return
+    }
 
     const body = await fetchResponse.responseText
     if (!body.includes('target="book_submissions"')) return
+    this.accepted = true
     this.formTarget.reset()
+    this.clearSearch()
     this.close()
+  }
+
+  // The request is made; the search text has done its job. Left in the box it
+  // would reopen the dropdown over the strip row that confirms the add.
+  clearSearch() {
+    const search = this.addItemSearch()
+    if (!search) return
+    search.value = ""
+    const hidden = search.closest('[data-controller~="autocomplete"]')?.querySelector('input[type="hidden"]')
+    if (hidden) hidden.value = ""
   }
 
   // A toast sits in the page, beneath an open modal dialog's top layer, so a
@@ -166,17 +212,19 @@ export default class extends Controller {
     this.syncMethod()
   }
 
+  // Rebuilds the author inputs from these names alone: the first input stays,
+  // the rest go, and as many are added as there are names (at most 10).
   setAuthors(names) {
-    const inputs = this.authorInputs()
-    names.slice(0, MAX_AUTHORS).forEach((name, index) => {
-      let input = inputs[index]
-      if (!input) {
-        input = this.buildAuthorInput(index)
-        this.authorsTarget.appendChild(input)
-      }
+    const [first, ...extra] = this.authorInputs()
+    extra.forEach((input) => input.remove())
+    const list = names.slice(0, MAX_AUTHORS)
+    first.value = list[0] || ""
+    list.slice(1).forEach((name, index) => {
+      const input = this.buildAuthorInput(index + 1)
       input.value = name
+      this.authorsTarget.appendChild(input)
     })
-    this.addAuthorTarget.hidden = this.authorInputs().length >= MAX_AUTHORS
+    this.addAuthorTarget.hidden = list.length >= MAX_AUTHORS
     this.syncMethod()
   }
 

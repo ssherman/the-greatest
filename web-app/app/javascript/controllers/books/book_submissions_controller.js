@@ -26,12 +26,22 @@ export default class extends Controller {
     this.onVisibility = () => { if (!document.hidden) this.sync() }
     this.onFetchResponse = (event) => this.fetchResponded(event)
     this.onFetchError = (event) => this.fetchFailed(event)
-    // A write's answer is fresh state, so a stopped poller may start again.
-    this.onStream = () => { this.stopped = false }
+    // A write's answer that replaces the strip is fresh state: a stopped poller
+    // may start again and the 10 minutes begin anew. Other streams (toasts, the
+    // dialog's error line) say nothing about the strip.
+    this.onStream = (event) => {
+      if (event.target?.getAttribute?.("target") !== FRAME_ID) return
+      this.stopped = false
+      this.startedAtValue = 0
+    }
+    this.onFrameMissing = (event) => this.frameMissing(event)
+    this.onBeforeFrameRender = (event) => this.beforeFrameRender(event)
     document.addEventListener("visibilitychange", this.onVisibility)
     document.addEventListener("turbo:before-stream-render", this.onStream)
     this.element.addEventListener("turbo:before-fetch-response", this.onFetchResponse)
     this.element.addEventListener("turbo:fetch-request-error", this.onFetchError)
+    this.element.addEventListener("turbo:frame-missing", this.onFrameMissing)
+    this.element.addEventListener("turbo:before-frame-render", this.onBeforeFrameRender)
     this.observer = new MutationObserver(() => this.sync())
     this.observer.observe(this.element, { childList: true, subtree: true })
     this.sync()
@@ -45,6 +55,69 @@ export default class extends Controller {
     document.removeEventListener("turbo:before-stream-render", this.onStream)
     this.element.removeEventListener("turbo:before-fetch-response", this.onFetchResponse)
     this.element.removeEventListener("turbo:fetch-request-error", this.onFetchError)
+    this.element.removeEventListener("turbo:frame-missing", this.onFrameMissing)
+    this.element.removeEventListener("turbo:before-frame-render", this.onBeforeFrameRender)
+  }
+
+  // An answer that is not our frame (a 502 page, a proxy error) would replace
+  // the strip with "Content missing" or navigate the page. Keep the rows; the
+  // poll that got it has already stopped polling (fetchResponded).
+  frameMissing(event) {
+    if (!this.isStripFrame(event.target)) return
+    event.preventDefault()
+  }
+
+  // A poll that answers with the rows it already shows swaps nothing, so focus
+  // stays put and the live region has nothing to announce; only the state
+  // attributes are read. When the rows did change, the swap happens and the
+  // focused button (found again by its row and label) gets its focus back.
+  beforeFrameRender(event) {
+    const frame = event.target
+    if (!this.isStripFrame(frame) || typeof event.detail?.render !== "function") return
+
+    const original = event.detail.render
+    event.detail.render = (current, next) => {
+      if (this.rowsOf(current) === this.rowsOf(next) && current.querySelector(STATE_SELECTOR)) {
+        this.copyState(current, next)
+        this.sync()
+        return
+      }
+      const focused = this.focusedControl(current)
+      original(current, next)
+      this.restoreFocus(current, focused)
+    }
+  }
+
+  rowsOf(root) {
+    return Array.from(root.querySelectorAll('[data-testid="book-submission-row"]'))
+      .map((row) => row.outerHTML)
+      .join("")
+  }
+
+  copyState(current, next) {
+    const from = next.querySelector(STATE_SELECTOR)
+    const to = current.querySelector(STATE_SELECTOR)
+    if (!to) return
+    for (const name of ["data-poll-url", "data-in-progress", "data-reload-list"]) {
+      const value = from?.getAttribute(name)
+      if (value === null || value === undefined) to.removeAttribute(name)
+      else to.setAttribute(name, value)
+    }
+  }
+
+  focusedControl(current) {
+    const active = document.activeElement
+    if (!active || active === document.body || !current.contains(active)) return null
+    const row = active.closest('[data-testid="book-submission-row"]')
+    return { rowId: row?.id, label: active.textContent.trim() }
+  }
+
+  restoreFocus(current, focused) {
+    if (!focused) return
+    const row = focused.rowId ? current.querySelector(`#${CSS.escape(focused.rowId)}`) : null
+    const control = row && Array.from(row.querySelectorAll("button")).find((button) => button.textContent.trim() === focused.label)
+    if (control) control.focus()
+    else this.element.focus({ preventScroll: true })
   }
 
   // "Try another way" on a row: the dialog opens with that row replaced. Reader
