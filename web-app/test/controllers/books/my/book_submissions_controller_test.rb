@@ -530,25 +530,42 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/href=["'][^"']*(javascript|alert)/i, response.body)
   end
 
-  test "a raw input with no title is shown as text only" do
+  test "a raw input with no title is never shown" do
     sign_in_as @user, stub_auth: true
     row(raw_input: "javascript:alert(1)").update_columns(resolved_title: nil, typed_title: nil)
 
     strip
 
-    assert_includes response.body, "javascript:alert(1)"
-    assert_no_match(/href=["'][^"']*javascript/i, response.body)
+    assert_includes response.body, "Adding a book from Goodreads"
+    assert_no_match(/javascript/i, response.body)
   end
 
-  test "a needs_details row names its request, escaped and never as a link" do
+  test "a needs_details row names its request by its id and never shows the pasted text" do
     sign_in_as @user, stub_auth: true
-    row(status: :needs_details, raw_input: "javascript:alert(1)//<img src=x>")
+    row(status: :needs_details, goodreads_book_id: 5107, raw_input: "javascript:alert(1)//<img src=x>")
 
     strip
 
-    assert_includes response.body, "We couldn&#39;t find a book from that link. Try another way"
-    assert_includes response.body, "javascript:alert(1)//&lt;img src=x&gt;"
-    assert_no_match(/(href|src)=["'][^"']*javascript/i, response.body)
+    assert_includes response.body, "We couldn&#39;t find a book from that link."
+    assert_includes response.body, "Goodreads book 5107"
+    assert_no_match(/javascript/i, response.body)
+  end
+
+  test "index loads the books of its added rows in one query" do
+    sign_in_as @user, stub_auth: true
+    3.times { |i| row(status: :added, book: ::Books::Book.create!(title: "Linked #{i}"), announced_at: Time.current) }
+    queries = 0
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      queries += 1 if payload[:sql].match?(/FROM "books_books"/)
+    end
+
+    strip
+
+    assert_response :success
+    assert_equal 3, response.body.scan("View book").size
+    assert_equal 1, queries
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
   end
 
   # Task 9: reading order, in-progress, refused writes, frame requests
@@ -571,7 +588,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     assert flipped
     doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
-    assert_includes doc.text, "Adding: Racer"
+    assert_includes doc.text, %(Adding "Racer")
     assert_equal "true", doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
     refute_includes response.body, "data-reload-list"
     assert_nil racing.reload.announced_at
@@ -579,7 +596,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     strip
     assert_includes response.body, 'data-reload-list="true"'
-    assert_includes response.body, "added Racer"
+    assert_includes response.body, "added &quot;Racer&quot;"
     assert marked?
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
@@ -600,7 +617,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     ActiveSupport::Notifications.unsubscribe(subscriber)
 
     assert flipped
-    assert_includes response.body, "Adding: Racer"
+    assert_includes response.body, "Adding &quot;Racer&quot;"
     assert_nil racing.reload.announced_at
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
@@ -622,7 +639,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     assert flipped
     doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
-    assert_includes doc.text, "Adding: Racer"
+    assert_includes doc.text, %(Adding "Racer")
     assert_equal "true", doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
     assert_nil racing.reload.announced_at
     refute_includes response.body, "data-reload-list"
@@ -712,7 +729,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
       strip(list)
 
       assert_response :success
-      assert_includes response.body, "We couldn&#39;t verify Provisional Doomed, so it was removed."
+      assert_includes response.body, "We couldn&#39;t verify &quot;Provisional Doomed&quot;, so it was removed."
     end
   end
 
@@ -725,7 +742,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     first = row(status: :added, book: book, created_book: true, review_status: :pending, resolved_title: "Dismissed Then Doomed")
     second = row(status: :added, book: book, user: second_user, list: second_list, review_status: :not_needed, resolved_title: "Dismissed Then Doomed")
     readers = [[@user, @list, first], [second_user, second_list, second]]
-    removed = "We couldn&#39;t verify Dismissed Then Doomed, so it was removed."
+    removed = "We couldn&#39;t verify &quot;Dismissed Then Doomed&quot;, so it was removed."
     dismiss = lambda do |submission|
       post dismiss_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
       assert_response :success
@@ -767,7 +784,7 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal %w[cancelled rejected], [submission.reload.status, submission.review_status]
-    assert_includes response.body, "We couldn&#39;t verify Deleted In Flight, so it was removed."
+    assert_includes response.body, "We couldn&#39;t verify &quot;Deleted In Flight&quot;, so it was removed."
     doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
     assert_nil doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
     assert_not_includes response.body, cancel_books_my_book_submission_path(submission)

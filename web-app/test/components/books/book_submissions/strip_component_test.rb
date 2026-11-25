@@ -72,44 +72,72 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     assert_empty @doc.css("a")
   end
 
-  # Row copy (spec section 6)
+  # Row copy (docs/superpowers/specs/2026-11-25-book-submission-alerts-design.md)
+
+  HINT = "It can take a while. You can leave this page and we'll still add it."
+  STALLED = "Still working on it. Reload the page to check."
 
   def rows = @doc.css("[data-testid=book-submission-row]")
 
-  def row_text(submission) = @doc.css("##{ActionView::RecordIdentifier.dom_id(submission)}").text.squish
+  def node(submission) = @doc.css("##{ActionView::RecordIdentifier.dom_id(submission)}").first
 
-  test "each status reads as the spec says" do
-    cases = {
-      queued: ["Adding: The Dispossessed", {resolved_title: "The Dispossessed"}],
-      looking_up: ["Adding: The Dispossessed", {resolved_title: "The Dispossessed"}],
-      needs_details: ["We couldn't find a book from that link. Try another way", {}],
-      added: ["Added The Dispossessed", {resolved_title: "The Dispossessed", created_book: true}],
-      failed: ["Could not add The Dispossessed", {resolved_title: "The Dispossessed"}]
-    }
-    cases.each do |status, (copy, attrs)|
-      submission = row(status, **attrs)
-      render_strip([submission])
-      assert_includes row_text(submission), copy, status.to_s
-    end
-    existing = row(:added, resolved_title: "The Dispossessed")
-    render_strip([existing])
-    assert_includes row_text(existing), "Already on the site: added The Dispossessed"
+  def row_text(submission) = node(submission).text.squish
+
+  def amazon_row(status, **attrs)
+    row(status, input_method: :amazon, goodreads_book_id: nil, asin: "0593188985",
+      raw_input: "https://www.amazon.com/Long-Wave-Novel/dp/0593188985/ref=sr_1_1?dib=eyJ2Ijoi", **attrs)
   end
 
-  def title_row(title, **attrs)
-    row(:needs_details, input_method: :title_authors, goodreads_book_id: nil, raw_input: nil, typed_title: title,
+  def isbn_row(status, **attrs)
+    row(status, input_method: :isbn, goodreads_book_id: nil, isbn13: "9780061054884", raw_input: "0-06-105488-7", **attrs)
+  end
+
+  def title_row(title, status = :needs_details, **attrs)
+    row(status, input_method: :title_authors, goodreads_book_id: nil, raw_input: nil, typed_title: title,
       typed_author_names: ["A"], **attrs)
   end
 
-  test "a needs_details row says what was not found, by how the reader asked, and names the request" do
-    link = "We couldn't find a book from that link. Try another way"
+  test "a request with a title is called by it" do
     cases = {
-      row(:needs_details, raw_input: "https://www.goodreads.com/book/show/5107") => [link, "https://www.goodreads.com/book/show/5107"],
-      row(:needs_details, input_method: :amazon, goodreads_book_id: nil, asin: "B000FC11JE", raw_input: "https://www.amazon.com/dp/B000FC11JE") =>
-        [link, "https://www.amazon.com/dp/B000FC11JE"],
-      row(:needs_details, input_method: :isbn, goodreads_book_id: nil, isbn13: "9780061054884", raw_input: "0-06-105488-7") =>
-        ["We couldn't find a book with that ISBN. Try another way", "0-06-105488-7"],
-      title_row("The Quiet Year") => ["We couldn't find that book. Try another way", "The Quiet Year"]
+      queued: [%(Adding "The Dispossessed" #{HINT} #{STALLED} Cancel), {}],
+      looking_up: [%(Adding "The Dispossessed" #{HINT} #{STALLED} Cancel), {}],
+      added: [%(Added "The Dispossessed" Dismiss), {created_book: true}],
+      failed: [%(Could not add "The Dispossessed" Try another way Dismiss), {}]
+    }
+    cases.each do |status, (copy, attrs)|
+      submission = row(status, resolved_title: "The Dispossessed", **attrs)
+      render_strip([submission])
+      assert_equal copy, row_text(submission), status.to_s
+    end
+    existing = row(:added, resolved_title: "The Dispossessed")
+    render_strip([existing])
+    assert_equal %(Already on the site: added "The Dispossessed" Dismiss), row_text(existing)
+  end
+
+  test "a request with no title yet is called by where it came from, with its short reference" do
+    cases = {
+      row(:queued, goodreads_book_id: 5107) => "Adding a book from Goodreads Goodreads book 5107. #{HINT} #{STALLED} Cancel",
+      amazon_row(:looking_up) => "Adding a book from Amazon Amazon item 0593188985. #{HINT} #{STALLED} Cancel",
+      isbn_row(:queued) => "Adding a book by ISBN ISBN 9780061054884. #{HINT} #{STALLED} Cancel",
+      isbn_row(:queued, isbn13: nil, isbn10: "0061054887") => "Adding a book by ISBN ISBN 0061054887. #{HINT} #{STALLED} Cancel",
+      title_row("The Quiet Year", :queued) => %(Adding "The Quiet Year" #{HINT} #{STALLED} Cancel),
+      amazon_row(:failed) => "Could not add a book from Amazon Amazon item 0593188985 Try another way Dismiss",
+      amazon_row(:cancelled, review_status: :rejected) =>
+        "We couldn't verify a book from Amazon, so it was removed. Amazon item 0593188985 Dismiss",
+      amazon_row(:added, created_book: true) => "Added a book from Amazon Amazon item 0593188985 Dismiss"
+    }
+    render_strip(cases.keys)
+
+    cases.each { |submission, copy| assert_equal copy, row_text(submission) }
+  end
+
+  test "a needs_details row says what was not found, by how the reader asked, and names the request" do
+    link = "We couldn't find a book from that link."
+    cases = {
+      row(:needs_details, goodreads_book_id: 5107) => [link, "Goodreads book 5107"],
+      amazon_row(:needs_details) => [link, "Amazon item 0593188985"],
+      isbn_row(:needs_details) => ["We couldn't find a book with that ISBN.", "ISBN 9780061054884"],
+      title_row("The Quiet Year") => ["We couldn't find that book.", "The Quiet Year"]
     }
 
     render_strip(cases.keys)
@@ -117,6 +145,18 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     cases.each do |submission, (copy, label)|
       assert_equal "#{copy} #{label} Try another way Cancel", row_text(submission), submission.input_method
     end
+  end
+
+  test "the pasted text is never shown, whatever the status" do
+    submissions = %i[queued looking_up needs_details added failed].flat_map do |status|
+      [row(status, raw_input: "https://www.goodreads.com/PASTED"), amazon_row(status).tap { |s| s.update!(raw_input: "https://www.amazon.com/PASTED") },
+        isbn_row(status).tap { |s| s.update!(raw_input: "PASTED") }]
+    end
+    submissions << row(:cancelled, review_status: :rejected, raw_input: "https://www.goodreads.com/PASTED")
+    render_strip(submissions)
+
+    assert_equal submissions.size, rows.size
+    assert_no_match(/PASTED/, @doc.to_html)
   end
 
   test "two needs_details rows of one kind can be told apart, and their text is escaped" do
@@ -130,28 +170,54 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     assert_empty @doc.css("a")
   end
 
-  test "a needs_details row with nothing to call it still says what happened" do
-    submission = row(:needs_details)
-    submission.update_columns(raw_input: nil)
-    render_strip([submission])
-
-    assert_equal "We couldn't find a book from that link. Try another way Try another way Cancel", row_text(submission)
-    assert_empty(@doc.css("[data-testid=book-submission-row] span").select { |span| span.text.strip.empty? })
-  end
-
-  test "every other row names its request once" do
-    submissions = %i[queued looking_up added failed].map { |status| row(status, resolved_title: "Once #{status}") }
+  test "every row names its request once" do
+    submissions = %i[queued looking_up needs_details added failed].map { |status| row(status, resolved_title: "Once #{status}") }
     submissions << row(:cancelled, resolved_title: "Once rejected", review_status: :rejected)
     render_strip(submissions)
 
     submissions.each { |submission| assert_equal 1, row_text(submission).scan(submission.resolved_title).size, submission.status }
   end
 
+  test "only a request in progress has a spinner, and a clock and line for when the page stopped checking" do
+    working = row(:looking_up)
+    others = %i[needs_details added failed].map { |status| row(status) }
+    render_strip([working, *others])
+
+    assert_equal 1, node(working).css(".loading").size
+    assert_equal 2, node(working).css("[data-when=stalled]").size
+    others.each do |other|
+      assert_empty node(other).css(".loading"), other.status
+      assert_empty node(other).css("[data-when=stalled]"), other.status
+    end
+  end
+
+  test "icons and spinners are silent, and no row is a live region of its own" do
+    render_strip(%i[looking_up needs_details added failed].map { |status| row(status) })
+
+    assert_equal 4, rows.size
+    icons = @doc.css("svg, .loading")
+    assert_operator icons.size, :>=, 4
+    icons.each { |icon| assert_equal "true", icon["aria-hidden"] }
+    assert_empty @doc.css("[role=alert], [role=status], [aria-live]")
+  end
+
+  test "an added row links to its book's page and nothing else does" do
+    book = Books::Book.create!(title: "A Linked Book")
+    added = row(:added, book: book, created_book: true)
+    gone = row(:added, created_book: true)
+    working = row(:looking_up, book: book)
+    rejected = row(:added, book: book, review_status: :rejected)
+    render_strip([added, gone, working, rejected])
+
+    assert_equal [routes.book_path(book.slug)], @doc.css("a").map { |a| a["href"] }
+    assert_equal "View book", node(added).css("a").text.strip
+  end
+
   test "a rejected row says it was removed" do
     rejected = row(:cancelled, resolved_title: "Odd Book", review_status: :rejected)
     render_strip([rejected])
 
-    assert_includes row_text(rejected), "We couldn't verify Odd Book, so it was removed."
+    assert_includes row_text(rejected), %(We couldn't verify "Odd Book", so it was removed.)
   end
 
   test "every row carries the book-submission-row test id" do
@@ -167,7 +233,7 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
 
     assert_equal 1, @doc.css("form[action='#{routes.cancel_books_my_book_submission_path(bare)}']").size
     assert_empty @doc.css("form[action='#{routes.cancel_books_my_book_submission_path(with_book)}']")
-    assert_includes row_text(with_book), "Adding:"
+    assert_includes row_text(with_book), "Adding"
     assert_empty @doc.css("form[action='#{routes.dismiss_books_my_book_submission_path(with_book)}']")
   end
 

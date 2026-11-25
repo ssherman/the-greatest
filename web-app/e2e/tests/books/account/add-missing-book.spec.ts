@@ -51,10 +51,15 @@ test.describe("Books account: add a missing book", () => {
     await openList(page);
     const strip = page.getByTestId("book-submission-strip");
 
-    await expect(strip.getByText("Adding: E2E Book Submission Looking Up")).toBeVisible();
+    const working = page.getByTestId("book-submission-row").filter({ hasText: 'Adding "E2E Book Submission Looking Up"' });
+    await expect(working.locator(".loading")).toBeVisible();
+    await expect(working.getByText("It can take a while.")).toBeVisible();
+    await expect(working.getByText("Still working on it.")).toBeHidden();
     const notFound = page.getByTestId("book-submission-row").filter({ hasText: "E2E Book Submission Needs Details" });
-    await expect(notFound.getByText("We couldn't find a book from that link. Try another way")).toBeVisible();
-    await expect(strip.getByText("Added E2E Book Submission Added")).toBeVisible();
+    await expect(notFound.getByText("We couldn't find a book from that link.")).toBeVisible();
+    await expect(strip.getByText('Added "E2E Book Submission Added"')).toBeVisible();
+    await expect(strip.getByRole("link", { name: "View book" })).toHaveAttribute("href", /\/book\//);
+    await expect(strip.getByText("goodreads.com")).toHaveCount(0);
     await expect(strip.getByRole("button", { name: "Try another way" })).toBeVisible();
     await expect(page.getByTestId("not-yet-reviewed").first()).toHaveText("Not yet reviewed");
   });
@@ -100,7 +105,7 @@ test.describe("Books account: add a missing book", () => {
     await page.clock.install();
     await openList(page);
     const live = page.getByTestId("book-submission-strip");
-    await expect(live.getByText("Adding: E2E Book Submission Looking Up")).toBeVisible();
+    await expect(live.getByText('Adding "E2E Book Submission Looking Up"')).toBeVisible();
     const polledAtStart = polls;
     await page.evaluate(() => {
       (window as any).__mutations = 0;
@@ -117,6 +122,41 @@ test.describe("Books account: add a missing book", () => {
     }
 
     expect(await page.evaluate(() => (window as any).__mutations)).toBe(0);
+  });
+
+  test("when checking stops the spinner becomes a clock, and a fresh strip spins again", async ({ page }) => {
+    let gets = 0;
+    await page.route("**/book-submissions", (route) => {
+      gets++;
+      return gets === 1 ? route.continue() : route.fulfill({ status: 502, contentType: "text/html", body: "Bad Gateway" });
+    });
+    await page.clock.install();
+    await openList(page);
+    const strip = page.getByTestId("book-submission-strip");
+    const working = page.getByTestId("book-submission-row").filter({ hasText: 'Adding "E2E Book Submission Looking Up"' });
+    await expect(working.locator(".loading")).toBeVisible();
+    await expect(working.locator("svg")).toBeHidden();
+
+    await page.clock.runFor(10_500);
+    await expect(working.getByText("Still working on it. Reload the page to check.")).toBeVisible();
+    await expect(working.locator("svg")).toBeVisible();
+    await expect(working.locator(".loading")).toBeHidden();
+    await expect(working.getByText("It can take a while.")).toBeHidden();
+
+    // What a write's answer does: the strip is replaced, so checking starts again.
+    await page.evaluate(() => {
+      const stream = document.createElement("turbo-stream");
+      stream.setAttribute("action", "replace");
+      stream.setAttribute("target", "book_submissions");
+      const template = document.createElement("template");
+      const copy = document.getElementById("book_submissions")!.cloneNode(true) as HTMLElement;
+      copy.removeAttribute("src");
+      template.content.append(copy);
+      stream.append(template);
+      document.body.append(stream);
+    });
+    await expect(working.locator(".loading")).toBeVisible();
+    await expect(strip).not.toHaveAttribute("data-stalled", "");
   });
 
   test("switching the method shows only that method's fields", async ({ page }) => {
@@ -171,7 +211,7 @@ test.describe("Books account: add a missing book", () => {
 
   test("cancel removes a row that has no book yet", async ({ page }) => {
     await openList(page);
-    const row = page.getByTestId("book-submission-row").filter({ hasText: "Adding: E2E Book Submission Looking Up" });
+    const row = page.getByTestId("book-submission-row").filter({ hasText: 'Adding "E2E Book Submission Looking Up"' });
 
     await row.getByRole("button", { name: "Cancel" }).click();
 
@@ -255,6 +295,7 @@ test.describe("Books account: add a missing book, network stubbed", () => {
     await expect(page.getByText("Adding: Slow Book")).toBeVisible();
     await expect(page.getByText("Content missing")).toHaveCount(0);
     expect(counts.gets).toBe(2);
+    await expect(strip(page)).toHaveAttribute("data-stalled", "");
   });
 
   test("a failed submit that is not a stream tells the reader and leaves the strip alone", async ({ page }) => {
@@ -512,6 +553,7 @@ test.describe("Books account: add a missing book, network stubbed", () => {
     await page.clock.runFor(60_000);
     await page.waitForTimeout(300);
     expect(counts.gets).toBe(stopped);
+    await expect(strip(page)).toHaveAttribute("data-stalled", "");
   });
 
   test("a reload-list answer reloads the list once, not again when the controller reconnects", async ({ page }) => {
