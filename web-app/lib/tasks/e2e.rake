@@ -346,7 +346,8 @@ namespace :e2e do
       book: added_book, created_book: true, announced_at: Time.current)
 
     puts({list_id: list.id, hit_title: hit.title, hit_goodreads_id: BOOK_SUBMISSION_HIT_GOODREADS_ID,
-          hit_book_id: hit.id, looking_up_id: looking.id, needs_details_id: stuck.id, added_id: added.id}.to_json)
+          hit_book_id: hit.id, looking_up_id: looking.id, needs_details_id: stuck.id, added_id: added.id,
+          added_book_id: added_book.id}.to_json)
   end
 
   desc "Remove what e2e:book_submissions_seed and the book-submission E2E spec created"

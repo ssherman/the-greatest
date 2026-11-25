@@ -1057,6 +1057,18 @@ Rails.application.routes.draw do
       resources :list_audits, only: [:index] do
         member { post :release }
       end
+
+      # Books users asked for that the catalogue lacks: the review queue, and the admin's own
+      # decisions (the agents use the admin API).
+      resources :book_submissions, only: [:index] do
+        member do
+          post :approve
+          post :merge
+          post :reject
+          post :supply_details
+          post :retry
+        end
+      end
       post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
       post "enrichment_requests/:id/retry_apply", to: "enrichment_queues#retry_apply", as: :retry_apply_enrichment_request, constraints: {id: /\d+/}
 

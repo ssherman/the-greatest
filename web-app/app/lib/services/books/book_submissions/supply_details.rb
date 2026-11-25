@@ -26,6 +26,9 @@ module Services
         KEYS = %w[isbn13 isbn10 asin goodreads_id].freeze
         ASIN = /\A[A-Z0-9]{10}\z/
         STATUSES = %w[needs_details failed].freeze
+        # A reviewer on the admin page may also supply a row handed to a person; an agent may not.
+        ADMIN_REVIEWS = %w[not_needed pending needs_human].freeze
+        AGENT_REVIEWS = %w[not_needed pending].freeze
 
         def self.call(submission:, title:, author_names:, user:, via:, note:, identifiers: {}, lease_token: nil)
           new(submission: submission, title: title, author_names: author_names, identifiers: identifiers, user: user, via: via,
@@ -73,7 +76,7 @@ module Services
         # Reviews a request may be supplied in. The admin page may also take one
         # flagged needs_human (a skip, or abandoned by agents), which goes back
         # to not_needed; the API never holds a lease on it.
-        def reviews = (@via == "admin_ui") ? %w[not_needed pending needs_human] : %w[not_needed pending]
+        def reviews = (@via == "admin_ui") ? ADMIN_REVIEWS : AGENT_REVIEWS
 
         # The stored hash, or a failed Result.
         def build

@@ -1,0 +1,45 @@
+<% content_for :title, "Book Submissions" %>
+
+<% tab_labels = {"needs_review" => "Needs review", "needs_details" => "Needs details", "needs_human" => "Needs human",
+                 "approved" => "Approved", "merged" => "Merged", "rejected" => "Rejected", "failed" => "Failed", "all" => "All"} %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold">Book Submissions</h1>
+      <p class="text-base-content/70">Books readers asked for that the site lacked. Approve makes the book public; merge and reject are permanent.</p>
+    </div>
+    <div data-controller="clipboard-copy">
+      <textarea hidden readonly data-clipboard-copy-target="source"><%= @agent_prompt %></textarea>
+      <button type="button" class="btn btn-sm" data-action="clipboard-copy#copy"
+              data-clipboard-copy-target="button" data-testid="copy-agent-prompt">Copy prompt</button>
+    </div>
+  </div>
+
+  <div role="tablist" class="tabs tabs-border flex-wrap" data-testid="submission-tabs">
+    <% tab_labels.each do |key, label| %>
+      <%= link_to admin_books_book_submissions_path(tab: key), role: "tab", class: ["tab", ("tab-active" if key == @tab)],
+            data: {testid: "tab-#{key.dasherize}"}, aria: {selected: key == @tab} do %>
+        <%= label %> <span class="badge badge-sm badge-ghost ml-2" data-testid="count-<%= key.dasherize %>"><%= number_with_delimiter(@counts[key]) %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <% if @book_id %>
+    <div class="alert alert-info" data-testid="book-filter">
+      <span>Showing the submissions for book <%= link_to "##{@book_id}", admin_books_book_path(@book_id), class: "link" %> only.</span>
+      <%= link_to "Show all", admin_books_book_submissions_path(tab: @tab), class: "btn btn-sm btn-ghost" %>
+    </div>
+  <% end %>
+
+  <% if @submissions.any? %>
+    <div class="space-y-4">
+      <%= render partial: "admin/books/book_submissions/submission", collection: @submissions, as: :submission %>
+    </div>
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center"><%== @pagy.series_nav %></div>
+    <% end %>
+  <% else %>
+    <p class="text-base-content/70" data-testid="no-submissions">Nothing here.</p>
+  <% end %>
+</div>

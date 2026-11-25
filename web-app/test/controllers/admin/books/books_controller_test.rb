@@ -3,6 +3,13 @@ require "test_helper"
 module Admin
   module Books
     class BooksControllerTest < ActionDispatch::IntegrationTest
+      include BookSubmissionReviewHelper
+
+      def user_added_submission
+        stub_review_side_effects
+        reviewable_submission
+      end
+
       setup do
         @admin_user = users(:admin_user)
         @editor_user = users(:editor_user)
@@ -111,6 +118,25 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
         get admin_books_book_path(@book)
         assert_response :success
+      end
+
+      test "show badges a book a reader's request created, linking to its submissions" do
+        row = user_added_submission
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_book_path(row.book)
+
+        assert_select "[data-testid=user-added-badge][href=?]", admin_books_book_submissions_path(tab: "all", book_id: row.book_id), text: /User-added/
+      end
+
+      test "show does not badge a catalog book or one that absorbed a user-added duplicate" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_book_path(@book)
+        assert_select "[data-testid=user-added-badge]", count: 0
+
+        row = user_added_submission
+        row.update_columns(book_id: @book.id, review_status: ::Books::BookSubmission.review_statuses[:merged])
+        get admin_books_book_path(@book)
+        assert_select "[data-testid=user-added-badge]", count: 0
       end
 
       test "show redirects a regular user" do

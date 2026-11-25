@@ -1,0 +1,175 @@
+<%# Locals: submission. Everything a reader typed is escaped and may be long, so it wraps anywhere. Links are
+    built from the parsed id by the controller's helpers, never from raw_input. %>
+<% actions = row_actions(submission) %>
+<% book = submission.book %>
+<% status_class = {"added" => "badge-success", "failed" => "badge-error", "needs_details" => "badge-warning"}.fetch(submission.status, "badge-ghost") %>
+<% review_class = {"pending" => "badge-info", "needs_human" => "badge-warning", "approved" => "badge-success", "merged" => "badge-success", "rejected" => "badge-error"}.fetch(submission.review_status, "badge-ghost") %>
+<% names = Array(submission.resolved_author_names.presence || submission.typed_author_names).map(&:to_s) %>
+
+<div class="card bg-base-100 shadow" id="submission-<%= submission.id %>" data-testid="submission-row" data-submission-id="<%= submission.id %>">
+  <div class="card-body gap-3">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div class="min-w-0">
+        <h2 class="card-title text-lg [overflow-wrap:anywhere]" data-testid="submission-title"><%= submission.label.presence || "(no title yet)" %></h2>
+        <% if names.any? %>
+          <p class="text-base-content/70 [overflow-wrap:anywhere]">by <%= names.join(", ") %></p>
+        <% end %>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        <span class="badge badge-ghost badge-sm"><%= submission.input_method.humanize %></span>
+        <span class="badge badge-sm <%= status_class %>" data-testid="submission-status"><%= submission.status.humanize %></span>
+        <span class="badge badge-sm <%= review_class %>" data-testid="submission-review"><%= submission.review_status.humanize %></span>
+      </div>
+    </div>
+
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+      <div>
+        <dt class="text-base-content/60">Submitted</dt>
+        <dd class="[overflow-wrap:anywhere]">
+          <%= time_tag submission.created_at, submission.created_at.strftime("%b %d, %Y %H:%M") %>
+          by <%= submission.user&.email || "a deleted user" %>
+          <% if submission.user_list %>to <em><%= submission.user_list.name %></em><% end %>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-base-content/60">They gave us</dt>
+        <dd class="[overflow-wrap:anywhere]">
+          <% if submission.raw_input.present? %>
+            <code class="text-xs"><%= submission.raw_input %></code>
+          <% else %>
+            a title and authors
+          <% end %>
+          <% if goodreads_url(submission) %>
+            <%= link_to "Goodreads page", goodreads_url(submission), target: "_blank", rel: "noopener noreferrer", class: "link", data: {testid: "source-link"} %>
+          <% elsif amazon_url(submission) %>
+            <%= link_to "Amazon page", amazon_url(submission), target: "_blank", rel: "noopener noreferrer", class: "link", data: {testid: "source-link"} %>
+          <% end %>
+          <% ids = {"ISBN-13" => submission.isbn13, "ISBN-10" => submission.isbn10, "ASIN" => submission.asin, "Goodreads id" => submission.goodreads_book_id}.compact_blank %>
+          <% if ids.any? %><span class="block text-base-content/70"><%= ids.map { |label, value| "#{label} #{value}" }.join(" · ") %></span><% end %>
+        </dd>
+      </div>
+      <% if book %>
+        <div>
+          <dt class="text-base-content/60">Book</dt>
+          <dd class="[overflow-wrap:anywhere]">
+            <%= link_to book.title, admin_books_book_path(book), class: "link", data: {testid: "submission-book"} %>
+            <% if book.provisional? %><span class="badge badge-warning badge-sm">Provisional</span><% end %>
+            <% if book.authors.any? %><span class="block text-base-content/70">by <%= book.authors.map(&:name).join(", ") %></span><% end %>
+          </dd>
+        </div>
+      <% end %>
+      <% if submission.match_decision %>
+        <div>
+          <dt class="text-base-content/60">The finder decided</dt>
+          <dd class="[overflow-wrap:anywhere]">
+            <%= submission.match_decision.outcome.to_s.humanize %><% if submission.match_decision.reason.present? %>: <%= submission.match_decision.reason %><% end %>
+            <% candidates = Array(submission.match_decision.candidates).select { |c| c.is_a?(Hash) && c["record_type"] == "Books::Book" && c["record_id"].is_a?(Integer) } %>
+            <% candidates.each do |candidate| %>
+              <span class="block text-base-content/70">
+                Candidate <%= link_to "##{candidate["record_id"]}", admin_books_book_path(candidate["record_id"]), class: "link" %>
+                <%= candidate.dig("evidence", "title") %>
+              </span>
+            <% end %>
+          </dd>
+        </div>
+      <% end %>
+      <% if submission.error.present? %>
+        <div class="sm:col-span-2">
+          <dt class="text-base-content/60">Error</dt>
+          <dd class="[overflow-wrap:anywhere] text-error"><%= submission.error.to_s.truncate(300) %></dd>
+        </div>
+      <% end %>
+      <% if submission.review_note.present? %>
+        <div class="sm:col-span-2">
+          <dt class="text-base-content/60">Review note<% if submission.reviewed_via %> (<%= submission.reviewed_via.humanize.downcase %><% if submission.reviewed_by %>, <%= submission.reviewed_by.email %><% end %>)<% end %></dt>
+          <dd class="[overflow-wrap:anywhere]">
+            <%= submission.review_note %>
+            <% Array(submission.review_sources).each do |source| %><span class="block text-base-content/70"><%= source %></span><% end %>
+          </dd>
+        </div>
+      <% end %>
+    </dl>
+
+    <% if actions.any? %>
+      <div class="flex flex-wrap items-start gap-2" data-testid="submission-actions">
+        <% if actions.include?(:approve) && current_user_can_delete? %>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="approve">
+            <summary class="btn btn-sm btn-success btn-outline">Approve</summary>
+            <%= form_with url: approve_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96",
+                  data: {turbo_confirm: "Approve this book? It becomes public."} do %>
+              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3 %>
+              <%= submit_tag "Approve", class: "btn btn-sm btn-success" %>
+            <% end %>
+          </details>
+        <% end %>
+
+        <% if actions.include?(:merge) && current_user_can_delete? %>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="merge">
+            <summary class="btn btn-sm btn-warning btn-outline">Merge</summary>
+            <%= form_with url: merge_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Merge into this book</legend>
+                <%= render AutocompleteComponent.new(name: "target_id", id: "target_id_#{submission.id}", url: search_admin_books_books_path(exclude_id: submission.book_id),
+                      placeholder: "Search for the book we already hold…", required: true) %>
+              </fieldset>
+              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2 %>
+              <p class="text-sm text-base-content/70">Preview first. A merge deletes this provisional book permanently and moves its readers' list entries to the target.</p>
+              <div class="flex gap-2">
+                <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "merge-preview"} %>
+                <%= button_tag "Merge", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-warning",
+                      data: {turbo_confirm: "Merge #{truncate(book.title, length: 60)} into the book you chose? This cannot be undone."} %>
+              </div>
+            <% end %>
+          </details>
+        <% end %>
+
+        <% if actions.include?(:reject) && current_user_can_delete? %>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="reject">
+            <summary class="btn btn-sm btn-error btn-outline">Reject</summary>
+            <%= form_with url: reject_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
+              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3 %>
+              <p class="text-sm text-base-content/70">Preview shows what would be deleted. Reject deletes the provisional book and its provisional authors permanently.</p>
+              <div class="flex gap-2">
+                <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "reject-preview"} %>
+                <%= button_tag "Reject", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-error", data: {testid: "reject-confirm",
+                      turbo_confirm: "Permanently delete #{truncate(book.title, length: 60).inspect}? This cannot be undone."} %>
+              </div>
+            <% end %>
+          </details>
+        <% end %>
+
+        <% if actions.include?(:supply_details) && current_user_can_write? %>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="supply_details">
+            <summary class="btn btn-sm btn-outline">Supply details</summary>
+            <%= form_with url: supply_details_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
+              <%= hidden_field_tag :tab, @tab, id: nil %>
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Title</legend>
+                <%= text_field_tag :title, nil, class: "input w-full", required: true, maxlength: 255, id: "title_#{submission.id}" %>
+              </fieldset>
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Authors, one per line</legend>
+                <%= text_area_tag :authors, nil, class: "textarea w-full", rows: 2, required: true, id: "authors_#{submission.id}" %>
+              </fieldset>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <%= text_field_tag :isbn, nil, class: "input w-full", placeholder: "ISBN", "aria-label": "ISBN", id: "isbn_#{submission.id}" %>
+                <%= text_field_tag :asin, nil, class: "input w-full", placeholder: "ASIN", "aria-label": "ASIN", id: "asin_#{submission.id}" %>
+                <%= text_field_tag :goodreads_id, nil, class: "input w-full", placeholder: "Goodreads id", "aria-label": "Goodreads id", id: "goodreads_id_#{submission.id}" %>
+              </div>
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Note: where you found it</legend>
+                <%= text_area_tag :note, nil, class: "textarea w-full", rows: 2, required: true, maxlength: 1000, id: "note_#{submission.id}" %>
+              </fieldset>
+              <%= submit_tag "Supply details", class: "btn btn-sm btn-primary" %>
+            <% end %>
+          </details>
+        <% end %>
+
+        <% if actions.include?(:retry) && current_user_can_write? %>
+          <%= button_to "Retry", retry_admin_books_book_submission_path(submission), method: :post, params: {tab: @tab},
+                class: "btn btn-sm btn-outline", form: {data: {action_name: "retry"}} %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

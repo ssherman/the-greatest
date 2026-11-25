@@ -17,6 +17,10 @@ module Services
           new(submission: submission, user: user).call
         end
 
+        # What the service accepts, for the page to offer the button by: the
+        # rule of the scope in #call, read from a loaded row.
+        def self.retryable?(row) = row.failed? && !row.review_rejected?
+
         def initialize(submission:, user:)
           @submission = submission
           @user = user
