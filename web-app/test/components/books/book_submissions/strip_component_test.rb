@@ -96,6 +96,57 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     assert_includes row_text(existing), "Already on the site: added The Dispossessed"
   end
 
+  def title_row(title, **attrs)
+    row(:needs_details, input_method: :title_authors, goodreads_book_id: nil, raw_input: nil, typed_title: title,
+      typed_author_names: ["A"], **attrs)
+  end
+
+  test "a needs_details row says what was not found, by how the reader asked, and names the request" do
+    link = "We couldn't find a book from that link. Try another way"
+    cases = {
+      row(:needs_details, raw_input: "https://www.goodreads.com/book/show/5107") => [link, "https://www.goodreads.com/book/show/5107"],
+      row(:needs_details, input_method: :amazon, goodreads_book_id: nil, asin: "B000FC11JE", raw_input: "https://www.amazon.com/dp/B000FC11JE") =>
+        [link, "https://www.amazon.com/dp/B000FC11JE"],
+      row(:needs_details, input_method: :isbn, goodreads_book_id: nil, isbn13: "9780061054884", raw_input: "0-06-105488-7") =>
+        ["We couldn't find a book with that ISBN. Try another way", "0-06-105488-7"],
+      title_row("The Quiet Year") => ["We couldn't find that book. Try another way", "The Quiet Year"]
+    }
+
+    render_strip(cases.keys)
+
+    cases.each do |submission, (copy, label)|
+      assert_equal "#{copy} #{label} Try another way Cancel", row_text(submission), submission.input_method
+    end
+  end
+
+  test "two needs_details rows of one kind can be told apart, and their text is escaped" do
+    first = title_row("<b>One</b>")
+    second = title_row("Two")
+    render_strip([first, second])
+
+    assert_includes row_text(first), "<b>One</b>"
+    assert_includes row_text(second), "Two"
+    assert_empty @doc.css("b")
+    assert_empty @doc.css("a")
+  end
+
+  test "a needs_details row with nothing to call it still says what happened" do
+    submission = row(:needs_details)
+    submission.update_columns(raw_input: nil)
+    render_strip([submission])
+
+    assert_equal "We couldn't find a book from that link. Try another way Try another way Cancel", row_text(submission)
+    assert_empty(@doc.css("[data-testid=book-submission-row] span").select { |span| span.text.strip.empty? })
+  end
+
+  test "every other row names its request once" do
+    submissions = %i[queued looking_up added failed].map { |status| row(status, resolved_title: "Once #{status}") }
+    submissions << row(:cancelled, resolved_title: "Once rejected", review_status: :rejected)
+    render_strip(submissions)
+
+    submissions.each { |submission| assert_equal 1, row_text(submission).scan(submission.resolved_title).size, submission.status }
+  end
+
   test "a rejected row says it was removed" do
     rejected = row(:cancelled, resolved_title: "Odd Book", review_status: :rejected)
     render_strip([rejected])

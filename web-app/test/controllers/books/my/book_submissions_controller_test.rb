@@ -540,6 +540,17 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/href=["'][^"']*javascript/i, response.body)
   end
 
+  test "a needs_details row names its request, escaped and never as a link" do
+    sign_in_as @user, stub_auth: true
+    row(status: :needs_details, raw_input: "javascript:alert(1)//<img src=x>")
+
+    strip
+
+    assert_includes response.body, "We couldn&#39;t find a book from that link. Try another way"
+    assert_includes response.body, "javascript:alert(1)//&lt;img src=x&gt;"
+    assert_no_match(/(href|src)=["'][^"']*javascript/i, response.body)
+  end
+
   # Task 9: reading order, in-progress, refused writes, frame requests
 
   def frame_headers = {"Turbo-Frame" => "book_submissions"}

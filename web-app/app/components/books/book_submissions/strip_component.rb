@@ -38,10 +38,26 @@ class Books::BookSubmissions::StripComponent < ViewComponent::Base
 
     case submission.status
     when "queued", "looking_up" then "Adding: #{label}"
-    when "needs_details" then "We couldn't find a book from that link. Try another way"
+    when "needs_details" then not_found_message(submission)
     when "added" then submission.created_book? ? "Added #{label}" : "Already on the site: added #{label}"
     when "failed" then "Could not add #{label}"
     else label.to_s
     end
+  end
+
+  def not_found_message(submission)
+    if submission.method_isbn?
+      "We couldn't find a book with that ISBN. Try another way"
+    elsif submission.method_title_authors?
+      "We couldn't find that book. Try another way"
+    else
+      "We couldn't find a book from that link. Try another way"
+    end
+  end
+
+  # The not-found sentence names no book, so two such rows would read the same:
+  # the row also shows what the reader asked for. Every other row's message has it.
+  def request_label(submission)
+    submission.label if submission.needs_details?
   end
 end

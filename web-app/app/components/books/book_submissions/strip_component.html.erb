@@ -2,7 +2,12 @@
   <%= tag.div(data: frame_data.merge(testid: "book-submissions-state")) %>
   <% submissions.each do |submission| %>
     <div id="<%= dom_id(submission) %>" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1 text-sm" data-testid="book-submission-row">
-      <span class="[overflow-wrap:anywhere]"><%= message(submission) %></span>
+      <span class="[overflow-wrap:anywhere]">
+        <%= message(submission) %>
+        <% if request_label(submission).present? %>
+          <span class="block text-base-content/70"><%= request_label(submission) %></span>
+        <% end %>
+      </span>
       <span class="flex flex-wrap items-center gap-2">
         <% if retryable?(submission) %>
           <%= button_tag "Try another way", type: "button", class: "btn btn-xs btn-outline",

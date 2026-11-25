@@ -52,7 +52,8 @@ test.describe("Books account: add a missing book", () => {
     const strip = page.getByTestId("book-submission-strip");
 
     await expect(strip.getByText("Adding: E2E Book Submission Looking Up")).toBeVisible();
-    await expect(strip.getByText("We couldn't find a book from that link. Try another way")).toBeVisible();
+    const notFound = page.getByTestId("book-submission-row").filter({ hasText: "E2E Book Submission Needs Details" });
+    await expect(notFound.getByText("We couldn't find a book from that link. Try another way")).toBeVisible();
     await expect(strip.getByText("Added E2E Book Submission Added")).toBeVisible();
     await expect(strip.getByRole("button", { name: "Try another way" })).toBeVisible();
     await expect(page.getByTestId("not-yet-reviewed").first()).toHaveText("Not yet reviewed");
@@ -179,7 +180,7 @@ test.describe("Books account: add a missing book", () => {
 
   test("Try another way reopens the dialog on another method", async ({ page }) => {
     await openList(page);
-    const row = page.getByTestId("book-submission-row").filter({ hasText: "We couldn't find a book from that link" });
+    const row = page.getByTestId("book-submission-row").filter({ hasText: "E2E Book Submission Needs Details" });
 
     await row.getByRole("button", { name: "Try another way" }).click();
 
