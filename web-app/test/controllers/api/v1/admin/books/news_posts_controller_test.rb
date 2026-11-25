@@ -426,6 +426,13 @@ module Api
             assert_equal 1, jobs.size
           end
 
+          # A refused retry still purges: the first call may have committed and then
+          # failed to enqueue, and a retry that purged nothing could never repair it.
+          def assert_one_purge_of(jobs, post)
+            assert_equal 1, jobs.size
+            assert_includes jobs.first["args"].last, "https://dev-new.thegreatestbooks.org/news/#{post.slug}"
+          end
+
           test "a live post with a past time is a 409 naming its date, not a 422" do
             live = news_posts(:books_december_update)
             was = live.reload.published_at
@@ -433,7 +440,7 @@ module Api
             assert_api_response_conform(status: 409, api: :admin)
             assert_includes json[:detail], was.utc.iso8601(6)
             assert_equal was, live.reload.published_at
-            assert_empty jobs
+            assert_one_purge_of jobs, live
           end
 
           test "a draft with a past time is a 422 that says how to publish now, and purges nothing" do
@@ -489,7 +496,7 @@ module Api
             assert_api_response_conform(status: 409, api: :admin)
             assert_includes json[:detail], was.utc.iso8601(6)
             assert_equal was, live.reload.published_at
-            assert_empty jobs
+            assert_one_purge_of jobs, live
           end
 
           test "publish keeps an image the admin attached" do
@@ -519,7 +526,7 @@ module Api
           test "unpublishing a draft is a 409" do
             jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/unpublish" }
             assert_api_response_conform(status: 409, api: :admin)
-            assert_empty jobs
+            assert_one_purge_of jobs, news_posts(:books_draft)
           end
 
           test "another site's post is a 404 on publish and unpublish and is left alone" do
@@ -557,6 +564,22 @@ module Api
             assert_equal ["draft", "published"], [news_posts(:books_draft).reload.status, news_posts(:books_december_update).reload.status]
           end
 
+          test "unpublish logs the date it clears, from the stored row, and no other write does" do
+            lines = []
+            Rails.logger.stubs(:info).with { |line| lines << line.to_s }
+            live = news_posts(:books_december_update)
+            was = live.reload.published_at
+            send_json :post, "/api/v1/admin/news_posts/#{live.id}/unpublish"
+            send_json :post, "/api/v1/admin/news_posts/#{live.id}/publish"
+            send_json :patch, "/api/v1/admin/news_posts/#{live.id}", {title: "Retitled"}
+            send_json :post, "/api/v1/admin/news_posts", {title: "Fresh Draft", body: "x"}
+
+            ours = lines.grep(/event=api_admin_news_post/)
+            assert_equal %w[unpublish publish update create], ours.map { |line| line[/action=(\w+)/, 1] }
+            assert_match(/ was_published_at=#{Regexp.escape(was.utc.iso8601(6))}\z/, ours.first)
+            assert_equal [], ours.drop(1).grep(/was_published_at/)
+          end
+
           test "publish and unpublish each log one line" do
             lines = []
             Rails.logger.stubs(:info).with { |line| lines << line.to_s }
@@ -568,7 +591,7 @@ module Api
             assert_equal 2, ours.size
             token = ApiToken.find_by!(token_prefix: ApiTokenSecrets::ADMIN[0, 12])
             assert_match(/action=publish changed=published_at token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{draft.id}\z/, ours.first)
-            assert_match(/action=unpublish changed=published_at token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{draft.id}\z/, ours.last)
+            assert_match(/action=unpublish changed=published_at token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{draft.id} was_published_at=\S+Z\z/, ours.last)
           end
         end
       end

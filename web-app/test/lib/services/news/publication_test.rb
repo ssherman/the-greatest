@@ -84,6 +84,44 @@ module Services
         end
         assert_equal :already_draft, Publication.unpublish(news_post: news_posts(:books_draft)).data[:code]
       end
+
+      test "unpublish reports the date it cleared, read from the locked row" do
+        post = news_posts(:books_december_update)
+        was = post.reload.published_at
+        stale = ::NewsPost.find(post.id)
+        post.update_columns(published_at: 2.days.ago.change(usec: 0))
+        locked_was = post.reload.published_at
+
+        result = Publication.unpublish(news_post: stale)
+        assert_equal locked_was, result.data[:was_published_at]
+        assert_not_equal was, result.data[:was_published_at]
+      end
+
+      def purges
+        ::Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          yield
+          ::News::PurgeCachedPagesJob.jobs.dup
+        end
+      end
+
+      test "a refused already_published or already_draft call purges the post's pages again" do
+        live = news_posts(:books_december_update)
+        draft = news_posts(:books_draft)
+        [[live, -> { Publication.publish(news_post: live) }, :already_published],
+          [draft, -> { Publication.unpublish(news_post: draft) }, :already_draft]].each do |post, call, code|
+          result = nil
+          jobs = purges { result = call.call }
+          assert_equal code, result.data[:code]
+          assert_equal 1, jobs.size
+          assert_includes jobs.first["args"].last.join(" "), post.slug
+        end
+      end
+
+      test "a past or invalid refusal purges nothing" do
+        jobs = purges { Publication.publish(news_post: news_posts(:books_draft), at: 1.minute.ago) }
+        assert_empty jobs
+      end
     end
   end
 end

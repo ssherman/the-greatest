@@ -63,7 +63,7 @@ A real `merge_categories` can fail part way and answer with `merged`, `failed` a
 - Omit `published_at` to publish now. To schedule, send a future ISO 8601 time with an offset, such as `2031-03-04T09:00:00-05:00`. Never send null or a past time. A post that is already live answers 409 with the date it went live, and that date does not change.
 - A scheduled post can appear up to six hours late on the news index and feed. Say so if the person needs the exact minute.
 - Use each `url` exactly as returned; do not change its host.
-- `unpublish_news_post` returns a live or scheduled post to a draft and deletes nothing.
+- `unpublish_news_post` returns a live or scheduled post to a draft and takes its page down. It clears the publication date, and the date cannot be set back here: publishing again dates the post now, and only a person can restore the old date in admin. Unpublish only when the person asked for it. To change a live post's text, use `update_news_post`, which edits it in place.
 
 ## The book submissions queue
 

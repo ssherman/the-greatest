@@ -124,7 +124,7 @@ module Api
           result = ::Services::News::Publication.unpublish(news_post: post)
           return refuse(result) unless result.success?
 
-          log_news("unpublish", post, changed: result.data[:changed])
+          log_news("unpublish", post, changed: result.data[:changed], was_published_at: result.data[:was_published_at])
           render_post(post)
         end
 
@@ -244,10 +244,13 @@ module Api
             "Choose a distinct title, such as one with the month or a qualifier."
         end
 
-        def log_news(action, post, changed: [])
+        # Dates only, never text. Unpublish is the one write that loses a value the
+        # API cannot restore, so its line keeps the date it cleared.
+        def log_news(action, post, changed: [], was_published_at: nil)
+          was = " was_published_at=#{was_published_at.utc.iso8601(6)}" if was_published_at
           Rails.logger.info("event=api_admin_news_post action=#{action} changed=#{changed.join(",")} " \
             "token_id=#{current_principal.token.id} token_kind=#{current_principal.token_kind} " \
-            "user_id=#{current_principal.user.id} news_post_id=#{post.id}")
+            "user_id=#{current_principal.user.id} news_post_id=#{post.id}#{was}")
         end
 
         # A read has just loaded the post, so it is not fetched again.
