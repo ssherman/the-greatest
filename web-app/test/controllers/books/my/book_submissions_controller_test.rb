@@ -683,6 +683,23 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "a book deleted while its request was in progress shows the removed copy, stops polling and offers no Cancel" do
+    book = ::Books::Book.create!(title: "Deleted In Flight", provisional: true)
+    submission = row(status: :looking_up, book: book, created_book: true, review_status: :pending, resolved_title: "Deleted In Flight")
+    ::Books::PurgeShowPagesJob.stubs(:perform_async)
+
+    book.destroy!
+    sign_in_as @user, stub_auth: true
+    strip
+
+    assert_response :success
+    assert_equal %w[cancelled rejected], [submission.reload.status, submission.review_status]
+    assert_includes response.body, "We couldn&#39;t verify Deleted In Flight, so it was removed."
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert_nil doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
+    assert_not_includes response.body, cancel_books_my_book_submission_path(submission)
+  end
+
   test "a signed-out frame request gets an empty strip frame and a 401, never a redirect" do
     strip(headers: frame_headers)
 

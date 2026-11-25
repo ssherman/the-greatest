@@ -15,9 +15,15 @@ module Services
       # so shares its fate; callers pass it only when the book was provisional,
       # because a not_needed row on a catalog book is just a reader who found it.
       #
-      # The lease is cleared so a closed row can never be held by an agent.
-      # claimable already excludes it (it reads review_status), the lease would
-      # only be stale data.
+      # The lease is cleared so a closed row can never be held by an agent. The
+      # agent queue also excludes it by review_status (`reviewable`), including a
+      # failed or needs_details row.
+      #
+      # A rejection is terminal for a row still in progress: in the same UPDATE a
+      # queued or looking_up row becomes cancelled, so a job that resumes after
+      # the book was deleted finds nothing to do instead of making a second book.
+      # The reader's strip still shows a cancelled row whose review is rejected.
+      # A note is written only when given, so a needs_human row keeps its own.
       #
       # submission_ids narrows the close to rows the caller captured earlier: the
       # merger moves rows onto the survivor, where the survivor's own rows and the
@@ -33,16 +39,22 @@ module Services
           now = Time.current
           # "via" pluralises to itself, so the enum's mapping is reviewed_via, not reviewed_vias.
           vias = ::Books::BookSubmission.reviewed_via
-          scope.update_all(
+          statuses = ::Books::BookSubmission.statuses
+          changes = {
             review_status: ::Books::BookSubmission.review_statuses.fetch(review_status.to_s),
             reviewed_via: vias.fetch(via.to_s) { vias.fetch("system") },
             reviewed_by_id: user&.id,
             reviewed_at: now,
-            review_note: note,
             lease_token: nil,
             lease_expires_at: nil,
             updated_at: now
-          )
+          }
+          changes[:review_note] = note unless note.nil?
+          if review_status.to_s == "rejected"
+            open = ::Books::BookSubmission::IN_PROGRESS_STATUSES.map { |name| statuses.fetch(name) }.join(", ")
+            changes[:status] = Arel.sql("CASE WHEN status IN (#{open}) THEN #{statuses.fetch("cancelled")} ELSE status END")
+          end
+          scope.update_all(changes)
         end
       end
     end

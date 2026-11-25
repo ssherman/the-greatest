@@ -103,10 +103,12 @@ module Books
     scope :visible, -> { where(dismissed_at: nil) }
     # What an admin or agent has to look at: a new book awaiting review, or a
     # request the lookup could not finish. A row flagged needs_human is taken
-    # out of the agent queue and never comes back here.
+    # out of the agent queue and never comes back here, and neither is one an
+    # admin, a merge, a promotion or a delete has closed (approved, merged,
+    # rejected), whatever its status.
     scope :reviewable, -> {
       where(status: :added, review_status: :pending)
-        .or(where.not(review_status: :needs_human).where(status: %i[needs_details failed]))
+        .or(where(review_status: %i[not_needed pending], status: %i[needs_details failed]))
     }
     scope :claimable, -> { reviewable.where("lease_expires_at IS NULL OR lease_expires_at <= ?", Time.current) }
 

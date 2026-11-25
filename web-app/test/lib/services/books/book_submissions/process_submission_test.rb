@@ -11,6 +11,24 @@ module Services
 
         Boom = Class.new(StandardError)
 
+        # Runs a block between the book being settled (CreateBook's commit, or the
+        # match) and the list step, so a merge or a delete lands in that gap.
+        module AfterBookHook
+          class << self
+            attr_accessor :hook
+          end
+
+          private
+
+          def finish(book)
+            AfterBookHook.hook&.call(book)
+            super
+          end
+        end
+        ProcessSubmission.prepend(AfterBookHook)
+
+        teardown { AfterBookHook.hook = nil }
+
         setup do
           stub_resolution_services
           freeze_time
@@ -649,6 +667,79 @@ module Services
           assert_equal [@list.id, editors_list.id].sort, items_for(first.book).map(&:user_list_id).sort
           assert_equal %w[added added], [first.status, second.status]
           assert_equal 1, WorkflowRun.where(enrichable: first.book).count
+        end
+
+        # ---- a merge or delete between the book and the list ---------------
+
+        test "a book merged away after it was made puts the survivor on the list, and no item points at the old book" do
+          GenerateUserFavoritesListsJob.stubs(:perform_async)
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+          survivor = books_books(:war_and_peace)
+          made = nil
+          AfterBookHook.hook = ->(book) {
+            made = book
+            assert ::Books::Book::Merger.call(source: book, target: survivor).success?
+          }
+          submission = book_submission
+
+          process(submission)
+
+          submission.reload
+          assert_equal [survivor, "added", "merged"], [submission.book, submission.status, submission.review_status]
+          assert_equal 0, UserListItem.where(listable_type: "Books::Book", listable_id: made.id).count
+          assert_equal 1, items_for(survivor).where(user_list_id: @list.id).count
+          assert_equal items_for(survivor).find_by(user_list_id: @list.id), submission.user_list_item
+          assert_equal 0, ::Books::Book.where(id: made.id).count
+        end
+
+        test "a book deleted after it was made leaves no item and the row stays rejected and cancelled" do
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          made = nil
+          AfterBookHook.hook = ->(book) {
+            made = book
+            ::Books::Book.find(book.id).destroy!
+          }
+          submission = book_submission
+          items_before = UserListItem.count
+
+          result = process(submission)
+
+          submission.reload
+          assert_equal :done, result.data[:outcome]
+          assert_equal ["cancelled", "rejected", nil], [submission.status, submission.review_status, submission.book_id]
+          assert_equal items_before, UserListItem.count
+          assert_equal 0, books_called("The Quiet Year").count
+          assert_equal 0, WorkflowRun.where(enrichable_type: "Books::Book", enrichable_id: made.id).count
+        end
+
+        test "a matched provisional book deleted before the list step leaves a second reader's row rejected, with no item" do
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          book = provisional_book
+          AfterBookHook.hook = ->(matched) { ::Books::Book.find(matched.id).destroy! }
+          submission = book_submission
+          stub_finder(finder_match(subject: submission, record: book))
+          items_before = UserListItem.count
+
+          process(submission)
+
+          submission.reload
+          assert_equal ["cancelled", "rejected", nil], [submission.status, submission.review_status, submission.book_id]
+          assert_equal items_before, UserListItem.count
+        end
+
+        test "a delete that lands after the list step is not overwritten by added" do
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          StartLookups.stubs(:call).with { |book:|
+            ::Books::Book.find(book.id).destroy!
+            true
+          }
+          submission = book_submission
+
+          process(submission)
+
+          submission.reload
+          assert_equal ["cancelled", "rejected", nil, nil], [submission.status, submission.review_status, submission.book_id, submission.user_list_item_id]
         end
       end
     end

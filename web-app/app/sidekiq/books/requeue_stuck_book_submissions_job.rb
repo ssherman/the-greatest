@@ -35,6 +35,7 @@ class Books::RequeueStuckBookSubmissionsJob
   def stuck
     cutoff = IDLE_FOR.ago
     ::Books::BookSubmission.where(status: ::Books::BookSubmission::IN_PROGRESS_STATUSES)
+      .where.not(review_status: :rejected)
       .where(updated_at: ...cutoff)
       .where("next_attempt_at IS NULL OR next_attempt_at <= ?", cutoff)
   end

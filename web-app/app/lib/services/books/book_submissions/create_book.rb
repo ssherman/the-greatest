@@ -58,7 +58,7 @@ module Services
           ActiveRecord::Base.transaction(requires_new: true) do
             self.class.lock(@signature)
             @submission.lock!
-            next result(false, :aborted, nil, false) unless @submission.in_progress?
+            next result(false, :aborted, nil, false) unless @submission.in_progress? && !@submission.review_rejected?
             next result(true, :resumed, @submission.book, @submission.created_book?) if @submission.book
             next result(false, :no_owner, nil, false) unless @submission.user_id && @submission.user_list_id
 

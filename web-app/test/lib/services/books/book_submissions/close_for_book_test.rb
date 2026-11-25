@@ -108,6 +108,72 @@ module Services
           assert_equal ["approved", "pending"], [chosen.reload.review_status, other.reload.review_status]
         end
 
+        test "a closed failed or needs_details row leaves the agent queue, whichever way it was closed" do
+          %i[approved merged rejected].each do |review_status|
+            %i[failed needs_details].each do |status|
+              row = submission(status: status)
+              assert_includes ::Books::BookSubmission.claimable, row
+
+              close(review_status: review_status)
+
+              row.reload
+              assert_not_includes ::Books::BookSubmission.reviewable, row, "#{status} #{review_status}"
+              assert_not_includes ::Books::BookSubmission.claimable, row, "#{status} #{review_status}"
+            end
+          end
+        end
+
+        test "a failed or needs_details row that is open still shows in the queue, and a needs_human one does not" do
+          open = %i[failed needs_details].map { |status| submission(status: status, review_status: :not_needed, created_book: false) }
+          pending = submission(status: :failed)
+          flagged = submission(status: :failed, review_status: :needs_human)
+
+          assert_equal [], (open + [pending]) - ::Books::BookSubmission.reviewable.to_a
+          assert_not_includes ::Books::BookSubmission.reviewable, flagged
+        end
+
+        test "reviewable and claimable still compose in a chain" do
+          mine = submission(status: :failed)
+          other = submission(status: :failed, user: @admin)
+          done = submission(status: :failed)
+          close(submission_ids: [done.id])
+
+          chained = ::Books::BookSubmission.where(user_id: @user.id).reviewable
+          assert_equal [mine.id], chained.where(id: [mine.id, other.id, done.id]).pluck(:id)
+          assert_equal [mine.id], ::Books::BookSubmission.where(user_id: @user.id).claimable.where(id: [mine.id, done.id]).pluck(:id)
+          assert_equal [other.id], ::Books::BookSubmission.reviewable.where(user_id: @admin.id).pluck(:id)
+          assert_equal [mine.id], ::Books::BookSubmission.reviewable.claimable.where(user_id: @user.id, id: [mine.id, done.id]).pluck(:id)
+        end
+
+        test "a rejection cancels rows still in progress, and nothing else changes status" do
+          queued = submission(status: :queued)
+          looking = submission(status: :looking_up)
+          added = submission
+
+          close(review_status: :rejected)
+
+          assert_equal %w[cancelled cancelled added], [queued, looking, added].map { it.reload.status }
+        end
+
+        test "an approval or merge leaves an in-progress row's status alone" do
+          looking = submission(status: :looking_up)
+
+          close(review_status: :merged)
+
+          assert_equal "looking_up", looking.reload.status
+        end
+
+        test "a note is kept when none is given, and replaced when one is" do
+          flagged = submission(review_status: :needs_human, review_note: "needs a person")
+
+          close
+          assert_equal "needs a person", flagged.reload.review_note
+
+          again = submission(review_note: "old")
+          close(note: "new")
+          assert_equal "new", again.reload.review_note
+        end
+
         test "runs one query when the book has no submissions" do
           queries = []
           callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }

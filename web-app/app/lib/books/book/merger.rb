@@ -184,8 +184,19 @@ module Books
             closed += close_submission_rows(@own_submission_ids, :approved, @target_provisional)
           end
           closed += close_submission_rows(@moved_submission_ids, :merged, @source_provisional)
+          closed += mark_moved_approved_rows_merged
         end
         @stats[:submissions_closed] = closed
+      end
+
+      # An approved user-added row keeps its created_book flag, so left approved it
+      # would make the public survivor look user-added. Only the status changes;
+      # who approved it, how, when and on what sources stay. CloseForBook keeps its
+      # rule (open rows only), so this is the merger's own write. Rows already on
+      # the survivor keep approved.
+      def mark_moved_approved_rows_merged
+        ::Books::BookSubmission.where(id: @moved_submission_ids, review_status: :approved)
+          .update_all(review_status: ::Books::BookSubmission.review_statuses.fetch("merged"), updated_at: Time.current)
       end
 
       def close_submission_rows(ids, review_status, include_matched)

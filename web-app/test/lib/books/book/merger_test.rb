@@ -6,6 +6,8 @@ module Books
       def setup
         @source = books_books(:crime_and_punishment)
         @target = books_books(:war_and_peace)
+        ::Books::PurgeShowPagesJob.stubs(:perform_async)
+        ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
       end
 
       test "the merged-away book's verification, findings and candidates go; the target's stay" do
@@ -138,6 +140,46 @@ module Books
         assert_equal ["api", users(:admin_user).id], [row.reload.reviewed_via, row.reviewed_by_id]
       ensure
         Current.reset
+      end
+
+      test "approved rows moved onto a public survivor become merged, keep their review, and leave no user-added badge" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        approved = sub(source, :approved)
+        approved.update!(reviewed_via: :admin_ui, reviewed_by: users(:admin_user), reviewed_at: 3.days.ago.change(usec: 0),
+          review_note: "good", review_sources: ["https://example.test/a"])
+        before = approved.reload.attributes.slice("reviewed_via", "reviewed_by_id", "reviewed_at", "review_note", "review_sources", "created_book")
+        own_approved = sub(@target, :approved)
+
+        assert ::Books::Book::Merger.call(source: source, target: @target).success?
+
+        approved.reload
+        assert_equal "merged", approved.review_status
+        assert_equal before, approved.attributes.slice("reviewed_via", "reviewed_by_id", "reviewed_at", "review_note", "review_sources", "created_book")
+        assert_not approved.user_added?
+        assert_equal "approved", own_approved.reload.review_status
+      end
+
+      test "an approved row and a pending row on a catalog source close merged when the survivor is public" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        approved = sub(@source, :approved)
+        pending = sub(@source, :pending)
+
+        assert ::Books::Book::Merger.call(source: @source, target: @target).success?
+
+        assert_equal %w[merged merged], [approved, pending].map { review(it) }
+        assert_not approved.user_added?
+      end
+
+      test "an approved row moved onto a provisional survivor that stays provisional is left alone" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        source = provisional_book("Source P")
+        target = provisional_book("Target P")
+        approved = sub(source, :approved)
+
+        assert ::Books::Book::Merger.call(source: source, target: target).success?
+
+        assert_equal "approved", review(approved)
       end
 
       test "a merge that rolls back changes no submission" do
