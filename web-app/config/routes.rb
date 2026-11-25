@@ -738,6 +738,9 @@ Rails.application.routes.draw do
         namespace :admin do
           get "openapi", to: "openapi#show"
           scope module: :books do
+            get "news_posts", to: "news_posts#index"
+            get "news_posts/:id", to: "news_posts#show", constraints: {id: /\d+/}
+            get "news_topics", to: "news_posts#topics"
             get "books", to: "books#index"
             get "authors", to: "authors#index"
             get "books/:id", to: "books#show", constraints: {id: /\d+/}
