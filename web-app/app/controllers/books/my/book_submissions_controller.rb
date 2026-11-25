@@ -11,7 +11,7 @@ class Books::My::BookSubmissionsController < ApplicationController
   WRITE_ACTIONS = %w[create cancel dismiss].freeze
 
   before_action :prevent_caching
-  before_action :require_signed_in!, only: :index
+  before_action :require_signed_in_for_strip!, only: :index
   before_action :require_signed_in_as_stream!, only: [:create, :cancel, :dismiss]
 
   # Declared after the sign-in check so an anonymous request is turned away
@@ -28,13 +28,15 @@ class Books::My::BookSubmissionsController < ApplicationController
   rescue_from ActionController::InvalidAuthenticityToken, with: :invalid_token
 
   # GET /my/lists/:list_id/book-submissions
-  # The strip. A row that is newly added is announced here, once: only the
-  # response whose conditional write won it reloads the list and marks state.
+  # The strip. The rows are read first and announced after, so a row that
+  # becomes added between the two shows as still in progress and is announced
+  # by the next poll. Only the response whose conditional write won a row
+  # reloads the list and marks state.
   def index
     @list = find_list
-    announced = announce(@list)
-    @submissions = strip_submissions(@list).to_a
-    render Books::BookSubmissions::StripComponent.new(list: @list, submissions: @submissions, reload_list: announced), layout: false
+    @submissions, in_progress, read_at = read_strip(@list)
+    announced = announce(@list, @submissions, read_at)
+    render Books::BookSubmissions::StripComponent.new(list: @list, submissions: @submissions, reload_list: announced, in_progress: in_progress), layout: false
   end
 
   # POST /my/lists/:list_id/book-submissions
@@ -76,9 +78,14 @@ class Books::My::BookSubmissionsController < ApplicationController
     submission = current_user.book_submissions.find(params[:id])
     authorize submission, permission
     result = yield submission
-    return render_error(result.errors.to_sentence, :unprocessable_entity) unless result.success?
-
     list = submission.user_list_id && owned_books_lists.find_by(id: submission.user_list_id)
+    unless result.success?
+      # The button the reader pressed is stale, so the answer replaces the strip too.
+      streams = [error_stream(result.errors.to_sentence)]
+      streams << strip_stream(list) if list
+      return render turbo_stream: streams, status: :unprocessable_entity
+    end
+
     render turbo_stream: list ? strip_stream(list) : []
   end
 
@@ -98,23 +105,42 @@ class Books::My::BookSubmissionsController < ApplicationController
       .order(created_at: :desc, id: :desc).limit(STRIP_LIMIT)
   end
 
-  def strip_stream(list)
-    announced = announce(list)
-    turbo_stream.replace("book_submissions",
-      Books::BookSubmissions::StripComponent.new(list: list, submissions: strip_submissions(list).to_a, reload_list: announced))
+  # Rows first, then the announcement (see index). in_progress covers every
+  # undismissed row of the list, not only the 20 shown. A shown row that is in
+  # progress also keeps the strip polling (the component checks its own rows),
+  # even if it flipped to added after this query.
+  def read_strip(list)
+    read_at = Time.current
+    rows = strip_submissions(list).to_a
+    in_progress = Books::BookSubmission.visible.where(user_id: current_user.id, user_list_id: list.id, status: Books::BookSubmission::IN_PROGRESS_STATUSES).exists?
+    [rows, in_progress, read_at]
   end
 
-  # Every response that renders the strip for the owner announces here, before
-  # it reads the rows. One conditional write over the list's added rows nobody
-  # has announced yet, whatever the strip shows (dismissed rows and rows behind
-  # the 20 newest included), so two responses at once announce a row once and
-  # only the winner reloads the list and marks user state. A HEAD or prefetch
-  # request must not take the announcement away from the reader's real request.
-  def announce(list)
+  def strip_stream(list)
+    rows, in_progress, read_at = read_strip(list)
+    announced = announce(list, rows, read_at)
+    turbo_stream.replace("book_submissions",
+      Books::BookSubmissions::StripComponent.new(list: list, submissions: rows, reload_list: announced, in_progress: in_progress))
+  end
+
+  # Every response that renders the strip for the owner announces here, after
+  # it has read its rows. One conditional write over the list's added rows
+  # nobody has announced yet: the ones this response shows as added, and the
+  # ones it does not show (dismissed, or behind the 20 newest) that existed
+  # before it read. A row this response shows in any other status is left for
+  # the next poll, since the reader has not seen it added. The write is
+  # conditional, so two responses at once announce a row once and only the
+  # winner reloads the list and marks user state. A HEAD or prefetch request
+  # must not take the announcement away from the reader's real request.
+  def announce(list, rows, read_at)
     return false if request.head? || prefetch?
 
-    changed = Books::BookSubmission.where(user_id: current_user.id, user_list_id: list.id, status: :added, announced_at: nil)
-      .update_all(announced_at: Time.current).positive?
+    shown = rows.map(&:id)
+    shown_added = rows.select(&:added?).map(&:id)
+    pending = Books::BookSubmission.where(user_id: current_user.id, user_list_id: list.id, status: :added, announced_at: nil)
+    unshown = pending.where.not(id: shown).where(created_at: ...read_at)
+    pending = pending.where(id: shown_added).or(unshown)
+    changed = pending.update_all(announced_at: Time.current).positive?
     mark_user_state_changed if changed
     changed
   end
@@ -130,11 +156,30 @@ class Books::My::BookSubmissionsController < ApplicationController
     raw.is_a?(ActionController::Parameters) ? raw.to_unsafe_h : {}
   end
 
+  # The strip is a lazily loaded Turbo Frame: a redirect to the home page, or
+  # the not-found page, would be rendered inside it. A frame request is
+  # answered with the empty frame and the status, and the poller stops on it.
+  def require_signed_in_for_strip!
+    return render_empty_strip(:unauthorized) if strip_frame_request? && !current_user
+
+    require_signed_in!
+  end
+
+  def strip_frame_request?
+    action_name == "index" && request.headers["Turbo-Frame"] == "book_submissions"
+  end
+
+  def render_empty_strip(status)
+    prevent_caching
+    render html: helpers.turbo_frame_tag("book_submissions", target: "_top"), layout: false, status: status
+  end
+
   def require_signed_in_as_stream!
     render_error("Sign in again to continue", :unauthorized) unless current_user
   end
 
   def not_found
+    return render_empty_strip(:not_found) if strip_frame_request?
     return render_not_found if action_name == "index"
 
     render_error("That list or request no longer exists. Reload the page", :not_found)
@@ -151,7 +196,10 @@ class Books::My::BookSubmissionsController < ApplicationController
   end
 
   def render_error(message, status)
-    toast = Toast::MessageComponent.new(message: message, type: :error)
-    render turbo_stream: turbo_stream.append("toast-region", toast), status: status
+    render turbo_stream: error_stream(message), status: status
+  end
+
+  def error_stream(message)
+    turbo_stream.append("toast-region", Toast::MessageComponent.new(message: message, type: :error))
   end
 end

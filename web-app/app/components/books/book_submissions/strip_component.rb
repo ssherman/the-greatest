@@ -6,10 +6,11 @@
 # finishes the markup and the polling. The state attributes sit on a child of
 # the frame because a frame reload copies only the frame's children.
 class Books::BookSubmissions::StripComponent < ViewComponent::Base
-  def initialize(list:, submissions:, reload_list: false)
+  def initialize(list:, submissions:, reload_list: false, in_progress: false)
     @list = list
     @submissions = submissions
     @reload_list = reload_list
+    @in_progress = in_progress
   end
 
   private
@@ -18,12 +19,18 @@ class Books::BookSubmissions::StripComponent < ViewComponent::Base
 
   def frame_data
     data = {poll_url: books_my_list_book_submissions_path(list)}
-    data[:in_progress] = "true" if submissions.any?(&:in_progress?)
+    data[:in_progress] = "true" if @in_progress || submissions.any?(&:in_progress?)
     data[:reload_list] = "true" if @reload_list
     data
   end
 
-  def open?(submission) = ::Books::BookSubmission::OPEN_STATUSES.include?(submission.status)
+  # Cancel is only for a request that has made no book yet: the server
+  # refuses it once there is one, so the button is not offered then.
+  def cancellable?(submission) = submission.book_id.nil? && ::Books::BookSubmission::OPEN_STATUSES.include?(submission.status)
+
+  def finished?(submission) = ::Books::BookSubmission::OPEN_STATUSES.exclude?(submission.status)
+
+  def retryable?(submission) = %w[needs_details failed].include?(submission.status) && !submission.review_rejected?
 
   def message(submission)
     label = submission.label

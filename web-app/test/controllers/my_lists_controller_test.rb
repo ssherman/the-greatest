@@ -1123,6 +1123,70 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_select "dialog#new-list-dialog [maxlength='100'][name='user_list[name]']"
   end
 
+  # --- add a missing book (books lists, owner only) ---
+
+  test "the owner of a books list gets the add-a-book dialog, the strip frame and the dropdown footer" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 1
+    assert_select "[data-testid=book-submission-strip] turbo-frame#book_submissions[src='#{books_my_list_book_submissions_path(list)}'][target=_top]", count: 1
+    assert_select "[data-autocomplete-footer-testid-value=add-missing-book]", count: 1
+  end
+
+  test "nothing is mounted for a viewer who is not the owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+    assert_select "[data-autocomplete-footer-testid-value]", count: 0
+  end
+
+  test "nothing is mounted for an anonymous viewer of a public books list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+  end
+
+  test "nothing is mounted on a music list" do
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(@albums_favorites)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+    assert_select "[data-autocomplete-footer-label-value]", count: 0
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book, in both layouts" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    books_books(:war_and_peace).update_columns(provisional: true)
+    sign_in_as(@user, stub_auth: true)
+
+    %w[table_view grid_view].each do |mode|
+      get my_list_path(list, view_mode: mode)
+      assert_select "[data-testid=not-yet-reviewed]", count: 1
+    end
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page

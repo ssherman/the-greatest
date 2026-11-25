@@ -13,7 +13,9 @@ class AutocompleteComponent < ViewComponent::Base
     debounce: 300,
     required: false,
     disabled: false,
-    id: nil
+    id: nil,
+    footer_label: nil,
+    footer_testid: nil
   )
     @name = name
     @url = url
@@ -27,6 +29,8 @@ class AutocompleteComponent < ViewComponent::Base
     @required = required
     @disabled = disabled
     @id = id
+    @footer_label = footer_label
+    @footer_testid = footer_testid
   end
 
   def input_id
@@ -41,5 +45,5 @@ class AutocompleteComponent < ViewComponent::Base
 
   attr_reader :name, :url, :placeholder, :value, :selected_text,
     :display_key, :value_key, :min_length, :debounce,
-    :required, :disabled
+    :required, :disabled, :footer_label, :footer_testid
 end

@@ -1,17 +1,21 @@
 <%= helpers.turbo_frame_tag "book_submissions", target: "_top" do %>
   <%= tag.div(data: frame_data.merge(testid: "book-submissions-state")) %>
   <% submissions.each do |submission| %>
-    <div id="<%= dom_id(submission) %>" class="flex items-center justify-between gap-3 py-1 text-sm">
-      <% if submission.status == "needs_details" %>
-        <span class="[overflow-wrap:anywhere]" data-replaces="<%= submission.id %>"><%= message(submission) %></span>
-      <% else %>
-        <span class="[overflow-wrap:anywhere]"><%= message(submission) %></span>
-      <% end %>
-      <% if open?(submission) %>
-        <%= button_to "Cancel", cancel_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost" %>
-      <% else %>
-        <%= button_to "Dismiss", dismiss_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost" %>
-      <% end %>
+    <div id="<%= dom_id(submission) %>" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1 text-sm" data-testid="book-submission-row">
+      <span class="[overflow-wrap:anywhere]"><%= message(submission) %></span>
+      <span class="flex flex-wrap items-center gap-2">
+        <% if retryable?(submission) %>
+          <%= button_tag "Try another way", type: "button", class: "btn btn-xs btn-outline",
+                data: {action: "click->books--book-submissions#tryAnother", replaces: submission.id,
+                       input_method: submission.input_method, title: submission.typed_title,
+                       authors: Array(submission.typed_author_names).to_json} %>
+        <% end %>
+        <% if cancellable?(submission) %>
+          <%= button_to "Cancel", cancel_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost", form: {data: {turbo_frame: "book_submissions"}} %>
+        <% elsif finished?(submission) %>
+          <%= button_to "Dismiss", dismiss_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost", form: {data: {turbo_frame: "book_submissions"}} %>
+        <% end %>
+      </span>
     </div>
   <% end %>
 <% end %>

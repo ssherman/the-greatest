@@ -13,12 +13,13 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   # position is the item's stored slot in the list (drives the "#N" badge);
   # index is its zero-based place on the rendered page (drives cover
   # eager-loading). They move independently once a list spans more than one page.
-  def initialize(item:, view_mode:, position:, index: nil, completion_editable: false)
+  def initialize(item:, view_mode:, position:, index: nil, completion_editable: false, owner: false)
     @item = item
     @view_mode = view_mode.to_s
     @position = position
     @index = index
     @completion_editable = completion_editable
+    @owner = owner
   end
 
   def self.card_capable?(listable_class)
@@ -68,6 +69,14 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
 
   def completion_editable?
     completion_editable
+  end
+
+  # A book added by a reader (or an import) that nobody has reviewed yet. The
+  # list page is never cached, so only the owner is told.
+  def not_yet_reviewed_badge
+    return unless @owner && listable.is_a?(Books::Book) && listable.provisional?
+
+    tag.span("Not yet reviewed", class: "badge badge-ghost badge-sm self-start", data: {testid: "not-yet-reviewed"})
   end
 
   # Songs get their richer list-item row outside table_view; everything else in

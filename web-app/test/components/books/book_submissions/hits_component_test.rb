@@ -16,15 +16,23 @@ class Books::BookSubmissions::HitsComponentTest < ViewComponent::TestCase
     @doc = render_inline(Books::BookSubmissions::HitsComponent.new(list: @list, books: [@book], input: input))
   end
 
-  test "shows each book's title, author and year as escaped text with an add form" do
+  test "shows each book's title, author and year as escaped text" do
     render_hits({"method" => "isbn", "isbn" => "9780441478125"})
 
     assert_includes @doc.text, "The <i>Dispossessed</i>"
     assert_includes @doc.text, "Ursula Le Guin"
     assert_includes @doc.text, "1974"
     assert_empty @doc.css("i")
-    field = @doc.css("form[action='#{routes.user_list_items_path(@list)}'] input[name='user_list_item[listable_id]']").first
-    assert_equal @book.id.to_s, field["value"]
+  end
+
+  test "Add to list hands the book to the existing add-item flow, not a form to the JSON endpoint" do
+    render_hits({"method" => "isbn", "isbn" => "9780441478125"})
+
+    assert_empty @doc.css("form[action='#{routes.user_list_items_path(@list)}']")
+    button = @doc.css("button[data-action*='addToList']").first
+    assert_equal @book.id.to_s, button["data-value"]
+    assert_equal "The <i>Dispossessed</i>", button["data-text"]
+    assert_equal "button", button["type"]
   end
 
   test "None of these resends the input with confirmed_new, escaped" do

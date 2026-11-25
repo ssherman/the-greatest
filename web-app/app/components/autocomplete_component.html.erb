@@ -5,6 +5,10 @@
        data-autocomplete-debounce-value="<%= debounce %>"
        data-autocomplete-display-key-value="<%= display_key %>"
        data-autocomplete-value-key-value="<%= value_key %>"
+       <% if footer_label.present? %>
+       data-autocomplete-footer-label-value="<%= footer_label %>"
+       data-autocomplete-footer-testid-value="<%= footer_testid %>"
+       <% end %>
        data-turbo="false"
        class="autocomplete-container"
        style="position: relative; width: 100%;">

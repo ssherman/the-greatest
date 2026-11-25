@@ -43,4 +43,18 @@ class UserLists::Show::AddItemComponentTest < ViewComponent::TestCase
     assert_selector "[data-autocomplete-url-value*='Books%3A%3ABook']"
     assert_selector "input[placeholder='Search for a book to add…']"
   end
+
+  test "a books list ends the dropdown with the add-a-book footer" do
+    render_inline(Component.new(list: user_lists(:regular_user_books_favorites)))
+
+    assert_selector "[data-autocomplete-footer-label-value=\"Can't find it? Add a book\"]"
+    assert_selector "[data-autocomplete-footer-testid-value='add-missing-book']"
+  end
+
+  test "music and games lists have no footer" do
+    [user_lists(:regular_user_music_albums_favorites), user_lists(:regular_user_games_favorites)].each do |list|
+      render_inline(Component.new(list: list))
+      assert_no_selector "[data-autocomplete-footer-label-value]"
+    end
+  end
 end

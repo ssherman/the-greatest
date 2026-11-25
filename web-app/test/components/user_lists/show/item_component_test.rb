@@ -137,4 +137,46 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     render_inline(Component.new(item: item, view_mode: "table_view", position: 1))
     assert_no_selector "button[data-action='user-list-completion#open']"
   end
+
+  # "Not yet reviewed" on a provisional book, for the owner only
+
+  def provisional_item
+    item = user_list_items(:regular_user_books_item_1)
+    item.listable.update_columns(provisional: true)
+    item
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book in the table layout" do
+    render_inline(Component.new(item: provisional_item, view_mode: "table_view", position: 1, owner: true))
+
+    assert_selector "tr [data-testid='not-yet-reviewed']", text: "Not yet reviewed"
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book in the grid layout" do
+    render_inline(Component.new(item: provisional_item, view_mode: "grid_view", position: 1, owner: true))
+
+    assert_selector "[data-testid='not-yet-reviewed']", text: "Not yet reviewed"
+  end
+
+  test "a viewer who is not the owner never sees it" do
+    ["table_view", "grid_view"].each do |mode|
+      render_inline(Component.new(item: provisional_item, view_mode: mode, position: 1))
+      assert_no_selector "[data-testid='not-yet-reviewed']"
+    end
+  end
+
+  test "a reviewed book shows no badge to the owner" do
+    item = user_list_items(:regular_user_books_item_1)
+    ["table_view", "grid_view"].each do |mode|
+      render_inline(Component.new(item: item, view_mode: mode, position: 1, owner: true))
+      assert_no_selector "[data-testid='not-yet-reviewed']"
+    end
+  end
+
+  test "a provisional album is never badged" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(Component.new(item: item, view_mode: "table_view", position: 1, owner: true))
+
+    assert_no_selector "[data-testid='not-yet-reviewed']"
+  end
 end

@@ -517,4 +517,177 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "javascript:alert(1)"
     assert_no_match(/href=["'][^"']*javascript/i, response.body)
   end
+
+  # Task 9: reading order, in-progress, refused writes, frame requests
+
+  def frame_headers = {"Turbo-Frame" => "book_submissions"}
+
+  test "a row that becomes added between reading the rows and announcing is shown in progress and announced by the next poll" do
+    sign_in_as @user, stub_auth: true
+    racing = row(status: :queued, resolved_title: "Racer")
+    flipped = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      next if flipped || payload[:sql] !~ /\AUPDATE "books_book_submissions" SET "announced_at"/
+
+      flipped = true
+      ::Books::BookSubmission.where(id: racing.id).update_all(status: ::Books::BookSubmission.statuses[:added])
+    end
+
+    strip
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    assert flipped
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert_includes doc.text, "Adding: Racer"
+    assert_equal "true", doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
+    refute_includes response.body, "data-reload-list"
+    assert_nil racing.reload.announced_at
+    refute marked?
+
+    strip
+    assert_includes response.body, 'data-reload-list="true"'
+    assert_includes response.body, "added Racer"
+    assert marked?
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "a create stream also reads the rows before it announces" do
+    sign_in_as @user, stub_auth: true
+    racing = row(status: :queued, resolved_title: "Racer")
+    flipped = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      next if flipped || payload[:sql] !~ /\AUPDATE "books_book_submissions" SET "announced_at"/
+
+      flipped = true
+      ::Books::BookSubmission.where(id: racing.id).update_all(status: ::Books::BookSubmission.statuses[:added])
+    end
+
+    post_submission(input: GOODREADS.merge(goodreads_url: "https://www.goodreads.com/book/show/777"))
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    assert flipped
+    assert_includes response.body, "Adding: Racer"
+    assert_nil racing.reload.announced_at
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "a row that becomes added right after the rows were read is shown in progress, polled for and not announced yet" do
+    sign_in_as @user, stub_auth: true
+    racing = row(status: :queued, resolved_title: "Racer")
+    flipped = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      next if flipped || payload[:sql] !~ /\ASELECT.*FROM "books_book_submissions".*ORDER BY "books_book_submissions"."created_at" DESC.*LIMIT/m
+
+      flipped = true
+      ::Books::BookSubmission.where(id: racing.id).update_all(status: ::Books::BookSubmission.statuses[:added])
+    end
+
+    strip
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    assert flipped
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert_includes doc.text, "Adding: Racer"
+    assert_equal "true", doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
+    assert_nil racing.reload.announced_at
+    refute_includes response.body, "data-reload-list"
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "a row created and added after the rows were read is not announced by this response" do
+    sign_in_as @user, stub_auth: true
+    late = nil
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      next if late || payload[:sql] !~ /\ASELECT.*FROM "books_book_submissions".*ORDER BY "books_book_submissions"."created_at" DESC.*LIMIT/m
+
+      late = row(status: :added, resolved_title: "Latecomer", created_at: 1.minute.from_now)
+    end
+
+    strip
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    assert late
+    assert_nil late.reload.announced_at
+    refute_includes response.body, "data-reload-list"
+
+    strip
+    assert_includes response.body, "Latecomer"
+    assert_includes response.body, 'data-reload-list="true"'
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "data-in-progress is true when an undismissed row behind the 20 shown is in progress" do
+    sign_in_as @user, stub_auth: true
+    row(status: :queued, created_at: 2.days.ago)
+    21.times { |i| row(status: :failed, created_at: i.minutes.ago) }
+
+    strip
+
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert_equal "true", doc.at_css("[data-testid=book-submissions-state]")["data-in-progress"]
+  end
+
+  test "a dismissed in-progress-looking row or another list's row does not keep polling" do
+    sign_in_as @user, stub_auth: true
+    row(status: :queued, dismissed_at: Time.current)
+    row(status: :queued, list: @user.user_lists.where(type: "Books::UserList").where.not(id: @list.id).first)
+
+    strip
+
+    refute_includes response.body, "data-in-progress"
+  end
+
+  test "a refused cancel also sends a fresh strip so the stale button goes" do
+    submission = row(status: :looking_up, book: ::Books::Book.create!(title: "Made"), resolved_title: "Made")
+    sign_in_as @user, stub_auth: true
+
+    post cancel_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, 'target="toast-region"'
+    assert_includes response.body, 'action="replace" target="book_submissions"'
+    refute_includes response.body, cancel_books_my_book_submission_path(submission)
+  end
+
+  test "a refused dismiss also sends a fresh strip" do
+    submission = row(status: :queued)
+    sign_in_as @user, stub_auth: true
+
+    post dismiss_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, 'action="replace" target="book_submissions"'
+  end
+
+  test "a signed-out frame request gets an empty strip frame and a 401, never a redirect" do
+    strip(headers: frame_headers)
+
+    assert_response :unauthorized
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert doc.at_css("turbo-frame#book_submissions")
+    assert_nil doc.at_css("[data-testid=book-submissions-state]")
+    assert_equal "", doc.at_css("turbo-frame#book_submissions").text.strip
+  end
+
+  test "a frame request for a list that is not the reader's gets an empty frame and a 404, not the not-found page" do
+    sign_in_as @user, stub_auth: true
+
+    strip(user_lists(:regular_user_music_albums_favorites), headers: frame_headers)
+
+    assert_response :not_found
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert doc.at_css("turbo-frame#book_submissions")
+    assert_nil doc.at_css("html")
+    assert_equal "", doc.at_css("turbo-frame#book_submissions").text.strip
+  end
+
+  test "a frame request for another frame's id is still handled as a normal request" do
+    strip(headers: {"Turbo-Frame" => "list_items"})
+
+    assert_response :redirect
+  end
 end

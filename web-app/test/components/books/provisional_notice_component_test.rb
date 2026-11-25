@@ -9,7 +9,7 @@ class Books::ProvisionalNoticeComponentTest < ViewComponent::TestCase
 
     render_inline(Books::ProvisionalNoticeComponent.new(record: book))
 
-    assert_selector "[data-testid='provisional-notice']"
+    assert_selector "[data-testid='provisional-notice']", text: "Recently added; not yet reviewed or enriched."
   end
 
   test "renders nothing for a catalog record" do
