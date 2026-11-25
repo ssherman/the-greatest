@@ -104,6 +104,11 @@ export default class extends Controller {
 
       resultItem: {
         tag: "li",
+        // autocomplete.js sets each item's innerHTML from the record; a title is
+        // text, so it is written as text.
+        element: (item, data) => {
+          item.textContent = data.match
+        },
         class: "rounded-lg hover:bg-base-200 active:bg-base-300 cursor-pointer transition-colors px-4 py-2",
         highlight: false,
         selected: "bg-base-200"
