@@ -181,6 +181,26 @@ module Services
           assert_equal :no_record, resolve(submission(:goodreads, goodreads_book_id: 4005)).data[:outcome]
         end
 
+        test "goodreads drops the series from the title" do
+          {"The Quiet Year (Brenner Chronicles #2)" => "The Quiet Year",
+           "The Quiet Year (Brenner Chronicles, #2.5)" => "The Quiet Year",
+           "The Quiet Year (Brenner Chronicles #2" => "The Quiet Year",
+           "The Quiet Year (A Novel)" => "The Quiet Year (A Novel)",
+           "Number (#1) Fan" => "Number (#1) Fan"}.each_with_index do |(page_title, title), index|
+            goodreads_page(goodreads_book_id: 4100 + index, title: page_title)
+
+            assert_equal title, resolve(submission(:goodreads, goodreads_book_id: 4100 + index)).data[:title]
+          end
+        end
+
+        test "a title typed, supplied or from another source keeps its parentheses" do
+          title = "The Quiet Year (Brenner Chronicles #2)"
+          typed = submission(:title_authors, typed_title: title, typed_author_names: ["Anna Brenner"])
+          supplied = submission(:goodreads, goodreads_book_id: 4200, supplied: {"title" => title, "author_names" => ["Anna Brenner"]})
+
+          assert_equal [title, title], [typed, supplied].map { resolve(it).data[:title] }
+        end
+
         test "goodreads page with no title is no_record" do
           goodreads_page(goodreads_book_id: 4006, title: "")
 
@@ -226,6 +246,20 @@ module Services
           ::Services::Amazon::Client.stubs(:get_items).returns([])
 
           assert_equal :no_record, resolve(amazon_submission).data[:outcome]
+        end
+
+        test "amazon answering with another product than the asin asked for is no_record" do
+          other = amazon_product(title: "Some Other Book", asin: "B000OTHER0")
+          ::Services::Amazon::Client.stubs(:get_items).returns([other, amazon_product.except("asin")])
+
+          assert_equal :no_record, resolve(amazon_submission).data[:outcome]
+        end
+
+        test "amazon takes the product with the asin asked for, wherever it stands in the answer" do
+          other = amazon_product(title: "Some Other Book", asin: "B000OTHER0")
+          ::Services::Amazon::Client.stubs(:get_items).returns([other, amazon_product(title: "The Dispossessed")])
+
+          assert_equal "The Dispossessed", resolve(amazon_submission).data[:title]
         end
 
         test "amazon down is unavailable when there is no isbn to try" do

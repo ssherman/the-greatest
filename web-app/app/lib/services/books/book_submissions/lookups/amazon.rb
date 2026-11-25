@@ -11,8 +11,10 @@ module Services
 
           RESOURCES = ::Services::Books::AmazonProductService::AMAZON_RESOURCES
 
+          # Only the product asked for counts, whatever else the answer holds.
           def by_asin(asin)
             ::Services::Amazon::Client.get_items(item_ids: [asin], resources: RESOURCES)
+              .select { |product| product["asin"] == asin }
               .filter_map { |product| answer(product) }.first
           end
 

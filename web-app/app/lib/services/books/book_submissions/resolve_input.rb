@@ -105,7 +105,9 @@ module Services
           contributors = page.contributors
           creators = contributors.select(&:creator?)
           names = (creators.presence || contributors).map(&:name)
-          answer = page.outcome_found? ? Lookups::Answer.build(title: page.title, author_names: names, year: page.original_publication_year) : nil
+          # Goodreads writes the series into the title: "The Quiet Year (Brenner Chronicles #2)".
+          title = page.title.to_s.sub(::Books::Goodreads::BookPage::SERIES_SUFFIX, "")
+          answer = page.outcome_found? ? Lookups::Answer.build(title: title, author_names: names, year: page.original_publication_year) : nil
           record("goodreads", answer&.usable? ? answer : nil)
           answer&.usable? ? resolved(answer, "goodreads", own_identifiers) : outcome(:no_record)
         end
