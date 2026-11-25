@@ -14,12 +14,18 @@ module Services
     #     cannot be enumerated)
     #   * the legacy /blog_posts/* routes -- 301 redirects, not content.
     class CachedUrls
-      def self.call(news_post)
-        new(news_post).call
+      def self.call(news_post, as_published: false)
+        new(news_post, as_published: as_published).call
       end
 
-      def initialize(news_post)
+      # as_published: count the post as published even when it is not, so the
+      # page counts are those from before it was taken down. A retried unpublish
+      # needs that: its first call already removed the post, and pages it pushed
+      # past the end (the index's or a topic's last page) are still cached. For
+      # a post that is published already it changes nothing.
+      def initialize(news_post, as_published: false)
         @news_post = news_post
+        @extra = (as_published && !news_post.published?) ? 1 : 0
       end
 
       def call
@@ -96,7 +102,7 @@ module Services
       end
 
       def published_count
-        @published_count ||= domain_scope.count
+        @published_count ||= domain_scope.count + @extra
       end
 
       # One grouped query rather than a count per topic.
@@ -108,7 +114,8 @@ module Services
             .where(news_post_topics: {news_topic_id: topics.map(&:id)})
             .group("news_post_topics.news_topic_id")
             .count
-          topics.index_with { |topic| counts.fetch(topic.id, 0) }
+          own = (@extra > 0) ? news_post.news_topic_ids : []
+          topics.index_with { |topic| counts.fetch(topic.id, 0) + (own.include?(topic.id) ? @extra : 0) }
         end
       end
 

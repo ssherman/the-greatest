@@ -135,6 +135,38 @@ module Services
         end
       end
 
+      test "as_published counts a post that is not published, in the index and in its topics" do
+        # Exactly one page's worth (10) published, in the index and in the
+        # topic, so counting the draft as well is what makes page 2 exist.
+        topic = news_topics(:books_new_lists)
+        news_posts(:books_december_update).news_topics << topic
+        9.times do |i|
+          NewsPost.create!(domain: :books, title: "Counted Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)).news_topics << topic
+        end
+        post = news_posts(:books_draft)
+        post.news_topics << topic
+        assert_equal 10, NewsPost.books.published.count
+
+        page2 = "https://#{@books_host}/news/page/2"
+        topic_page2 = "https://#{@books_host}/news/topic/new-lists/page/2"
+
+        plain = CachedUrls.call(post)
+        assert_not_includes plain, page2
+        assert_not_includes plain, topic_page2
+
+        counted = CachedUrls.call(post, as_published: true)
+        assert_includes counted, page2
+        assert_includes counted, topic_page2
+        assert_not_includes counted, "https://#{@books_host}/news/topic/rankings/page/2"
+      end
+
+      test "as_published changes nothing for a post that is already published" do
+        post = news_posts(:books_december_update)
+
+        assert_equal CachedUrls.call(post), CachedUrls.call(post, as_published: true)
+      end
+
       test "returns nothing for a post with no slug" do
         @post.slug = ""
 

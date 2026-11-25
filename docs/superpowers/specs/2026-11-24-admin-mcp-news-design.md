@@ -136,7 +136,9 @@ Any subset of `title`, `body`, `summary`, `topic_ids`, plus `expected_updated_at
   The cleared date cannot be restored through the API (a past time is refused), so publishing again dates
   the post now; only a person can restore it in admin. The audit line carries `was_published_at`.
 - A refused `already_published` or `already_draft` call enqueues the purge again, because the first call's
-  status change may have committed before its purge was enqueued. `past` and `invalid` purge nothing.
+  status change may have committed before its purge was enqueued. Its pages are counted with the post
+  still published, so a retried unpublish also purges the page the removal pushed past the end.
+  `past` and `invalid` purge nothing.
 - Both run under the same row lock as update.
 
 ## The shared save

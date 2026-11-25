@@ -118,6 +118,35 @@ module Services
         end
       end
 
+      # The first unpublish committed and its enqueue was lost. By the retry the
+      # post no longer counts, so a page count taken then misses the last index
+      # page the post's removal made disappear, and that page stays cached with
+      # the retracted post on it.
+      test "a retried unpublish purges the index and topic pages the post's removal made disappear" do
+        topic = news_topics(:books_rankings)
+        10.times do |i|
+          NewsPost.create!(domain: :books, title: "Retry Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)).news_topics << topic
+        end
+        post = news_posts(:books_december_update)
+        assert_includes post.news_topic_ids, topic.id
+        assert_equal 11, NewsPost.books.published.count
+
+        ::News::PurgeCachedPagesJob.stubs(:perform_async).raises(RuntimeError, "redis down")
+        assert_raises(RuntimeError) { Publication.unpublish(news_post: post) }
+        ::News::PurgeCachedPagesJob.unstub(:perform_async)
+        assert_equal "draft", post.reload.status
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          assert_equal :already_draft, Publication.unpublish(news_post: post).data[:code]
+          urls = ::News::PurgeCachedPagesJob.jobs.sole["args"].last
+          host = Rails.application.config.domains[:books]
+          assert_includes urls, "https://#{host}/news/page/2"
+          assert_includes urls, "https://#{host}/news/topic/rankings/page/2"
+        end
+      end
+
       test "a past or invalid refusal purges nothing" do
         jobs = purges { Publication.publish(news_post: news_posts(:books_draft), at: 1.minute.ago) }
         assert_empty jobs

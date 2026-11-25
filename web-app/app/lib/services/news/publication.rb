@@ -15,6 +15,9 @@ module Services
     # committed its status change and then failed to enqueue its purge; the retry
     # is refused with a 409, and without this purge nothing could ever repair the
     # stale pages. :past and :invalid change nothing, so they purge nothing.
+    # The pages are counted with the post as published: a retried unpublish
+    # meets the post already removed, and the index or topic page its removal
+    # pushed past the end is still cached with the post on it.
     class Publication
       REPURGED = %i[already_published already_draft].freeze
 
@@ -48,7 +51,7 @@ module Services
       def self.purge_again(result)
         if !result.success? && REPURGED.include?(result.data[:code])
           post = result.data[:news_post]
-          ::News::PurgeCachedPagesJob.perform_async(post.domain, CachedUrls.call(post))
+          ::News::PurgeCachedPagesJob.perform_async(post.domain, CachedUrls.call(post, as_published: true))
         end
         result
       end
