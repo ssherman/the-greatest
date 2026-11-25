@@ -128,7 +128,23 @@ and fails the test outright rather than degrading to a `failure` result.
   confirmed by a real call. It is used by `Services::Books::BookSubmissions::ResolveInput` (user-added
   books, Amazon links). Before that ships, make one real call for a known ASIN and confirm the key (a
   wrong key reads as "Amazon has no such product", the failure "Failing loudly" above warns about),
-  then replace this note with the result.
+  then replace this note with the result. Also call one unknown ASIN: an empty answer is what
+  `ResolveInput` expects; a non-2xx raises `Client::Error`, which it treats as "Amazon is down" and retries for
+  an hour. To check, run this from a production console (it prints the status, the top-level keys and the
+  titles, never headers or credentials; change the ASIN for the second call, e.g. `B0ZZZZZZZZ`):
+
+  ```ruby
+  amazon = Services::Amazon::Client.new
+  response = amazon.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE,
+    partner_tag: amazon.send(:partner_tag), item_ids: ["0143039431"],
+    resources: Services::Books::AmazonProductService::AMAZON_RESOURCES)
+  body = response.parse
+  puts response.status.code, body.keys.inspect
+  puts body.values.flat_map { |part| part.is_a?(Hash) ? Array(part["items"]) : [] }.map { |item| item.dig("itemInfo", "title", "displayValue") }
+  ```
+
+  The key holding the items must be `itemsResult`. If it is another name, change it in
+  `Client#get_items`.
 - **Books enrichment runs through the book workflow's `amazon` step** (`Workflows::Books::Steps::Amazon`,
   wrapping `Services::Books::AmazonProductService`; see `enrichment-workflows.md`). Two callers plan
   a book run, and with it that step:

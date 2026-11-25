@@ -89,7 +89,13 @@ wakes a waiting step.
 Run `options` are plain data on the run (`refresh`, `allow_research`, `skip_ai_if_ran`) plus two the
 engine reads itself: `start_at` (every step before the named one) and `only` (every step not
 listed) are planned already `skipped`, outcome `not_requested`, and released, so edges on them are
-satisfied at once. Adapters and `skip_if` read the rest from `run.options`. `start_after:` on the
+satisfied at once. A `lane` option of `priority` moves the steps on the `goodreads_fetch` and `serial` queues to
+`goodreads_fetch_priority` and `serial_priority` (`Workflows::Lanes`); Sidekiq drains a priority queue first
+inside the same one-thread capsule. Every other queue is left as declared, and the Goodreads step takes
+priority gate turns. A reader's new provisional book starts a limited run, `initiated_by: "book_submission"`,
+`only` the `goodreads` and `amazon` steps, on the priority lane (`Services::Books::BookSubmissions::StartLookups`).
+`BookEnrichment.start` returns an active run untouched, except that a full run (no `only`) supersedes an
+active limited submission run, so approval is not blocked by it. Adapters and `skip_if` read the rest from `run.options`. `start_after:` on the
 planner holds the run's first steps in `waiting` until that time (the backfill's pacing, the
 reject's 10-second delay).
 
@@ -234,8 +240,9 @@ attempts included, is terminal and so frees them, so a Goodreads outage never ho
   a wait whose result holds the step's progress (`result["progress"]`), so the step never sleeps on the
   capsule. A cold match costs two turns (search, page), 15 s apart. The daily cap (1,500) and the block
   cooldown are the gate's: a refusal waits until tomorrow or the cooldown's end. The Goodreads import
-  draws on the same budget and there is no sub-cap or priority: enrichment and import share it first
-  come, first served. The `goodreads_fetch` queue's concurrency of 1 is what makes the gate lock-free.
+  draws on the same budget, first come, first served, except for the priority lane: a run with the
+  option `lane: "priority"` (see "Options") takes its turns from the reader's slice of the cap
+  (`docs/features/goodreads-import.md`, "The priority lane"). The `goodreads_fetch` queue's concurrency of 1 is what makes the gate lock-free.
 - **A page it cannot read ends only that book.** A blocked fetch (a 401/403/429, any other status the
   parser cannot read, or a page whose `<title>` is not Goodreads', such as a challenge) closes the gate
   for the cooldown, and the step waits it out once. A second block in a row ends the step as `blocked`;
@@ -247,7 +254,10 @@ attempts included, is terminal and so frees them, so a Goodreads outage never ho
   before the step fetches it again, and `bin/rails books:goodreads:rerun_unparseable[limit]`
   queues a fresh run for each book whose latest run ended `unparseable` (default 500, oldest first;
   a second run of the task skips books already re-run). The fresh run is a whole run with the old
-  run's options, so `book_facts` and `amazon` run again as well.
+  run's options, so `book_facts` and `amazon` run again as well, but never with its `lane`: the priority
+  lane is for a waiting reader, not a bulk rerun. The rerun tasks skip limited runs started by a book
+  submission (`initiated_by: "book_submission"` with an `only` option) altogether, because the approval plans
+  the full run and a replay of the limited one would block it.
 - **Results.** `matched` with `{matched: true, goodreads_book_id, page_id}`, or `no_match` / `rejected`
   / `blocked` / `unparseable` with `{matched: false}` and one `books.goodreads` ledger row. `book_facts` reads the page named by
   `page_id` and nothing else from the step, so a later re-enrichment can feed the same cached page without

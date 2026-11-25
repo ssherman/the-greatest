@@ -1,6 +1,7 @@
 # User-added books: design
 
 Status: approved by Shane 2026-11-24 ("yes sounds good"). Branch `worktree-user-added-books`.
+Built on this branch; see docs/features/user-added-books.md for what differs from this document.
 "(Call)" marks a choice Claude made; Shane approved the document with them in it, without discussing
 each one.
 

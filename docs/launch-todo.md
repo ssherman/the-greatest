@@ -953,3 +953,35 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
    The deploy also adds `lists.items_need_revision` (migration, default false). Lists the agent flags
    show an "Items need revision" badge, and the books lists index filters them with "Needs item
    revision"; only an admin clears the flag, on the list's edit form.
+
+## 20. User-added books (after the deploy that adds them)
+
+A reader adds a book the site lacks from a list page; an admin or an agent approves it. Details:
+`docs/features/user-added-books.md`. Steps marked "Shane runs with `!`" use production, so an agent does
+not run them. The deploy's four migrations only add a table (`books_book_submissions`) and columns to it,
+so they are safe to run live and need no downtime.
+
+1. **Confirm both new Sidekiq queues are being worked.** After the deploy, Sidekiq must have restarted
+   and be serving `goodreads_fetch_priority` and `serial_priority` (they sit in the `goodreads_fetch` and
+   `serial` capsules). If it still runs the old config, a reader's Goodreads link waits for nothing.
+   Check the Sidekiq admin page's Busy tab, or from a console
+   `Sidekiq::ProcessSet.new.flat_map { |p| p["queues"] }.uniq.sort`, for both names.
+2. **Check Amazon's `get_items` response. Shane runs with `!`.** One real call for a known ASIN and one
+   for an unknown one, from a production console. The command is in `docs/features/amazon-creators-api.md`
+   ("Known gaps"); it prints only the status, the top-level keys and the titles, never headers. The known
+   ASIN must answer with the key `itemsResult` and the right title. The unknown ASIN (`B0ZZZZZZZZ`)
+   must come back as an empty answer, not an error: an error is read as "Amazon is down" and the request
+   retries for an hour. If the key is different, fix `Client#get_items` before relying on Amazon links.
+3. **Add one book by ISBN and one by Goodreads link, end to end. Shane runs with `!`.** Signed in on the
+   books site, open one of your own lists, search for a book that is not there, and use "Can't find it?
+   Add a book". Pick an ISBN of a book the site lacks, then a Goodreads link to another. Each should
+   appear on the list within a few minutes with the strip saying it was added, and show in
+   `/admin/book_submissions` under "Needs review" (after the lookups, with their Goodreads and Amazon
+   details). Delete both from the admin page afterwards with Reject, which also removes the list item.
+4. **Mint an admin token for the agent. Shane runs with `!`.** At `/developers/tokens` on the books host,
+   with the scope `books:admin:merge` (it implies read and write) and an expiry; an admin token must expire.
+   Then use **Copy prompt** on `/admin/book_submissions` and give it to an agent on the admin MCP endpoint.
+5. **Settings.** Defaults are right; set them only to change them:
+   `GOODREADS_PRIORITY_RESERVED` (100, the part of the daily Goodreads cap kept for readers),
+   `BOOK_SUBMISSION_LOOKUP_RUNS` (100, early lookup runs in 24 hours) and
+   `BOOK_SUBMISSION_LOOKUPS_ENABLED` (on; `0` stops the early lookups without a deploy).

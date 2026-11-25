@@ -34,7 +34,8 @@ Rails.application.config.x.goodreads = ActiveSupport::OrderedOptions.new.merge(
   # the cap: 86,400 / interval is the most fetches a day can hold, 5,760 at 15 s,
   # so raising the cap past that needs a shorter interval too.
   fetch_interval: GoodreadsEnv.integer("GOODREADS_FETCH_INTERVAL", 15),
-  # Fetches reserved per UTC day. GOODREADS_DAILY_FETCH_CAP overrides it.
+  # Fetches reserved per UTC day, and the most fetches that may actually start
+  # in one UTC day. GOODREADS_DAILY_FETCH_CAP overrides it. 0 stops fetching.
   daily_fetch_cap: GoodreadsEnv.integer("GOODREADS_DAILY_FETCH_CAP", 1_500),
   # Part of daily_fetch_cap kept for priority turns (a reader adding one book),
   # both in reservations and in actual starts: ordinary turns stop that many
