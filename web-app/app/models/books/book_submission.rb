@@ -7,6 +7,7 @@
 #  asin                  :string
 #  attempts              :integer          default(0), not null
 #  blocked_fetches       :integer          default(0), not null
+#  claims                :integer          default(0), not null
 #  created_book          :boolean          default(FALSE), not null
 #  dismissed_at          :datetime
 #  error                 :text
