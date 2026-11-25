@@ -14,6 +14,12 @@ module Services
       # wrong type or invalid UTF-8. A value of the wrong type counts as blank;
       # invalid bytes are scrubbed. Nothing here raises.
       #
+      # Invisible characters. A value made only of them is blank. Invisible format
+      # characters are trimmed from both ends of every value, and dropped from
+      # inside a title or a name (never from inside a link), except the joiners,
+      # which spell real words in Persian, Sinhala, Mongolian and other scripts.
+      # A visible format character (the Arabic number sign) stays.
+      #
       # data[:attributes] holds only the keys the method may set, because the
       # model refuses the others. data[:fingerprint] is equal for equal
       # normalized input (the same Goodreads id from two URLs, an ISBN-10 and
@@ -39,6 +45,17 @@ module Services
         AMAZON_HOST = /\A(?:www\.|smile\.|m\.)?amazon\.(?:com|ca|co\.uk|de|fr|it|es|nl|se|pl|ie|com\.au|com\.mx|com\.br|com\.be|com\.tr|co\.jp|in|sg|ae|sa|eg)\z/
         GOODREADS_PATH = %r{\A(?:/[a-z]{2}(?:-[a-z]+)?)?/book/show/(\d{1,18})(?:[-./]|\z)}i
         AMAZON_PATH = %r{/(?:dp|gp/product|gp/aw/d|exec/obidos/ASIN)/([A-Z0-9]{10})(?:[/?]|\z)}i
+
+        # Spelled out without /i, which would also match the long s and the Kelvin sign.
+        SCHEME = %r{\A[A-Za-z][A-Za-z0-9+.-]*://}
+        AUTHORITY = /\A[A-Za-z0-9.-]+(?::[0-9]*)?\z/
+
+        # Format characters (Cf) that show as nothing, the soft hyphen included.
+        INVISIBLE_FORMAT = /[\p{Cf}&&\p{Default_Ignorable_Code_Point}]/
+        EDGES = /\A(?:[[:space:]]|#{INVISIBLE_FORMAT})+|(?:[[:space:]]|#{INVISIBLE_FORMAT})+\z/
+        # Zero-width non-joiner and joiner, Mongolian vowel separator.
+        JOINERS = /[‌‍᠎]/
+        NOTHING_VISIBLE = /\A[[:space:]\p{Cf}\p{Default_Ignorable_Code_Point}]*\z/
 
         GOODREADS_HELP = "Paste a Goodreads book link, like https://www.goodreads.com/book/show/13651"
         AMAZON_HELP = "Paste an Amazon book link that contains /dp/ or /gp/product/ and the product code"
@@ -124,20 +141,33 @@ module Services
         end
 
         # A link with no scheme is read as https. Refused (nil): a string that
-        # cannot be parsed, is not http(s), or whose authority is anything but
-        # letters, digits, dots and hyphens with an optional port. Userinfo,
-        # percent-encoding and punctuation in front of the host are all
-        # refused, so "javascript:x@www.goodreads.com/..." or
+        # cannot be parsed, holds a space, is not http(s), or whose authority is
+        # anything but ASCII letters, digits, dots and hyphens with an optional
+        # port. Userinfo, percent-encoding, punctuation in front of the host and
+        # every non-ASCII host are all refused, so
+        # "javascript:x@www.goodreads.com/..." or
         # "evil.test%40www.goodreads.com/..." never reads as a link.
+        #
+        # URI takes ASCII only, and a link copied from an address bar can hold
+        # raw letters after the host ("/Größe/dp/..."), so those are
+        # percent-encoded. The authority is judged as it was pasted and is never
+        # encoded.
         def parse_uri(link)
-          candidate = link.match?(%r{\A[a-z][a-z0-9+.-]*://}i) ? link : "https://#{link}"
-          authority = candidate.sub(%r{\A[a-z][a-z0-9+.-]*://}i, "")[%r{\A[^/?#]*}]
-          return nil unless authority.match?(/\A[a-z0-9.-]+(?::\d*)?\z/i)
+          return nil if link.match?(/[[:space:]]/)
 
-          uri = URI.parse(candidate)
+          scheme = link[SCHEME] || "https://"
+          rest = link.sub(SCHEME, "")
+          authority = rest[%r{\A[^/?#]*}]
+          return nil unless authority.match?(AUTHORITY)
+
+          uri = URI.parse(scheme + authority + percent_encoded(rest.delete_prefix(authority)))
           (uri.is_a?(URI::HTTP) && uri.host.present?) ? uri : nil
         rescue URI::Error
           nil
+        end
+
+        def percent_encoded(text)
+          text.gsub(/[^\x00-\x7F]+/) { |run| run.bytes.map { |byte| "%%%02X" % byte }.join }
         end
 
         def goodreads_host?(host)
@@ -167,16 +197,18 @@ module Services
           value
         end
 
-        # Strings only; invalid bytes scrubbed, NULs dropped, ends trimmed
-        # (including Unicode spaces).
+        # Strings only; invalid bytes scrubbed, NULs dropped, ends trimmed of
+        # spaces (Unicode ones too) and invisible characters, and "" when nothing
+        # in it can be seen.
         def text(value)
           return "" unless value.is_a?(String)
 
-          value.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000").gsub(/\A[[:space:]]+|[[:space:]]+\z/, "")
+          clean = value.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000")
+          clean.match?(NOTHING_VISIBLE) ? "" : clean.gsub(EDGES, "")
         end
 
         def squish(value)
-          text(value).gsub(/[[:space:]]+/, " ")
+          text(value).gsub(INVISIBLE_FORMAT) { |char| char.match?(JOINERS) ? char : "" }.gsub(/[[:space:]]+/, " ")
         end
 
         def success(attributes, fingerprint_parts)

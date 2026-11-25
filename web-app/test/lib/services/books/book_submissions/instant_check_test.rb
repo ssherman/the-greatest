@@ -189,6 +189,14 @@ module Services
           assert_equal 0, queries
         end
 
+        test "authors that leave no name to compare are no match, never a title-only one" do
+          make_book(title: "Shared Plain Title")
+
+          [["\u200B"], ["\u2060", " "], ["\uFEFF\u00A0"], []].each do |names|
+            assert_empty ids(check(input_method: "title_authors", typed_title: "Shared Plain Title", typed_author_names: names)), names.inspect
+          end
+        end
+
         test "no match is a success with no books" do
           result = check(input_method: "isbn", isbn13: "9780061054884")
           assert result.success?

@@ -9,7 +9,9 @@ module Services
       #
       # `attributes` is ParseInput's data[:attributes]. A link or ISBN is matched
       # by identifier (work or edition level, every source but legacy; a row with
-      # no source is skipped too); title and authors by exact normalized match.
+      # no source is skipped too); title and authors by exact normalized match,
+      # and only when the authors leave a name to compare (ExactLookup would
+      # otherwise answer by title alone).
       # Answers with up to MAX_BOOKS books, catalog before provisional, then
       # best primary rank (unranked last), then id.
       class InstantCheck
@@ -76,10 +78,11 @@ module Services
         end
 
         def title_book_ids
-          return [] if @attributes[:typed_title].blank? || Array(@attributes[:typed_author_names]).empty?
+          names = Array(@attributes[:typed_author_names])
+          return [] if @attributes[:typed_title].blank? || ::Services::Text::PersonNameKey.all(names).empty?
 
           DataImporters::Books::Book::ExactLookup.call(
-            title: @attributes[:typed_title], author_names: Array(@attributes[:typed_author_names]), limit: TITLE_CANDIDATES
+            title: @attributes[:typed_title], author_names: names, limit: TITLE_CANDIDATES
           ).pluck(:id)
         end
 

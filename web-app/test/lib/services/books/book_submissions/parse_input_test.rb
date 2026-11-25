@@ -42,7 +42,49 @@ module Services
           ["goodreads", "javascript;alert(1).www.goodreads.com/book/show/1-x"],
           ["goodreads", "'onx='.www.goodreads.com/book/show/1-x"],
           ["goodreads", "evil.test%2f.www.goodreads.com/book/show/1-x"],
-          ["goodreads", "evil.test%00.www.goodreads.com/book/show/1-x"]
+          ["goodreads", "evil.test%00.www.goodreads.com/book/show/1-x"],
+          # Cyrillic and other lookalikes in the host
+          ["goodreads", "https://www.g\u043E\u043Edreads.com/book/show/1"],
+          ["goodreads", "https://www.goodreads.c\u043Em/book/show/1"],
+          ["amazon", "https://www.\u0430mazon.com/dp/0061054887"],
+          ["amazon", "https://www.amazon.c\u043Em/dp/0061054887"],
+          # Letters that fold to ASCII (long s, Kelvin sign, dotless i)
+          ["goodreads", "https://www.goodread\u017F.com/book/show/1"],
+          ["goodreads", "http\u017F://www.goodreads.com/book/show/1"],
+          ["amazon", "https://www.amazon.co.u\u212A/dp/0061054887"],
+          # Fullwidth letters, digits and delimiters
+          ["goodreads", "https://www.\uFF47oodreads.com/book/show/1"],
+          ["goodreads", "https://\uFF57\uFF57\uFF57.goodreads.com/book/show/1"],
+          ["amazon", "https://www.amazon.\uFF43\uFF4F\uFF4D/dp/0061054887"],
+          ["goodreads", "https://www.goodreads.com:\uFF14\uFF14\uFF13/book/show/1"],
+          ["goodreads", "https://evil.test\uFF20www.goodreads.com/book/show/1"],
+          ["goodreads", "https://evil.test\uFF0F.goodreads.com/book/show/1"],
+          ["goodreads", "https://evil.test\uFF1F.goodreads.com/book/show/1"],
+          ["goodreads", "https://evil.test\uFF03.goodreads.com/book/show/1"],
+          ["goodreads", "https://www.goodreads.com\uFF0Fbook/show/1"],
+          ["goodreads", "https\uFF1A//www.goodreads.com/book/show/1"],
+          # The IDN dots and the fraction and division slashes
+          ["goodreads", "https://www\u3002goodreads\u3002com/book/show/1"],
+          ["goodreads", "https://www.goodreads\uFF0Ecom/book/show/1"],
+          ["amazon", "https://www.amazon\uFF61com/dp/0061054887"],
+          ["amazon", "https://evil.test\u2044.amazon.com/dp/0061054887"],
+          ["goodreads", "https://evil.test\u2215x.goodreads.com/book/show/1"],
+          # Invisible characters and a combining mark in the host, or before it after the scheme
+          ["goodreads", "https://www.good\u200Breads.com/book/show/1"],
+          ["goodreads", "https://\u200Bwww.goodreads.com/book/show/1"],
+          ["goodreads", "https://www.goodreads.com\u200B/book/show/1"],
+          ["goodreads", "www.good\u00ADreads.com/book/show/1"],
+          ["amazon", "https://www.amazon\u200D.com/dp/0061054887"],
+          ["amazon", "https://\u202Ewww.amazon.com/dp/0061054887"],
+          ["goodreads", "https://www.goodreads\u0301.com/book/show/1"],
+          # A path that only looks like the right one, and a space of any kind inside a link
+          ["goodreads", "https://www.goodreads.com/book\uFF0Fshow/13651"],
+          ["goodreads", "https://www.goodreads.com/book/\u017Fhow/13651"],
+          ["goodreads", "https://www.goodreads.com/book/show/\uFF11\uFF13\uFF16\uFF15\uFF11"],
+          ["goodreads", "https://www.goodreads.com/book/show/13651\u200B5"],
+          ["amazon", "https://www.amazon.com/dp/\uFF10\uFF10\uFF16\uFF11\uFF10\uFF15\uFF14\uFF18\uFF18\uFF17"],
+          ["goodreads", "https://www.goodreads.com/book/show/13651-a\u00A0https://evil.test"],
+          ["goodreads", "https://www.goodreads.com/book/show/13651-a\u2028b"]
         ]
 
         def parse(params)
@@ -171,6 +213,83 @@ module Services
           title = parse(method: "title_authors", title: "Ti\u0000tle ", authors: ["A\u0000"])
           assert_equal "Title", title.data[:attributes][:typed_title]
           assert_equal ["A"], title.data[:attributes][:typed_author_names]
+        end
+
+        # Every invisible character: the format characters (Cf) and the other ones Unicode
+        # says to show as nothing (the Hangul fillers, the variation selectors).
+        INVISIBLE = [*0x80..0xD7FF, *0xE000..0xFFFF, *0x1BCA0..0x1BCA3, *0xE0000..0xE007F].map { [it].pack("U") }
+          .grep(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/)
+
+        test "an author or a title of nothing but invisible characters is blank" do
+          assert_operator INVISIBLE.size, :>, 150
+          INVISIBLE.each do |char|
+            author = parse(method: "title_authors", title: "T", authors: [" #{char}#{char} "])
+            assert_not author.success?, "author U+%04X" % char.ord
+            assert_match(/author/i, author.errors.join)
+            title = parse(method: "title_authors", title: char, authors: ["A"])
+            assert_not title.success?, "title U+%04X" % char.ord
+            assert_match(/title/i, title.errors.join)
+          end
+        end
+
+        test "a field of another method holding only invisible characters does not count as filled" do
+          result = parse(method: "isbn", isbn: "9780061054884", goodreads_url: "\u200B", title: "\uFEFF", authors: ["\u00AD"])
+
+          assert result.success?, result.errors.inspect
+        end
+
+        test "format characters go from the ends and from inside a title and a name" do
+          result = parse(method: "title_authors", title: "\uFEFF The Dis\u00ADpossessed\u200B ", authors: ["\u202A\u200BUrsula\u2060 K.\u200E Le\u200B Guin\u202C"])
+
+          assert_equal "The Dispossessed", result.data[:attributes][:typed_title]
+          assert_equal ["Ursula K. Le Guin"], result.data[:attributes][:typed_author_names]
+          plain = parse(method: "title_authors", title: "The Dispossessed", authors: ["Ursula K. Le Guin"])
+          assert_equal plain.data[:fingerprint], result.data[:fingerprint]
+        end
+
+        test "the joiners inside a name stay, and only those at its ends go" do
+          persian = "\u0639\u0644\u06CC\u200C\u0631\u0636\u0627"
+          sinhala = "\u0DC1\u0DCA\u200D\u0DBB\u0DD3"
+          result = parse(method: "title_authors", title: "T", authors: ["\u200D#{persian}\u200C", sinhala])
+
+          assert_equal [persian, sinhala], result.data[:attributes][:typed_author_names]
+        end
+
+        test "a visible mark that is technically a format character stays" do
+          result = parse(method: "title_authors", title: "\u0600\u0661\u0662", authors: ["A"])
+
+          assert_equal "\u0600\u0661\u0662", result.data[:attributes][:typed_title]
+        end
+
+        NON_ASCII_LINKS = {
+          ["goodreads", "https://www.goodreads.com/book/show/13651-cien-a\u00F1os-de-soledad"] => {goodreads_book_id: 13651},
+          ["goodreads", "www.goodreads.com/book/show/13651.\u0412\u043E\u0439\u043D\u0430_\u0438_\u043C\u0438\u0440"] => {goodreads_book_id: 13651},
+          ["goodreads", "https://www.goodreads.com/book/show/13651?title=a\u00F1os#rese\u00F1as"] => {goodreads_book_id: 13651},
+          ["goodreads", "https://www.goodreads.com/es/book/show/13651-\u{1F4D6}"] => {goodreads_book_id: 13651},
+          ["amazon", "https://www.amazon.de/Gr\u00F6\u00DFe/dp/0061054887"] => {asin: "0061054887"},
+          ["amazon", "https://www.amazon.co.jp/\u6307\u8F2A\u7269\u8A9E/dp/0061054887/ref=sr_1_1?__mk_ja_JP=\u30AB\u30BF\u30AB\u30CA"] => {asin: "0061054887"}
+        }.freeze
+
+        NON_ASCII_LINKS.each do |(method, link), expected|
+          test "reads the raw non-ASCII #{method} link #{link}" do
+            result = parse(:method => method, link_key(method) => link)
+
+            assert result.success?, result.errors.inspect
+            assert_equal expected, result.data[:attributes].slice(*expected.keys)
+            assert_equal link, result.data[:attributes][:raw_input]
+          end
+        end
+
+        test "invisible characters around a link are trimmed and the rest is kept as pasted" do
+          link = "https://www.goodreads.com/book/show/13651"
+          ["#{link}\u200B", "\uFEFF#{link}", "\u202A #{link}\u202C\n", "#{link}\u00A0\u200E"].each do |pasted|
+            result = parse(method: "goodreads", goodreads_url: pasted)
+            assert result.success?, pasted.inspect
+            assert_equal link, result.data[:attributes][:raw_input]
+            assert_equal parse(method: "goodreads", goodreads_url: link).data[:fingerprint], result.data[:fingerprint]
+          end
+          amazon = parse(method: "amazon", amazon_url: "https://www.amazon.com/dp/0061054887\u200B")
+          assert_equal "0061054887", amazon.data[:attributes][:asin]
         end
 
         test "refuses a link over 2048 characters" do
