@@ -522,6 +522,50 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "a list with an item whose book is gone still shows its other items, to the owner and to the public" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    list.update!(public: true)
+    gone = list.user_list_items.create!(listable: books_books(:cannery_row))
+    kept = list.user_list_items.create!(listable: books_books(:of_mice_and_men))
+    gone.update_columns(listable_id: 0)
+
+    [@user, nil].each do |viewer|
+      viewer ? sign_in_as(viewer, stub_auth: true) : reset!
+      host! Rails.application.config.domains[:books]
+      %w[grid_view table_view].each do |view_mode|
+        get my_list_path(list, view_mode: view_mode)
+        assert_response :success, "#{viewer ? "owner" : "public"} #{view_mode}"
+        assert_includes response.body, %(data-listable-id="#{kept.listable_id}")
+        assert_not_includes response.body, %(data-listable-id="0")
+      end
+    end
+  end
+
+  test "a public music list with an item whose album is gone still shows" do
+    @albums_favorites.update!(public: true)
+    gone = @albums_favorites.user_list_items.first
+    gone.update_columns(listable_id: 0)
+
+    %w[grid_view table_view].each do |view_mode|
+      get my_list_path(@albums_favorites, view_mode: view_mode)
+      assert_response :success, view_mode
+    end
+  end
+
+  test "the edit page still lists an item whose book is gone, so its owner can remove it" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    gone = list.user_list_items.create!(listable: books_books(:cannery_row))
+    gone.update_columns(listable_id: 0)
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(list)
+
+    assert_response :success
+    assert_select "#user_list_item_#{gone.id} form[action='#{my_list_item_path(list, gone)}']"
+  end
+
   test "anonymous viewer gets 404 on a private list" do
     host! Rails.application.config.domains[:books]
     get my_list_path(user_lists(:regular_user_books_favorites))
@@ -1121,6 +1165,70 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     get my_lists_path
     assert_select "dialog#new-list-dialog"
     assert_select "dialog#new-list-dialog [maxlength='100'][name='user_list[name]']"
+  end
+
+  # --- add a missing book (books lists, owner only) ---
+
+  test "the owner of a books list gets the add-a-book dialog, the strip frame and the dropdown footer" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 1
+    assert_select "[data-testid=book-submission-strip] turbo-frame#book_submissions[src='#{books_my_list_book_submissions_path(list)}'][target=_top]", count: 1
+    assert_select "[data-autocomplete-footer-testid-value=add-missing-book]", count: 1
+  end
+
+  test "nothing is mounted for a viewer who is not the owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+    assert_select "[data-autocomplete-footer-testid-value]", count: 0
+  end
+
+  test "nothing is mounted for an anonymous viewer of a public books list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+  end
+
+  test "nothing is mounted on a music list" do
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(@albums_favorites)
+
+    assert_response :success
+    assert_select "dialog[data-testid=book-submission-dialog]", count: 0
+    assert_select "turbo-frame#book_submissions", count: 0
+    assert_select "[data-autocomplete-footer-label-value]", count: 0
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book, in both layouts" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    books_books(:war_and_peace).update_columns(provisional: true)
+    sign_in_as(@user, stub_auth: true)
+
+    %w[table_view grid_view].each do |mode|
+      get my_list_path(list, view_mode: mode)
+      assert_select "[data-testid=not-yet-reviewed]", count: 1
+    end
   end
 
   private

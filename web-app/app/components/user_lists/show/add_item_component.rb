@@ -29,6 +29,12 @@ class UserLists::Show::AddItemComponent < ViewComponent::Base
     helpers.listable_search_path(listable_type: listable_type)
   end
 
+  # A books list ends the dropdown with a way to add a book the site does not
+  # have, results or not. The caller only renders this for the owner.
+  def footer_label
+    "Can't find it? Add a book" if list.is_a?(::Books::UserList)
+  end
+
   def placeholder
     "Search for a #{item_noun} to add…"
   end

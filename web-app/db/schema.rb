@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_23_033218) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_053411) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -195,6 +195,60 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_033218) do
     t.index ["book_id", "related_book_id", "relation_type"], name: "index_books_book_relationships_unique", unique: true
     t.index ["book_id"], name: "index_books_book_relationships_on_book_id"
     t.index ["related_book_id"], name: "index_books_book_relationships_on_related_book_id"
+  end
+
+  create_table "books_book_submissions", force: :cascade do |t|
+    t.bigint "user_id"
+    t.bigint "user_list_id"
+    t.bigint "book_id"
+    t.bigint "match_decision_id"
+    t.bigint "user_list_item_id"
+    t.integer "input_method", null: false
+    t.text "raw_input"
+    t.string "typed_title"
+    t.jsonb "typed_author_names", default: []
+    t.bigint "goodreads_book_id"
+    t.string "asin"
+    t.string "isbn13"
+    t.string "isbn10"
+    t.string "resolved_title"
+    t.jsonb "resolved_author_names", default: []
+    t.jsonb "supplied"
+    t.jsonb "lookup", default: {}
+    t.string "signature"
+    t.string "fingerprint"
+    t.integer "status", default: 0, null: false
+    t.integer "review_status", default: 0, null: false
+    t.boolean "created_book", default: false, null: false
+    t.text "error"
+    t.datetime "processing_started_at"
+    t.datetime "next_attempt_at"
+    t.datetime "announced_at"
+    t.datetime "dismissed_at"
+    t.bigint "reviewed_by_id"
+    t.integer "reviewed_via"
+    t.datetime "reviewed_at"
+    t.text "review_note"
+    t.jsonb "review_sources", default: []
+    t.string "lease_token"
+    t.datetime "lease_expires_at"
+    t.bigint "claimed_by_id"
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "blocked_fetches", default: 0, null: false
+    t.integer "sweeps", default: 0, null: false
+    t.integer "fetch_errors", default: 0, null: false
+    t.integer "claims", default: 0, null: false
+    t.index ["book_id"], name: "index_books_book_submissions_on_book_id"
+    t.index ["claimed_by_id"], name: "index_books_book_submissions_on_claimed_by_id"
+    t.index ["match_decision_id"], name: "index_books_book_submissions_on_match_decision_id"
+    t.index ["reviewed_by_id"], name: "index_books_book_submissions_on_reviewed_by_id"
+    t.index ["signature"], name: "index_books_book_submissions_on_signature"
+    t.index ["status", "review_status"], name: "index_books_book_submissions_on_status_and_review_status"
+    t.index ["user_id", "created_at"], name: "index_books_book_submissions_on_user_id_and_created_at"
+    t.index ["user_list_id"], name: "index_books_book_submissions_on_user_list_id"
+    t.index ["user_list_item_id"], name: "index_books_book_submissions_on_user_list_item_id"
   end
 
   create_table "books_books", force: :cascade do |t|
@@ -1947,6 +2001,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_23_033218) do
   add_foreign_key "books_book_countries", "books_countries", column: "country_id"
   add_foreign_key "books_book_relationships", "books_books", column: "book_id"
   add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
+  add_foreign_key "books_book_submissions", "books_books", column: "book_id", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "match_decisions", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "user_list_items", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "user_lists", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "users", column: "claimed_by_id", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "users", column: "reviewed_by_id", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "users", on_delete: :nullify
   add_foreign_key "books_books", "books_editions", column: "default_edition_id", on_delete: :nullify
   add_foreign_key "books_books", "languages", column: "original_language_id"
   add_foreign_key "books_credits", "books_authors", column: "author_id"

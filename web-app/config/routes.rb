@@ -772,6 +772,14 @@ Rails.application.routes.draw do
             post "enrichment_queues/:type/claims", to: "enrichment_queues#claim", constraints: {type: /[a-z_]+/}
             post "enrichment_items/:id/submit", to: "enrichment_items#submit", constraints: {id: /\d+/}
             post "enrichment_items/:id/skip", to: "enrichment_items#skip", constraints: {id: /\d+/}
+            get "book_submissions", to: "book_submissions#index"
+            post "book_submissions/claims", to: "book_submissions#claim"
+            get "book_submissions/:id", to: "book_submissions#show", constraints: {id: /\d+/}
+            post "book_submissions/:id/details", to: "book_submissions#details", constraints: {id: /\d+/}
+            post "book_submissions/:id/skip", to: "book_submissions#skip", constraints: {id: /\d+/}
+            post "book_submissions/:id/approve", to: "book_submissions#approve", constraints: {id: /\d+/}
+            post "book_submissions/:id/merge", to: "book_submissions#merge", constraints: {id: /\d+/}
+            post "book_submissions/:id/reject", to: "book_submissions#reject", constraints: {id: /\d+/}
             get "books/:id/identifiers", to: "identifiers#book_index", constraints: {id: /\d+/}
             get "authors/:id/identifiers", to: "identifiers#author_index", constraints: {id: /\d+/}
             get "identifiers", to: "identifiers#lookup"
@@ -871,6 +879,15 @@ Rails.application.routes.draw do
     post "my/goodreads-import", to: "books/my/goodreads_imports#create"
     get "my/goodreads-import/:id", to: "books/my/goodreads_imports#show", as: :books_my_goodreads_import,
       constraints: {id: /\d+/}
+
+    get "my/lists/:list_id/book-submissions", to: "books/my/book_submissions#index",
+      as: :books_my_list_book_submissions, constraints: {list_id: /\d+/}
+    post "my/lists/:list_id/book-submissions", to: "books/my/book_submissions#create",
+      constraints: {list_id: /\d+/}
+    post "my/book-submissions/:id/cancel", to: "books/my/book_submissions#cancel",
+      as: :cancel_books_my_book_submission, constraints: {id: /\d+/}
+    post "my/book-submissions/:id/dismiss", to: "books/my/book_submissions#dismiss",
+      as: :dismiss_books_my_book_submission, constraints: {id: /\d+/}
 
     get "reading_goal_state/:id", to: "books/reading_goal_state#show", as: :books_reading_goal_state,
       constraints: {id: /\d+/}
@@ -1046,6 +1063,18 @@ Rails.application.routes.draw do
       # List audits: the queue page and the admin's escape hatch for a stuck lease.
       resources :list_audits, only: [:index] do
         member { post :release }
+      end
+
+      # Books users asked for that the catalogue lacks: the review queue, and the admin's own
+      # decisions (the agents use the admin API).
+      resources :book_submissions, only: [:index], constraints: {id: /\d+/} do
+        member do
+          post :approve
+          post :merge
+          post :reject
+          post :supply_details
+          post :retry
+        end
       end
       post "enrichment_requests/:id/requeue", to: "enrichment_queues#requeue", as: :requeue_enrichment_request, constraints: {id: /\d+/}
       post "enrichment_requests/:id/retry_apply", to: "enrichment_queues#retry_apply", as: :retry_apply_enrichment_request, constraints: {id: /\d+/}

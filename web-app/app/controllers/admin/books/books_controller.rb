@@ -8,7 +8,10 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   end
 
   def search
-    results = ::Search::Books::Search::BookAutocomplete.call(params[:q], size: 20, book_kind: nil, include_provisional: true)
+    # public_only: the merge form of a submission, whose target must be a catalogue book. Its
+    # labels carry the authors and the id, so two books with one title can be told apart.
+    public_only = params[:public_only] == "1"
+    results = ::Search::Books::Search::BookAutocomplete.call(params[:q], size: 20, book_kind: nil, include_provisional: !public_only)
     book_ids = results.map { |r| r[:id].to_i }
     book_ids.delete(params[:exclude_id].to_i) if params[:exclude_id].present?
 
@@ -18,6 +21,10 @@ class Admin::Books::BooksController < Admin::Books::BaseController
     end
 
     books = ::Books::Book.where(id: book_ids).in_order_of(:id, book_ids)
+    if public_only
+      books = books.where(provisional: false).includes(:authors)
+      return render json: books.map { |b| {value: b.id, text: "#{autocomplete_label(b)} by #{b.authors.map(&:name).join(", ").presence || "unknown"} (##{b.id})"} }
+    end
     render json: books.map { |b| {value: b.id, text: autocomplete_label(b)} }
   end
 

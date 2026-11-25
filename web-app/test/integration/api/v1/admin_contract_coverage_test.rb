@@ -6,6 +6,8 @@ module Api
     # response of config/api/v1/admin_openapi.yaml must be reachable and
     # conform. The merge operations are exercised with a dry run for 200, so the shared fixtures survive.
     class AdminContractCoverageTest < ActionDispatch::IntegrationTest
+      include BookSubmissionReviewHelper
+
       READ = ApiTokenSecrets::ADMIN_READ
       MEMBER = ApiTokenSecrets::MEMBER
       MERGE = ApiTokenSecrets::ADMIN
@@ -602,7 +604,65 @@ module Api
             row, token = enrichment_row
             post "/api/v1/admin/enrichment_items/#{row.id}/skip", params: {lease_token: token, reason: " "}, as: :json, headers: bearer(MERGE)
           },
-          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/enrichment_items/1/skip", as: :json, headers: bearer(MERGE) } }
+          ["POST", "/api/v1/admin/enrichment_items/{id}/skip", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/enrichment_items/1/skip", as: :json, headers: bearer(MERGE) } },
+          ["GET", "/api/v1/admin/book_submissions", "200"] => -> { get "/api/v1/admin/book_submissions", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/book_submissions", "400"] => -> { get "/api/v1/admin/book_submissions?review_status=bogus", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/book_submissions", "401"] => -> { get "/api/v1/admin/book_submissions" },
+          ["GET", "/api/v1/admin/book_submissions", "403"] => -> { get "/api/v1/admin/book_submissions", headers: bearer(MEMBER) },
+          ["GET", "/api/v1/admin/book_submissions", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/book_submissions", headers: bearer(READ) } },
+          ["GET", "/api/v1/admin/book_submissions/{id}", "200"] => -> { get "/api/v1/admin/book_submissions/#{submission_row.id}", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/book_submissions/{id}", "401"] => -> { get "/api/v1/admin/book_submissions/1" },
+          ["GET", "/api/v1/admin/book_submissions/{id}", "403"] => -> { get "/api/v1/admin/book_submissions/1", headers: bearer(MEMBER) },
+          ["GET", "/api/v1/admin/book_submissions/{id}", "404"] => -> { get "/api/v1/admin/book_submissions/999999999", headers: bearer(READ) },
+          ["GET", "/api/v1/admin/book_submissions/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/book_submissions/1", headers: bearer(READ) } },
+          ["POST", "/api/v1/admin/book_submissions/claims", "200"] => -> {
+            submission_row(leased: false)
+            post "/api/v1/admin/book_submissions/claims", params: {limit: 1}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/book_submissions/claims", "400"] => -> { post "/api/v1/admin/book_submissions/claims", params: {limit: 26}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/claims", "401"] => -> { post "/api/v1/admin/book_submissions/claims", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/claims", "403"] => -> { post "/api/v1/admin/book_submissions/claims", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/claims", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/claims", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "200"] => -> { post "/api/v1/admin/book_submissions/#{details_row.id}/details", params: {lease_token: BookSubmissionReviewHelper::TOKEN, title: "Coverage Book", author_names: ["Coverage Author"], note: "Found it"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "400"] => -> { post "/api/v1/admin/book_submissions/#{details_row.id}/details", params: {lease_token: BookSubmissionReviewHelper::TOKEN, title: 5, author_names: [], note: "n"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "401"] => -> { post "/api/v1/admin/book_submissions/1/details", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "403"] => -> { post "/api/v1/admin/book_submissions/1/details", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "404"] => -> { post "/api/v1/admin/book_submissions/999999999/details", params: {lease_token: BookSubmissionReviewHelper::TOKEN, title: "Coverage Book", author_names: ["Coverage Author"], note: "Found it"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "409"] => -> { post "/api/v1/admin/book_submissions/#{details_row.id}/details", params: {lease_token: BookSubmissionReviewHelper::TOKEN, title: "Coverage Book", author_names: ["Coverage Author"], note: "Found it"}.merge(lease_token: "not-the-token"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "422"] => -> { post "/api/v1/admin/book_submissions/#{details_row.id}/details", params: {lease_token: BookSubmissionReviewHelper::TOKEN, title: "Coverage Book", author_names: ["Coverage Author"], note: "Found it"}.merge({title: " "}), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/details", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/1/details", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "200"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/skip", params: {lease_token: BookSubmissionReviewHelper::TOKEN, reason: "Cannot show it is real"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "400"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/skip", params: {lease_token: BookSubmissionReviewHelper::TOKEN, reason: 5}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "401"] => -> { post "/api/v1/admin/book_submissions/1/skip", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "403"] => -> { post "/api/v1/admin/book_submissions/1/skip", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "404"] => -> { post "/api/v1/admin/book_submissions/999999999/skip", params: {lease_token: BookSubmissionReviewHelper::TOKEN, reason: "Cannot show it is real"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "409"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/skip", params: {lease_token: BookSubmissionReviewHelper::TOKEN, reason: "Cannot show it is real"}.merge(lease_token: "not-the-token"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "422"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/skip", params: {lease_token: BookSubmissionReviewHelper::TOKEN, reason: "Cannot show it is real"}.merge({reason: " "}), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/skip", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/1/skip", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "200"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/approve", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"]}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "400"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/approve", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "n", sources: "x"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "401"] => -> { post "/api/v1/admin/book_submissions/1/approve", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "403"] => -> { post "/api/v1/admin/book_submissions/1/approve", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "404"] => -> { post "/api/v1/admin/book_submissions/999999999/approve", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"]}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "409"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/approve", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"]}.merge(lease_token: "not-the-token"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "422"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/approve", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"]}.merge({sources: []}), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/approve", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/1/approve", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "200"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/merge", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], target_id: ::Books::Book.create!(title: "Coverage Catalog Copy").id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "400"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/merge", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], target_id: 1, dry_run: "yes"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "401"] => -> { post "/api/v1/admin/book_submissions/1/merge", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "403"] => -> { post "/api/v1/admin/book_submissions/1/merge", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "404"] => -> { post "/api/v1/admin/book_submissions/999999999/merge", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], target_id: ::Books::Book.create!(title: "Coverage Catalog Copy").id, dry_run: true}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "409"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/merge", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], target_id: ::Books::Book.create!(title: "Coverage Catalog Copy").id, dry_run: true}.merge(lease_token: "not-the-token"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "422"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/merge", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], target_id: ::Books::Book.create!(title: "Coverage Catalog Copy").id, dry_run: true}.merge({target_id: 999_999_999}), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/merge", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/1/merge", as: :json, headers: bearer(MERGE) } },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "200"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/reject", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], dry_run: true}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "400"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/reject", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], dry_run: "yes"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "401"] => -> { post "/api/v1/admin/book_submissions/1/reject", as: :json },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "403"] => -> { post "/api/v1/admin/book_submissions/1/reject", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "404"] => -> { post "/api/v1/admin/book_submissions/999999999/reject", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], dry_run: true}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "409"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/reject", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], dry_run: true}.merge(lease_token: "not-the-token"), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "422"] => -> { post "/api/v1/admin/book_submissions/#{submission_row.id}/reject", params: {lease_token: BookSubmissionReviewHelper::TOKEN, note: "Found it", sources: ["https://example.org/proof"], dry_run: true}.merge({sources: []}), as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions/{id}/reject", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions/1/reject", as: :json, headers: bearer(MERGE) } }
         }
       ).freeze
 
@@ -617,6 +677,25 @@ module Api
       def enrichment_submission(token)
         {lease_token: token, sources: ["https://example.org/a"],
          answer: {recognized: true, original_language: "Japanese", nationality: "Japanese", confidence: "high", reason: "Stated by a source"}}
+      end
+
+      # A reviewable user-added book (provisional, one provisional author) of the reader, leased to the admin the
+      # MERGE token belongs to under BookSubmissionReviewHelper::TOKEN, or unleased for a claim. The purge jobs a
+      # promotion, merge or delete would queue are stubbed: they reach for the Cloudflare zone.
+      def submission_row(leased: true)
+        stub_review_side_effects
+        row = reviewable_submission(user: users(:regular_user))
+        leased ? lease(row) : row
+      end
+
+      # A request that found no book, leased the same way.
+      def details_row
+        stub_review_side_effects
+        ::Books::BookSubmission.create!(
+          user: users(:regular_user), user_list: user_lists(:regular_user_books_read), input_method: :title_authors, typed_title: "Coverage Lost Book",
+          typed_author_names: ["Nobody"], status: :needs_details, review_status: :not_needed,
+          lease_token: BookSubmissionReviewHelper::TOKEN, lease_expires_at: 30.minutes.from_now, claimed_by_id: users(:admin_user).id
+        )
       end
 
       def series_path(id = books_series(:asoiaf).id) = "/api/v1/admin/series/#{id}"

@@ -1,6 +1,12 @@
 import { application } from "../controllers/application"
 import "./web_shared"
 
+import Books__BookSubmissionDialogController from "../controllers/books/book_submission_dialog_controller"
+application.register("books--book-submission-dialog", Books__BookSubmissionDialogController)
+
+import Books__BookSubmissionsController from "../controllers/books/book_submissions_controller"
+application.register("books--book-submissions", Books__BookSubmissionsController)
+
 import Books__CategorySearchController from "../controllers/books/category_search_controller"
 application.register("books--category-search", Books__CategorySearchController)
 

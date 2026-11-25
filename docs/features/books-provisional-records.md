@@ -1,12 +1,16 @@
 # Books: provisional records
 
-A provisional book or author is a real row that an import created and that no admin has approved
-yet. `books_books.provisional` and `books_authors.provisional` (boolean, default false) carry the
+A provisional book or author is a real row that an import or a reader's book submission created
+and that no admin has approved yet. `books_books.provisional` and `books_authors.provisional` (boolean, default false) carry the
 flag. The design is §9 of `docs/superpowers/specs/2026-10-03-goodreads-import-design.md`.
 
-Nothing sets the flag yet. The Goodreads resolver (increment 3) and the member import (increment
-6) will create provisional records, and an admin approving an import (increment 6) is the only
-thing that clears it.
+Three things set the flag: the Goodreads resolver and member import, the legacy replay's apply step
+(on a book it flags), and a reader's book submission (`docs/features/user-added-books.md`), which
+creates a provisional book through the book importer. An approval clears it, always through
+`Services::Books::GoodreadsImports::PromoteRecords`: an admin approving an import, an admin
+approving a submission on the admin page, or an agent holding a token with `books:admin:merge`
+(`approve_book_submission`). Approving a submission also closes every other submission on the book.
+The legacy replay's revert of a `mark_provisional` verdict, and a merge that folds a real book into a provisional one (`Books::Book::Merger#reconcile_provisional`), also clear it. A merge into a public book, or a delete, ends a provisional record without clearing the flag.
 
 ## The rule
 
@@ -72,8 +76,7 @@ a book's `mark_provisional` is only proposed, for an admin (`docs/features/goodr
 ## Show pages
 
 A provisional book or author still loads by URL. `@indexable` is false, so the page renders
-`noindex`, and `Books::ProvisionalNoticeComponent` shows "Added from a Goodreads import; not yet
-reviewed or enriched." The notice depends only on the record, so edge-cached HTML stays the same
+`noindex`, and `Books::ProvisionalNoticeComponent` shows "Recently added; not yet reviewed or enriched." The notice depends only on the record, so edge-cached HTML stays the same
 for every visitor. Promoting a record (`Services::Books::GoodreadsImports::PromoteRecords`) purges its
 cached page through `Books::PurgeShowPagesJob`.
 

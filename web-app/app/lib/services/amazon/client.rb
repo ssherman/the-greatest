@@ -27,20 +27,31 @@ module Services
       # nothing. Raises Error on any non-2xx response — never returns [] for a
       # failed call, because callers cannot tell the two apart.
       def search_items(**params)
-        response = client.search_items(
-          marketplace: MARKETPLACE,
-          partner_tag: partner_tag,
-          **params
-        )
+        parse_items(client.search_items(marketplace: MARKETPLACE, partner_tag: partner_tag, **params), "searchResult")
+      end
 
+      def self.get_items(item_ids:, **params)
+        new.get_items(item_ids: item_ids, **params)
+      end
+
+      # The items for the given ASINs, [] when Amazon knows none of them. Raises
+      # Error on any non-2xx response, as search_items does. Built from the
+      # gem's get_items signature: the gem ships no example response, so the
+      # "itemsResult" key is unverified until one real call confirms it
+      # (docs/features/amazon-creators-api.md).
+      def get_items(item_ids:, **params)
+        parse_items(client.get_items(marketplace: MARKETPLACE, partner_tag: partner_tag, item_ids: item_ids, **params), "itemsResult")
+      end
+
+      private
+
+      def parse_items(response, result_key)
         unless response.status.success?
           raise Error, "Amazon Creators API responded #{response.status.code}: #{response.body.to_s[0, 500]}"
         end
 
-        response.parse.dig("searchResult", "items") || []
+        response.parse.dig(result_key, "items") || []
       end
-
-      private
 
       def client
         ::Vacuum.new(

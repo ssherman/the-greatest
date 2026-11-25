@@ -60,7 +60,8 @@ reuses this machinery for new books:
 
 - **One gate turn for every fetch.** The import's `FetchPageJob` and the enrichment step both take a turn
   through `Books::Goodreads::GateTurn`, so the 15 s spacing, the 1,500-per-UTC-day cap and the 6 h block
-  cooldown are one budget, with no sub-cap and no priority. Books a user's import creates usually cost the
+  cooldown are one budget. The one exception is the priority lane for a reader adding a book
+  (below). Books a user's import creates usually cost the
   enrichment step no fetch, because they arrive with a Goodreads id and a cached page.
 - **The search cache.** `books_goodreads_searches` stores each title search (rows and HTML, `found` or
   `no_results`) keyed by the normalized query and is fresh for 30 days, so a retried or repeated search
@@ -146,6 +147,15 @@ for it. Matched editions never touch Goodreads.
   as if no page came back. Goodreads' own 503 page
   and timeouts are retried through the line up to `fetch_attempts` (3). Settings:
   `config/initializers/goodreads.rb`.
+- **The priority lane (user-added books).** Ordinary turns use `daily_fetch_cap - priority_reserved`
+  (1,400 of 1,500 by default). A reader adding a book has its own slice, `priority_reserved`
+  (`GOODREADS_PRIORITY_RESERVED`, default 100) a day, and falls back to the ordinary line when the slice is
+  spent. Actual starts are capped per UTC day as well as reservations, and ordinary turns are held back by the
+  part of the slice priority has not used. A priority turn is protected for 90 seconds (ordinary turns step
+  aside while it is due) and is re-armed while spacing makes it wait. A cap of 0 stops fetching.
+  `StatusReport` and `FixesReport` print ordinary use only, against the full cap. The priority jobs run on
+  `goodreads_fetch_priority`, in the same one-thread capsule as `goodreads_fetch`.
+  See `docs/features/user-added-books.md`.
 - **Reading.** `Books::Goodreads::BookPage` reads `__NEXT_DATA__`, or the markup and `ld+json`
   when a page has none (1 page in 20, measured). It reads title, series, contributors with roles,
   original year, ISBNs and ASIN, and never descriptions. An unknown id is a 200 titled "Page not

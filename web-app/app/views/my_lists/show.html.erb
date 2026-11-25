@@ -73,6 +73,9 @@
   <% if @owner %>
     <%= render UserLists::FavoritesNoteComponent.new(user_list: @list) %>
     <%= render UserLists::Show::AddItemComponent.new(list: @list) %>
+    <% if @list.is_a?(Books::UserList) %>
+      <%= render Books::BookSubmissions::MountComponent.new(list: @list) %>
+    <% end %>
   <% end %>
 
   <%# Only this frame reloads after an add (user-list-add-item controller calls %>
@@ -106,7 +109,7 @@
             </thead>
             <tbody>
               <% @items.each_with_index do |item, index| %>
-                <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed) %>
+                <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed, owner: @owner) %>
               <% end %>
             </tbody>
           </table>
@@ -114,7 +117,7 @@
       <% else %>
         <div class="<%= UserLists::Show::ItemComponent.grid_container_class(@list.class.listable_class) %>">
           <% @items.each_with_index do |item, index| %>
-            <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed) %>
+            <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed, owner: @owner) %>
           <% end %>
         </div>
       <% end %>

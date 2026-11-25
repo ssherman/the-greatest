@@ -17,14 +17,14 @@ module Services
           ])
         end
 
-        # Real authors (not placeholders) with no running author enrichment run
+        # Real, reviewed authors (not placeholders, not provisional) with no running author enrichment run
         # (that run researches the author itself), joined to the rank. "ranked"
         # keeps only ranked authors.
         def base_relation(scope:)
           raise ArgumentError, "unknown scope: #{scope.inspect}" unless Services::EnrichmentQueue::Type::SCOPES.include?(scope.to_s)
 
           relation = ::Books::Author
-            .where(exclude_from_rankings: false)
+            .where(exclude_from_rankings: false, provisional: false)
             .where("NOT EXISTS (#{running_runs.to_sql})")
             .joins(ranked_join_sql)
           relation = relation.where("ranked_items.rank IS NOT NULL") if scope.to_s == "ranked"

@@ -75,3 +75,8 @@ oauth_prune:
   class: Oauth::PruneJob
   cron: "45 3 * * *"
   description: "Delete unused OAuth clients, old authorization codes and token rows no check can reach; keeps revoked rows reuse detection needs"
+
+book_submissions_requeue_stuck:
+  class: Books::RequeueStuckBookSubmissionsJob
+  cron: "*/10 * * * *"
+  description: "Queue again the book submissions a lost job left queued or looking up for over 30 minutes"

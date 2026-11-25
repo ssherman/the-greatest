@@ -43,6 +43,18 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "div.card[data-listable-id='#{item.listable_id}']"
   end
 
+  test "an item whose listable is gone renders nothing, in either view, owner or not" do
+    [user_list_items(:regular_user_books_item_1), user_list_items(:regular_user_books_item_3), user_list_items(:regular_user_fav_album_1)].each do |item|
+      item.update_columns(listable_id: 0)
+      item.reload
+      %w[grid_view table_view].product([true, false]).each do |view_mode, owner|
+        rendered = render_inline(Component.new(item: item, view_mode: view_mode, position: 1, index: 0, completion_editable: owner, owner: owner))
+
+        assert_equal "", rendered.to_html.strip, "#{view_mode} owner #{owner}"
+      end
+    end
+  end
+
   test "table_layout? is false for books outside table_view" do
     refute Component.table_layout?(listable_class: "Books::Book", view_mode: "grid_view")
   end
@@ -136,5 +148,47 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
 
     render_inline(Component.new(item: item, view_mode: "table_view", position: 1))
     assert_no_selector "button[data-action='user-list-completion#open']"
+  end
+
+  # "Not yet reviewed" on a provisional book, for the owner only
+
+  def provisional_item
+    item = user_list_items(:regular_user_books_item_1)
+    item.listable.update_columns(provisional: true)
+    item
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book in the table layout" do
+    render_inline(Component.new(item: provisional_item, view_mode: "table_view", position: 1, owner: true))
+
+    assert_selector "tr [data-testid='not-yet-reviewed']", text: "Not yet reviewed"
+  end
+
+  test "the owner sees Not yet reviewed on a provisional book in the grid layout" do
+    render_inline(Component.new(item: provisional_item, view_mode: "grid_view", position: 1, owner: true))
+
+    assert_selector "[data-testid='not-yet-reviewed']", text: "Not yet reviewed"
+  end
+
+  test "a viewer who is not the owner never sees it" do
+    ["table_view", "grid_view"].each do |mode|
+      render_inline(Component.new(item: provisional_item, view_mode: mode, position: 1))
+      assert_no_selector "[data-testid='not-yet-reviewed']"
+    end
+  end
+
+  test "a reviewed book shows no badge to the owner" do
+    item = user_list_items(:regular_user_books_item_1)
+    ["table_view", "grid_view"].each do |mode|
+      render_inline(Component.new(item: item, view_mode: mode, position: 1, owner: true))
+      assert_no_selector "[data-testid='not-yet-reviewed']"
+    end
+  end
+
+  test "a provisional album is never badged" do
+    item = user_list_items(:regular_user_fav_album_1)
+    render_inline(Component.new(item: item, view_mode: "table_view", position: 1, owner: true))
+
+    assert_no_selector "[data-testid='not-yet-reviewed']"
   end
 end

@@ -60,6 +60,7 @@ class UserList < ApplicationRecord
   # inverse_of is set explicitly because the order scope disables Rails' automatic
   # inverse detection; without it, item.user_list would re-query (N+1) in views.
   has_many :user_list_items, -> { order(:position) }, dependent: :destroy, inverse_of: :user_list
+  has_many :book_submissions, class_name: "Books::BookSubmission", dependent: :nullify
 
   # Enums
   # Integer 0 (the retired List view) is deliberately unused; the remaining
