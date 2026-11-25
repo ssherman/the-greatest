@@ -1,0 +1,22 @@
+<div data-testid="book-submission-hits-list">
+  <p class="font-semibold">We already have this. Is it the one?</p>
+  <ul class="mt-2 space-y-2">
+    <% books.each do |book| %>
+      <li class="flex items-center justify-between gap-3">
+        <span class="[overflow-wrap:anywhere]">
+          <%= book.title %>
+          <% if author_line(book).present? %>by <%= author_line(book) %><% end %>
+          <% if book.first_published_year %>(<%= book.first_published_year %>)<% end %>
+        </span>
+        <%= button_to "Add to list", user_list_items_path(list), params: {user_list_item: {listable_id: book.id}}, class: "btn btn-sm" %>
+      </li>
+    <% end %>
+  </ul>
+  <%= form_with url: books_my_list_book_submissions_path(list), class: "mt-3" do %>
+    <% hidden_fields.each do |name, value| %>
+      <%= hidden_field_tag name, value, id: nil %>
+    <% end %>
+    <%= hidden_field_tag :confirmed_new, "1", id: nil %>
+    <%= button_tag "None of these", type: "submit", class: "btn btn-sm btn-ghost" %>
+  <% end %>
+</div>

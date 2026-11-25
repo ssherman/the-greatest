@@ -865,6 +865,15 @@ Rails.application.routes.draw do
     get "my/goodreads-import/:id", to: "books/my/goodreads_imports#show", as: :books_my_goodreads_import,
       constraints: {id: /\d+/}
 
+    get "my/lists/:list_id/book-submissions", to: "books/my/book_submissions#index",
+      as: :books_my_list_book_submissions, constraints: {list_id: /\d+/}
+    post "my/lists/:list_id/book-submissions", to: "books/my/book_submissions#create",
+      constraints: {list_id: /\d+/}
+    post "my/book-submissions/:id/cancel", to: "books/my/book_submissions#cancel",
+      as: :cancel_books_my_book_submission, constraints: {id: /\d+/}
+    post "my/book-submissions/:id/dismiss", to: "books/my/book_submissions#dismiss",
+      as: :dismiss_books_my_book_submission, constraints: {id: /\d+/}
+
     get "reading_goal_state/:id", to: "books/reading_goal_state#show", as: :books_reading_goal_state,
       constraints: {id: /\d+/}
     get "reading_goals", to: redirect("/my/reading-goals", status: 301)

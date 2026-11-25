@@ -1,0 +1,16 @@
+<%= helpers.turbo_frame_tag "book_submissions", target: "_top", data: frame_data do %>
+  <% submissions.each do |submission| %>
+    <div id="<%= dom_id(submission) %>" class="flex items-center justify-between gap-3 py-1 text-sm">
+      <% if submission.status == "needs_details" %>
+        <span class="[overflow-wrap:anywhere]" data-replaces="<%= submission.id %>"><%= message(submission) %></span>
+      <% else %>
+        <span class="[overflow-wrap:anywhere]"><%= message(submission) %></span>
+      <% end %>
+      <% if open?(submission) %>
+        <%= button_to "Cancel", cancel_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost" %>
+      <% else %>
+        <%= button_to "Dismiss", dismiss_books_my_book_submission_path(submission), class: "btn btn-xs btn-ghost" %>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>
