@@ -741,6 +741,25 @@ module Services
           submission.reload
           assert_equal ["cancelled", "rejected", nil, nil], [submission.status, submission.review_status, submission.book_id, submission.user_list_item_id]
         end
+
+        test "a resumed run whose book is now in the catalog plans no lookups on it" do
+          catalog = books_books(:war_and_peace)
+          submission = book_submission(book: catalog, created_book: true, review_status: :merged, status: :looking_up)
+          StartLookups.expects(:call).never
+
+          process(submission)
+
+          assert_equal "added", submission.reload.status
+          assert_includes @list.reload.items, catalog
+        end
+
+        test "a resumed run whose book is still provisional and was made by it plans the lookups" do
+          book = provisional_book
+          submission = book_submission(book: book, created_book: true, review_status: :pending, status: :looking_up)
+          StartLookups.expects(:call).with(book: book).once
+
+          process(submission)
+        end
       end
     end
   end

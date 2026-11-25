@@ -177,23 +177,30 @@ module Services
           ::MatchDecision.where(id: decision.id, reviewed_at: nil).update_all(needs_review: true)
         end
 
-        # The list add runs under a FOR KEY SHARE lock on the book, taken before
-        # anything is read back, in the order the merger takes it (the book, then
-        # the rows). A merge or delete cannot commit between the check and the
-        # add, so an item is never made for a book that is gone. A book merged
-        # away since CreateBook is replaced by its survivor (the merger moved the
-        # row); a deleted one leaves no item, and the delete already closed the
-        # row (rejected and cancelled), so there is nothing to mark added.
+        # The list add runs under two locks, taken in this order: the owner's user
+        # row (the one OwnerMutation takes, and the one a book delete holds while
+        # its cascade removes list items), then the book, FOR KEY SHARE, read back
+        # after the lock. The book delete locks the book row first (Book#close_submissions)
+        # and the merger locks both books before it moves anything, so a merge or
+        # delete either finished before this lock (the book is gone, and nothing is
+        # added) or waits for this transaction. An item is never made for a book that
+        # is gone. A book merged away since CreateBook is replaced by its survivor
+        # (the merger moved the row); a deleted one leaves no item, and a provisional
+        # book's delete already closed the row (rejected and cancelled), so there
+        # is nothing to mark added.
         def finish(book)
           settled = nil
           item = nil
           ActiveRecord::Base.transaction do
+            ::User.lock.where(id: @submission.user_id).pick(:id)
             settled = lock_book(book)
             item = add_to_list(settled) if settled
           end
           return done unless settled
 
-          StartLookups.call(book: settled) if @submission.created_book? && settled.id == book.id
+          # Lookups only for the provisional book this run made: a book merged into
+          # or promoted to the catalog since is not this feature's to enrich.
+          StartLookups.call(book: settled) if @submission.created_book? && settled.id == book.id && settled.provisional?
           mark_added(item)
           done
         end

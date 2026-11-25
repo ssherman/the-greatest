@@ -157,7 +157,10 @@ class Books::Book < ApplicationRecord
   before_validation :derive_book_length,
     if: -> { book_length.blank? && (page_range_changed? || word_count_changed?) }
   # Prepended so it runs before the submissions' dependent: :nullify drops book_id,
-  # which is how it finds them. One UPDATE, whether or not the book has any.
+  # which is how it finds them. It locks the book row first (one query), so a
+  # list add that locks the book afterwards (ProcessSubmission#finish) waits for
+  # this delete and then finds the book gone, instead of adding an item the final
+  # DELETE strands. Then one UPDATE, whether or not the book has any submissions.
   before_destroy :close_submissions, prepend: true
   after_destroy { Services::BooksMigration::RedirectRecorder.deleted(item_type: "Books::Book", from_id: id) }
 
@@ -288,6 +291,7 @@ class Books::Book < ApplicationRecord
   # Deleted: the reader's request is rejected, and a second reader's row on a
   # provisional book goes with it. A catalog book's not_needed rows stay.
   def close_submissions
+    self.class.lock.where(id: id).pick(:id)
     Services::Books::BookSubmissions::CloseForBook.call(book_ids: [id], review_status: :rejected, include_matched: provisional?)
   end
 
