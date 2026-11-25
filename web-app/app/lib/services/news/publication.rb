@@ -10,13 +10,15 @@ module Services
     # :invalid.
     class Publication
       def self.publish(news_post:, at: nil)
-        # Needs no lock: it judges the caller's argument, not the stored post.
-        if at && at <= Time.current
-          return SavePost::Result.new(success?: false, data: {news_post: news_post, code: :past}, errors: ["The publication time is in the past"])
-        end
-
+        # Judged under the lock, in this order: a live post is a conflict whatever
+        # time was sent, so a retried scheduling call gets the date it went live
+        # and never a past-time error.
         guard = lambda do |locked|
-          [:already_published, "The post is already published; it went live #{locked.published_at.utc.iso8601(6)}"] if locked.published?
+          if locked.published?
+            [:already_published, "The post is already published; it went live #{locked.published_at.utc.iso8601(6)}"]
+          elsif at && at <= Time.current
+            [:past, "The publication time is in the past; omit published_at to publish now"]
+          end
         end
         SavePost.call(news_post: news_post, attrs: {published_at: at || Time.current}, guard: guard)
       end

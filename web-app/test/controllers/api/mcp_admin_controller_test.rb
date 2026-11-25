@@ -132,6 +132,15 @@ module Api
       assert_response :not_found
     end
 
+    test "publish_news_post with published_at null is an error and the post stays a draft" do
+      post = news_posts(:books_draft)
+      call_tool("publish_news_post", {id: post.id, published_at: nil}, token: @write_secret)
+
+      assert_equal true, json.dig("result", "isError")
+      assert_equal "invalid_parameter", tool_text["code"]
+      assert_equal "draft", post.reload.status
+    end
+
     test "a merge dry run changes nothing, then the real merge happens and is audited with the user" do
       source = categories(:books_novels_genre)
       target = categories(:books_fiction_genre)

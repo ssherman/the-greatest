@@ -404,16 +404,44 @@ module Api
 
           test "publish with a future time schedules it, honouring the offset" do
             post = news_posts(:books_draft)
-            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish", {published_at: "2031-03-04T09:00:00-05:00"}
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish", {published_at: "2031-03-04T09:00:00-05:00"} }
+            assert_api_response_conform(status: 200, api: :admin)
             assert_equal ["scheduled", Time.utc(2031, 3, 4, 14)], [json.dig(:data, :status), post.reload.published_at]
+            assert_equal 1, jobs.size
             get "/news/#{post.slug}"
             assert_response :not_found
           end
 
-          test "a scheduled post can be published now" do
+          test "a scheduled post can be published now, and purges" do
             post = news_posts(:books_scheduled)
-            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish"
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish" }
             assert_equal ["published", "published"], [json.dig(:data, :status), post.reload.status]
+            assert_equal 1, jobs.size
+          end
+
+          test "a scheduled post unpublished returns to draft, and purges" do
+            post = news_posts(:books_scheduled)
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{post.id}/unpublish" }
+            assert_equal "draft", post.reload.status
+            assert_equal 1, jobs.size
+          end
+
+          test "a live post with a past time is a 409 naming its date, not a 422" do
+            live = news_posts(:books_december_update)
+            was = live.reload.published_at
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{live.id}/publish", {published_at: "2020-01-01T00:00:00Z"} }
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_includes json[:detail], was.utc.iso8601(6)
+            assert_equal was, live.reload.published_at
+            assert_empty jobs
+          end
+
+          test "a draft with a past time is a 422 that says how to publish now, and purges nothing" do
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", {published_at: "2020-01-01T00:00:00Z"} }
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_match(/omit published_at to publish now/, json[:detail])
+            assert_equal "draft", news_posts(:books_draft).reload.status
+            assert_empty jobs
           end
 
           test "a published_at that is not a full time with an offset is a 400 and publishes nothing" do

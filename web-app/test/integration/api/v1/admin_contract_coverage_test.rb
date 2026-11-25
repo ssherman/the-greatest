@@ -355,7 +355,10 @@ module Api
           news_posts(:books_december_update).update_columns(published_at: 1.day.ago)
           post "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}/publish", headers: bearer(MERGE)
         },
-        ["POST", "/api/v1/admin/news_posts/{id}/publish", "422"] => -> { post "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", params: {published_at: "2020-01-01T00:00:00Z"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/news_posts/{id}/publish", "422"] => -> {
+          news_posts(:books_draft).update_columns(published_at: nil)
+          post "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", params: {published_at: "2020-01-01T00:00:00Z"}, as: :json, headers: bearer(MERGE)
+        },
         ["POST", "/api/v1/admin/news_posts/{id}/publish", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", headers: bearer(MERGE) } },
         ["POST", "/api/v1/admin/news_posts/{id}/unpublish", "200"] => -> { post "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}/unpublish", headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/news_posts/{id}/unpublish", "401"] => -> { post "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}/unpublish" },

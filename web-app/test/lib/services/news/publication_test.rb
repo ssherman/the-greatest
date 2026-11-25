@@ -28,6 +28,20 @@ module Services
         assert_equal "published", post.reload.status
       end
 
+      test "a live post with a past time is already_published, naming its date, not past" do
+        post = news_posts(:books_december_update)
+        was = post.reload.published_at
+        result = Publication.publish(news_post: post, at: 1.minute.ago)
+        assert_equal :already_published, result.data[:code]
+        assert_includes result.errors.first, was.utc.iso8601(6)
+        assert_equal was, post.reload.published_at
+      end
+
+      test "the past-time refusal says how to publish now" do
+        result = Publication.publish(news_post: news_posts(:books_draft), at: 1.minute.ago)
+        assert_match(/omit published_at to publish now/, result.errors.first)
+      end
+
       test "publish refuses a past time and leaves the post a draft" do
         assert_equal :past, Publication.publish(news_post: news_posts(:books_draft), at: 1.minute.ago).data[:code]
         assert_equal "draft", news_posts(:books_draft).reload.status

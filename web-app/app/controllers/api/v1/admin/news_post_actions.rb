@@ -73,8 +73,7 @@ module Api
         end
 
         def update
-          post = find_post or return
-          return render_forbidden unless ::NewsPostPolicy.new(current_principal.user, post).update?
+          post = writable_post or return
 
           body = json_body
           return bad_body("The body must be a JSON object with the fields to change.") if body.blank?
@@ -99,8 +98,7 @@ module Api
         end
 
         def publish
-          post = find_post or return
-          return render_forbidden unless ::NewsPostPolicy.new(current_principal.user, post).update?
+          post = writable_post or return
 
           # No body at all means "now"; anything else must be a JSON object.
           body = request.raw_post.blank? ? {} : json_body
@@ -121,8 +119,7 @@ module Api
         end
 
         def unpublish
-          post = find_post or return
-          return render_forbidden unless ::NewsPostPolicy.new(current_principal.user, post).update?
+          post = writable_post or return
 
           result = ::Services::News::Publication.unpublish(news_post: post)
           return refuse(result) unless result.success?
@@ -144,6 +141,15 @@ module Api
           return post if post
 
           render_problem(::Api::Problem.new(:not_found, detail: "No news post #{params[:id]}."))
+          nil
+        end
+
+        # The post the caller may edit, or nil after rendering the 404 or 403.
+        def writable_post
+          post = find_post or return
+          return post if ::NewsPostPolicy.new(current_principal.user, post).update?
+
+          render_forbidden
           nil
         end
 
