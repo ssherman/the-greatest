@@ -230,32 +230,102 @@ class Books::FetchSubmissionGoodreadsPageJobTest < ActiveSupport::TestCase
     assert_equal "needs_details", @submission.reload.status
   end
 
-  test "a turn already taken is never reused: an error after it reschedules through a new turn" do
+  def cancel_row = ::Books::BookSubmission.where(id: @submission.id).update_all(status: ::Books::BookSubmission.statuses[:cancelled])
+
+  test "an error after the turn reschedules a minute later, not due, with the raise counted, and the sweep leaves the row alone" do
     FETCH.stubs(:call).raises(RuntimeError, "boom")
-    JOB.expects(:perform_at).with(30.seconds.from_now, @submission.id, false)
+    Rails.logger.expects(:error).with(regexp_matches(/RuntimeError: boom/)).at_least_once
+    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false, 1)
 
     assert_nothing_raised { perform(true) }
 
     @submission.reload
-    assert_equal ["looking_up", 1], [@submission.status, @submission.attempts]
+    assert_equal ["looking_up", 1.minute.from_now, 0], [@submission.status, @submission.next_attempt_at, @submission.attempts]
   end
 
-  test "the rescheduled job, not due, takes a fresh reservation before it fetches again" do
+  test "the rescheduled job takes a fresh reservation before it fetches again" do
     FETCH.stubs(:call).raises(RuntimeError, "boom").then.returns(fetched(:found))
     @gate.stubs(:spacing_wait).returns(0)
     perform(true)
     @gate.expects(:reserve).with(priority: true).once.returns(Books::FetchGate::Reservation.new(wait: 0, refusal: nil))
 
-    perform(false)
+    JOB.new.perform(@submission.id, false, 1)
   end
 
-  test "an error after the turn with the window spent needs details" do
-    @submission.update!(processing_started_at: Time.current - @window - 1.second)
-    FETCH.stubs(:call).raises(RuntimeError, "boom")
+  test "an unparseable page whose write raises is rescheduled through a new turn, not retried as due" do
+    FETCH.stubs(:call).returns(fetched(:unparseable))
+    Services::Books::BookSubmissions::Settle.stubs(:call).raises(RuntimeError, "write failed").then.returns(1)
+    JOB.expects(:perform_at).with(1.minute.from_now, @submission.id, false, 1)
+
+    perform(true)
+    Services::Books::BookSubmissions::Settle.unstub(:call)
+    @gate.expects(:reserve).with(priority: true).once.returns(Books::FetchGate::Reservation.new(wait: 0, refusal: nil))
+    @gate.stubs(:spacing_wait).returns(0)
+    JOB.new.perform(@submission.id, false, 1)
+  end
+
+  test "an unavailable page whose reschedule raises is rescheduled through a new turn, not retried as due" do
+    FETCH.stubs(:call).returns(fetched(:unavailable))
+    JOB.stubs(:perform_at).raises(RuntimeError, "redis blip").then.returns(nil)
 
     perform(true)
 
-    assert_equal "needs_details", @submission.reload.status
+    assert_equal ["looking_up", 1.minute.from_now], [@submission.reload.status, @submission.next_attempt_at]
+  end
+
+  test "an error in the rescue's own write propagates to Sidekiq and schedules nothing" do
+    FETCH.stubs(:call).raises(RuntimeError, "boom")
+    Services::Books::BookSubmissions::Settle.stubs(:call).raises(ActiveRecord::StatementInvalid, "db down")
+    JOB.expects(:perform_at).never
+
+    assert_raises(ActiveRecord::StatementInvalid) { perform(true) }
+  end
+
+  test "a fetch that always raises is tried three times, then fails the submission with the error, logged, and schedules nothing" do
+    FETCH.expects(:call).times(3).raises(RuntimeError, "boom")
+    Rails.logger.expects(:error).with(regexp_matches(/RuntimeError: boom/)).at_least_once
+    scheduled = []
+    JOB.stubs(:perform_at).with { |*args|
+      scheduled << args
+      true
+    }
+    args = [@submission.id, true, 0]
+
+    loop do
+      JOB.new.perform(*args)
+      break if scheduled.empty?
+
+      _at, *args = scheduled.shift
+      travel 1.minute
+    end
+
+    @submission.reload
+    assert_equal "failed", @submission.status
+    assert_includes @submission.error, "RuntimeError: boom"
+    assert_empty scheduled
+  end
+
+  test "a cancel committed during a raising fetch stays cancelled and schedules nothing" do
+    FETCH.stubs(:call).with { |**|
+      cancel_row
+      true
+    }.raises(RuntimeError, "boom")
+    JOB.expects(:perform_at).never
+
+    perform(true)
+
+    assert_equal "cancelled", @submission.reload.status
+  end
+
+  test "a cancel committed during the third raising fetch is not failed over" do
+    FETCH.stubs(:call).with { |**|
+      cancel_row
+      true
+    }.raises(RuntimeError, "boom")
+
+    JOB.new.perform(@submission.id, false, 2)
+
+    assert_equal ["cancelled", nil], [@submission.reload.status, @submission.error]
   end
 
   test "the first blocked fetch is counted and waits for the gate; the second needs details and holds nothing" do
