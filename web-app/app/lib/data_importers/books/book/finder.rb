@@ -9,6 +9,12 @@ module DataImporters
       # normalized title-plus-author lookup, the OpenSearch title-plus-
       # authors query, and the Open Library resolve service (or, by mode, its
       # identifier lookup, both, or neither).
+      #
+      # We store "Andrew Johnson" / "A Biography"; a Goodreads export says
+      # "Andrew Johnson: A Biography". The two agree when the whole titles are
+      # equal (titles_agree?). The part before the colon alone never proves a
+      # match -- it is often a series ("Batman: ...") -- so it only finds
+      # candidates for the AI.
       class Finder < DataImporters::FinderBase
         IDENTIFIER_LOOKUPS = [
           [:open_library_work_key, :books_work_openlibrary_id],
@@ -59,17 +65,28 @@ module DataImporters
 
         def describe_candidate(candidate)
           line = super
+          line = "#{line} | subtitle: #{candidate.evidence[:subtitle]}" if candidate.evidence[:subtitle].present?
           line = "#{line} | collection" if candidate.evidence[:book_kind].to_s == "collection"
           line
         end
 
         def describe_query(query)
           line = super
+          line = "#{line} | subtitle: #{query.subtitle}" if query.subtitle.present?
           if query.series_name.present?
             line = "#{line} | series: #{[query.series_name, query.series_number && "##{query.series_number}"].compact.join(" ")}"
           end
           line = "#{line} | also credited, role unknown: #{query.context_author_names.join(", ")}" if query.context_author_names.any?
           line
+        end
+
+        # Equal titles, or equal whole titles ("title: subtitle") however each
+        # side splits them. A closing series or format note is not part of the
+        # title (TitleForms).
+        def titles_agree?(query, record)
+          return true if super
+
+          (whole_title_keys(query) & held_title_keys(record)).any?
         end
 
         # The stored Open Library work keys were assigned by old matching code,
@@ -97,20 +114,14 @@ module DataImporters
           [
             DataImporters::Sources::Identifiers.new(model_class: ::Books::Book, lookups: identifier_lookups(query),
               sources: @identifier_sources),
-            DataImporters::Sources::Exact.new(scope: exact_scope(query), limit: EXACT_LIMIT),
-            DataImporters::Sources::OpenSearch.new(
-              model_class: ::Books::Book,
-              search_class: ::Search::Books::Search::BookByTitleAndAuthors,
-              params: search_params(query),
-              size: OPENSEARCH_SIZE,
-              includes: [:authors, :identifiers]
-            )
-          ] + open_library_sources(query)
+            DataImporters::Sources::Exact.new(scope: exact_scope(query), limit: EXACT_LIMIT)
+          ] + search_sources(query) + open_library_sources(query)
         end
 
         def domain_guidance
           "A translation, a retitled edition or an alternate spelling of the same work is the same book. " \
             "A collection or omnibus is not the same as one of the works inside it, and one volume of a series is not the series. " \
+            "The words before a colon may be only a series or a character: titles that share them but whose subtitles name different stories or volumes are different books, while a descriptive subtitle that one edition has and another lacks is not a difference. " \
             "An adaptation (a graphic novel, manga, pop-up book, play or screenplay, retelling), a study guide, a summary or a commentary is a different book from the work it is based on. " \
             "Two books with the same title by different authors are different books."
         end
@@ -148,7 +159,7 @@ module DataImporters
         def record_year(record) = record.first_published_year
 
         def record_extra_evidence(record)
-          {book_kind: record.book_kind, alternate_titles: record_alternate_titles(record)}
+          {subtitle: record.subtitle.presence, book_kind: record.book_kind, alternate_titles: record_alternate_titles(record)}
         end
 
         def record_alternate_titles(record)
@@ -176,6 +187,32 @@ module DataImporters
           end
         end
 
+        # The search requires every word it is given in our title, which holds no
+        # subtitle, so a whole title never finds a split one. The second search
+        # asks for the part before the colon, without closing brackets. That part
+        # is common, so it keeps only books whose author agrees: without that,
+        # 91% of new colon and bracket titles reached the AI (production replay,
+        # 2026-11-25).
+        def search_sources(query)
+          sources = [search_source(search_params(query))]
+          main = TitleForms.main(query.title)
+          if query.author_names.any? && main.present? && normalize(main) != normalize(query.title)
+            sources << search_source(search_params(query).merge(title: main), keep: ->(book) { creators_agree?(query, book) })
+          end
+          sources
+        end
+
+        def search_source(params, keep: nil)
+          DataImporters::Sources::OpenSearch.new(
+            model_class: ::Books::Book,
+            search_class: ::Search::Books::Search::BookByTitleAndAuthors,
+            params: params,
+            size: OPENSEARCH_SIZE,
+            includes: [:authors, :identifiers],
+            keep: keep
+          )
+        end
+
         # Normalized title equality (served by the lower(title) expression
         # index), joined to an author whose name keys
         # (Services::Text::PersonNameKey, GIN-indexed books_authors.name_keys)
@@ -183,7 +220,12 @@ module DataImporters
         # title matches: they are candidates for the AI, never a rule-4
         # match, because creators_required? is true for books.
         #
-        # The filtered ids are plucked first, with no ORDER BY or LIMIT on
+        # With authors, the title also reaches books that hold it split, or
+        # whole, or that share only its part before the colon (TitleForms).
+        # Whole-title matches come first, so a long series cannot push one out
+        # of the limit.
+        #
+        # The filtered rows are plucked first, with no ORDER BY or LIMIT on
         # the filtered query: measured on 158k books, ORDER BY id + LIMIT 5
         # on the filtered relation makes the planner walk the primary key
         # (59 ms, every row filtered) instead of using
@@ -192,15 +234,39 @@ module DataImporters
         def exact_scope(query)
           return ::Books::Book.none if query.title.blank?
 
-          filtered = ::Books::Book.where("LOWER(books_books.title) = ?", normalize(query.title))
           keys = ::Services::Text::PersonNameKey.all(query.author_names)
+          titles = keys.any? ? lookup_title_keys(query) : [normalize(query.title)]
+          filtered = ::Books::Book.where("LOWER(books_books.title) IN (?)", titles)
           if keys.any?
             filtered = filtered.joins(book_authors: :author)
               .where("books_authors.name_keys && ARRAY[:keys]::varchar[]", keys: keys)
           end
-          ids = filtered.distinct.pluck(:id).sort.first(EXACT_LIMIT)
+          whole = whole_title_keys(query)
+          rows = filtered.distinct.pluck(:id, :title, :subtitle)
+          ids = rows.sort_by { |id, title, subtitle| [([normalize(title), whole_key(title, subtitle)] & whole).any? ? 0 : 1, id] }
+            .map(&:first).first(EXACT_LIMIT)
           ::Books::Book.where(id: ids).includes(:authors, :identifiers).order(:id)
         end
+
+        # Every title our title column may hold for the query's book.
+        def lookup_title_keys(query)
+          heads = [query.title, TitleForms.without_note(query.title)].map { |title| TitleForms.split(title).first }
+          (whole_title_keys(query) + (heads << TitleForms.main(query.title)).map { |title| normalize(title) }).uniq
+        end
+
+        # The query's whole title, with and without a closing note, and joined to
+        # its subtitle when it has one.
+        def whole_title_keys(query)
+          [query.title, TitleForms.without_note(query.title)]
+            .flat_map { |title| [normalize(title), whole_key(title, query.subtitle)] }.compact_blank.uniq
+        end
+
+        def held_title_keys(record)
+          ([record.title, *record_alternate_titles(record)].map { |title| normalize(title) } + [whole_key(record.title, record.subtitle)])
+            .compact_blank.uniq
+        end
+
+        def whole_key(title, subtitle) = normalize(TitleForms.full(title, subtitle))
 
         def search_params(query)
           return nil if query.title.blank?

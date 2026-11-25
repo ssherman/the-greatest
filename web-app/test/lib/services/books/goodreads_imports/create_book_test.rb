@@ -151,6 +151,77 @@ module Services
             ["books_work_isbn13", "9780441013593"]
           assert_equal [true, true, nil], [edition.created?, edition.verification_verified?, edition.pending_import_id]
         end
+
+        # ---- the book's title --------------------------------------------------
+
+        def created_from(title, **attributes)
+          edition = goodreads_edition(title: title, **attributes)
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition))
+          edition.reload.book
+        end
+
+        def parts(book) = [book.title, book.subtitle]
+
+        test "a colon title is kept whole, so the part before the colon never matches another book by rule" do
+          book = created_from("Night Watch: Rising")
+          assert_equal ["Night Watch: Rising", nil], parts(book)
+          ::Services::Ai::Tasks::Matching::SelectCandidateTask.stubs(:new).raises("no AI here")
+
+          match = ::DataImporters::Books::Book::Finder.new.call(
+            query: EditionQuery.call(goodreads_edition(title: "Night Watch", goodreads_book_id: 91_000_000))
+          )
+
+          assert match.unmatched?
+        end
+
+        test "a closing series note is left off the book; the edition keeps the title as it came" do
+          edition = goodreads_edition(title: "BOOM goes the Bride (Brides of Nap City Book 1)")
+          signature = edition.signature
+
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition))
+
+          edition.reload
+          assert_equal ["BOOM goes the Bride", nil], parts(edition.book)
+          assert_equal ["BOOM goes the Bride (Brides of Nap City Book 1)", signature], [edition.title, edition.signature]
+        end
+
+        test "a bracket that may say which book this is stays" do
+          assert_equal ["Accounting 2 (Quick Study: Business)", nil], parts(created_from("Accounting 2 (Quick Study: Business)"))
+          assert_equal ["Theology (Volume 2)", nil], parts(created_from("Theology (Volume 2)"))
+        end
+
+        test "the series note stays when the author already has a book under the title without it" do
+          created_from("Rising")
+
+          assert_equal "Rising (Night Watch, Book 2)", created_from("Rising (Night Watch, Book 2)").title
+          assert_equal "Rising", created_from("Rising (Night Watch, Book 2)", primary_author: "Someone Else").title
+        end
+
+        test "a Goodreads page's title loses its note too" do
+          edition = goodreads_edition(goodreads_book_id: 90_000_001, verification: :pending)
+          page = goodreads_page(goodreads_book_id: 90_000_001, title: "The Quiet Year (Kindle Edition)")
+
+          CreateBook.call(edition: edition, import: @import, match: unmatched_match(subject: edition), page: page)
+
+          assert_equal "The Quiet Year", edition.reload.book.title
+        end
+
+        # The promise that keeps imports stable: whatever CreateBook stores, the
+        # same export title under another Goodreads id finds it, with no AI.
+        ["Andrew Johnson: A Biography", "BOOM goes the Bride (Brides of Nap City Book 1)", "Accounting 2 (Quick Study: Business)",
+          "Theology: The New Covenant (The Glory of the Lord: A Theological Aesthetics, Vol. 7)", "Theology (Volume 2)",
+          "Batman/Superman: World's Finest, Vol. 2: Strange Visitor", "Batman, Vol. 2: I Am Suicide", "Enrique IV (Teatro) (Spanish Edition)",
+          "Watership Down: The Graphic Novel", "The Iliad (Classics Illustrated)", "マギ 18 [Magi: Sinbad no Bouken 18]", "The Quiet Year"].each do |title|
+          test "another edition titled #{title} matches the book made from it, by rule" do
+            book = created_from(title)
+            ::Services::Ai::Tasks::Matching::SelectCandidateTask.expects(:new).never
+            other = goodreads_edition(title: title, goodreads_book_id: 91_000_000)
+
+            match = ::DataImporters::Books::Book::Finder.new.call(query: EditionQuery.call(other), subject: other)
+
+            assert_equal [book, :rule], [match.record, match.decided_by]
+          end
+        end
       end
     end
   end

@@ -79,7 +79,12 @@ and points the decision at a record it creates.
 agrees with the query on its title (or an alternate title) or on a creator (or an alternate
 name), or when the query carried nothing to compare. **Exact match** (rule 4): equal
 normalized title, agreeing creators where the domain has them, no year conflict (both
-present and more than two apart). For books authors, names compare by
+present and more than two apart). For books, titles also agree when the *whole* titles are equal
+("Andrew Johnson: A Biography" against our `Andrew Johnson` / `A Biography`), whichever side is
+split, and a closing series or format note ("(American Presidents Book 17)", "(Kindle Edition)") is not part of the
+title (`DataImporters::Books::Book::TitleForms`). A bracket that may say which book this is ("(Volume 2)",
+"(Graphic Novel)", "(Classics Illustrated)") is never dropped, and sharing only the part before the
+colon is never agreement: it is often a series. For books authors, names compare by
 `Services::Text::PersonNameKey`: the same normalization, plus single-letter initials folded, so
 `J.D.`, `J. D.` and `J D` are one spelling. Every other word must still match. There is no
 surname-only matching. That shortcut is what gave the legacy books app its wrong authors.
@@ -141,9 +146,11 @@ one, and its pairs return to the queue.
 Increment 1 wrapped every legacy lookup; **increment 2 (books)** replaced the books finder's
 sources with `Sources::Identifiers` (Open Library key, ISBN-13, ISBN-10, ASIN, Goodreads),
 `Sources::Exact` (normalized title, joined to an author's name or alternate name when the
-query has authors), `Sources::OpenSearch` over `Search::Books::Search::BookByTitleAndAuthors`
+query has authors; then also the title's other forms, whole-title matches first), `Sources::OpenSearch` over `Search::Books::Search::BookByTitleAndAuthors`
 (title or alternate title required; authors and a year within one as boosts; a higher minimum
-score without authors), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
+score without authors; a second search, when the query has authors, asks for the part before the
+colon with no closing brackets and keeps only books whose author agrees, because the first needs
+every word of the title in our title column, which holds no subtitle), and `DataImporters::Books::Book::OpenLibrarySource` (`POST /resolve`,
 limit 5; one candidate per local holder of the work key or an old key that redirects to it
 (`redirect_sources`); on an accept, one more per local holder of a `decision.duplicates` key
 or an old key of one, under the key it holds and never counted as accepted; the whole

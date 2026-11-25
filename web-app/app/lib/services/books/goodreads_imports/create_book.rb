@@ -22,7 +22,7 @@ module Services
       # stamped and no enrichment; enrichment runs on admin approval. A book
       # backed by its Goodreads page (SettleEdition) takes the page's title and
       # the authors the page agreed on, and is verified; any other is
-      # unverified.
+      # unverified. Either title loses its closing series note (BookTitle).
       class CreateBook
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         CreateFailed = Class.new(StandardError)
@@ -92,9 +92,10 @@ module Services
         end
 
         def create
+          author_names = @author_names.presence || [@edition.primary_author]
           result = @importer.call(
-            title: @page&.title.presence || @edition.title,
-            author_names: @author_names.presence || [@edition.primary_author],
+            title: BookTitle.call(text: @page&.title.presence || @edition.title, author_names: author_names),
+            author_names: author_names,
             year: @edition.original_publication_year || @page&.original_publication_year || @edition.year_published,
             isbn13: [@edition.isbn13 || @page&.isbn13].compact,
             isbn10: [@edition.isbn10 || @page&.isbn10].compact,
