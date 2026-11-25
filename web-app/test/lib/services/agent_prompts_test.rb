@@ -386,7 +386,7 @@ module Services
         "A penalty needs a reason, not only matching words", "say in the note how this makes this list a weaker guide",
         "Do not attach a penalty for a limit that another penalty or flag on the list already charges",
         "says the kept count was worked out, guessed or only a minimum", "how a recorded count was worked out",
-        "or for a kept count our own record says was an estimate"
+        "or for a kept count our own record says was an estimate", "Write names in Latin script"
       ].each { |text| assert_includes prompt, text }
     end
 

@@ -7,7 +7,7 @@
   guidance: 'The source list has more than 500 entries. Count the source, not how many we imported.'
 - id: 3
   name: 'List: criteria is not just best/favorite'
-  guidance: 'The list ranks by something other than quality or love: most influential, most important, most read, best-selling, most challenged, most underrated, "books that changed the world". "Essential", "must read" and "greatest" count as best and do not take this. Prefer 7 when the angle is a gimmick. Lists of the books that mattered most to the voters, moved or affected them most, desert-island picks, and books everyone should read count as best or favourite and do not take this.'
+  guidance: 'The list ranks by something other than quality or love: most influential, most important, most read, best-selling, most challenged, most underrated, "books that changed the world". The site ranks the greatest books, and influence and importance measure impact, which a terrible book can have. Ask whether a book nobody thinks is good could top this list because of its impact (Mein Kampf on a "most influential" list): if so, it takes this. "Best and most important" (or "best and most central") asks for quality too and does not. "Essential", "must read" and "greatest" count as best and do not take this. Prefer 7 when the angle is a gimmick. Lists of the books that mattered most to the voters, moved or affected them most, desert-island picks, and books everyone should read count as best or favourite and do not take this.'
 - id: 4
   name: 'List: is a follow up/honorable mention to a different list'
   guidance: 'The list is the overflow or sequel of another list ("100 more", "honourable mentions", "the ones that didn''t make the cut").'
