@@ -98,6 +98,18 @@ module Mcp
         assert_not_includes spec, "show the user"
       end
 
+      test "the admin usage text states the news rules" do
+        text = admin_usage_text
+
+        ["## News posts", "create_news_post", "publish_news_post", "expected_updated_at", "admin_url",
+          "never build a URL from a slug", "always a draft", "read a few recent published posts"].each do |phrase|
+          assert_includes text, phrase
+        end
+        assert_not_includes text.downcase, "cloudflare"
+        assert_not_includes text, "show the user"
+        assert_includes Mcp::Sites::Books.instructions(:admin), "publish_news_post"
+      end
+
       test "the admin usage text says an untag has no dry run" do
         text = admin_usage_text
 
