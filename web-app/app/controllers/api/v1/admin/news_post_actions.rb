@@ -82,7 +82,7 @@ module Api
           return unknown_fields(unknown, UPDATE_FIELDS) if unknown.any?
           return bad_body("Send at least one of #{CREATE_FIELDS.join(", ")}.") if (body.keys & CREATE_FIELDS).empty?
           if body.key?("body") && !body.key?("expected_updated_at")
-            return bad_body("Changing body needs expected_updated_at, the updated_at from your last read of the post.")
+            return bad_body("Changing body needs expected_updated_at: the updated_at from the same result whose body you are editing. If you read the post again to get it, apply your edit to the body that read returns.")
           end
 
           expected = time_param!("expected_updated_at", body["expected_updated_at"]) if body.key?("expected_updated_at")
