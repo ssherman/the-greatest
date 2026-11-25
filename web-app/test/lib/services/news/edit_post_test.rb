@@ -36,6 +36,13 @@ module Services
         assert EditPost.call(news_post: @post, attrs: {body: "changed"}, expected_updated_at: expected).success?
       end
 
+      test "date and slug in attrs are ignored" do
+        was = [@post.published_at, @post.slug]
+        assert EditPost.call(news_post: @post, attrs: {body: "changed", published_at: nil, slug: "moved"}).success?
+        assert_equal was, [@post.reload.published_at, @post.slug]
+        assert_equal "changed", @post.body
+      end
+
       test "an invalid edit is reported as invalid" do
         result = EditPost.call(news_post: @post, attrs: {title: ""})
         assert_equal [false, :invalid], [result.success?, result.data[:code]]

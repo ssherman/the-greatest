@@ -17,7 +17,7 @@ module Services
       def initialize(domain:, user:, attrs:)
         @domain = domain
         @user = user
-        @attrs = attrs.with_indifferent_access
+        @attrs = attrs.with_indifferent_access.slice(*::NewsPost::API_WRITABLE)
       end
 
       def call
@@ -32,15 +32,36 @@ module Services
           return refuse(:unusable_title, "The title has no usable URL slug", post)
         end
 
-        if (existing = ::NewsPost.find_by(domain: post.domain, slug: slug))
-          return refuse(:slug_taken, "A post with the slug #{slug.inspect} already exists on this site", post, existing: existing)
+        if (existing = find_existing(post, slug))
+          return slug_taken(post, slug, existing)
         end
 
-        saved = SavePost.call(news_post: post, attrs: @attrs)
+        # Assigned explicitly: friendly_id only generates a slug when blank, so
+        # it can never quietly append a UUID if a concurrent create wins the
+        # race after the check above. The unique (domain, slug) index is then
+        # the backstop, rescued here rather than inside SavePost so its own
+        # savepoint has already rolled back.
+        post.slug = slug
+        begin
+          saved = SavePost.call(news_post: post, attrs: @attrs)
+        rescue ActiveRecord::RecordNotUnique
+          existing = find_existing(post, slug)
+          raise unless existing
+
+          return slug_taken(post, slug, existing)
+        end
         Result.new(success?: saved.success?, data: saved.data, errors: saved.errors)
       end
 
       private
+
+      def find_existing(post, slug)
+        ::NewsPost.find_by(domain: post.domain, slug: slug)
+      end
+
+      def slug_taken(post, slug, existing)
+        refuse(:slug_taken, "A post with the slug #{slug.inspect} already exists on this site", post, existing: existing)
+      end
 
       def refuse(code, message, post, extra = {})
         Result.new(success?: false, data: {news_post: post, code: code}.merge(extra), errors: [message])

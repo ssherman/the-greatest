@@ -79,6 +79,10 @@ class NewsPost < ApplicationRecord
   scope :published, -> { where(published_at: ..Time.current) }
   scope :recent, -> { order(published_at: :desc, id: :desc) }
 
+  # The only attributes the API services (DraftPost, EditPost) take from a
+  # caller. Date, slug, site and author are changed by other means or never.
+  API_WRITABLE = %w[title body summary news_topic_ids].freeze
+
   # Three states from one column. A scheduled post is a draft as far as
   # draft? goes (it is not live), so callers that must tell it apart use status.
   STATUSES = %w[draft scheduled published].freeze

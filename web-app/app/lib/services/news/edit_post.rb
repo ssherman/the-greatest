@@ -11,6 +11,7 @@ module Services
 
       def self.call(news_post:, attrs:, expected_updated_at: nil)
         guard = ->(locked) { stale_refusal(locked, expected_updated_at) }
+        attrs = attrs.with_indifferent_access.slice(*::NewsPost::API_WRITABLE)
         saved = SavePost.call(news_post: news_post, attrs: attrs, guard: guard)
         Result.new(success?: saved.success?, data: saved.data, errors: saved.errors)
       end
