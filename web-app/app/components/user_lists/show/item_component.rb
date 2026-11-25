@@ -22,6 +22,13 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     @owner = owner
   end
 
+  # Nothing stops a list item from outliving what it points at (listable is
+  # polymorphic, so there is no foreign key). Such an item is skipped; the Edit
+  # page still lists it, so its owner can remove it.
+  def render?
+    !listable.nil?
+  end
+
   def self.card_capable?(listable_class)
     CARD_LISTABLES.include?(listable_class.to_s)
   end

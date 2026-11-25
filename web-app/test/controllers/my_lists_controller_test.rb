@@ -522,6 +522,50 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "a list with an item whose book is gone still shows its other items, to the owner and to the public" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    list.update!(public: true)
+    gone = list.user_list_items.create!(listable: books_books(:cannery_row))
+    kept = list.user_list_items.create!(listable: books_books(:of_mice_and_men))
+    gone.update_columns(listable_id: 0)
+
+    [@user, nil].each do |viewer|
+      viewer ? sign_in_as(viewer, stub_auth: true) : reset!
+      host! Rails.application.config.domains[:books]
+      %w[grid_view table_view].each do |view_mode|
+        get my_list_path(list, view_mode: view_mode)
+        assert_response :success, "#{viewer ? "owner" : "public"} #{view_mode}"
+        assert_includes response.body, %(data-listable-id="#{kept.listable_id}")
+        assert_not_includes response.body, %(data-listable-id="0")
+      end
+    end
+  end
+
+  test "a public music list with an item whose album is gone still shows" do
+    @albums_favorites.update!(public: true)
+    gone = @albums_favorites.user_list_items.first
+    gone.update_columns(listable_id: 0)
+
+    %w[grid_view table_view].each do |view_mode|
+      get my_list_path(@albums_favorites, view_mode: view_mode)
+      assert_response :success, view_mode
+    end
+  end
+
+  test "the edit page still lists an item whose book is gone, so its owner can remove it" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    gone = list.user_list_items.create!(listable: books_books(:cannery_row))
+    gone.update_columns(listable_id: 0)
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_my_list_path(list)
+
+    assert_response :success
+    assert_select "#user_list_item_#{gone.id} form[action='#{my_list_item_path(list, gone)}']"
+  end
+
   test "anonymous viewer gets 404 on a private list" do
     host! Rails.application.config.domains[:books]
     get my_list_path(user_lists(:regular_user_books_favorites))

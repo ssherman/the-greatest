@@ -21,10 +21,14 @@ module Services
       #   4. every open row on the book is closed with the note and sources,
       #      then the book is destroyed (the destroy hook finds nothing left to
       #      close), then the provisional authors left with nothing are.
-      # A reader who adds the book to a list between the BookUses check and the
-      # destroy has that item destroyed with the book, as a submitter's would be;
-      # nothing but a submission's own create path makes a book reachable, and
-      # that ends in the close above.
+      # Another reader can reach the book without a submission of their own (the
+      # instant check offers a provisional book, and adding it is a plain list
+      # add, which locks no book). An item they add after the BookUses check goes
+      # with the book, as a submitter's would. One committed after the destroy has
+      # read the book's items is left pointing at nothing (a list item's listable
+      # has no foreign key); the list page skips such an item
+      # (UserLists::Show::ItemComponent#render?). A submission's own list add
+      # locks the book and cannot leave one.
       #
       # An author is destroyed only when nothing could still point at it: no
       # book_authors, no credit on a record that survives (credits on this book and its

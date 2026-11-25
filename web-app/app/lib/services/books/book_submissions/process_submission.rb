@@ -197,10 +197,13 @@ module Services
         # a deadlock. FOR NO KEY UPDATE does not conflict with KEY SHARE, yet still
         # conflicts with the FOR UPDATE that DestructionInvalidator and OwnerMutation
         # take, so a reader's list mutations still take turns. OwnerMutation's own
-        # FOR UPDATE, later in this transaction, is an upgrade of this lock: it can
-        # only wait for a KEY SHARE held by a delete or merge, and those take the
-        # book before anything of the reader's, which this run already holds, so
-        # they cannot have reached it.
+        # FOR UPDATE, later in this transaction, is an upgrade of this lock. It
+        # waits for a KEY SHARE on the reader's row, which a delete of another of
+        # the reader's books, or any insert naming the reader, can hold; that wait
+        # is harmless. A transaction that deletes several of the reader's books (a
+        # Goodreads import revert of two) can hold that KEY SHARE from one and then
+        # wait for the book this run holds: the two deadlock. Nothing is lost by
+        # it, and if this run is the one Postgres stops, the job is retried.
         def finish(book)
           settled = nil
           item = nil

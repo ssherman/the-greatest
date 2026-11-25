@@ -56,7 +56,7 @@ module Services
         def assert_every_work_row_has_an_action
           WORK_TABS.each do |tab|
             # Not the fixture: no service leaves an added, pending row without its book.
-          QueueTabs.scope(tab).where.not(id: books_book_submissions(:added_title_authors).id).includes(book: :submissions).each do |row|
+            QueueTabs.scope(tab).where.not(id: books_book_submissions(:added_title_authors).id).includes(book: :submissions).each do |row|
               assert_not_empty RowActions.for(row), "#{tab}: #{row.status} #{row.review_status}, book #{row.book_id.inspect}"
             end
           end

@@ -43,6 +43,18 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "div.card[data-listable-id='#{item.listable_id}']"
   end
 
+  test "an item whose listable is gone renders nothing, in either view, owner or not" do
+    [user_list_items(:regular_user_books_item_1), user_list_items(:regular_user_books_item_3), user_list_items(:regular_user_fav_album_1)].each do |item|
+      item.update_columns(listable_id: 0)
+      item.reload
+      %w[grid_view table_view].product([true, false]).each do |view_mode, owner|
+        rendered = render_inline(Component.new(item: item, view_mode: view_mode, position: 1, index: 0, completion_editable: owner, owner: owner))
+
+        assert_equal "", rendered.to_html.strip, "#{view_mode} owner #{owner}"
+      end
+    end
+  end
+
   test "table_layout? is false for books outside table_view" do
     refute Component.table_layout?(listable_class: "Books::Book", view_mode: "grid_view")
   end
