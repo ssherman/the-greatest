@@ -421,17 +421,41 @@ test.describe("Books account: add a missing book, network stubbed", () => {
     await expect(strip(page)).toBeFocused();
   });
 
-  test("search results render as text, selection still works", async ({ page }) => {
+  test("search results are never parsed as markup, and selection keeps the raw text", async ({ page }) => {
+    // An <img> with a relative src makes a request the moment it is parsed, even
+    // if the element is replaced a moment later, so counting requests tells
+    // parsing from display.
+    let probes = 0;
+    await page.route("**/t9-probe.png", (route) => {
+      probes++;
+      return route.fulfill({ status: 200, contentType: "image/png", body: "" });
+    });
     await stubStrip(page, () => html(frame("", seeded.list_id)));
-    await stubSearch(page, [{ text: "<b>marker</b> title", value: 41 }]);
+    // Choosing a result runs the real add-item flow; it must not reach the server.
+    await page.route("**/user_lists/*/items", (route) =>
+      route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ error: { message: "stubbed" } }) })
+    );
+    await stubSearch(page, [
+      { text: '<img src="/t9-probe.png"> marker title', value: 41 },
+      { text: 12345 as unknown as string, value: 42 },
+    ]);
     await open(page);
 
     await search(page).fill("marker");
-    const item = page.locator(".autocomplete-container ul li[role='option']").first();
-    await expect(item).toHaveText("<b>marker</b> title");
-    await expect(page.locator(".autocomplete-container ul b")).toHaveCount(0);
+    const items = page.locator(".autocomplete-container ul li[role='option']");
+    await expect(items.first()).toHaveText('<img src="/t9-probe.png"> marker title');
+    await page.waitForTimeout(500);
+    expect(probes).toBe(0);
+    await expect(page.locator(".autocomplete-container ul img")).toHaveCount(0);
+
     await search(page).press("ArrowDown");
-    await expect(item).toHaveAttribute("aria-selected", "true");
+    await expect(items.first()).toHaveAttribute("aria-selected", "true");
+    await search(page).press("Enter");
+    await expect(search(page)).toHaveValue('<img src="/t9-probe.png"> marker title');
+
+    // A numeric title still works.
+    await search(page).fill("12");
+    await expect(items.first()).toHaveText("12345");
   });
 
   test("polls every 10 seconds, stops at 10 minutes", async ({ page }) => {

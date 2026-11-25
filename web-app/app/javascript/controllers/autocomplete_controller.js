@@ -1,6 +1,9 @@
 import { Controller } from "@hotwired/stimulus"
 import autoComplete from "@tarekraafat/autocomplete.js"
 
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char])
+
 export default class extends Controller {
   static targets = ["input", "hiddenField"]
   static values = {
@@ -78,6 +81,11 @@ export default class extends Controller {
           }
         },
         keys: [this.displayKeyValue],
+        // autocomplete.js writes each result's `match` into the page as HTML.
+        // A title is text, so the match is escaped before the library sees it;
+        // the selected value (`value`) stays the raw record, which is what
+        // lands in the input and the events.
+        filter: (matches) => matches.map((result) => ({ ...result, match: escapeHtml(result.match) })),
         cache: false
       },
 
@@ -107,11 +115,6 @@ export default class extends Controller {
 
       resultItem: {
         tag: "li",
-        // autocomplete.js sets each item's innerHTML from the record; a title is
-        // text, so it is written as text.
-        element: (item, data) => {
-          item.textContent = data.match
-        },
         class: "rounded-lg hover:bg-base-200 active:bg-base-300 cursor-pointer transition-colors px-4 py-2",
         highlight: false,
         selected: "bg-base-200"
