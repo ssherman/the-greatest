@@ -3,7 +3,8 @@
 # The owner's strip above a list's items: one line per submission, in its own
 # Turbo Frame. Every string here came from the reader or from a lookup of
 # their input, so it is printed escaped and never put in an href. Task 9
-# finishes the markup and the polling.
+# finishes the markup and the polling. The state attributes sit on a child of
+# the frame because a frame reload copies only the frame's children.
 class Books::BookSubmissions::StripComponent < ViewComponent::Base
   def initialize(list:, submissions:, reload_list: false)
     @list = list

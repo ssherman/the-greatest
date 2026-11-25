@@ -1,4 +1,5 @@
-<%= helpers.turbo_frame_tag "book_submissions", target: "_top", data: frame_data do %>
+<%= helpers.turbo_frame_tag "book_submissions", target: "_top" do %>
+  <%= tag.div(data: frame_data.merge(testid: "book-submissions-state")) %>
   <% submissions.each do |submission| %>
     <div id="<%= dom_id(submission) %>" class="flex items-center justify-between gap-3 py-1 text-sm">
       <% if submission.status == "needs_details" %>

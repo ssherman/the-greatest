@@ -23,6 +23,8 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     }.merge(attrs))
   end
 
+  def marked? = response.headers["Set-Cookie"].to_s.include?(UserStateChangeMarker::COOKIE.to_s)
+
   def stream? = response.media_type == "text/vnd.turbo-stream.html"
 
   # create
@@ -333,12 +335,12 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     refute response.headers["Set-Cookie"].to_s.include?(UserStateChangeMarker::COOKIE.to_s)
   end
 
-  test "when another poll announces the row between this poll's read and its write, this one announces nothing" do
+  test "when another poll announces the row after this poll finds the list, this one announces nothing" do
     sign_in_as @user, stub_auth: true
     added = row(status: :added)
     raced = false
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-      next if raced || payload[:sql] !~ /\ASELECT.*FROM "books_book_submissions".*ORDER BY/m
+      next if raced || payload[:sql] !~ /\ASELECT.*FROM "user_lists"/m
 
       raced = true
       ::Books::BookSubmission.where(id: added.id).update_all(announced_at: Time.current)
@@ -353,17 +355,128 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
   end
 
-  test "HEAD and prefetch requests do not announce" do
+  test "a HEAD request does not announce" do
     sign_in_as @user, stub_auth: true
     added = row(status: :added)
 
     head books_my_list_book_submissions_path(@list), headers: {"HOST" => @host}
-    strip(headers: {"Sec-Purpose" => "prefetch"})
-    strip(headers: {"Purpose" => "prefetch"})
-    strip(headers: {"X-Purpose" => "preview"})
 
     assert_nil added.reload.announced_at
-    refute response.headers["Set-Cookie"].to_s.include?(UserStateChangeMarker::COOKIE.to_s)
+    refute marked?
+  end
+
+  {"Purpose" => "prefetch", "Sec-Purpose" => "prefetch", "X-Sec-Purpose" => "prefetch", "X-Purpose" => "preview", "X-Moz" => "prefetch"}.each do |header, value|
+    test "a request with #{header}: #{value} does not announce" do
+      sign_in_as @user, stub_auth: true
+      added = row(status: :added)
+
+      strip(headers: {header => value})
+
+      assert_response :success
+      assert_nil added.reload.announced_at
+      refute_includes response.body, "data-reload-list"
+      refute marked?
+    end
+  end
+
+  test "cancelling one row announces another that was added and unannounced, then the next poll does not repeat it" do
+    sign_in_as @user, stub_auth: true
+    added = row(status: :added, resolved_title: "A")
+    stuck = row(status: :needs_details)
+
+    post cancel_books_my_book_submission_path(stuck), as: :turbo_stream, headers: {"HOST" => @host}
+
+    assert_response :success
+    assert_includes response.body, 'data-reload-list="true"'
+    assert marked?
+    assert_not_nil added.reload.announced_at
+
+    strip
+    refute_includes response.body, "data-reload-list"
+    refute marked?
+  end
+
+  test "dismissing a row announces it and another added one in the same response, and the next poll does not repeat" do
+    sign_in_as @user, stub_auth: true
+    first = row(status: :added)
+    second = row(status: :added)
+
+    post dismiss_books_my_book_submission_path(first), as: :turbo_stream, headers: {"HOST" => @host}
+
+    assert_includes response.body, 'data-reload-list="true"'
+    assert marked?
+    assert_not_nil first.reload.announced_at
+    assert_not_nil second.reload.announced_at
+    assert_not_nil first.dismissed_at
+
+    strip
+    refute_includes response.body, "data-reload-list"
+  end
+
+  test "create announces an added unannounced row in its stream" do
+    sign_in_as @user, stub_auth: true
+    added = row(status: :added)
+
+    post_submission
+
+    assert_response :created
+    assert_includes response.body, 'data-reload-list="true"'
+    assert marked?
+    assert_not_nil added.reload.announced_at
+  end
+
+  test "a hits answer does not announce" do
+    book = ::Books::Book.create!(title: "Already Here")
+    Identifier.create!(identifiable: book, identifier_type: :books_work_goodreads_id, value: "13651", source: :open_library)
+    sign_in_as @user, stub_auth: true
+    added = row(status: :added)
+
+    post_submission
+
+    assert_nil added.reload.announced_at
+  end
+
+  test "an added row behind 20 newer ones is announced" do
+    sign_in_as @user, stub_auth: true
+    old = row(status: :added, created_at: 2.days.ago)
+    21.times { |i| row(status: :failed, created_at: i.minutes.ago) }
+
+    strip
+
+    assert_includes response.body, 'data-reload-list="true"'
+    assert_not_nil old.reload.announced_at
+  end
+
+  test "a dismissed added unannounced row is announced" do
+    sign_in_as @user, stub_auth: true
+    gone = row(status: :added, dismissed_at: Time.current)
+
+    strip
+
+    assert_includes response.body, 'data-reload-list="true"'
+    assert_not_nil gone.reload.announced_at
+  end
+
+  test "another list's and another user's added rows are not announced" do
+    sign_in_as @user, stub_auth: true
+    elsewhere = row(status: :added, list: @user.user_lists.where(type: "Books::UserList").where.not(id: @list.id).first)
+    theirs = row(status: :added, user: users(:editor_user))
+
+    strip
+
+    assert_nil elsewhere.reload.announced_at
+    assert_nil theirs.reload.announced_at
+  end
+
+  test "the state attributes are on a child of the frame" do
+    sign_in_as @user, stub_auth: true
+    row(status: :queued)
+
+    strip
+
+    doc = Nokogiri::HTML::DocumentFragment.parse(response.body)
+    assert_equal "true", doc.at_css("turbo-frame#book_submissions > [data-testid=book-submissions-state]")["data-in-progress"]
+    assert_nil doc.at_css("turbo-frame#book_submissions")["data-in-progress"]
   end
 
   test "index of another user's list and a music list is a 404, signed out redirects" do

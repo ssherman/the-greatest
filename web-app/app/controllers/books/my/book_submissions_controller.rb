@@ -32,9 +32,8 @@ class Books::My::BookSubmissionsController < ApplicationController
   # response whose conditional write won it reloads the list and marks state.
   def index
     @list = find_list
+    announced = announce(@list)
     @submissions = strip_submissions(@list).to_a
-    announced = announce(@submissions)
-    mark_user_state_changed if announced
     render Books::BookSubmissions::StripComponent.new(list: @list, submissions: @submissions, reload_list: announced), layout: false
   end
 
@@ -100,25 +99,28 @@ class Books::My::BookSubmissionsController < ApplicationController
   end
 
   def strip_stream(list)
+    announced = announce(list)
     turbo_stream.replace("book_submissions",
-      Books::BookSubmissions::StripComponent.new(list: list, submissions: strip_submissions(list).to_a))
+      Books::BookSubmissions::StripComponent.new(list: list, submissions: strip_submissions(list).to_a, reload_list: announced))
   end
 
-  # One conditional write, so two polls at once announce a row once and only
-  # the winner reloads the list. A HEAD or prefetch request must not take the
-  # announcement away from the reader's real poll.
-  def announce(submissions)
+  # Every response that renders the strip for the owner announces here, before
+  # it reads the rows. One conditional write over the list's added rows nobody
+  # has announced yet, whatever the strip shows (dismissed rows and rows behind
+  # the 20 newest included), so two responses at once announce a row once and
+  # only the winner reloads the list and marks user state. A HEAD or prefetch
+  # request must not take the announcement away from the reader's real request.
+  def announce(list)
     return false if request.head? || prefetch?
 
-    ids = submissions.select { |s| s.status == "added" && s.announced_at.nil? }.map(&:id)
-    return false if ids.empty?
-
-    Books::BookSubmission.where(id: ids, user_id: current_user.id, status: :added, announced_at: nil)
+    changed = Books::BookSubmission.where(user_id: current_user.id, user_list_id: list.id, status: :added, announced_at: nil)
       .update_all(announced_at: Time.current).positive?
+    mark_user_state_changed if changed
+    changed
   end
 
   def prefetch?
-    %w[Purpose Sec-Purpose X-Purpose X-Moz].any? { |name| request.headers[name].to_s.match?(/prefetch|preview/i) }
+    %w[Purpose Sec-Purpose X-Sec-Purpose X-Purpose X-Moz].any? { |name| request.headers[name].to_s.match?(/prefetch|preview/i) }
   end
 
   # The form's fields, or an empty hash for anything that is not a form

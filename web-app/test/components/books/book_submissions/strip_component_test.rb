@@ -17,6 +17,8 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     }.merge(attrs))
   end
 
+  def state = @doc.css("turbo-frame#book_submissions > [data-testid=book-submissions-state]").first
+
   def render_strip(submissions, **options)
     @doc = render_inline(Books::BookSubmissions::StripComponent.new(list: @list, submissions: submissions, **options))
   end
@@ -27,20 +29,20 @@ class Books::BookSubmissions::StripComponentTest < ViewComponent::TestCase
     assert_equal 1, @doc.css("turbo-frame#book_submissions").size
   end
 
-  test "marks the frame for polling only while something is in progress" do
+  test "marks the state element, a child of the frame, for polling only while something is in progress" do
     render_strip([row(:queued)])
-    assert_equal "true", @doc.css("turbo-frame#book_submissions").first["data-in-progress"]
+    assert_equal "true", state["data-in-progress"]
 
     render_strip([row(:added)])
-    assert_nil @doc.css("turbo-frame#book_submissions").first["data-in-progress"]
+    assert_nil state["data-in-progress"]
   end
 
   test "reload_list is set only when asked" do
     render_strip([row(:added)], reload_list: true)
-    assert_equal "true", @doc.css("turbo-frame#book_submissions").first["data-reload-list"]
+    assert_equal "true", state["data-reload-list"]
 
     render_strip([row(:added)])
-    assert_nil @doc.css("turbo-frame#book_submissions").first["data-reload-list"]
+    assert_nil state["data-reload-list"]
   end
 
   test "open rows offer cancel and finished rows offer dismiss" do
