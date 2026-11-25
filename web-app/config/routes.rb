@@ -740,6 +740,8 @@ Rails.application.routes.draw do
           scope module: :books do
             get "news_posts", to: "news_posts#index"
             get "news_posts/:id", to: "news_posts#show", constraints: {id: /\d+/}
+            post "news_posts", to: "news_posts#create"
+            patch "news_posts/:id", to: "news_posts#update", constraints: {id: /\d+/}
             get "news_topics", to: "news_posts#topics"
             get "books", to: "books#index"
             get "authors", to: "authors#index"

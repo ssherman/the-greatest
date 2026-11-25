@@ -331,6 +331,21 @@ module Api
         ["GET", "/api/v1/admin/news_posts/{id}", "403"] => -> { get "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}", headers: bearer(MEMBER) },
         ["GET", "/api/v1/admin/news_posts/{id}", "404"] => -> { get "/api/v1/admin/news_posts/999999999", headers: bearer(READ) },
         ["GET", "/api/v1/admin/news_posts/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}", headers: bearer(READ) } },
+        ["POST", "/api/v1/admin/news_posts", "201"] => -> { post "/api/v1/admin/news_posts", params: {title: "Coverage Draft", body: "Words"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/news_posts", "400"] => -> { post "/api/v1/admin/news_posts", params: {title: "No body"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/news_posts", "401"] => -> { post "/api/v1/admin/news_posts", params: {title: "Coverage Draft", body: "Words"}, as: :json },
+        ["POST", "/api/v1/admin/news_posts", "403"] => -> { post "/api/v1/admin/news_posts", params: {title: "Coverage Draft", body: "Words"}, as: :json, headers: bearer(READ) },
+        ["POST", "/api/v1/admin/news_posts", "409"] => -> { post "/api/v1/admin/news_posts", params: {title: "December Update", body: "Words"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/news_posts", "422"] => -> { post "/api/v1/admin/news_posts", params: {title: "Coverage Unknown", body: "Words", published_at: "2030-01-01T00:00:00Z"}, as: :json, headers: bearer(MERGE) },
+        ["POST", "/api/v1/admin/news_posts", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/news_posts", params: {title: "Coverage Draft", body: "Words"}, as: :json, headers: bearer(MERGE) } },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "200"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: "Coverage Retitled"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "400"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {body: "No stamp"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "401"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: "Coverage Retitled"}, as: :json },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "403"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: "Coverage Retitled"}, as: :json, headers: bearer(READ) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "404"] => -> { patch "/api/v1/admin/news_posts/999999999", params: {title: "Coverage Retitled"}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "409"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: "Stale", expected_updated_at: 1.day.ago.utc.iso8601(6)}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "422"] => -> { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: " "}, as: :json, headers: bearer(MERGE) },
+        ["PATCH", "/api/v1/admin/news_posts/{id}", "429"] => -> { with_exhausted_limit { patch "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", params: {title: "Coverage Retitled"}, as: :json, headers: bearer(MERGE) } },
         ["GET", "/api/v1/admin/news_topics", "200"] => -> { get "/api/v1/admin/news_topics", headers: bearer(READ) },
         ["GET", "/api/v1/admin/news_topics", "401"] => -> { get "/api/v1/admin/news_topics" },
         ["GET", "/api/v1/admin/news_topics", "403"] => -> { get "/api/v1/admin/news_topics", headers: bearer(MEMBER) },
@@ -627,6 +642,10 @@ module Api
 
       setup do
         host! "dev-new.thegreatestbooks.org"
+        # The news writes enqueue a Cloudflare purge, Sidekiq runs inline and this
+        # machine's .env can hold a real token.
+        @original_purge_token = ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"]
+        ENV.delete("CLOUDFLARE_CACHE_PURGE_TOKEN")
         stub_workflow_dispatch
         ::Search::Books::Search::BookGeneral.stubs(:call).returns([{id: books_books(:war_and_peace).id.to_s, score: 1.0, source: {}}])
         ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: books_authors(:tolstoy).id.to_s, score: 1.0, source: {}}])
@@ -655,6 +674,10 @@ module Api
       # An open audit held by the admin the MERGE token belongs to.
       def coverage_audit
         ListAudit.create!(list: (list = coverage_list), before: ::Services::Lists::Audits::Snapshot.call(list), user: users(:admin_user), status: :in_progress, started_at: Time.current, lease_expires_at: 1.hour.from_now)
+      end
+
+      teardown do
+        ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"] = @original_purge_token
       end
 
       test "the map and the document describe the same responses" do

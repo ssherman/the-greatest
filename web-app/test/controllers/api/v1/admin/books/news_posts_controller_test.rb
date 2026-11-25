@@ -143,6 +143,179 @@ module Api
             5.times { |i| ::NewsPost.create!(domain: :books, title: "N #{i}", body: "x", user: users(:admin_user)).news_topics << news_topics(:books_rankings) }
             assert_equal baseline, count_queries { get_json "/api/v1/admin/news_posts" }
           end
+
+          # -- create and update ----------------------------------------
+
+          def send_json(method, path, body = nil, token: write_token)
+            public_send(method, path, params: body, as: :json, headers: bearer(token))
+          end
+
+          def write_token = ApiTokenSecrets::ADMIN
+
+          # The purge jobs a block enqueues, with nothing run.
+          def purges
+            ::Sidekiq::Testing.fake! do
+              ::News::PurgeCachedPagesJob.jobs.clear
+              yield
+              ::News::PurgeCachedPagesJob.jobs.dup
+            end
+          end
+
+          test "create makes a draft owned by the token's user, with the body exactly as sent" do
+            body = "  Line one\r\nLine two  \n"
+            send_json :post, "/api/v1/admin/news_posts", {title: "  Fresh News ", body: body, summary: " ", topic_ids: [news_topics(:books_rankings).id] * 2}
+            assert_api_response_conform(status: 201, api: :admin)
+            post = NewsPost.find(json.dig(:data, :id))
+            assert_equal ["Fresh News", body, "books", users(:admin_user), "draft"], [post.title, post.body, post.domain, post.user, post.status]
+            assert_nil post.summary
+            assert_equal [news_topics(:books_rankings).id], post.news_topic_ids
+            get "/news/#{post.slug}"
+            assert_response :not_found
+          end
+
+          test "create enqueues a purge" do
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts", {title: "Fresh", body: "x"} }
+            assert_equal 1, jobs.size
+          end
+
+          test "a taken title is a 409 naming the post that has it" do
+            assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "December Update", body: "x"} }
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_includes json[:detail], news_posts(:books_december_update).id.to_s
+          end
+
+          test "a retried create makes one post" do
+            2.times { send_json :post, "/api/v1/admin/news_posts", {title: "Once Only", body: "x"} }
+            assert_response :conflict
+            assert_equal 1, NewsPost.books.where(title: "Once Only").count
+          end
+
+          BAD_CREATES = {
+            400 => [{title: "T"}, {body: "x"}, {title: 5, body: "x"}, {title: "T", body: ["x"]}, {title: "T", body: "a\u0000b"},
+              {title: "T", body: "x", summary: 1}, {title: "T", body: "x", topic_ids: "1"}, {title: "T", body: "x", topic_ids: ["1"]}],
+            422 => [{title: " ", body: "x"}, {title: "T", body: " \n"}, {title: "T" * 201, body: "x"}, {title: "T", body: "x" * 100_001},
+              {title: "T", body: "x", summary: "s" * 501}, {title: "T", body: "x", published_at: "2030-01-01T00:00:00Z"},
+              {title: "T", body: "x", topic_ids: [2**70]}, {title: "日本語", body: "x"}, {title: "Topic", body: "x"}]
+          }.freeze
+
+          test "bad creates are refused and write nothing" do
+            BAD_CREATES.each do |status, bodies|
+              bodies.each do |body|
+                assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", body }
+                assert_equal [status, body.inspect.first(60)], [response.status, body.inspect.first(60)]
+              end
+            end
+          end
+
+          test "another site's topic is a 422 on create and update" do
+            send_json :post, "/api/v1/admin/news_posts", {title: "T", body: "x", topic_ids: [news_topics(:music_site_news).id]}
+            assert_api_response_conform(status: 422, api: :admin)
+            send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", {topic_ids: [news_topics(:music_site_news).id]}
+            assert_api_response_conform(status: 422, api: :admin)
+          end
+
+          test "update edits a live post in place and purges it" do
+            post = news_posts(:books_december_update)
+            jobs = purges { send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Retitled", summary: nil} }
+            assert_api_response_conform(status: 200, api: :admin)
+            post.reload
+            assert_equal ["Retitled", "december-update", "published"], [post.title, post.slug, post.status]
+            assert_nil post.summary
+            assert_equal %w[summary title], json[:changed].sort
+            assert_includes jobs.first["args"].last, "https://dev-new.thegreatestbooks.org/news/december-update"
+          end
+
+          test "topic_ids replaces the set and an empty list clears it" do
+            post = news_posts(:books_december_update)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {topic_ids: [news_topics(:books_new_lists).id]}
+            assert_equal [[news_topics(:books_new_lists).id], ["topic_ids"]], [post.reload.news_topic_ids, json[:changed]]
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {topic_ids: []}
+            assert_empty post.reload.news_topic_ids
+          end
+
+          test "a body change needs expected_updated_at" do
+            post = news_posts(:books_draft)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {body: "new"}
+            assert_api_response_conform(status: 400, api: :admin)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {body: "new", expected_updated_at: post.updated_at.utc.iso8601(6)}
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "new", post.reload.body
+          end
+
+          test "an image the admin added after the agent read the post is not overwritten" do
+            send_json :post, "/api/v1/admin/news_posts", {title: "With Picture", body: "Words"}
+            id, slug, read_at = json[:data].values_at(:id, :slug, :updated_at)
+            sign_in_as(users(:admin_user), stub_auth: true)
+            patch admin_books_news_post_path(slug), params: {news_post: {title: "With Picture", body: "Words ![p](/p.png)", body_images: [fixture_file_upload("test_image.png", "image/png")]}}
+
+            send_json :patch, "/api/v1/admin/news_posts/#{id}", {body: "Better words", expected_updated_at: read_at}
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_equal "Words ![p](/p.png)", NewsPost.find(id).body
+
+            get_json "/api/v1/admin/news_posts/#{id}"
+            assert_equal 1, json.dig(:data, :body_images_count)
+            send_json :patch, "/api/v1/admin/news_posts/#{id}", {body: "Better words ![p](/p.png)", expected_updated_at: json.dig(:data, :updated_at)}
+            assert_response :success
+          end
+
+          test "a stale expected_updated_at is refused without a body too" do
+            post = news_posts(:books_draft)
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: "Later", expected_updated_at: 1.day.ago.utc.iso8601(6)}
+            assert_response :conflict
+            assert_not_equal "Later", post.reload.title
+          end
+
+          test "an update with nothing to change, or a bad expected_updated_at, is a 400" do
+            id = news_posts(:books_draft).id
+            now = news_posts(:books_draft).updated_at.utc.iso8601(6)
+            [{}, {expected_updated_at: now}, {title: "T", expected_updated_at: "yesterday"}, {title: "T", expected_updated_at: "2026-02-30T00:00:00Z"},
+              {title: "T", expected_updated_at: "2026-01-01T00:00:00+99:00"}, {title: "T", expected_updated_at: 5}].each do |body|
+              send_json :patch, "/api/v1/admin/news_posts/#{id}", body
+              assert_equal [400, body.inspect], [response.status, body.inspect]
+            end
+            assert_not_equal "T", news_posts(:books_draft).reload.title
+          end
+
+          test "an update with a blank title, a blank body or an unknown key is a 422 and writes nothing" do
+            post = news_posts(:books_draft)
+            stamp = post.updated_at.utc.iso8601(6)
+            [{title: " "}, {body: " ", expected_updated_at: stamp}, {title: "T", slug: "x"}, {title: "T", published_at: "2030-01-01T00:00:00Z"}].each do |body|
+              send_json :patch, "/api/v1/admin/news_posts/#{post.id}", body
+              assert_equal [422, body.inspect], [response.status, body.inspect]
+            end
+            assert_equal ["Something Unfinished", "Not ready yet.", "something-unfinished"], [post.reload.title, post.body, post.slug]
+          end
+
+          test "a failed update leaves the topics unchanged" do
+            post = news_posts(:books_december_update)
+            before = post.news_topic_ids.sort
+            send_json :patch, "/api/v1/admin/news_posts/#{post.id}", {title: " ", topic_ids: [news_topics(:books_new_lists).id]}
+            assert_response :unprocessable_content
+            assert_equal before, post.reload.news_topic_ids.sort
+          end
+
+          test "another site's post is a 404 on update" do
+            send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:music_launch).id}", {title: "T"}
+            assert_response :not_found
+          end
+
+          test "a read token cannot create or update" do
+            assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "T", body: "x"}, token: ApiTokenSecrets::ADMIN_READ }
+            assert_api_response_conform(status: 403, api: :admin)
+            send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", {title: "T"}, token: ApiTokenSecrets::ADMIN_READ
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_not_equal "T", news_posts(:books_draft).reload.title
+          end
+
+          test "a user the policy refuses gets a 403 and nothing is written" do
+            NewsPostPolicy.any_instance.stubs(:create?).returns(false)
+            NewsPostPolicy.any_instance.stubs(:update?).returns(false)
+            assert_no_difference("NewsPost.count") { send_json :post, "/api/v1/admin/news_posts", {title: "Denied", body: "x"} }
+            assert_equal 403, response.status
+            send_json :patch, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}", {title: "Denied"}
+            assert_equal 403, response.status
+            assert_not_equal "Denied", news_posts(:books_draft).reload.title
+          end
         end
       end
     end

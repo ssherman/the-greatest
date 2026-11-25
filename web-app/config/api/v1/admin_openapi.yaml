@@ -4190,6 +4190,59 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createNewsPost
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Create a draft news post
+      description: |
+        Creates a news post on the books site from a required `title` and `body`, with an optional `summary` and `topic_ids`. The post is always a draft owned by the token's user; it goes live only when published. The title is stripped (1 to 200 characters), the body is stored exactly as sent (1 to 100,000 characters) and a blank summary is none (up to 500). A title whose URL slug is already taken on the site is 409 and names the post that has it; a title with no usable slug (no Latin letters or numbers, or a reserved word such as `topic`) is 422. A wrong JSON type, a null byte or a missing `title` or `body` is 400; an unknown key (`published_at` included), a blank or too long value, or a `topic_ids` entry that is not a topic of this site is 422. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
+      x-mcp:
+        description: >-
+          Creates a news post for the books site. It is always a draft: use publish_news_post to make it live. The body is
+          Markdown only: raw HTML is dropped, a single newline is a line break and headings show one level smaller than
+          written. Links must be full URLs taken from the public tools' `url` fields, never built from a slug; an admin
+          list's `url` is an outside page, not a page of this site. Settle the title first, because the post's URL is made
+          from it at creation and never changes. A 409 names the existing post that holds that URL, so pick a distinct
+          title (for example, add the month). `topic_ids` come from list_news_topics. Images are added by a person at the
+          returned `admin_url`, not here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsPostCreateRequest"
+      responses:
+        "201":
+          description: The draft.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNewsPostDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/news_posts/{id}:
     x-domain: books
     get:
@@ -4231,6 +4284,61 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    patch:
+      operationId: updateNewsPost
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Edit a news post
+      description: |
+        Changes only the fields sent: `title`, `body`, `summary` (null or blank clears it) and `topic_ids` (replaces the whole set; an empty list clears it). Works on drafts and on live posts, which change at once; the URL never changes. Changing `body` requires `expected_updated_at`, the post's `updated_at` from the last read; when it differs from the stored value (also when sent without a body) the answer is 409 and nothing is written, because someone may have added images. An empty body, a body with no field to change, a wrong JSON type, a null byte or a malformed `expected_updated_at` is 400; an unknown key, a blank `title` or `body`, a too long value or a topic of another site is 422. A failed update changes nothing, topics included. Returns the post and `changed`, the field names that really changed. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
+      x-mcp:
+        description: >-
+          Edits one books news post by integer id (from list_admin_news_posts), draft or live. Send only what changes.
+          `topic_ids` replaces the whole set and `[]` clears it. Changing `body` needs `expected_updated_at`, the
+          `updated_at` from your last read of the post; on a 409 read the post again and reapply your edit, because someone
+          may have added images since. Keep every image link already in the body. Live posts change at once and their
+          pages are refreshed. The URL does not change when the title does. The same Markdown rules apply as in create_news_post.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsPostUpdateRequest"
+      responses:
+        "200":
+          description: The post after the change.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNewsPostEdited"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/news_topics:
@@ -5377,6 +5485,41 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/AdminNewsPostFull"
+    AdminNewsPostEdited:
+      type: object
+      required: [data, changed]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminNewsPostFull"
+        changed:
+          type: array
+          description: The fields that really changed, `topic_ids` for the topics.
+          items: {type: string, enum: [title, body, summary, topic_ids]}
+    NewsPostCreateRequest:
+      type: object
+      required: [title, body]
+      additionalProperties: false
+      properties:
+        title: {type: string, description: "Stripped, 1 to 200 characters. Its URL slug must be free on the site (409 otherwise)."}
+        body: {type: string, description: "Markdown, stored as sent, 1 to 100,000 characters."}
+        summary: {type: [string, "null"], description: "Up to 500 characters; null or blank means none."}
+        topic_ids:
+          type: array
+          description: Topic ids of this site (from list_news_topics). Repeats count once.
+          items: {type: integer, minimum: 1}
+    NewsPostUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: {type: string, description: "Stripped, 1 to 200 characters. The URL does not change."}
+        body: {type: string, description: "Markdown, stored as sent. Needs expected_updated_at."}
+        summary: {type: [string, "null"], description: "Up to 500 characters; null or blank clears it."}
+        topic_ids:
+          type: array
+          description: Replaces the whole set; an empty list clears it.
+          items: {type: integer, minimum: 1}
+        expected_updated_at: {type: string, format: date-time, description: "The post's updated_at from your last read, exactly as returned. Required with body; a mismatch is 409."}
     AdminNewsPostCollection:
       type: object
       required: [data, meta, links]
