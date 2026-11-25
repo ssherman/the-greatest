@@ -90,6 +90,34 @@ test.describe("Books account: add a missing book", () => {
     await expect(search(page)).toBeFocused();
   });
 
+  test("polling the real strip twice with nothing changed mutates nothing inside the live region", async ({ page }) => {
+    let polls = 0;
+    await page.route("**/book-submissions", (route) => {
+      if (route.request().method() === "GET") polls++;
+      return route.continue();
+    });
+    await page.clock.install();
+    await openList(page);
+    const live = page.getByTestId("book-submission-strip");
+    await expect(live.getByText("Adding: E2E Book Submission Looking Up")).toBeVisible();
+    const polledAtStart = polls;
+    await page.evaluate(() => {
+      (window as any).__mutations = 0;
+      new MutationObserver((records) => ((window as any).__mutations += records.length)).observe(
+        document.querySelector('[data-testid="book-submission-strip"]')!,
+        { childList: true, subtree: true, characterData: true }
+      );
+    });
+
+    for (let i = 0; i < 2; i++) {
+      await page.clock.runFor(10_500);
+      await expect.poll(() => polls).toBe(polledAtStart + i + 1);
+      await page.waitForTimeout(400);
+    }
+
+    expect(await page.evaluate(() => (window as any).__mutations)).toBe(0);
+  });
+
   test("switching the method shows only that method's fields", async ({ page }) => {
     await openList(page);
     await search(page).fill("anything at all");
@@ -169,8 +197,10 @@ test.describe("Books account: add a missing book, network stubbed", () => {
   const dialogOf = (page: Page) => page.getByTestId("book-submission-dialog");
   const strip = (page: Page) => page.getByTestId("book-submission-strip");
 
+  // button_to puts a masked authenticity token in every form, a new one in every response.
+  let tokenCounter = 0;
   const cancelForm = (id: number) =>
-    `<form class="button_to" method="post" action="/my/book-submissions/${id}/cancel" data-turbo-frame="book_submissions"><button class="btn btn-xs" type="submit">Cancel</button></form>`;
+    `<form class="button_to" method="post" action="/my/book-submissions/${id}/cancel" data-turbo-frame="book_submissions"><button class="btn btn-xs" type="submit">Cancel</button><input type="hidden" name="authenticity_token" value="token-${++tokenCounter}" autocomplete="off"></form>`;
   const retryButton = (id: number, method: string, title = "", authors: string[] = []) =>
     `<button type="button" class="btn btn-xs" data-action="click->books--book-submissions#tryAnother" data-replaces="${id}" data-input-method="${method}" data-title="${title}" data-authors='${JSON.stringify(authors)}'>Try another way</button>`;
   const row = (id: number, text: string, buttons = "") =>
@@ -366,6 +396,7 @@ test.describe("Books account: add a missing book, network stubbed", () => {
 
   test("a poll that changes nothing swaps nothing, keeps focus and announces nothing", async ({ page }) => {
     const listId = seeded.list_id;
+    // Each poll body is built anew, so its forms carry a different token.
     await stubStrip(page, () => html(frame(row(1, "Adding: Slow Book", cancelForm(1)), listId, true)));
     await page.clock.install();
     await open(page);
@@ -379,8 +410,10 @@ test.describe("Books account: add a missing book, network stubbed", () => {
       );
     });
 
-    await page.clock.runFor(10_500);
-    await page.waitForTimeout(400);
+    for (let i = 0; i < 3; i++) {
+      await page.clock.runFor(10_500);
+      await page.waitForTimeout(400);
+    }
 
     await expect(cancel).toBeFocused();
     expect(await page.evaluate(() => (window as any).__mutations)).toBe(0);
@@ -498,6 +531,52 @@ test.describe("Books account: add a missing book, network stubbed", () => {
     });
     await page.waitForTimeout(1_200);
     expect(listLoads).toBe(1);
+  });
+
+  test("a search reply that lands while the dialog is open does not open the dropdown, and searching works afterwards", async ({ page }) => {
+    await stubStrip(page, () => html(frame("", seeded.list_id)));
+    await page.route("**/listable_search*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.fulfill({ json: [] });
+    });
+    await open(page);
+
+    await search(page).fill("slow reply");
+    await page.waitForTimeout(450);
+    await page.getByTestId("add-missing-book").click();
+    await expect(dialogOf(page)).toBeVisible();
+    await page.waitForTimeout(1_000);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    await expect(page.locator(".autocomplete-container ul")).toBeHidden();
+
+    await search(page).fill("slow reply again");
+    await expect(page.getByText('No results found for "slow reply again"')).toBeVisible();
+  });
+
+  test("the same late reply does not cover the new row after an accepted submission", async ({ page }) => {
+    const listId = seeded.list_id;
+    await stubStrip(
+      page,
+      () => html(frame("", listId)),
+      () => stream(acceptedStream(row(7, "Adding: https://www.goodreads.com/book/show/7", cancelForm(7)), listId), 201)
+    );
+    await page.route("**/listable_search*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({ json: [] });
+    });
+    await open(page);
+
+    await search(page).fill("slow reply");
+    await page.waitForTimeout(450);
+    await page.getByTestId("add-missing-book").click();
+    await dialogOf(page).locator("#book_submission_goodreads_url").fill("https://www.goodreads.com/book/show/7");
+    await dialogOf(page).getByRole("button", { name: "Add book" }).click();
+    await expect(page.getByText("Adding: https://www.goodreads.com/book/show/7")).toBeVisible();
+    await page.waitForTimeout(2_000);
+
+    await expect(page.locator(".autocomplete-container ul")).toBeHidden();
+    await page.getByTestId("book-submission-row").getByRole("button", { name: "Cancel" }).click({ trial: true });
   });
 
   test("a refusal that is only a toast also shows inside the open dialog, and reopening starts clean", async ({ page }) => {

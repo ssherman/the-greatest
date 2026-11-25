@@ -47,38 +47,10 @@ export default class extends Controller {
 
       data: {
         src: async () => {
-          if (this.abortController) {
-            this.abortController.abort()
-          }
-
-          this.abortController = new AbortController()
-
-          try {
-            const query = this.inputTarget.value
-            const separator = this.urlValue.includes('?') ? '&' : '?'
-            const response = await fetch(
-              `${this.urlValue}${separator}q=${encodeURIComponent(query)}`,
-              {
-                signal: this.abortController.signal,
-                headers: {
-                  'Accept': 'application/json',
-                  'X-CSRF-Token': this.csrfToken
-                }
-              }
-            )
-
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`)
-            }
-
-            return await response.json()
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              return []
-            }
-            console.error('Autocomplete fetch error:', error)
-            return []
-          }
+          const results = await this.fetchResults()
+          // A reply that lands after the footer was chosen must not render or
+          // open the dropdown: an Error stops autocomplete.js before it renders.
+          return this.searchPaused ? new Error("search paused") : results
         },
         keys: [this.displayKeyValue],
         // autocomplete.js writes each result's `match` into the page as HTML.
@@ -156,6 +128,41 @@ export default class extends Controller {
     })
   }
 
+  async fetchResults() {
+    if (this.abortController) {
+      this.abortController.abort()
+    }
+
+    this.abortController = new AbortController()
+
+    try {
+      const query = this.inputTarget.value
+      const separator = this.urlValue.includes('?') ? '&' : '?'
+      const response = await fetch(
+        `${this.urlValue}${separator}q=${encodeURIComponent(query)}`,
+        {
+          signal: this.abortController.signal,
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-Token': this.csrfToken
+          }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return []
+      }
+      console.error('Autocomplete fetch error:', error)
+      return []
+    }
+  }
+
   addInputListener() {
     this.handleInput = this.handleInput.bind(this)
     this.inputTarget.addEventListener('input', this.handleInput)
@@ -201,7 +208,7 @@ export default class extends Controller {
     if (!list) return
     if (!list.querySelector("[data-autocomplete-footer]")) list.appendChild(this.buildFooter())
     // autocomplete.js navigation reads feedback.results; it is unset until the first search.
-    if (!this.autoComplete.feedback) {
+    if (!this.autoComplete.feedback?.results) {
       this.autoComplete.feedback = { query: "", matches: [], results: [] }
       this.autoComplete.cursor = -1
     }
@@ -210,6 +217,8 @@ export default class extends Controller {
 
   chooseFooter() {
     this.searchPaused = true
+    // A request already in flight is dropped; its reply is ignored either way.
+    this.abortController?.abort()
     this.element.dispatchEvent(
       new CustomEvent("autocomplete:footer", {
         detail: { query: this.inputTarget.value.trim() },

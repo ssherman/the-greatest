@@ -88,9 +88,16 @@ export default class extends Controller {
     }
   }
 
+  // The rows as text, without what changes on every response: button_to puts a
+  // masked authenticity token in every form. A kept row keeps its older token,
+  // which stays valid for the session.
   rowsOf(root) {
     return Array.from(root.querySelectorAll('[data-testid="book-submission-row"]'))
-      .map((row) => row.outerHTML)
+      .map((row) => {
+        const copy = row.cloneNode(true)
+        copy.querySelectorAll('input[name="authenticity_token"]').forEach((input) => input.remove())
+        return copy.outerHTML
+      })
       .join("")
   }
 
