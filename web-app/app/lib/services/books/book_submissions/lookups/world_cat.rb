@@ -35,7 +35,7 @@ module Services
           end
 
           def raw_name(entry)
-            entry.is_a?(Hash) ? entry["name"] : entry
+            Names.scrubbed(entry.is_a?(Hash) ? entry["name"] : entry)
           end
         end
       end

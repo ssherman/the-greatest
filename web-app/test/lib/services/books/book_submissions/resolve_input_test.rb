@@ -349,6 +349,14 @@ module Services
           assert_equal ["Either/Or", "a fragment of life"], [data[:title], data[:subtitle]]
         end
 
+        test "invalid UTF-8 in a WorldCat creator or subtitle is scrubbed, not raised" do
+          bad = "Le Guin, Ursula \xC3".dup.force_encoding(Encoding::UTF_8)
+          stub_world_cat([wc_record(creator: bad, subtitle: "Sub\xC3".dup.force_encoding(Encoding::UTF_8))])
+          data = resolve(isbn_submission).data
+
+          assert_equal [["Ursula Le Guin"], "Sub"], [data[:author_names], data[:subtitle]]
+        end
+
         test "a creator given as a Hash with a name is read" do
           stub_world_cat([wc_record(creator: {"name" => "Le Guin, Ursula K., 1929-2018."})])
 

@@ -18,7 +18,6 @@ module Services
             "Taizan5" => "Taizan5",
             "Exurb1a" => "Exurb1a",
             "タイザン5" => "タイザン5",
-            "هداىت، صادق، 1903=1951 author" => "هداىت، صادق، 1903=1951 author",
             "Mary Smith (Novelist)" => "Mary Smith",
             "Hemingway 1899-1961." => "Hemingway",
             "John Smith Jr." => "John Smith Jr.",
@@ -41,8 +40,6 @@ module Services
             "Кинси, Ти." => "Ти Кинси",
             "Маас, Сара Дж., author" => "Сара Дж Маас",
             "Plato, author." => "Plato",
-            "椿いづみ, author, artist" => "椿いづみ",
-            "蔡志忠, 1948- , editor, artist" => "蔡志忠",
             "Brubaker, Ed" => "Ed Brubaker",
             "Traven, B., 1882?-1969." => "B. Traven",
             "Perse, Saint-John" => "Saint-John Perse",
@@ -57,8 +54,50 @@ module Services
             "Beethoven, Ludwig van" => "Ludwig van Beethoven",
             "Gaulle, Charles de" => "Charles de Gaulle",
             "ჭეიშვილი, რეზო" => "რეზო ჭეიშვილი",
-            "Yoshimoto, 吉本" => "吉本 Yoshimoto",
+            "Иличевский, А.В." => "А.В. Иличевский",
+            "Richard (Rick). Yancey" => "Richard Yancey",
+            "Richard [Rick]. Yancey" => "Richard Yancey",
+            "Matthew (Graphic novelist). Rosenberg" => "Matthew Rosenberg",
+            "Rosenberg, Matthew (Graphic novelist)." => "Matthew Rosenberg",
             # not a shape we are sure of
+            "University of California, Los Angeles" => nil,
+            "Ministry of Culture, Sports and Tourism" => nil,
+            "Phillips, Craig & Dean" => nil,
+            "Nelson, Prince Rogers" => nil,
+            "Ervine, St. John G." => nil,
+            "荒木, 飛呂彦" => nil,
+            "Yoshimoto, 吉本" => nil,
+            "椿いづみ, author, artist" => nil,
+            "蔡志忠, 1948- , editor, artist" => nil,
+            "毛姆 Maugham, William Somerset 1874-1965" => nil,
+            "هداىت، صادق، 1903=1951 author" => nil,
+            "ثمىنى، نغمه،, author" => nil,
+            "Smith, John / Jane Doe" => nil,
+            "John Smith; Jane Doe" => nil,
+            "John Smith | Jane Doe" => nil,
+            "John Smith & Jane Doe" => nil,
+            "Smith/Jones" => nil,
+            "Gates, Henry Louis Jr." => nil,
+            "Gates, Jr. Henry Louis" => nil,
+            "Downs, Alan Ph. D." => nil,
+            "Downs, Alan PhD" => nil,
+            "Downs, MD Alan" => nil,
+            "Press, Penguin" => nil,
+            "Bank of England, London" => nil,
+            "Marks and Spencer, London" => nil,
+            "Time Inc, New York" => nil,
+            "Acme Ltd, London" => nil,
+            "Acme LLC, Dallas" => nil,
+            "Smith Co, Dallas" => nil,
+            "Smith Company, Dallas" => nil,
+            "Penguin Press, New York" => nil,
+            "Penguin Publishing, New York" => nil,
+            "Brown University, Providence" => nil,
+            "Ministry Culture, Seoul" => nil,
+            "Department Health, London" => nil,
+            "King, Stephen" => "Stephen King",
+            "Bishop, Elizabeth" => "Elizabeth Bishop",
+            "Pope, Alexander" => "Alexander Pope",
             "Chaucer, Geoffrey, approximately 1340-1400." => nil,
             "Homer, active 8th century B.C." => nil,
             "Henry Louis, Jr Gates" => nil,
@@ -133,6 +172,13 @@ module Services
             assert_equal "ab", Names.text("a\u0000b")
             assert_equal 255, Names.text("x" * 300).length
             assert_nil Names.text("\u0000 ")
+          end
+
+          test "invalid UTF-8 in a creator or title does not raise" do
+            bad = "Le Guin, Ursula \xC3".dup.force_encoding(Encoding::UTF_8)
+
+            assert_equal "Ursula Le Guin", Names.world_cat_person(bad)
+            assert_equal ["Title", "Sub"], Names.world_cat_title("Title", "Sub\xC3".dup.force_encoding(Encoding::UTF_8))
           end
 
           test "years: integers pass through, strings are parsed" do

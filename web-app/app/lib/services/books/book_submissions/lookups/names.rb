@@ -26,6 +26,16 @@ module Services
           BLOCKED_WORDS = %w[saint st sir dame lord lady king queen emperor empress pope prince princess duke duchess
             count countess baron baroness earl marquis bishop archbishop cardinal rabbi of and inc ltd llc co company
             press publishing university ministry department &].freeze
+          # Corporate and connective words: a surname part holding one is a body,
+          # not a person ("University of California, Los Angeles"). Not the title
+          # words: King, Pope and Bishop are real surnames.
+          CORPORATE_WORDS = %w[of and & inc ltd llc co company press publishing university ministry department].freeze
+          # Suffixes and credentials never belong inside a given-name part.
+          POST_NAME_WORDS = %w[jr sr ii iii iv phd ph md mba cpa esq rn dds dvm jd msc bsc].freeze
+          # Two or more people in one value.
+          SEVERAL_PEOPLE = %r{[/;|&،]}
+          # Native order there is surname first, so a "Last, First" flip would reverse it.
+          SURNAME_FIRST_SCRIPTS = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/
           # Scripts with no case in ordinary use: a word cannot be "lowercase" there.
           UNCASED_SCRIPTS = %w[Han Hiragana Katakana Hangul Georgian Hebrew Arabic Thai Lao Devanagari Bengali Gurmukhi
             Gujarati Tamil Telugu Kannada Malayalam Sinhala Khmer Myanmar Tibetan Ethiopic Syriac Thaana Mongolian].freeze
@@ -67,9 +77,14 @@ module Services
           # - Anything else with a comma (an epithet part, a part mixing words
           #   and dates, a lowercase given name) is nil.
           def world_cat_person(raw)
-            name = scrubbed(raw).gsub(PARENTHESES, "").gsub(SQUARE_BRACKETS, "").sub(DATES, "").squish
+            raw = scrubbed(raw)
+            return nil if raw.match?(SEVERAL_PEOPLE)
+
+            # A period right after a removed bracket belonged to it ("Richard (Rick). Yancey").
+            name = raw.gsub(/#{PARENTHESES}\.?/o, "").gsub(/#{SQUARE_BRACKETS}\.?/o, "").sub(DATES, "").squish
             return nil if name.empty?
             return strip_closing_period(name).presence unless name.include?(",")
+            return nil if name.match?(SURNAME_FIRST_SCRIPTS)
 
             comma_person(name)
           end
@@ -77,8 +92,9 @@ module Services
           # "Title / creator" loses everything after the slash and "Title : subtitle"
           # splits. A subtitle the record carries wins over the split one.
           def world_cat_title(title, subtitle)
+            subtitle = scrubbed(subtitle)
             main, _, rest = scrubbed(title).sub(SLASH_STATEMENT, "").partition(" : ")
-            [tidy_title(main), tidy_title((subtitle.presence || rest).to_s.sub(SLASH_STATEMENT, ""))]
+            [tidy_title(main), tidy_title((subtitle.presence || rest).sub(SLASH_STATEMENT, ""))]
           end
 
           def tidy_title(value)
@@ -110,7 +126,7 @@ module Services
           def comma_person(name)
             surname, *parts = name.split(",", -1).map { |part| tidy_part(part) }
             parts.pop while parts.last == ""
-            return nil if surname.empty?
+            return nil if surname.empty? || corporate?(surname)
 
             given = suffix = nil
             parts.each_with_index do |part, index|
@@ -132,10 +148,15 @@ module Services
             strip_closing_period(part.squish.gsub(/(?<=\S)\s+\.\s+(?=\S)/, " "))
           end
 
+          def corporate?(text)
+            text.split.any? { |word| CORPORATE_WORDS.include?(word.downcase.delete_suffix(".")) }
+          end
+
           def given_name?(part)
             words = part.split
-            return false if words.empty? || words.first.match?(SUFFIX)
+            return false if words.empty?
             return false if words.any? { |word| BLOCKED_WORDS.include?(word.downcase.delete_suffix(".")) }
+            return false if words.any? { |word| POST_NAME_WORDS.include?(word.downcase.delete(".,")) }
 
             particles = false
             names = 0
