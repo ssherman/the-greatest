@@ -20,7 +20,7 @@ require "test_helper"
 #  resolved_at      :datetime
 #  resolved_via     :integer
 #  sources          :jsonb            not null
-#  status           :integer          default(0), not null
+#  status           :integer          default("pending"), not null
 #  version          :integer          default(1), not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
