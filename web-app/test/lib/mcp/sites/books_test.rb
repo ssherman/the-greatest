@@ -113,6 +113,16 @@ module Mcp
         assert_includes text, "send their `lease_token` back"
       end
 
+      test "the admin usage text and instructions tell the agent to decide book submissions itself and skip when unsure" do
+        text = admin_usage_text
+
+        assert_includes text, "## The book submissions queue"
+        assert_includes text, "You decide each submission yourself; do not ask before approving, merging or rejecting"
+        assert_includes text, "use `skip_book_submission` when you cannot show the book is real"
+        assert_includes text, "The queue is done when `data` is empty and `meta.remaining` is 0."
+        assert_includes Mcp::Sites::Books.instructions(:admin), "decide each submission yourself, and use skip_book_submission"
+      end
+
       test "the admin instructions are one paragraph that mentions dry-running first" do
         text = Mcp::Sites::Books.instructions(:admin)
 

@@ -181,16 +181,24 @@ module Workflows
         # One gate turn. Nil means this execution may fetch; an Outcome is the
         # wait that ends it.
         def fetch_turn
-          decision = ::Books::Goodreads::GateTurn.call(gate: @gate, due: @progress["due"] == true)
+          decision = ::Books::Goodreads::GateTurn.call(gate: @gate, due: @progress["due"] == true, priority: priority?)
           case decision.action
           when :wait then wait_until(Time.current + decision.wait, due: true)
           when :refused
-            wake = (decision.refusal == :daily_cap) ? Time.current.utc.tomorrow.beginning_of_day : blocked_until
-            wait_until(wake, due: false)
+            wait_until(refused_until(decision.refusal), due: false)
           else
             spend_turn
           end
         end
+
+        # A priority turn can be refused at a different time than an ordinary
+        # one, so the gate is asked first; it has no answer when it would grant.
+        def refused_until(refusal)
+          (priority? && @gate.reopens_at(priority: true)) ||
+            ((refusal == :daily_cap) ? Time.current.utc.tomorrow.beginning_of_day : blocked_until)
+        end
+
+        def priority? = @run.options["lane"] == Workflows::Lanes::PRIORITY
 
         # The turn is used up the moment the fetch starts. A raise after it (a
         # fetch that fails, the pick, a crash) goes through Coordinator.fail, which

@@ -21,6 +21,14 @@ GOODREADS_SEED_AUTHOR = "E2E Goodreads Import Author"
 # The filename of e2e/fixtures/goodreads_export.csv, as the upload stores it.
 E2E_GOODREADS_FIXTURE = "goodreads_export.csv"
 
+# The rows e2e:book_submissions_seed owns, found by this title prefix. The hit
+# book carries a Goodreads id far above any real one, so typing its link in the
+# dialog finds it at the instant check and nothing is ever submitted.
+BOOK_SUBMISSION_MARKER = "E2E Book Submission"
+BOOK_SUBMISSION_HIT_TITLE = "E2E Book Submission Hit"
+BOOK_SUBMISSION_HIT_GOODREADS_ID = 999_000_002
+BOOK_SUBMISSION_AUTHOR = "E2E Book Submission Author"
+
 namespace :e2e do
   # One value from e2e/.env. Read from the file rather than ENV because these
   # tasks run from a shell that has not loaded that file, and dotenv only loads
@@ -300,5 +308,58 @@ namespace :e2e do
     Books::Book.where(title: GOODREADS_SEED_TITLE).find_each(&:destroy!)
     Books::Author.where(name: GOODREADS_SEED_AUTHOR).find_each(&:destroy!)
     puts "cleaned up the Goodreads import E2E records"
+  end
+
+  desc "Seed a looking_up row, a needs_details row, an added row with a provisional book and a findable " \
+    "book on the Playwright user's Books Favorites list. Prints the ids as JSON. Idempotent. " \
+    "(E2E_BOOK_SUBMISSIONS_EMAIL overrides the account.)"
+  task book_submissions_seed: :environment do
+    user = User.find_by!(email: ENV.fetch("E2E_BOOK_SUBMISSIONS_EMAIL") { playwright_email })
+    list = Books::UserList.find_by!(user: user, list_type: :favorites)
+    author = Books::Author.find_or_create_by!(name: BOOK_SUBMISSION_AUTHOR) { |a| a.provisional = true }
+
+    book_for = lambda do |title, provisional:|
+      book = Books::Book.find_by(title: title) || Books::Book.create!(title: title, provisional: provisional)
+      book.update!(provisional: provisional)
+      Books::BookAuthor.find_or_create_by!(book: book, author: author) { |credit| credit.position = 1 }
+      book
+    end
+
+    hit = book_for.call(BOOK_SUBMISSION_HIT_TITLE, provisional: false)
+    Identifier.find_or_create_by!(identifiable: hit, identifier_type: :books_work_goodreads_id,
+      value: BOOK_SUBMISSION_HIT_GOODREADS_ID.to_s, source: :open_library)
+    added_book = book_for.call("#{BOOK_SUBMISSION_MARKER} Added", provisional: true)
+    list.user_list_items.find_or_create_by!(listable: added_book)
+
+    row = lambda do |title, number, attrs|
+      submission = Books::BookSubmission.find_or_initialize_by(user: user, resolved_title: title)
+      submission.update!({
+        user_list: list, input_method: :goodreads, goodreads_book_id: 999_000_100 + number,
+        raw_input: "https://www.goodreads.com/book/show/#{999_000_100 + number}",
+        fingerprint: "e2e-book-submission-#{number}", dismissed_at: nil, announced_at: nil, book: nil
+      }.merge(attrs))
+      submission
+    end
+    looking = row.call("#{BOOK_SUBMISSION_MARKER} Looking Up", 1, status: :looking_up)
+    stuck = row.call("#{BOOK_SUBMISSION_MARKER} Needs Details", 2, status: :needs_details)
+    added = row.call("#{BOOK_SUBMISSION_MARKER} Added", 3, status: :added, review_status: :pending,
+      book: added_book, created_book: true, announced_at: Time.current)
+
+    puts({list_id: list.id, hit_title: hit.title, hit_goodreads_id: BOOK_SUBMISSION_HIT_GOODREADS_ID,
+          hit_book_id: hit.id, looking_up_id: looking.id, needs_details_id: stuck.id, added_id: added.id,
+          added_book_id: added_book.id}.to_json)
+  end
+
+  desc "Remove what e2e:book_submissions_seed and the book-submission E2E spec created"
+  task book_submissions_cleanup: :environment do
+    submissions = Books::BookSubmission.where("resolved_title LIKE ?", "#{BOOK_SUBMISSION_MARKER}%")
+    books = Books::Book.where("title LIKE ?", "#{BOOK_SUBMISSION_MARKER}%")
+    UserListItem.where(listable_type: "Books::Book", listable_id: books.select(:id)).find_each(&:destroy!)
+    removed = submissions.count
+    submissions.find_each(&:destroy!)
+    Identifier.where(identifier_type: :books_work_goodreads_id, value: BOOK_SUBMISSION_HIT_GOODREADS_ID.to_s).find_each(&:destroy!)
+    books.find_each(&:destroy!)
+    Books::Author.where(name: BOOK_SUBMISSION_AUTHOR).find_each(&:destroy!)
+    puts "removed #{removed} submission(s)"
   end
 end

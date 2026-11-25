@@ -23,6 +23,14 @@ module Services
           run
         end
 
+        test "a limited submission run whose goodreads step failed is not rerun" do
+          b = book("Submitted")
+          finished_run(b, state: :failed, options: {"only" => ["goodreads"], "lane" => "priority"}).update!(initiated_by: "book_submission")
+          BOOK_ENRICHMENT.expects(:start).never
+
+          assert_equal({started: 0, remaining: 0}, RerunFailed.call(limit: 10).data)
+        end
+
         test "starts a new book run for each book whose latest goodreads step failed, with its options" do
           failed = book("Catch-22")
           finished_run(failed, state: :failed, options: {"force_research" => true})

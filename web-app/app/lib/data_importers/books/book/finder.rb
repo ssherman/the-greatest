@@ -187,6 +187,20 @@ module DataImporters
           end
         end
 
+        # See ExactLookup for the query shape and why it is built that way. loose: the
+        # finder also wants books sharing only the part before the colon, as AI candidates.
+        def exact_scope(query)
+          ExactLookup.call(title: query.title, subtitle: query.subtitle, author_names: query.author_names,
+            limit: EXACT_LIMIT, loose: true)
+        end
+
+        def whole_title_keys(query) = ExactLookup.whole_keys(query.title, query.subtitle)
+
+        def held_title_keys(record)
+          ([record.title, *record_alternate_titles(record)].map { |title| normalize(title) } +
+            [ExactLookup.key(TitleForms.full(record.title, record.subtitle))]).compact_blank.uniq
+        end
+
         # The search requires every word it is given in our title, which holds no
         # subtitle, so a whole title never finds a split one. The second search
         # asks for the part before the colon, without closing brackets. That part
@@ -212,61 +226,6 @@ module DataImporters
             keep: keep
           )
         end
-
-        # Normalized title equality (served by the lower(title) expression
-        # index), joined to an author whose name keys
-        # (Services::Text::PersonNameKey, GIN-indexed books_authors.name_keys)
-        # meet the query's when the query names authors. A title-only query still yields
-        # title matches: they are candidates for the AI, never a rule-4
-        # match, because creators_required? is true for books.
-        #
-        # With authors, the title also reaches books that hold it split, or
-        # whole, or that share only its part before the colon (TitleForms).
-        # Whole-title matches come first, so a long series cannot push one out
-        # of the limit.
-        #
-        # The filtered rows are plucked first, with no ORDER BY or LIMIT on
-        # the filtered query: measured on 158k books, ORDER BY id + LIMIT 5
-        # on the filtered relation makes the planner walk the primary key
-        # (59 ms, every row filtered) instead of using
-        # index_books_books_on_lower_title (0.01 ms). A title matches a
-        # handful of rows, so plucking them all is cheap.
-        def exact_scope(query)
-          return ::Books::Book.none if query.title.blank?
-
-          keys = ::Services::Text::PersonNameKey.all(query.author_names)
-          titles = keys.any? ? lookup_title_keys(query) : [normalize(query.title)]
-          filtered = ::Books::Book.where("LOWER(books_books.title) IN (?)", titles)
-          if keys.any?
-            filtered = filtered.joins(book_authors: :author)
-              .where("books_authors.name_keys && ARRAY[:keys]::varchar[]", keys: keys)
-          end
-          whole = whole_title_keys(query)
-          rows = filtered.distinct.pluck(:id, :title, :subtitle)
-          ids = rows.sort_by { |id, title, subtitle| [([normalize(title), whole_key(title, subtitle)] & whole).any? ? 0 : 1, id] }
-            .map(&:first).first(EXACT_LIMIT)
-          ::Books::Book.where(id: ids).includes(:authors, :identifiers).order(:id)
-        end
-
-        # Every title our title column may hold for the query's book.
-        def lookup_title_keys(query)
-          heads = [query.title, TitleForms.without_note(query.title)].map { |title| TitleForms.split(title).first }
-          (whole_title_keys(query) + (heads << TitleForms.main(query.title)).map { |title| normalize(title) }).uniq
-        end
-
-        # The query's whole title, with and without a closing note, and joined to
-        # its subtitle when it has one.
-        def whole_title_keys(query)
-          [query.title, TitleForms.without_note(query.title)]
-            .flat_map { |title| [normalize(title), whole_key(title, query.subtitle)] }.compact_blank.uniq
-        end
-
-        def held_title_keys(record)
-          ([record.title, *record_alternate_titles(record)].map { |title| normalize(title) } + [whole_key(record.title, record.subtitle)])
-            .compact_blank.uniq
-        end
-
-        def whole_key(title, subtitle) = normalize(TitleForms.full(title, subtitle))
 
         def search_params(query)
           return nil if query.title.blank?

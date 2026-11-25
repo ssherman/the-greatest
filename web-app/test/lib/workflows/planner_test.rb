@@ -39,6 +39,20 @@ module Workflows
       assert_equal 3, WorkflowStep.where(workflow_run_id: first.id).count
     end
 
+    test "lane priority puts the goodreads and serial steps on their priority queues and no other" do
+      priority = Workflows::Planner.call(definition: Workflows::Books::BookEnrichment, enrichable: books_books(:got),
+        initiated_by: "test", options: {lane: "priority"}).data[:run].steps.pluck(:key, :queue).to_h
+      assert_equal ["goodreads_fetch_priority", "serial_priority"], priority.values_at("goodreads", "amazon")
+      assert_equal({"evidence" => "evidence", "book_facts" => "low", "categorize" => "low", "categories" => "low"},
+        priority.slice("evidence", "book_facts", "categorize", "categories"))
+    end
+
+    test "a run without a lane keeps today's queues" do
+      plain = Workflows::Planner.call(definition: Workflows::Books::BookEnrichment, enrichable: books_books(:got), initiated_by: "test")
+        .data[:run].steps.pluck(:key, :queue).to_h
+      assert_equal ["goodreads_fetch", "serial"], plain.values_at("goodreads", "amazon")
+    end
+
     test "supersede cancels the active run and plans a new one" do
       first = plan.data[:run]
       second = plan(supersede: true).data[:run]

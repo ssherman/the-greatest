@@ -94,8 +94,9 @@ categories across genre, theme, game mode and player perspective.
 
 ## Data importers
 - google books integration
-- **port the legacy add-book modal** (Goodreads URL, Amazon URL, or title and author). A non-goal of
-  the Goodreads import spec, left as its own project.
+- **user-added books, left out:** adding a book from the recommendation wizard, from the member API
+  and member MCP endpoint, and following Amazon short links (`a.co`, `amzn.to`).
+  See `docs/features/user-added-books.md`.
 - **finder initials gap:** "J.D. Salinger" fails to match "J. D. Salinger" (found by the Goodreads
   replay).
 

@@ -108,6 +108,7 @@ module Admin
           {label: "Repair Verdicts", icon: :list, path: -> { URL_HELPERS.admin_books_repair_verdicts_path }},
           {label: "Enrichment Queues", icon: :list, path: -> { URL_HELPERS.admin_books_enrichment_queues_path }},
           {label: "List Audits", icon: :list, path: -> { URL_HELPERS.admin_books_list_audits_path }},
+          {label: "Book Submissions", icon: :list, path: -> { URL_HELPERS.admin_books_book_submissions_path }},
           {label: "Alternate Titles", icon: :list, path: -> { URL_HELPERS.review_admin_books_alternate_titles_path }},
           {label: "Goodreads Imports", icon: :list, path: -> { URL_HELPERS.admin_books_goodreads_imports_path }},
           {label: "Contact", icon: :chat, path: -> { URL_HELPERS.admin_books_contact_messages_path }},

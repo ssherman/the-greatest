@@ -1,0 +1,51 @@
+<%= helpers.turbo_frame_tag "book_submissions", target: "_top" do %>
+  <%= tag.div(data: frame_data.merge(testid: "book-submissions-state")) %>
+  <% if submissions.any? %>
+    <ul class="mb-6 flex flex-col gap-2">
+      <% submissions.each do |submission| %>
+        <% state = state(submission) %>
+        <li id="<%= dom_id(submission) %>" class="alert alert-soft <%= ALERTS.fetch(state) %> items-start border-base-content/20 text-base-content sm:items-center" data-testid="book-submission-row">
+          <% if state == :working %>
+            <%# data-stalled is set on the wrapper by the poller when the page has stopped checking. %>
+            <span class="flex size-6 items-center justify-center">
+              <span class="loading loading-spinner loading-md group-data-stalled/strip:hidden" aria-hidden="true"></span>
+              <span class="hidden group-data-stalled/strip:block" data-when="stalled"><%= icon(:stalled) %></span>
+            </span>
+          <% else %>
+            <%= icon(state) %>
+          <% end %>
+          <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div class="min-w-0">
+              <p class="font-semibold [overflow-wrap:anywhere]"><%= message(submission) %></p>
+              <% if state == :working %>
+                <p class="text-base-content/70 [overflow-wrap:anywhere]">
+                  <% if request_label(submission) %><%= request_label(submission) %>.<% end %>
+                  <span class="group-data-stalled/strip:hidden">It can take a while. You can leave this page and we'll still add it.</span>
+                  <span class="hidden group-data-stalled/strip:inline" data-when="stalled">Still working on it. Reload the page to check.</span>
+                </p>
+              <% elsif request_label(submission) %>
+                <p class="text-base-content/70 [overflow-wrap:anywhere]"><%= request_label(submission) %></p>
+              <% end %>
+            </div>
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+              <% if viewable_book(submission) %>
+                <%= link_to "View book", book_path(viewable_book(submission).slug), class: "btn btn-sm btn-outline" %>
+              <% end %>
+              <% if retryable?(submission) %>
+                <%= button_tag "Try another way", type: "button", class: "btn btn-sm btn-outline",
+                      data: {action: "click->books--book-submissions#tryAnother", replaces: submission.id,
+                             input_method: submission.input_method, title: submission.typed_title,
+                             authors: Array(submission.typed_author_names).to_json} %>
+              <% end %>
+              <% if cancellable?(submission) %>
+                <%= button_to "Cancel", cancel_books_my_book_submission_path(submission), class: "btn btn-sm btn-outline", form: {data: {turbo_frame: "book_submissions"}} %>
+              <% elsif finished?(submission) %>
+                <%= button_to "Dismiss", dismiss_books_my_book_submission_path(submission), class: "btn btn-sm btn-outline", form: {data: {turbo_frame: "book_submissions"}} %>
+              <% end %>
+            </div>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+<% end %>

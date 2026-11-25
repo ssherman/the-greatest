@@ -71,6 +71,13 @@ module Services
           assert_not_includes candidate_ids, orphan.id
         end
 
+        test "a provisional book is not offered, though it has a gap" do
+          pending = book_with_author("Pending Review", provisional: true)
+          assert_not_includes candidate_ids, pending.id
+          pending.update!(provisional: false)
+          assert_includes candidate_ids, pending.id
+        end
+
         test "a book with a blank title is not a candidate" do
           untitled = book_with_author("x")
           untitled.update_columns(title: "")

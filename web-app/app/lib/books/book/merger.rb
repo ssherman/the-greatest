@@ -28,15 +28,22 @@ module Books
 
       attr_reader :source_book, :target_book, :stats, :affected_ranking_configurations
 
-      def self.call(source:, target:, defer_rankings: false)
-        new(source: source, target: target, defer_rankings: defer_rankings).call
+      def self.call(source:, target:, defer_rankings: false, precondition: nil)
+        new(source: source, target: target, defer_rankings: defer_rankings, precondition: precondition).call
       end
 
       # defer_rankings: a bulk caller (the Goodreads replay's apply step) merges
       # many books in one run and queues each ranking recalculation and the
       # favorites rebuild once at the end, from affected_ranking_configurations,
       # instead of once per merge.
-      def initialize(source:, target:, defer_rankings: false)
+      # precondition: an optional callable, given (source, target) right after
+      # both rows are locked and inside the transaction. A String it returns is
+      # the reason the merge must not go ahead: nothing is changed and the
+      # result is a failure whose data is {precondition: true}. A caller that
+      # decided on stale reads (a reviewer racing another) uses it to decide
+      # again under the lock.
+      def initialize(source:, target:, defer_rankings: false, precondition: nil)
+        @precondition = precondition
         @source_book = source
         @target_book = target
         @defer_rankings = defer_rankings
@@ -69,14 +76,22 @@ module Books
 
         ActiveRecord::Base.transaction do
           lock_books
+          @precondition_failure = @precondition&.call(source_book, target_book)
+          raise ActiveRecord::Rollback if @precondition_failure
+
           collect_affected_ranking_configurations
           merge_all_associations
           reconcile_scalars
+          close_submissions
           target_book.save! if target_book.changed?
           resolve_duplicate_candidates
           record_redirect
           destroy_source_book
           @transaction_body_completed = true
+        end
+
+        if @precondition_failure
+          return Result.new(success?: false, data: {precondition: true}, errors: [@precondition_failure])
         end
 
         run_post_commit_steps
@@ -155,6 +170,53 @@ module Books
         repoint_series_representative
         merge_book_authors
         merge_credits
+        merge_submissions
+      end
+
+      # A reader's submission follows the book it was made for. The ids are read
+      # before the move, because afterwards the survivor's own rows and the moved
+      # ones sit under one book_id. Inside the transaction (and the survivor and
+      # source are locked), so a rollback changes nothing here.
+      def merge_submissions
+        @source_provisional = source_book.provisional?
+        @target_provisional = target_book.provisional?
+        @moved_submission_ids = source_book.submissions.pluck(:id)
+        @own_submission_ids = target_book.submissions.pluck(:id)
+        @stats[:submissions] = ::Books::BookSubmission.where(id: @moved_submission_ids).update_all(book_id: target_book.id)
+      end
+
+      # After reconcile_scalars, which settles whether the survivor is public. A
+      # provisional survivor leaves every row as it was. A public one closes the
+      # moved rows as merged (the survivor is where their book went) and, if it
+      # only became public through this merge, its own rows as approved. A
+      # matched not_needed row shares the fate of a provisional book it sat on,
+      # never of a catalog one.
+      def close_submissions
+        closed = 0
+        unless target_book.provisional?
+          if @target_provisional
+            closed += close_submission_rows(@own_submission_ids, :approved, @target_provisional)
+          end
+          closed += close_submission_rows(@moved_submission_ids, :merged, @source_provisional)
+          closed += mark_moved_approved_rows_merged
+        end
+        @stats[:submissions_closed] = closed
+      end
+
+      # An approved user-added row keeps its created_book flag, so left approved it
+      # would make the public survivor look user-added. Only the status changes;
+      # who approved it, how, when and on what sources stay. CloseForBook keeps its
+      # rule (open rows only), so this is the merger's own write. Rows already on
+      # the survivor keep approved.
+      def mark_moved_approved_rows_merged
+        ::Books::BookSubmission.where(id: @moved_submission_ids, review_status: :approved)
+          .update_all(review_status: ::Books::BookSubmission.review_statuses.fetch("merged"), updated_at: Time.current)
+      end
+
+      def close_submission_rows(ids, review_status, include_matched)
+        ::Services::Books::BookSubmissions::CloseForBook.call(
+          book_ids: [target_book.id], submission_ids: ids, review_status: review_status, include_matched: include_matched
+        )
       end
 
       # books_editions has no unique index on book_id, so there is no collision

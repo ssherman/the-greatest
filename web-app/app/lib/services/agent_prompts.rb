@@ -8,7 +8,7 @@ module Services
   # Books is the only domain with prompts, so its item types are named here; a
   # second domain's template brings its own counts with it.
   class AgentPrompts
-    QUEUES = %i[duplicates match_decisions repair_verdicts author_verdicts series].freeze
+    QUEUES = %i[duplicates match_decisions repair_verdicts author_verdicts series book_submissions].freeze
 
     DUPLICATE_TYPES = {pending_books: "Books::Book", pending_authors: "Books::Author"}.freeze
     DECISION_FINDERS = {
@@ -111,6 +111,7 @@ module Services
       when :repair_verdicts then repair_verdict_counts
       when :author_verdicts then {pending_authors: ::Books::RepairVerdict.current.reimport_author.proposed.count}
       when :series then series_counts
+      when :book_submissions then book_submission_counts
       else decision_counts
       end
     end
@@ -120,6 +121,12 @@ module Services
     def repair_verdict_counts
       pending = ::Books::RepairVerdict.current.reimport_match.proposed.group(:confidence).count
       %w[high medium low].to_h { |level| [:"pending_#{level}", pending[level].to_i] }
+    end
+
+    # The queue page's tabs, so the prompt and the page say the same numbers.
+    def book_submission_counts
+      counts = ::Services::Books::BookSubmissions::QueueTabs.counts
+      {pending_review: counts["needs_review"], pending_details: counts["needs_details"], needs_human: counts["needs_human"]}
     end
 
     # The live (not deleted, not merged away) series, how many hold a single book,

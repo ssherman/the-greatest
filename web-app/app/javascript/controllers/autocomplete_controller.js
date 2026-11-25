@@ -1,6 +1,9 @@
 import { Controller } from "@hotwired/stimulus"
 import autoComplete from "@tarekraafat/autocomplete.js"
 
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char])
+
 export default class extends Controller {
   static targets = ["input", "hiddenField"]
   static values = {
@@ -8,7 +11,11 @@ export default class extends Controller {
     minLength: { type: Number, default: 1 },
     debounce: { type: Number, default: 300 },
     displayKey: { type: String, default: "text" },
-    valueKey: { type: String, default: "value" }
+    valueKey: { type: String, default: "value" },
+    // Optional last row of the dropdown (e.g. "Can't find it? Add a book").
+    // Empty means no footer and nothing below changes.
+    footerLabel: { type: String, default: "" },
+    footerTestid: { type: String, default: "" }
   }
 
   connect() {
@@ -34,43 +41,20 @@ export default class extends Controller {
       placeHolder: this.inputTarget.placeholder,
       threshold: this.minLengthValue,
       debounce: this.debounceValue,
+      // A search still pending when the footer was chosen must not bring the
+      // dropdown back over the page (typing or a real focus lifts the pause).
+      trigger: (query) => !this.searchPaused && query.length >= this.minLengthValue,
 
       data: {
         src: async () => {
-          if (this.abortController) {
-            this.abortController.abort()
-          }
-
-          this.abortController = new AbortController()
-
-          try {
-            const query = this.inputTarget.value
-            const separator = this.urlValue.includes('?') ? '&' : '?'
-            const response = await fetch(
-              `${this.urlValue}${separator}q=${encodeURIComponent(query)}`,
-              {
-                signal: this.abortController.signal,
-                headers: {
-                  'Accept': 'application/json',
-                  'X-CSRF-Token': this.csrfToken
-                }
-              }
-            )
-
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`)
-            }
-
-            return await response.json()
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              return []
-            }
-            console.error('Autocomplete fetch error:', error)
-            return []
-          }
+          const results = await this.fetchResults()
+          // A reply that lands after the footer was chosen must not render or
+          // open the dropdown: an Error stops autocomplete.js before it renders.
+          return this.searchPaused ? new Error("search paused") : results
         },
         keys: [this.displayKeyValue],
+        // Results are text.
+        filter: (matches) => matches.map((result) => ({ ...result, match: escapeHtml(result.match) })),
         cache: false
       },
 
@@ -94,6 +78,7 @@ export default class extends Controller {
             message.textContent = `No results found for "${data.query}"`
             list.prepend(message)
           }
+          this.appendFooter(list)
         }
       },
 
@@ -107,6 +92,11 @@ export default class extends Controller {
       events: {
         input: {
           selection: (event) => {
+            // The footer is the one row with no result behind it.
+            if (this.footerLabelValue && !event.detail.selection.value) {
+              this.chooseFooter()
+              return
+            }
             const selection = event.detail.selection.value
 
             this.inputTarget.value = selection[this.displayKeyValue]
@@ -123,6 +113,9 @@ export default class extends Controller {
           },
 
           focus: () => {
+            // Focus returned by code (a closed dialog) must not search again.
+            if (this.inputTarget.hasAttribute("data-skip-focus-search")) return
+            this.searchPaused = false
             if (this.inputTarget.value.length >= this.minLengthValue) {
               this.autoComplete.start()
             }
@@ -130,6 +123,41 @@ export default class extends Controller {
         }
       }
     })
+  }
+
+  async fetchResults() {
+    if (this.abortController) {
+      this.abortController.abort()
+    }
+
+    this.abortController = new AbortController()
+
+    try {
+      const query = this.inputTarget.value
+      const separator = this.urlValue.includes('?') ? '&' : '?'
+      const response = await fetch(
+        `${this.urlValue}${separator}q=${encodeURIComponent(query)}`,
+        {
+          signal: this.abortController.signal,
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-Token': this.csrfToken
+          }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return []
+      }
+      console.error('Autocomplete fetch error:', error)
+      return []
+    }
   }
 
   addInputListener() {
@@ -143,8 +171,63 @@ export default class extends Controller {
     }
   }
 
+  // The footer row: a real button inside a list item, so autocomplete.js treats
+  // it like a result (arrow keys reach it, Enter or a click selects it) while
+  // it is also a button to a pointer, a screen reader and a test. Built with
+  // textContent only.
+  buildFooter() {
+    const item = document.createElement("li")
+    item.id = `${this.inputTarget.id}_footer`
+    item.setAttribute("role", "option")
+    item.setAttribute("data-autocomplete-footer", "")
+    item.className = "rounded-lg hover:bg-base-200 cursor-pointer transition-colors border-t border-base-300 mt-1"
+    const button = document.createElement("button")
+    button.type = "button"
+    button.tabIndex = -1
+    button.className = "w-full text-left px-4 py-2 font-semibold"
+    button.textContent = this.footerLabelValue
+    if (this.footerTestidValue) button.setAttribute("data-testid", this.footerTestidValue)
+    item.appendChild(button)
+    return item
+  }
+
+  // Called from autocomplete.js's own render, which has just rebuilt the list.
+  appendFooter(list) {
+    if (!this.footerLabelValue) return
+    list.appendChild(this.buildFooter())
+  }
+
+  // Typing shows the footer at once, before the search for this query returns.
+  // autocomplete.js only builds its list after the fetch, and a list that does
+  // not exist yet has nothing to reach by keyboard.
+  showFooterEarly() {
+    const list = this.autoComplete?.list
+    if (!list) return
+    if (!list.querySelector("[data-autocomplete-footer]")) list.appendChild(this.buildFooter())
+    // autocomplete.js navigation reads feedback.results; it is unset until the first search.
+    if (!this.autoComplete.feedback?.results) {
+      this.autoComplete.feedback = { query: "", matches: [], results: [] }
+      this.autoComplete.cursor = -1
+    }
+    if (!this.autoComplete.isOpen) this.autoComplete.open()
+  }
+
+  chooseFooter() {
+    this.searchPaused = true
+    // A request already in flight is dropped; its reply is ignored either way.
+    this.abortController?.abort()
+    this.element.dispatchEvent(
+      new CustomEvent("autocomplete:footer", {
+        detail: { query: this.inputTarget.value.trim() },
+        bubbles: true
+      })
+    )
+  }
+
   handleInput(event) {
+    this.searchPaused = false
     const currentValue = event.target.value.trim()
+    if (this.footerLabelValue && currentValue.length >= this.minLengthValue) this.showFooterEarly()
 
     // Clear hidden field if:
     // 1. Input is empty

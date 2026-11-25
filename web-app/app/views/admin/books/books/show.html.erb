@@ -4,6 +4,12 @@
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-3xl font-bold"><%= @book.title %></h1>
+      <%# One query for the book's submissions; the badge is a word and a link, so it does not rely on colour. %>
+      <% if @book.submissions.any?(&:user_added?) %>
+        <%= link_to "User-added", admin_books_book_submissions_path(tab: "all", book_id: @book.id),
+              class: "badge badge-info badge-outline mt-1", data: {testid: "user-added-badge"},
+              title: "A reader asked for this book. See the submission." %>
+      <% end %>
       <% if @book.subtitle.present? %>
         <p class="text-lg text-base-content/70"><%= @book.subtitle %></p>
       <% end %>
