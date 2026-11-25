@@ -202,7 +202,7 @@ module Services
           assert_equal "The Dispossessed", result.data[:title]
           assert_equal "An Ambiguous Utopia", result.data[:subtitle]
           assert_equal ["Ursula K. Le Guin"], result.data[:author_names]
-          assert_equal 2009, result.data[:year]
+          assert_nil result.data[:year] # an Amazon year is an edition's
           assert_equal({isbn13: [ISBN13], isbn10: ["0061054887"], asin: ["B000FC11JE"], goodreads_id: []}, result.data[:identifiers])
         end
 
@@ -285,7 +285,7 @@ module Services
           assert_equal "The dispossessed", result.data[:title]
           assert_equal "an ambiguous utopia", result.data[:subtitle]
           assert_equal ["Ursula K. Le Guin"], result.data[:author_names]
-          assert_equal 1974, result.data[:year]
+          assert_nil result.data[:year] # a WorldCat year is an edition's
           assert_equal [ISBN13], result.data[:identifiers][:isbn13]
         end
 
@@ -303,12 +303,80 @@ module Services
             "Hemingway, Ernest 1899-1961." => "Ernest Hemingway",
             "Smith, John (Novelist)" => "John Smith",
             "Ursula K. Le Guin" => "Ursula K. Le Guin",
-            "Dumas, Alexandre, 1802-1870 " => "Alexandre Dumas"
+            "Dumas, Alexandre, 1802-1870 " => "Alexandre Dumas",
+            "Orwell, George." => "George Orwell",
+            "Smith, Zadie." => "Zadie Smith",
+            "Roth, Philip (Philip Milton)." => "Philip Roth",
+            "Тартт, Донна." => "Донна Тартт",
+            "Plato, author." => "Plato",
+            "椿いづみ, author, artist" => "椿いづみ",
+            "Kurt Vonnegut, Jr." => "Kurt Vonnegut Jr.",
+            "Gates, Henry Louis, Jr" => "Henry Louis Gates Jr",
+            "Thomas, Aquinas, Saint, 1225?-1274." => "Thomas Aquinas",
+            "Leonardo, da Vinci, 1452-1519." => "Leonardo da Vinci",
+            "Marcus Aurelius, Emperor of Rome, 121-180." => "Marcus Aurelius",
+            "DK Publishing, Inc" => "DK Publishing Inc",
+            "Маас, Сара Дж., author" => "Сара Дж. Маас",
+            "Кинси, Ти." => "Ти Кинси",
+            "Smith, Zadie Marie." => "Zadie Marie Smith",
+            "Хоффман, Элис, аuthor" => "Элис Хоффман",
+            "曹雪芹, approximately 1717-1763" => "曹雪芹",
+            "Smith, K." => "K. Smith",
+            "Jennifer 8. Lee" => "Jennifer 8. Lee",
+            "50 Cent" => "50 Cent",
+            "Exurb1a" => "Exurb1a",
+            "タイザン5" => "タイザン5"
           }.each do |raw, expected|
             stub_world_cat([wc_record(creator: raw)])
 
             assert_equal [expected], resolve(isbn_submission).data[:author_names], raw
           end
+        end
+
+        test "a slash inside a title is kept, one standing alone is the creator statement" do
+          {
+            "Either/Or : a fragment of life / Soren Kierkegaard." => ["Either/Or", "a fragment of life"],
+            "S/Z" => ["S/Z", nil], "9/11" => ["9/11", nil], "Ranma 1/2. Vol. 27" => ["Ranma 1/2. Vol. 27", nil],
+            "80/20 triathlon" => ["80/20 triathlon", nil], "Superman/Batman" => ["Superman/Batman", nil],
+            "The title /" => ["The title", nil],
+            "Borges, mündlich/ Sieben Nächte" => ["Borges, mündlich/ Sieben Nächte", nil],
+            "Pig /pork" => ["Pig /pork", nil]
+          }.each do |raw, (title, subtitle)|
+            stub_world_cat([wc_record(title: raw)])
+            data = resolve(isbn_submission).data
+
+            assert_equal [title, subtitle], [data[:title], data[:subtitle]], raw
+          end
+        end
+
+        test "a subtitle the record carries loses its creator statement" do
+          stub_world_cat([wc_record(title: "The dispossessed", subtitle: "an ambiguous utopia / Ursula K. Le Guin.")])
+
+          assert_equal "an ambiguous utopia", resolve(isbn_submission).data[:subtitle]
+        end
+
+        test "years before 1000 and BC years pass through, strings are parsed" do
+          {-700 => -700, 180 => 180, 1974 => 1974}.each do |given, expected|
+            sub = isbn_submission(supplied: {"title" => "T", "author_names" => ["A"], "year" => given})
+            assert_equal expected, resolve(sub).data[:year]
+          end
+          sub = isbn_submission(supplied: {"title" => "T", "author_names" => ["A"], "year" => "1974-05"})
+          assert_equal 1974, resolve(sub).data[:year]
+        end
+
+        test "an Amazon outage with a binary body is recorded and does not lose the answer WorldCat gave" do
+          stub_world_cat([wc_record])
+          body = "Amazon Creators API responded 503: caf\xC3 \x00 down".b
+          ::Services::Amazon::Client.stubs(:get_items).raises(::Services::Amazon::Client::Error, body)
+          sub = amazon_submission(isbn13: ISBN13)
+
+          result = resolve(sub)
+
+          assert_equal "worldcat", result.data[:source]
+          message = sub.reload.lookup.first["error_message"]
+          assert_predicate message, :valid_encoding?
+          refute_includes message, "\u0000"
+          assert_includes message, "responded 503"
         end
 
         test "a creator given as a Hash with a name is read" do
@@ -321,6 +389,20 @@ module Services
           stub_world_cat([wc_record(creator: nil, contributors: ["Orwell, George, 1903-1950.", {"name" => "Fyvel, T. R."}])])
 
           assert_equal ["George Orwell", "T. R. Fyvel"], resolve(isbn_submission).data[:author_names]
+        end
+
+        test "a creator with a digit in the name is kept and contributors do not replace it" do
+          stub_world_cat([wc_record(creator: "50 Cent", contributors: ["Illustrator, Ivo"])])
+
+          assert_equal ["50 Cent"], resolve(isbn_submission).data[:author_names]
+        end
+
+        test "a creator that cleans to nothing leaves the record unusable instead of crediting contributors" do
+          stub_world_cat([wc_record(creator: "(Author)", contributors: ["Illustrator, Ivo"])])
+          stub_open_library(hits: [])
+          stub_amazon_search([])
+
+          assert_equal :no_record, resolve(isbn_submission).data[:outcome]
         end
 
         test "contributors are ignored when there is a creator" do

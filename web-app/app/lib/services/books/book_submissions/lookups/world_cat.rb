@@ -25,15 +25,17 @@ module Services
             [record, answer] if answer.usable?
           end
 
-          # The creator; contributors only when there is no creator.
+          # The creator; contributors only when the record has no creator at
+          # all. A creator that cleans to nothing leaves the book authorless
+          # rather than crediting an illustrator or translator.
           def authors(record)
-            creators = [record.creator].filter_map { |entry| name_of(entry) }
-            creators = Array(record.contributors).filter_map { |entry| name_of(entry) } if creators.empty?
-            creators
+            creators = [record.creator].reject { |entry| raw_name(entry).blank? }
+            creators = Array(record.contributors) if creators.empty?
+            creators.filter_map { |entry| Names.world_cat_person(raw_name(entry)) }
           end
 
-          def name_of(entry)
-            Names.world_cat_person(entry.is_a?(Hash) ? entry["name"] : entry)
+          def raw_name(entry)
+            entry.is_a?(Hash) ? entry["name"] : entry
           end
         end
       end

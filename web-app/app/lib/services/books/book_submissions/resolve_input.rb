@@ -43,6 +43,10 @@ module Services
         IDENTIFIER_KEYS = %w[isbn13 isbn10 asin goodreads_id].freeze
         MAX_IDENTIFIERS = 10
         MAX_ERROR_MESSAGE = 500
+        # Only these sources know when the book was first published. A
+        # WorldCat or Amazon year belongs to an edition, and the importer
+        # writes the year as first_published_year.
+        FIRST_PUBLISHED_SOURCES = %w[goodreads supplied].freeze
 
         def self.call(submission:)
           new(submission).call
@@ -138,8 +142,14 @@ module Services
         rescue *SOURCE_ERRORS => error
           @raised = true
           entries << {"source" => source, "outcome" => "error", "error_class" => error.class.name,
-                      "error_message" => error.message.to_s.first(MAX_ERROR_MESSAGE)}
+                      "error_message" => storable(error.message)}
           nil
+        end
+
+        # Client errors embed a response body, which can be binary or hold a
+        # NUL; neither can be stored as JSON.
+        def storable(message)
+          message.to_s.dup.force_encoding(Encoding::UTF_8).scrub("").delete("\u0000").first(MAX_ERROR_MESSAGE)
         end
 
         def record(source, answer)
@@ -154,7 +164,7 @@ module Services
         def resolved(answer, source, identifiers)
           Result.new(success?: true, errors: [], data: {
             outcome: :resolved, source: source, title: answer.title, subtitle: answer.subtitle,
-            author_names: answer.author_names, year: answer.year, identifiers: identifiers
+            author_names: answer.author_names, year: (answer.year if FIRST_PUBLISHED_SOURCES.include?(source)), identifiers: identifiers
           })
         end
 
