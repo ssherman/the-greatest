@@ -20,6 +20,16 @@ module Services
         assert_not_equal "changed", @post.reload.body
       end
 
+      # The held instance still carries the old stamp, so only a check made on
+      # the row as locked can see the other writer.
+      test "a change made through another instance is detected under the lock" do
+        old_stamp = @post.updated_at
+        ::NewsPost.find(@post.id).update!(body: "other writer")
+        result = EditPost.call(news_post: @post, attrs: {body: "mine"}, expected_updated_at: old_stamp)
+        assert_equal [false, :stale], [result.success?, result.data[:code]]
+        assert_equal "other writer", ::NewsPost.find(@post.id).body
+      end
+
       test "the current expected_updated_at saves" do
         result = EditPost.call(news_post: @post, attrs: {body: "changed"}, expected_updated_at: @post.updated_at)
         assert result.success?

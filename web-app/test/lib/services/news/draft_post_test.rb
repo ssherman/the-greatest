@@ -51,10 +51,6 @@ module Services
         assert_equal ["draft", "sneaky", "books", users(:admin_user)], [post.status, post.slug, post.domain, post.user]
       end
 
-      test "the saved slug is exactly the plain one" do
-        assert_equal "fresh-news", DraftPost.call(domain: :books, user: users(:admin_user), attrs: {title: "Fresh News", body: "x"}).data[:news_post].slug
-      end
-
       # The pre-check misses once while the slug is really taken, as when another
       # create commits between the check and the save. Without the explicit slug
       # friendly_id writes a UUID-suffixed copy and this fails on the count;

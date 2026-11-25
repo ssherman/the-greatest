@@ -8,8 +8,6 @@ module Services
     # Codes: :unusable_title, :slug_taken (data[:existing] is the NewsPost that
     # holds it), :invalid (SavePost's validation failure).
     class DraftPost
-      Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-
       def self.call(domain:, user:, attrs:)
         new(domain: domain, user: user, attrs: attrs).call
       end
@@ -43,14 +41,13 @@ module Services
         # savepoint has already rolled back.
         post.slug = slug
         begin
-          saved = SavePost.call(news_post: post, attrs: @attrs)
+          SavePost.call(news_post: post, attrs: @attrs)
         rescue ActiveRecord::RecordNotUnique
           existing = find_existing(post, slug)
           raise unless existing
 
-          return slug_taken(post, slug, existing)
+          slug_taken(post, slug, existing)
         end
-        Result.new(success?: saved.success?, data: saved.data, errors: saved.errors)
       end
 
       private
@@ -64,7 +61,7 @@ module Services
       end
 
       def refuse(code, message, post, extra = {})
-        Result.new(success?: false, data: {news_post: post, code: code}.merge(extra), errors: [message])
+        SavePost::Result.new(success?: false, data: {news_post: post, code: code}.merge(extra), errors: [message])
       end
     end
   end

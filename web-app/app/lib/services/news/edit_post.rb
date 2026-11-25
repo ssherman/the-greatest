@@ -5,15 +5,16 @@ module Services
     # comparison runs in SavePost's guard, under the row lock, so two writers
     # holding the same stamp cannot both pass.
     #
-    # Codes: :stale, :invalid.
+    # The stamp protects title, body and summary, and any image attach (which
+    # touches the post). A topics-only change writes join rows and does not
+    # move updated_at, so it is not detected.
+    #
+    # Codes: :stale, :invalid. Results are SavePost's.
     class EditPost
-      Result = Struct.new(:success?, :data, :errors, keyword_init: true)
-
       def self.call(news_post:, attrs:, expected_updated_at: nil)
         guard = ->(locked) { stale_refusal(locked, expected_updated_at) }
         attrs = attrs.with_indifferent_access.slice(*::NewsPost::API_WRITABLE)
-        saved = SavePost.call(news_post: news_post, attrs: attrs, guard: guard)
-        Result.new(success?: saved.success?, data: saved.data, errors: saved.errors)
+        SavePost.call(news_post: news_post, attrs: attrs, guard: guard)
       end
 
       # Microsecond precision is what Postgres stores and what a caller can

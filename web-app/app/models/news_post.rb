@@ -90,7 +90,9 @@ class NewsPost < ApplicationRecord
   scope :with_status, ->(status) {
     case status.to_s
     when "published" then published
-    when "scheduled" then where(published_at: Time.current..)
+    # Strict complement of published (<= now) so the two never overlap at the
+    # boundary; NOT (NULL <= now) is NULL, so drafts stay out.
+    when "scheduled" then where.not(published_at: ..Time.current)
     when "draft" then where(published_at: nil)
     else none
     end

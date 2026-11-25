@@ -40,6 +40,27 @@ module Services
         assert_equal was, post.reload.published_at
       end
 
+      test "publishing a live post with no time is refused and keeps its date" do
+        post = news_posts(:books_december_update)
+        was = post.reload.published_at
+        assert_equal :already_published, Publication.publish(news_post: post).data[:code]
+        assert_equal was, post.reload.published_at
+      end
+
+      test "publish judges the row as locked, not the held instance" do
+        post = news_posts(:books_draft)
+        live_at = 1.day.ago.change(usec: 0)
+        ::NewsPost.find(post.id).update!(published_at: live_at)
+        assert_equal :already_published, Publication.publish(news_post: post).data[:code]
+        assert_equal live_at, post.reload.published_at
+      end
+
+      test "unpublish judges the row as locked, not the held instance" do
+        post = news_posts(:books_december_update)
+        ::NewsPost.find(post.id).update!(published_at: nil)
+        assert_equal :already_draft, Publication.unpublish(news_post: post).data[:code]
+      end
+
       test "unpublish clears a live or scheduled date and refuses a draft" do
         %i[books_december_update books_scheduled].each do |name|
           assert Publication.unpublish(news_post: news_posts(name)).success?
