@@ -742,6 +742,8 @@ Rails.application.routes.draw do
             get "news_posts/:id", to: "news_posts#show", constraints: {id: /\d+/}
             post "news_posts", to: "news_posts#create"
             patch "news_posts/:id", to: "news_posts#update", constraints: {id: /\d+/}
+            post "news_posts/:id/publish", to: "news_posts#publish", constraints: {id: /\d+/}
+            post "news_posts/:id/unpublish", to: "news_posts#unpublish", constraints: {id: /\d+/}
             get "news_topics", to: "news_posts#topics"
             get "books", to: "books#index"
             get "authors", to: "authors#index"

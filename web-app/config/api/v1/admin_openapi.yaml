@@ -4341,6 +4341,107 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/news_posts/{id}/publish:
+    x-domain: books
+    post:
+      operationId: publishNewsPost
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Publish a news post
+      description: |
+        Makes a draft or scheduled news post public. Send no body, or a body without `published_at`, to publish now; send `published_at`, an ISO 8601 time with an offset such as `2031-03-04T09:00:00-05:00`, to schedule it for a future time (a scheduled post can also be rescheduled, or published early by omitting the time). A `published_at` that is null, not a string, lacks an offset or is not a real date and time is 400, as is a body that is not a JSON object. A time in the past is 422 (omit it to publish now; backdating is done in admin), as is an unknown key. A post that is already live is 409 and the answer gives the date it went live, which is never changed, so a retry is safe. A post of another site is 404. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
+      x-mcp:
+        description: >-
+          Publishes a books news post by integer id (from list_admin_news_posts or create_news_post). Omit `published_at`
+          to go live now. A future time with an offset, such as 2031-03-04T09:00:00-05:00, schedules it instead; never
+          send null or a past time. A scheduled post can appear up to six hours late on the news index and feed. Publish
+          when the person asked for it, with no separate confirmation. A 409 means the post is already live and its
+          date is unchanged. Report the returned `url` and `status`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsPostPublishRequest"
+      responses:
+        "200":
+          description: The post after publishing.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNewsPostDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/news_posts/{id}/unpublish:
+    x-domain: books
+    post:
+      operationId: unpublishNewsPost
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Return a news post to draft
+      description: |
+        Takes a live or scheduled news post back to draft by clearing its publication date, and refreshes the pages that showed it. Nothing is deleted: the text, topics and images stay, and the post can be published again. A post that is already a draft is 409. This endpoint declares no request body and ignores any that is sent. A post of another site is 404. Requires `books:admin:write`, and the token's owner must be allowed to edit news.
+      x-mcp:
+        description: >-
+          Returns a books news post to draft by integer id and takes its public page down. Nothing is deleted; the post
+          can be published again with publish_news_post. A 409 means it is already a draft.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The post as a draft.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNewsPostDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/news_topics:
     x-domain: books
     get:
@@ -5520,6 +5621,11 @@ components:
           description: Replaces the whole set; an empty list clears it.
           items: {type: integer, minimum: 1}
         expected_updated_at: {type: string, format: date-time, description: "The post's updated_at from your last read, exactly as returned. Required with body; a mismatch is 409."}
+    NewsPostPublishRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        published_at: {type: string, format: date-time, description: "An ISO 8601 time with an offset, in the future, to schedule the post. Omit it to publish now; null is refused."}
     AdminNewsPostCollection:
       type: object
       required: [data, meta, links]

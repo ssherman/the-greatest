@@ -43,7 +43,9 @@ module Services
       test "publishing a live post with no time is refused and keeps its date" do
         post = news_posts(:books_december_update)
         was = post.reload.published_at
-        assert_equal :already_published, Publication.publish(news_post: post).data[:code]
+        result = Publication.publish(news_post: post)
+        assert_equal :already_published, result.data[:code]
+        assert_includes result.errors.first, was.utc.iso8601(6)
         assert_equal was, post.reload.published_at
       end
 

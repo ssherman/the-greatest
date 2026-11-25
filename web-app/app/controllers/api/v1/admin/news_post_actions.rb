@@ -20,6 +20,7 @@ module Api
 
         CREATE_FIELDS = %w[title body summary topic_ids].freeze
         UPDATE_FIELDS = (CREATE_FIELDS + %w[expected_updated_at]).freeze
+        PUBLISH_FIELDS = %w[published_at].freeze
 
         # An ISO 8601 instant with a zone and nothing looser: Time.iso8601 turns
         # a February 30 into March 2 and DateTime.iso8601 reads +99:00 as UTC.
@@ -95,6 +96,39 @@ module Api
           changed = result.data[:changed].map { |key| (key == "news_topic_ids") ? "topic_ids" : key }
           log_news("update", post, changed: changed)
           render_post(post, changed: changed)
+        end
+
+        def publish
+          post = find_post or return
+          return render_forbidden unless ::NewsPostPolicy.new(current_principal.user, post).update?
+
+          # No body at all means "now"; anything else must be a JSON object.
+          body = request.raw_post.blank? ? {} : json_body
+          return bad_body("The body must be a JSON object, or empty to publish now.") if body.nil?
+
+          unknown = body.keys - PUBLISH_FIELDS
+          return unknown_fields(unknown, PUBLISH_FIELDS) if unknown.any?
+
+          # A key that is present goes through time_param!, null included: an
+          # unset option sent as null must not quietly publish now.
+          at = time_param!("published_at", body["published_at"]) if body.key?("published_at")
+
+          result = ::Services::News::Publication.publish(news_post: post, at: at)
+          return refuse(result) unless result.success?
+
+          log_news("publish", post, changed: result.data[:changed])
+          render_post(post)
+        end
+
+        def unpublish
+          post = find_post or return
+          return render_forbidden unless ::NewsPostPolicy.new(current_principal.user, post).update?
+
+          result = ::Services::News::Publication.unpublish(news_post: post)
+          return refuse(result) unless result.success?
+
+          log_news("unpublish", post, changed: result.data[:changed])
+          render_post(post)
         end
 
         private

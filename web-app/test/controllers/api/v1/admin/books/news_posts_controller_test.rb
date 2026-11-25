@@ -391,6 +391,157 @@ module Api
             send_json :post, "/api/v1/admin/news_posts", {title: "Stripped Summary", body: "x", summary: "  Padded  "}
             assert_equal "Padded", json.dig(:data, :summary)
           end
+
+          test "publish makes a draft public now and purges" do
+            post = news_posts(:books_draft)
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish", token: write_token }
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "published", json.dig(:data, :status)
+            assert_includes jobs.first["args"].last, json.dig(:data, :url)
+            get "/news/#{post.slug}"
+            assert_response :success
+          end
+
+          test "publish with a future time schedules it, honouring the offset" do
+            post = news_posts(:books_draft)
+            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish", {published_at: "2031-03-04T09:00:00-05:00"}
+            assert_equal ["scheduled", Time.utc(2031, 3, 4, 14)], [json.dig(:data, :status), post.reload.published_at]
+            get "/news/#{post.slug}"
+            assert_response :not_found
+          end
+
+          test "a scheduled post can be published now" do
+            post = news_posts(:books_scheduled)
+            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish"
+            assert_equal ["published", "published"], [json.dig(:data, :status), post.reload.status]
+          end
+
+          test "a published_at that is not a full time with an offset is a 400 and publishes nothing" do
+            [nil, 1893456000, "", "2031-03-04", "2031-03-04T09:00:00", "2031-02-30T09:00:00Z", "2031-03-04T09:00:00+99:00", "tomorrow"].each do |value|
+              send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", {published_at: value}
+              assert_equal [400, value], [response.status, value]
+              assert_equal "draft", news_posts(:books_draft).reload.status
+            end
+          end
+
+          test "a body that is not a JSON object is a 400 and publishes nothing" do
+            post = news_posts(:books_draft)
+            ["[]", "\"now\"", "1"].each do |raw|
+              self.post "/api/v1/admin/news_posts/#{post.id}/publish", params: raw, headers: bearer(ApiTokenSecrets::ADMIN).merge("Content-Type" => "application/json")
+              assert_equal [400, raw], [response.status, raw]
+            end
+            assert_equal "draft", post.reload.status
+          end
+
+          test "an empty request body publishes now" do
+            post = news_posts(:books_draft)
+            self.post "/api/v1/admin/news_posts/#{post.id}/publish", headers: bearer(ApiTokenSecrets::ADMIN)
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "published", post.reload.status
+          end
+
+          test "an unknown key on publish is a 422 and publishes nothing" do
+            post = news_posts(:books_draft)
+            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish", {published_at: "2031-03-04T09:00:00Z", title: "Nope"}
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_match(/Unknown field: title/, json[:detail])
+            assert_equal "draft", post.reload.status
+          end
+
+          test "a past time is a 422" do
+            send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", {published_at: "2020-01-01T00:00:00Z"}
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_equal "draft", news_posts(:books_draft).reload.status
+          end
+
+          test "publishing a live post is a 409 that names and keeps the date it went live" do
+            live = news_posts(:books_december_update)
+            was = live.reload.published_at
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{live.id}/publish" }
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_includes json[:detail], was.utc.iso8601(6)
+            assert_equal was, live.reload.published_at
+            assert_empty jobs
+          end
+
+          test "publish keeps an image the admin attached" do
+            post = news_posts(:books_draft)
+            post.body_images.attach(io: file_fixture("test_image.png").open, filename: "p.png", content_type: "image/png")
+            send_json :post, "/api/v1/admin/news_posts/#{post.id}/publish"
+            assert_equal 1, json.dig(:data, :body_images_count)
+          end
+
+          test "unpublish takes a live post down and purges it" do
+            post = news_posts(:books_december_update)
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{post.id}/unpublish", token: write_token }
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "draft", post.reload.status
+            assert_includes jobs.first["args"].last, "https://dev-new.thegreatestbooks.org/news/december-update"
+            get "/news/december-update"
+            assert_response :not_found
+          end
+
+          test "unpublish returns a scheduled post to draft and ignores a body" do
+            post = news_posts(:books_scheduled)
+            send_json :post, "/api/v1/admin/news_posts/#{post.id}/unpublish", {published_at: "garbage"}
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "draft", post.reload.status
+          end
+
+          test "unpublishing a draft is a 409" do
+            jobs = purges { send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/unpublish" }
+            assert_api_response_conform(status: 409, api: :admin)
+            assert_empty jobs
+          end
+
+          test "another site's post is a 404 on publish and unpublish and is left alone" do
+            music = news_posts(:music_launch)
+            before = music.reload.published_at
+            jobs = purges do
+              send_json :post, "/api/v1/admin/news_posts/#{music.id}/publish"
+              assert_api_response_conform(status: 404, api: :admin)
+              send_json :post, "/api/v1/admin/news_posts/#{music.id}/unpublish"
+              assert_api_response_conform(status: 404, api: :admin)
+            end
+            assert_equal before, music.reload.published_at
+            assert_empty jobs
+          end
+
+          test "a read token cannot publish or unpublish" do
+            jobs = purges do
+              send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish", token: ApiTokenSecrets::ADMIN_READ
+              assert_api_response_conform(status: 403, api: :admin)
+              send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}/unpublish", token: ApiTokenSecrets::ADMIN_READ
+              assert_api_response_conform(status: 403, api: :admin)
+            end
+            assert_empty jobs
+            assert_equal ["draft", "published"], [news_posts(:books_draft).reload.status, news_posts(:books_december_update).reload.status]
+          end
+
+          test "a user the policy refuses cannot publish or unpublish" do
+            NewsPostPolicy.any_instance.stubs(:update?).returns(false)
+            send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_draft).id}/publish"
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+            send_json :post, "/api/v1/admin/news_posts/#{news_posts(:books_december_update).id}/unpublish"
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal "forbidden", json[:code]
+            assert_equal ["draft", "published"], [news_posts(:books_draft).reload.status, news_posts(:books_december_update).reload.status]
+          end
+
+          test "publish and unpublish each log one line" do
+            lines = []
+            Rails.logger.stubs(:info).with { |line| lines << line.to_s }
+            draft = news_posts(:books_draft)
+            send_json :post, "/api/v1/admin/news_posts/#{draft.id}/publish"
+            send_json :post, "/api/v1/admin/news_posts/#{draft.id}/unpublish"
+
+            ours = lines.grep(/event=api_admin_news_post/)
+            assert_equal 2, ours.size
+            token = ApiToken.find_by!(token_prefix: ApiTokenSecrets::ADMIN[0, 12])
+            assert_match(/action=publish changed=published_at token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{draft.id}\z/, ours.first)
+            assert_match(/action=unpublish changed=published_at token_id=#{token.id} token_kind=\w+ user_id=#{token.user_id} news_post_id=#{draft.id}\z/, ours.last)
+          end
         end
       end
     end

@@ -15,7 +15,9 @@ module Services
           return SavePost::Result.new(success?: false, data: {news_post: news_post, code: :past}, errors: ["The publication time is in the past"])
         end
 
-        guard = ->(locked) { [:already_published, "The post is already published"] if locked.published? }
+        guard = lambda do |locked|
+          [:already_published, "The post is already published; it went live #{locked.published_at.utc.iso8601(6)}"] if locked.published?
+        end
         SavePost.call(news_post: news_post, attrs: {published_at: at || Time.current}, guard: guard)
       end
 
