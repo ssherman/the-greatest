@@ -186,4 +186,16 @@ class NewsPostTest < ActiveSupport::TestCase
     post.reload.title = "Retitled"
     assert post.save, post.errors.full_messages.to_sentence
   end
+
+  test "status names draft, scheduled and published" do
+    assert_equal %w[draft scheduled published],
+      [:books_draft, :books_scheduled, :books_december_update].map { |name| news_posts(name).status }
+  end
+
+  test "with_status selects exactly the matching post" do
+    expected = {"draft" => :books_draft, "scheduled" => :books_scheduled, "published" => :books_december_update}
+    NewsPost::STATUSES.each do |status|
+      assert_equal [news_posts(expected.fetch(status))], NewsPost.books.with_status(status).to_a, status
+    end
+  end
 end

@@ -79,9 +79,30 @@ class NewsPost < ApplicationRecord
   scope :published, -> { where(published_at: ..Time.current) }
   scope :recent, -> { order(published_at: :desc, id: :desc) }
 
+  # Three states from one column. A scheduled post is a draft as far as
+  # draft? goes (it is not live), so callers that must tell it apart use status.
+  STATUSES = %w[draft scheduled published].freeze
+
+  scope :with_status, ->(status) {
+    case status.to_s
+    when "published" then published
+    when "scheduled" then where(published_at: Time.current..)
+    when "draft" then where(published_at: nil)
+    else none
+    end
+  }
+
   def published? = published_at.present? && published_at <= Time.current
 
   def draft? = !published?
+
+  def status
+    if published? then "published"
+    elsif published_at.present? then "scheduled"
+    else
+      "draft"
+    end
+  end
 
   # Summary when the author wrote one, otherwise plain text derived from the
   # RENDERED body. Deriving from the Markdown source instead would leak "**"
