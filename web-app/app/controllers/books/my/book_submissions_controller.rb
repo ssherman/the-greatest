@@ -189,8 +189,11 @@ class Books::My::BookSubmissionsController < ApplicationController
     render_error("Your session expired. Reload the page and try again", :unprocessable_entity)
   end
 
-  # The dialog's error line for a refused form; a toast for everything else.
+  # The dialog's error line for a refused form; a toast for everything else,
+  # a list deleted under the request included.
   def render_form_error(result)
+    return not_found if result.data && result.data[:reason] == :gone
+
     status = (result.data && result.data[:reason] == :limit) ? :too_many_requests : :unprocessable_entity
     render turbo_stream: turbo_stream.update("book-submission-errors", ERB::Util.html_escape(result.errors.to_sentence)), status: status
   end

@@ -244,6 +244,28 @@ module Services
           assert ::Books::BookSubmission.exists?(result.data[:submission].id)
         end
 
+        test "a list deleted after it was looked up is a refusal, not an error, and makes no row" do
+          list = ::Books::UserList.create!(user: @user, name: "Going", list_type: :custom)
+          ::UserList.where(id: list.id).delete_all
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).never
+
+          result = Submit.call(user: @user, list: list, params: GOODREADS)
+
+          refute result.success?
+          assert_equal :gone, result.data[:reason]
+          assert_predicate result.errors, :any?
+          assert_equal 0, @user.book_submissions.count
+        end
+
+        test "a list deleted meanwhile leaves the request being replaced as it was" do
+          list = ::Books::UserList.create!(user: @user, name: "Going", list_type: :custom)
+          old = row(status: :failed, list: list)
+          ::Books::BookSubmission.stubs(:create!).raises(ActiveRecord::InvalidForeignKey, "gone")
+
+          refute Submit.call(user: @user, list: list, params: GOODREADS, replaces: old.id).success?
+          assert_equal "failed", old.reload.status
+        end
+
         test "a title and authors request with an author array is accepted" do
           result = submit({method: "title_authors", title: "The Dispossessed", authors: ["Ursula K. Le Guin"]})
 

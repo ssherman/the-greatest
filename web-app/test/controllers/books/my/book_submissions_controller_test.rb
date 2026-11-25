@@ -172,6 +172,28 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, @user.book_submissions.count
   end
 
+  test "a list deleted between the lookup and the insert answers the 404 stream" do
+    list = ::Books::UserList.create!(user: @user, name: "Going", list_type: :custom)
+    sign_in_as @user, stub_auth: true
+    gone = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      next if gone || payload[:sql] !~ /\ASELECT.*FROM "books_book_submissions"/m
+
+      gone = true
+      ::UserList.where(id: list.id).delete_all
+    end
+
+    post_submission(list)
+
+    assert gone
+    assert_response :not_found
+    assert stream?
+    assert_includes response.body, "That list or request no longer exists. Reload the page"
+    assert_equal 0, @user.book_submissions.count
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
   test "a signed-out POST is a 401 toast stream and the limiter never keys on nil" do
     12.times do
       post_submission

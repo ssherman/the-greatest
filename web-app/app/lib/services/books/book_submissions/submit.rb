@@ -7,7 +7,9 @@ module Services
       # request, so it reads Postgres only (InstantCheck) and queues the real
       # work for ProcessBookSubmissionJob.
       #
-      # A refusal has errors and data[:reason], :limit when the daily cap was hit.
+      # A refusal has errors and data[:reason]: :limit when the daily cap was hit,
+      # :gone when the list was deleted after the caller looked it up (the insert's
+      # foreign key is what notices; nothing is written).
       #
       # data[:outcome] is
       #   :hits     the site already holds up to three books that may be it
@@ -27,6 +29,7 @@ module Services
 
         REPLACEABLE_STATUSES = %w[needs_details failed].freeze
         LIMIT_MESSAGE = "You have added a lot of books today. Try again tomorrow"
+        GONE_MESSAGE = "That list no longer exists"
 
         def self.call(user:, list:, params:, confirmed_new: false, replaces: nil)
           new(user, list, params, confirmed_new, replaces).call
@@ -56,6 +59,8 @@ module Services
           success(outcome: outcome, submission: submission)
         rescue ActiveRecord::RecordInvalid => e
           failure(e.record.errors.full_messages)
+        rescue ActiveRecord::InvalidForeignKey
+          failure([GONE_MESSAGE], reason: :gone)
         end
 
         private
