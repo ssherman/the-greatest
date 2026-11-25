@@ -17,18 +17,14 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   before_action :require_domain_write!, only: [:supply_details, :retry]
   before_action :set_submission, only: [:approve, :merge, :reject, :supply_details, :retry]
 
-  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label
+  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label, :return_params
 
   def index
-    @tab = Submissions::QueueTabs.valid(params[:tab])
-    @counts = Submissions::QueueTabs.counts
-    @book_id = params[:book_id].to_s.match?(/\A\d{1,18}\z/) ? params[:book_id].to_i : nil
-    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :book_submissions)
+    load_page
     rows = Submissions::QueueTabs.scope(@tab).includes(*PRELOADS)
     rows = rows.where(book_id: @book_id) if @book_id
     rows = open_tab? ? rows.order(:created_at, :id) : rows.order(updated_at: :desc, id: :desc)
     @pagy, @submissions = pagy(rows, limit: PER_PAGE)
-    @preview = merge_preview
   end
 
   def approve
@@ -44,9 +40,8 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
     if dry_run?
       target = ::Books::Book.includes(:authors).find(result.data[:target_id])
-      notice = "Dry run: would merge #{book_label(@submission.book)} into #{book_label(target)}. " \
-        "The first is deleted and its readers' list entries move to the second. Nothing changed."
-      finish(result, notice, **preview_params(target))
+      render_preview("Dry run: would merge #{book_label(@submission.book)} into #{book_label(target)}. " \
+        "The first is deleted and its readers' list entries move to the second. Nothing changed.", target: target)
     else
       warnings = Array(result.data[:warnings]).map { |warning| warning.is_a?(Hash) ? (warning[:detail] || warning["detail"]).to_s : warning.to_s }.compact_blank
       finish(result, "Merged into #{book_label(result.data[:target])}.#{" Warnings: #{warnings.join(" ")}" if warnings.any?}")
@@ -60,13 +55,12 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
     return finish(result, nil) unless result.success?
 
     data = result.data
-    message = if dry_run?
-      "Dry run: would delete #{label} with #{view_context.pluralize(data[:author_ids].size, "provisional author")} " \
-        "and close #{view_context.pluralize(data[:submission_ids].size, "request")} as rejected. Nothing changed."
+    if dry_run?
+      render_preview("Dry run: would delete #{label} with #{view_context.pluralize(data[:author_ids].size, "provisional author")} " \
+        "and close #{view_context.pluralize(data[:submission_ids].size, "request")} as rejected. Nothing changed.")
     else
-      "Rejected. #{label} is deleted."
+      finish(result, "Rejected. #{label} is deleted.")
     end
-    finish(result, message)
   end
 
   def supply_details
@@ -85,19 +79,52 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   def set_submission
     @submission = ::Books::BookSubmission.find_by(id: params[:id])
-    redirect_to admin_books_book_submissions_path(tab: tab_param), alert: "That submission no longer exists." unless @submission
+    redirect_to admin_books_book_submissions_path(**return_params), alert: "That submission no longer exists." unless @submission
   end
 
-  # The redirect keeps the tab the admin was on; a tab that is not one of ours is the default.
-  def finish(result, notice, **query)
+  # Every action comes back to the page the admin was on (tab, page and book filter), so the queue
+  # carries on where it was. The notice says where a settled row went, so it is not lost.
+  def finish(result, notice)
     if result.success?
-      redirect_to admin_books_book_submissions_path(tab: tab_param, **query), notice: notice
+      redirect_to admin_books_book_submissions_path(**return_params), notice: "#{notice}#{moved_note}"
     else
-      redirect_to admin_books_book_submissions_path(tab: tab_param), alert: result.errors.map { |error| error[:detail] }.to_sentence
+      redirect_to admin_books_book_submissions_path(**return_params), alert: result.errors.map { |error| error[:detail] }.to_sentence
     end
   end
 
-  def tab_param = Submissions::QueueTabs.valid(params[:tab])
+  def moved_note
+    row = ::Books::BookSubmission.find_by(id: @submission.id)
+    tab = row && (row.review_status if %w[approved merged rejected needs_human].include?(row.review_status))
+    tab ? " It is now under the #{Submissions::QueueTabs::LABELS.fetch(tab)} tab." : ""
+  end
+
+  # A preview is answered in place, 422 as Turbo wants for a form that does not redirect, with the
+  # one submission shown and the form filled in from what was posted: the note, sources and target
+  # never travel in a URL or a cookie, and nothing is dropped. Back to the queue keeps tab, page and filter.
+  def render_preview(notice, target: nil)
+    load_page
+    @prefill = {submission_id: @submission.id, note: params[:note].to_s, sources: params[:sources].to_s, target: target}
+    @submissions = ::Books::BookSubmission.where(id: @submission.id).includes(*PRELOADS).to_a
+    @preview_only = true
+    flash.now[:notice] = notice
+    render :index, status: :unprocessable_entity
+  end
+
+  def load_page
+    @tab = return_params[:tab]
+    @book_id = return_params[:book_id]
+    @counts = Submissions::QueueTabs.counts
+    @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: :book_submissions)
+  end
+
+  # Where to come back to: the tab (one of ours), the page and the book filter (digits only).
+  def return_params
+    @return_params ||= {
+      tab: Submissions::QueueTabs.valid(params[:tab]),
+      page: params[:page].to_s[/\A[1-9]\d{0,6}\z/]&.to_i,
+      book_id: params[:book_id].to_s[/\A\d{1,18}\z/]&.to_i
+    }.compact
+  end
 
   def open_tab? = %w[needs_review needs_details].include?(@tab)
 
@@ -111,25 +138,6 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   def identifiers
     {"isbn13" => params[:isbn], "asin" => params[:asin], "goodreads_id" => params[:goodreads_id]}
       .transform_values { |value| value.to_s.strip }.reject { |_, value| value.empty? }
-  end
-
-  # What the preview carries to the next page, so the admin confirms the book they previewed
-  # with the note and sources they typed. Sources are left out when they would make the URL too long.
-  def preview_params(target)
-    sources_text = params[:sources].to_s
-    {merge_preview: @submission.id, target_id: target.id, note: params[:note].to_s.first(Submissions::Lease::MAX_NOTE),
-     sources: (sources_text unless sources_text.bytesize > 3000)}.compact
-  end
-
-  def merge_preview
-    submission_id = params[:merge_preview].to_s[/\A\d{1,18}\z/]
-    target_id = params[:target_id].to_s[/\A[1-9]\d{0,17}\z/]
-    return unless submission_id && target_id
-
-    target = ::Books::Book.includes(:authors).find_by(id: target_id, provisional: false)
-    return unless target
-
-    {submission_id: submission_id.to_i, target: target, note: params[:note].to_s.first(Submissions::Lease::MAX_NOTE), sources: params[:sources].to_s.first(3000)}
   end
 
   # A book as the admin must see it to be sure which one it is.

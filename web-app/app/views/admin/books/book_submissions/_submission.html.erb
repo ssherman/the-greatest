@@ -1,6 +1,7 @@
 <%# Locals: submission. Everything a reader typed is escaped and may be long, so it wraps anywhere. Links are
     built from the parsed id by the controller's helpers, never from raw_input. %>
 <% actions = row_actions(submission) %>
+<% prefill = @prefill if @prefill && @prefill[:submission_id] == submission.id %>
 <% book = submission.book %>
 <% status_class = {"added" => "badge-success", "failed" => "badge-error", "needs_details" => "badge-warning"}.fetch(submission.status, "badge-ghost") %>
 <% review_class = {"pending" => "badge-info", "needs_human" => "badge-warning", "approved" => "badge-success", "merged" => "badge-success", "rejected" => "badge-error"}.fetch(submission.review_status, "badge-ghost") %>
@@ -104,7 +105,7 @@
         <% end %>
 
         <% if actions.include?(:merge) && current_user_can_delete? %>
-          <% preview = @preview if @preview && @preview[:submission_id] == submission.id %>
+          <% preview = prefill if prefill&.dig(:target) %>
           <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="merge" <%= "open" if preview %>>
             <summary class="btn btn-sm btn-warning btn-outline">Merge</summary>
             <%= form_with url: merge_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
@@ -114,7 +115,7 @@
                 <div class="rounded-box border border-base-300 p-3 text-sm [overflow-wrap:anywhere]" data-testid="merge-target">
                   <p>Merge <strong><%= book_label(book) %></strong></p>
                   <p>into <strong data-testid="merge-target-label"><%= book_label(preview[:target]) %></strong></p>
-                  <%= link_to "Pick a different book", admin_books_book_submissions_path(tab: @tab), class: "link" %>
+                  <%= link_to "Pick a different book", admin_books_book_submissions_path(**return_params), class: "link" %>
                 </div>
                 <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2, note: preview[:note], sources: preview[:sources] %>
                 <p class="text-sm text-base-content/70">This deletes the provisional book permanently and moves its readers' list entries to the target.</p>
@@ -136,10 +137,10 @@
         <% end %>
 
         <% if actions.include?(:reject) && current_user_can_delete? %>
-          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="reject">
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="reject" <%= "open" if prefill && !prefill[:target] %>>
             <summary class="btn btn-sm btn-error btn-outline">Reject</summary>
             <%= form_with url: reject_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
-              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3 %>
+              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 3, note: prefill&.dig(:note), sources: prefill&.dig(:sources) %>
               <p class="text-sm text-base-content/70">Preview shows what would be deleted. Reject deletes the provisional book and its provisional authors permanently.</p>
               <div class="flex gap-2">
                 <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "reject-preview"} %>
@@ -154,7 +155,7 @@
           <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="supply_details">
             <summary class="btn btn-sm btn-outline">Supply details</summary>
             <%= form_with url: supply_details_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
-              <%= hidden_field_tag :tab, @tab, id: nil %>
+              <%= render "admin/books/book_submissions/return_fields" %>
               <fieldset class="fieldset">
                 <legend class="fieldset-legend">Title</legend>
                 <%= text_field_tag :title, nil, class: "input w-full", required: true, maxlength: 255, id: "title_#{submission.id}" %>
@@ -178,7 +179,7 @@
         <% end %>
 
         <% if actions.include?(:retry) && current_user_can_write? %>
-          <%= button_to "Retry", retry_admin_books_book_submission_path(submission), method: :post, params: {tab: @tab},
+          <%= button_to "Retry", retry_admin_books_book_submission_path(submission), method: :post, params: return_params,
                 class: "btn btn-sm btn-outline", form: {data: {action_name: "retry"}} %>
         <% end %>
       </div>

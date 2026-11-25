@@ -1,5 +1,5 @@
 <%# Locals: tab, rows, and optionally note and sources to prefill. The note and sources every decision carries; the id suffix keeps the ids unique per row. %>
-<%= hidden_field_tag :tab, tab, id: nil %>
+<%= render "admin/books/book_submissions/return_fields" %>
 <fieldset class="fieldset">
   <legend class="fieldset-legend">Note: the evidence</legend>
   <%= text_area_tag :note, local_assigns[:note], class: "textarea w-full", rows: rows, required: true, maxlength: 1000, id: nil %>

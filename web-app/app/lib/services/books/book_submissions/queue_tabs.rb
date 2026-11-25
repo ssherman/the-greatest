@@ -19,6 +19,8 @@ module Services
           "all" => -> { ::Books::BookSubmission.all }
         }.freeze
         KEYS = TABS.keys.freeze
+        LABELS = {"needs_review" => "Needs review", "needs_details" => "Needs details", "needs_human" => "Needs human",
+                  "approved" => "Approved", "merged" => "Merged", "rejected" => "Rejected", "failed" => "Failed", "all" => "All"}.freeze
         DEFAULT = "needs_review"
 
         module_function

@@ -236,9 +236,9 @@ module Admin
         sign_in_as(@admin, stub_auth: true)
         post_action(:merge, note: "same book", target_id: @target.id, dry_run: "true")
 
-        assert_response :redirect
-        assert_match(/Reader Title/, flash[:notice])
-        assert_match(/The Catalog Copy/, flash[:notice])
+        assert_response :unprocessable_entity
+        assert_match(/Reader Title/, notice_text)
+        assert_match(/The Catalog Copy/, notice_text)
         assert ::Books::Book.exists?(@row.book_id)
         assert_equal "pending", fresh(@row).review_status
       end
@@ -284,8 +284,8 @@ module Admin
         sign_in_as(@admin, stub_auth: true)
         post_action(:reject, note: "no such book", dry_run: "true")
 
-        assert_response :redirect
-        assert_match(/Reader Title/, flash[:notice])
+        assert_response :unprocessable_entity
+        assert_match(/Reader Title/, notice_text)
         assert ::Books::Book.exists?(@row.book_id)
         assert_equal "pending", fresh(@row).review_status
       end
@@ -335,7 +335,7 @@ module Admin
 
       # Merge preview and confirm
 
-      test "the preview names both books by title, authors, year and id, and carries the target, note and sources" do
+      test "the preview names both books by title, authors, year and id, and keeps the target, note and sources" do
         twin_a = ::Books::Book.create!(title: "War", first_published_year: 1999)
         twin_b = ::Books::Book.create!(title: "War", first_published_year: 2010)
         author = ::Books::Author.create!(name: "Twin Author")
@@ -344,17 +344,17 @@ module Admin
 
         post_action(:merge, note: "same", sources: "https://example.com/a", target_id: twin_b.id, dry_run: "true", tab: "all")
 
-        assert_match(/"War" by Twin Author \(2010, ##{twin_b.id}\)/, flash[:notice])
-        assert_no_match(/##{twin_a.id}\)/, flash[:notice])
-        assert_match(/"Reader Title" by Reviewable Author \d+ \(##{@row.book_id}\)/, flash[:notice])
-        follow_redirect!
+        assert_response :unprocessable_entity
+        assert_match(/"War" by Twin Author \(2010, ##{twin_b.id}\)/, notice_text)
+        assert_no_match(/##{twin_a.id}\)/, notice_text)
+        assert_match(/"Reader Title" by Reviewable Author \d+ \(##{@row.book_id}\)/, notice_text)
         assert_select "#submission-#{@row.id} [data-testid=merge-target-label]", text: /#{twin_b.id}/
         assert_select "#submission-#{@row.id} input[name=target_id][value='#{twin_b.id}']"
-        assert_select "#submission-#{@row.id} textarea[name=note]", text: "same"
-        assert_select "#submission-#{@row.id} textarea[name=sources]", text: /example.com\/a/
+        assert_equal "same", field("note")
+        assert_equal "https://example.com/a", field("sources")
       end
 
-      test "the real merge button exists only after a preview and its confirm names the target" do
+      test "the real merge button exists only after a preview and its confirm names both books" do
         target = ::Books::Book.create!(title: "Tom & Jerry's \"Guide\"", first_published_year: 1950)
         sign_in_as(@admin, stub_auth: true)
 
@@ -362,19 +362,117 @@ module Admin
         assert_select "#submission-#{@row.id} [data-testid=merge-preview]"
         assert_select "#submission-#{@row.id} [data-testid=merge-confirm]", count: 0
 
-        get admin_books_book_submissions_path(merge_preview: @row.id, target_id: target.id, note: "x")
+        post_action(:merge, note: "x", target_id: target.id, dry_run: "true")
         confirm = css_select("#submission-#{@row.id} [data-testid=merge-confirm]").first["data-turbo-confirm"]
         assert_includes confirm, "\"Tom & Jerry's \"Guide\"\" by unknown author (1950, ##{target.id})"
         assert_includes confirm, "Reader Title"
       end
 
-      test "a preview naming a provisional or missing target shows no target" do
+      test "a preview naming a provisional target is refused with an alert and shows no target" do
         provisional = ::Books::Book.create!(title: "Provisional Twin", provisional: true)
         sign_in_as(@admin, stub_auth: true)
-        get admin_books_book_submissions_path(merge_preview: @row.id, target_id: provisional.id)
+        post_action(:merge, note: "n", target_id: provisional.id, dry_run: "true")
 
-        assert_select "[data-testid=merge-target]", count: 0
-        assert_select "#submission-#{@row.id} [data-testid=merge-confirm]", count: 0
+        assert_response :redirect
+        assert_match(/provisional/, flash[:alert])
+      end
+
+      # Where the admin comes back to
+
+      def many_rows(count)
+        count.times { reviewable_submission(user: @reader) }
+      end
+
+      test "a row on page two can be previewed and merged, and the admin returns to page two" do
+        many_rows(52)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_book_submissions_path(page: 2)
+        assert_select "#submission-#{last.id} [data-testid=merge-preview]"
+        assert_select "#submission-#{@row.id}", count: 0
+        %w[approve merge reject].each do |action|
+          assert_select "#submission-#{last.id} details[data-action-name=#{action}] input[name=page][value='2']"
+          assert_select "#submission-#{last.id} details[data-action-name=#{action}] input[name=tab][value=needs_review]"
+        end
+
+        post_action(:merge, last, note: "same", target_id: @target.id, dry_run: "true", tab: "needs_review", page: "2")
+        assert_response :unprocessable_entity
+        assert_select "#submission-#{last.id} [data-testid=merge-confirm]"
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review", page: 2)
+
+        post_action(:merge, last, note: "same", target_id: @target.id, dry_run: "false", tab: "needs_review", page: "2")
+        assert_redirected_to admin_books_book_submissions_path(tab: "needs_review", page: 2)
+        assert_equal "merged", fresh(last).review_status
+      end
+
+      test "a row reached through the book filter can be previewed and merged, and the filter is kept" do
+        many_rows(55)
+        sign_in_as(@admin, stub_auth: true)
+        book_id = @row.book_id
+
+        get admin_books_book_submissions_path(tab: "all", book_id: book_id)
+        assert_select "#submission-#{@row.id} [data-testid=merge-preview]"
+        assert_select "[data-submission-id]", count: 1
+
+        post_action(:merge, note: "same", target_id: @target.id, dry_run: "true", tab: "all", book_id: book_id)
+        assert_response :unprocessable_entity
+        assert_select "#submission-#{@row.id} [data-testid=merge-confirm]"
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "all", book_id: book_id)
+
+        post_action(:merge, note: "same", target_id: @target.id, dry_run: "false", tab: "all", book_id: book_id)
+        assert_redirected_to admin_books_book_submissions_path(tab: "all", book_id: book_id)
+      end
+
+      test "a reject preview is answered in place with the form filled and the way back kept" do
+        many_rows(52)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:reject, last, note: "not a book", sources: "https://example.com/s", dry_run: "true", tab: "needs_review", page: "2")
+
+        assert_response :unprocessable_entity
+        assert_match(/Dry run: would delete/, notice_text)
+        assert_select "#submission-#{last.id} [data-testid=reject-confirm]"
+        assert_equal "not a book", field("note", "reject")
+        assert_equal "https://example.com/s", field("sources", "reject")
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review", page: 2)
+        assert ::Books::Book.exists?(last.book_id)
+      end
+
+      test "every action's redirect keeps the tab, the page and the book filter, and drops what is not digits" do
+        sign_in_as(@admin, stub_auth: true)
+        post_action(:approve, note: "ok", tab: "all", page: "3", book_id: @row.book_id.to_s)
+        assert_redirected_to admin_books_book_submissions_path(tab: "all", page: 3, book_id: @row.book_id)
+
+        other = reviewable_submission(user: @reader)
+        post_action(:approve, other, note: "ok", tab: "all", page: "3x", book_id: "7;8")
+        assert_redirected_to admin_books_book_submissions_path(tab: "all")
+      end
+
+      test "a settled row's notice says which tab it moved to" do
+        sign_in_as(@admin, stub_auth: true)
+        post_action(:approve, note: "ok")
+
+        assert_match(/under the Approved tab/, flash[:notice])
+      end
+
+      test "a long note and twenty long sources survive a preview and the real merge unchanged" do
+        note = "漢" * 1000
+        sources = Array.new(20) { |i| "https://example.com/#{"s" * 1900}#{i}" }.join("\n")
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:merge, note: note, sources: sources, target_id: @target.id, dry_run: "true")
+        assert_response :unprocessable_entity
+        assert_nil response.headers["Location"]
+        assert_equal note, field("note")
+        assert_equal sources, field("sources")
+
+        post_action(:merge, note: field("note"), sources: field("sources"), target_id: @target.id, dry_run: "false")
+        row = fresh(@row)
+        assert_equal "merged", row.review_status
+        assert_equal note, row.review_note
+        assert_equal 20, row.review_sources.size
       end
 
       test "a real merge reports each warning's detail, not the raw hash" do
@@ -440,6 +538,12 @@ module Admin
       end
 
       private
+
+      # The dry-run notice, as rendered on the page the preview answers with.
+      def notice_text = css_select(".alert").map(&:text).join(" ")
+
+      # A textarea's content as the admin sees it (the browser drops the newline right after the tag).
+      def field(name, action = "merge") = css_select("details[data-action-name=#{action}] textarea[name=#{name}]").first.text.sub(/\A\n/, "")
 
       def sql_query_count
         count = 0

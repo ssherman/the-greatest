@@ -461,6 +461,18 @@ module Services
       %w[search_admin_authors add_book_author remove_book_author update_author create_admin_author].each { |tool| assert_match(/\b#{tool}\b/, rule.call("- approve it")) }
     end
 
+    test "book submissions prompt says what a merge, an approval and a reject are for, and what sources are" do
+      prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
+      bullet = ->(start) { prompt.lines.find { |line| line.start_with?(start) } }
+
+      assert_match(/a book we hold is a merge, never an approval/, bullet.call("- merge it"))
+      assert_match(/A real book we do not hold is corrected and then approved\. Neither is a reject/, bullet.call("- merge it"))
+      assert_match(/http or https URLs of the pages showing the two are the same book/, bullet.call("- merge it"))
+      assert_match(/http or https URLs the approval rests on/, bullet.call("- approve it"))
+      assert_match(/http or https URLs of the searches and pages you checked/, bullet.call("- reject it"))
+      assert_match(/`sources`, a list of http or https URLs \(anything else is a 422\)/, prompt)
+    end
+
     test "book submissions prompt rejects only what is not a real book" do
       prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
       reject = prompt.lines.find { |line| line.start_with?("- reject it") }

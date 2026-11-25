@@ -110,8 +110,8 @@ test.describe("Books admin: book submissions", () => {
     await expect(page.getByText(/Dry run: would delete/)).toBeVisible();
     await expect(row(page, seeded.added_id)).toBeVisible();
 
-    await row(page, seeded.added_id).locator("summary", { hasText: "Reject" }).click();
-    await row(page, seeded.added_id).locator("details[data-action-name=reject] textarea[name=note]").fill("E2E: not a real book");
+    // The preview answers in place with the form open and the note kept: nothing to retype.
+    await expect(row(page, seeded.added_id).locator("details[data-action-name=reject] textarea[name=note]")).toHaveValue("E2E: not a real book");
     page.once("dialog", (dialog) => {
       expect(dialog.message()).toContain("E2E Book Submission Added");
       dialog.accept();
