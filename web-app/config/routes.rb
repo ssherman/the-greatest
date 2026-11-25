@@ -1060,7 +1060,7 @@ Rails.application.routes.draw do
 
       # Books users asked for that the catalogue lacks: the review queue, and the admin's own
       # decisions (the agents use the admin API).
-      resources :book_submissions, only: [:index] do
+      resources :book_submissions, only: [:index], constraints: {id: /\d+/} do
         member do
           post :approve
           post :merge

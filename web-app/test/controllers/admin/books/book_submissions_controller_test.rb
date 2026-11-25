@@ -246,7 +246,7 @@ module Admin
       test "merge moves the submission to the target as the admin through the admin page" do
         source_id = @row.book_id
         sign_in_as(@admin, stub_auth: true)
-        post_action(:merge, note: "same book", target_id: @target.id)
+        post_action(:merge, note: "same book", target_id: @target.id, dry_run: "false")
 
         assert_response :redirect
         row = fresh(@row)
@@ -262,7 +262,7 @@ module Admin
         ::Services::Books::BookSubmissions::Merge.stubs(:call).with { |**| seen = ActiveRecord::Base.connection.open_transactions }
           .returns(::Services::Books::BookSubmissions::Lease.failure(:conflict, "stubbed"))
 
-        post_action(:merge, note: "n", target_id: @target.id)
+        post_action(:merge, note: "n", target_id: @target.id, dry_run: "false")
 
         assert_equal baseline, seen
       end
@@ -271,9 +271,9 @@ module Admin
         provisional = ::Books::Book.create!(title: "Also Provisional", provisional: true)
         sign_in_as(@admin, stub_auth: true)
 
-        post_action(:merge, note: "n", target_id: provisional.id)
+        post_action(:merge, note: "n", target_id: provisional.id, dry_run: "false")
         assert_match(/provisional/, flash[:alert])
-        post_action(:merge, note: "n", target_id: "")
+        post_action(:merge, note: "n", target_id: "", dry_run: "false")
         assert flash[:alert].present?
         assert_equal "pending", fresh(@row).review_status
       end
@@ -293,7 +293,7 @@ module Admin
       test "reject deletes the provisional book and moves the row to rejected" do
         book_id = @row.book_id
         sign_in_as(@admin, stub_auth: true)
-        post_action(:reject, note: "not a real book")
+        post_action(:reject, note: "not a real book", dry_run: "false")
 
         assert_response :redirect
         row = fresh(@row)
@@ -305,10 +305,95 @@ module Admin
         list = lists(:books_list)
         list.list_items.create!(listable: @row.book, position: 1)
         sign_in_as(@admin, stub_auth: true)
-        post_action(:reject, note: "n")
+        post_action(:reject, note: "n", dry_run: "false")
 
         assert flash[:alert].present?
         assert ::Books::Book.exists?(@row.book_id)
+      end
+
+      # Only an explicit "false" is real
+
+      test "a missing or odd dry_run is a preview, never the real merge or reject" do
+        sign_in_as(@admin, stub_auth: true)
+
+        [{}, {dry_run: ""}, {dry_run: "0"}, {dry_run: "no"}, {"dry_run" => {"a" => "1"}}, {"dry_run" => ["false"]}].each do |extra|
+          post merge_admin_books_book_submission_path(@row), params: {note: "n", target_id: @target.id}.merge(extra)
+          post reject_admin_books_book_submission_path(@row), params: {note: "n"}.merge(extra)
+        end
+
+        assert ::Books::Book.exists?(@row.book_id)
+        assert_equal "pending", fresh(@row).review_status
+      end
+
+      test "an id that is not all digits reaches no row" do
+        sign_in_as(@admin, stub_auth: true)
+        post "/admin/book_submissions/#{@row.id}abc/approve", params: {note: "n"}
+
+        assert_response :not_found
+        assert_equal "pending", fresh(@row).review_status
+      end
+
+      # Merge preview and confirm
+
+      test "the preview names both books by title, authors, year and id, and carries the target, note and sources" do
+        twin_a = ::Books::Book.create!(title: "War", first_published_year: 1999)
+        twin_b = ::Books::Book.create!(title: "War", first_published_year: 2010)
+        author = ::Books::Author.create!(name: "Twin Author")
+        ::Books::BookAuthor.create!(book: twin_b, author: author, position: 1)
+        sign_in_as(@admin, stub_auth: true)
+
+        post_action(:merge, note: "same", sources: "https://example.com/a", target_id: twin_b.id, dry_run: "true", tab: "all")
+
+        assert_match(/"War" by Twin Author \(2010, ##{twin_b.id}\)/, flash[:notice])
+        assert_no_match(/##{twin_a.id}\)/, flash[:notice])
+        assert_match(/"Reader Title" by Reviewable Author \d+ \(##{@row.book_id}\)/, flash[:notice])
+        follow_redirect!
+        assert_select "#submission-#{@row.id} [data-testid=merge-target-label]", text: /#{twin_b.id}/
+        assert_select "#submission-#{@row.id} input[name=target_id][value='#{twin_b.id}']"
+        assert_select "#submission-#{@row.id} textarea[name=note]", text: "same"
+        assert_select "#submission-#{@row.id} textarea[name=sources]", text: /example.com\/a/
+      end
+
+      test "the real merge button exists only after a preview and its confirm names the target" do
+        target = ::Books::Book.create!(title: "Tom & Jerry's \"Guide\"", first_published_year: 1950)
+        sign_in_as(@admin, stub_auth: true)
+
+        get admin_books_book_submissions_path
+        assert_select "#submission-#{@row.id} [data-testid=merge-preview]"
+        assert_select "#submission-#{@row.id} [data-testid=merge-confirm]", count: 0
+
+        get admin_books_book_submissions_path(merge_preview: @row.id, target_id: target.id, note: "x")
+        confirm = css_select("#submission-#{@row.id} [data-testid=merge-confirm]").first["data-turbo-confirm"]
+        assert_includes confirm, "\"Tom & Jerry's \"Guide\"\" by unknown author (1950, ##{target.id})"
+        assert_includes confirm, "Reader Title"
+      end
+
+      test "a preview naming a provisional or missing target shows no target" do
+        provisional = ::Books::Book.create!(title: "Provisional Twin", provisional: true)
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(merge_preview: @row.id, target_id: provisional.id)
+
+        assert_select "[data-testid=merge-target]", count: 0
+        assert_select "#submission-#{@row.id} [data-testid=merge-confirm]", count: 0
+      end
+
+      test "a real merge reports each warning's detail, not the raw hash" do
+        warning = {code: "book_authors_not_transferred", detail: "2 author(s) did not transfer because the surviving book already has its own."}
+        ::Services::Books::AdminMerge.stubs(:call).returns(::Services::Books::AdminMerge::Result.new(success?: true, data: {warnings: [warning]}, errors: []))
+        sign_in_as(@admin, stub_auth: true)
+        post_action(:merge, note: "n", target_id: @target.id, dry_run: "false")
+
+        assert_includes flash[:notice], "Warnings: 2 author(s) did not transfer because the surviving book already has its own."
+        assert_no_match(/:detail|=>|\{/, flash[:notice])
+      end
+
+      test "the confirm text is escaped once" do
+        @row.book.update_columns(title: "The Handmaid's Tale & Co")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path
+
+        confirm = css_select("#submission-#{@row.id} [data-testid=reject-confirm]").first["data-turbo-confirm"]
+        assert_equal "Permanently delete \"The Handmaid's Tale & Co\"? This cannot be undone.", confirm
       end
 
       # Supply details and retry

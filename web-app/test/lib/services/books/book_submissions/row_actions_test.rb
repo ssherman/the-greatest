@@ -24,11 +24,11 @@ module Services
           end
         end
 
-        test "a row whose book is already public cannot be merged or rejected" do
+        test "a row whose book is already public is offered no decision" do
           row = reviewable_submission
           row.book.update_columns(provisional: false)
 
-          assert_equal %i[approve], actions(row)
+          assert_equal [], actions(row)
         end
 
         test "a book no submission created cannot be rejected" do
@@ -72,6 +72,55 @@ module Services
 
           assert_equal [], actions(rejected)
           assert_not Retry.call(submission: rejected, user: users(:admin_user)).success?
+        end
+
+        # Every offer is compared with what the service really answers, over every status, review
+        # state and kind of book. Merge and reject are asked with dry_run (they answer the same
+        # without destroying anything).
+        test "the offers match what the services accept across the whole matrix" do
+          admin = users(:admin_user)
+          target = ::Books::Book.create!(title: "Catalog Target")
+          kinds = %i[none provisional provisional_not_created public]
+          mismatches = []
+          checked = 0
+          accepted = Hash.new(0)
+
+          row_for = lambda do |status, review, kind|
+            attrs = {status: status, review_status: review}
+            attrs.update(book: nil, created_book: false) if kind == :none
+            attrs[:created_book] = false if kind == :provisional_not_created
+            row = reviewable_submission(**attrs)
+            row.book.update_columns(provisional: false) if kind == :public
+            row
+          end
+          offered = lambda do |row, action|
+            RowActions.for(::Books::BookSubmission.includes(book: :submissions).find(row.id)).include?(action)
+          end
+
+          ::Books::BookSubmission.statuses.each_key do |status|
+            ::Books::BookSubmission.review_statuses.each_key do |review|
+              kinds.each do |kind|
+                answers = {
+                  approve: ->(row) { Approve.call(submission: row, user: admin, via: "admin_ui", note: "n").success? },
+                  merge: ->(row) { Merge.call(submission: row, target_id: target.id, user: admin, via: "admin_ui", note: "n", dry_run: true).success? },
+                  reject: ->(row) { Reject.call(submission: row, user: admin, via: "admin_ui", note: "n", dry_run: true).success? },
+                  supply_details: ->(row) { SupplyDetails.call(submission: row, title: "T", author_names: ["A"], user: admin, via: "admin_ui", note: "n").success? },
+                  retry: ->(row) { Retry.call(submission: row, user: admin).success? }
+                }
+                answers.each do |action, ask|
+                  expected = offered.call(row_for.call(status, review, kind), action)
+                  actual = ask.call(row_for.call(status, review, kind))
+                  checked += 1
+                  accepted[action] += 1 if actual
+                  mismatches << [action, status, review, kind, "offered=#{expected} accepted=#{actual}"] if expected != actual
+                end
+              end
+            end
+          end
+
+          assert_equal 6 * 6 * 4 * 5, checked
+          assert_equal %i[approve merge reject retry supply_details].sort, accepted.keys.sort, "every action is accepted somewhere in the matrix"
+          assert_equal [], mismatches, mismatches.first(10).inspect
         end
       end
     end

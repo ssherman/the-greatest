@@ -1,10 +1,10 @@
-<%# Locals: tab, rows. The note and sources every decision carries; the id suffix keeps the ids unique per row. %>
+<%# Locals: tab, rows, and optionally note and sources to prefill. The note and sources every decision carries; the id suffix keeps the ids unique per row. %>
 <%= hidden_field_tag :tab, tab, id: nil %>
 <fieldset class="fieldset">
   <legend class="fieldset-legend">Note: the evidence</legend>
-  <%= text_area_tag :note, nil, class: "textarea w-full", rows: rows, required: true, maxlength: 1000, id: nil %>
+  <%= text_area_tag :note, local_assigns[:note], class: "textarea w-full", rows: rows, required: true, maxlength: 1000, id: nil %>
 </fieldset>
 <fieldset class="fieldset">
   <legend class="fieldset-legend">Sources, one URL per line (optional)</legend>
-  <%= text_area_tag :sources, nil, class: "textarea w-full", rows: 2, id: nil %>
+  <%= text_area_tag :sources, local_assigns[:sources], class: "textarea w-full", rows: 2, id: nil %>
 </fieldset>

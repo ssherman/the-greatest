@@ -104,21 +104,33 @@
         <% end %>
 
         <% if actions.include?(:merge) && current_user_can_delete? %>
-          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="merge">
+          <% preview = @preview if @preview && @preview[:submission_id] == submission.id %>
+          <details class="open:w-full" name="actions-<%= submission.id %>" data-action-name="merge" <%= "open" if preview %>>
             <summary class="btn btn-sm btn-warning btn-outline">Merge</summary>
             <%= form_with url: merge_admin_books_book_submission_path(submission), method: :post, class: "mt-2 space-y-2 sm:w-96" do %>
-              <fieldset class="fieldset">
-                <legend class="fieldset-legend">Merge into this book</legend>
-                <%= render AutocompleteComponent.new(name: "target_id", id: "target_id_#{submission.id}", url: search_admin_books_books_path(exclude_id: submission.book_id),
-                      placeholder: "Search for the book we already hold…", required: true) %>
-              </fieldset>
-              <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2 %>
-              <p class="text-sm text-base-content/70">Preview first. A merge deletes this provisional book permanently and moves its readers' list entries to the target.</p>
-              <div class="flex gap-2">
+              <% if preview %>
+                <%# Previewed: the target is fixed (a hidden field and the words), so what the confirm names is what is merged. %>
+                <%= hidden_field_tag :target_id, preview[:target].id, id: nil %>
+                <div class="rounded-box border border-base-300 p-3 text-sm [overflow-wrap:anywhere]" data-testid="merge-target">
+                  <p>Merge <strong><%= book_label(book) %></strong></p>
+                  <p>into <strong data-testid="merge-target-label"><%= book_label(preview[:target]) %></strong></p>
+                  <%= link_to "Pick a different book", admin_books_book_submissions_path(tab: @tab), class: "link" %>
+                </div>
+                <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2, note: preview[:note], sources: preview[:sources] %>
+                <p class="text-sm text-base-content/70">This deletes the provisional book permanently and moves its readers' list entries to the target.</p>
+                <%= button_tag "Merge", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-warning", data: {testid: "merge-confirm",
+                      turbo_confirm: "Merge #{book_label(book)} into #{book_label(preview[:target])}? This cannot be undone."} %>
+              <% else %>
+                <fieldset class="fieldset">
+                  <legend class="fieldset-legend">Merge into this book</legend>
+                  <%= render AutocompleteComponent.new(name: "target_id", id: "target_id_#{submission.id}",
+                        url: search_admin_books_books_path(exclude_id: submission.book_id, public_only: 1),
+                        placeholder: "Search for the book we already hold…", required: true) %>
+                </fieldset>
+                <%= render "admin/books/book_submissions/decision_fields", tab: @tab, rows: 2 %>
+                <p class="text-sm text-base-content/70">Preview first: it names both books, then you confirm the merge.</p>
                 <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "merge-preview"} %>
-                <%= button_tag "Merge", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-warning",
-                      data: {turbo_confirm: "Merge #{truncate(book.title, length: 60)} into the book you chose? This cannot be undone."} %>
-              </div>
+              <% end %>
             <% end %>
           </details>
         <% end %>
@@ -132,7 +144,7 @@
               <div class="flex gap-2">
                 <%= button_tag "Preview", type: "submit", name: "dry_run", value: "true", class: "btn btn-sm btn-outline", data: {testid: "reject-preview"} %>
                 <%= button_tag "Reject", type: "submit", name: "dry_run", value: "false", class: "btn btn-sm btn-error", data: {testid: "reject-confirm",
-                      turbo_confirm: "Permanently delete #{truncate(book.title, length: 60).inspect}? This cannot be undone."} %>
+                      turbo_confirm: "Permanently delete \"#{book.title.to_s.truncate(60)}\"? This cannot be undone."} %>
               </div>
             <% end %>
           </details>

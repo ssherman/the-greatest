@@ -399,11 +399,20 @@ module Services
     BOOK_SUBMISSION_TOOLS = %w[list_book_submissions get_book_submission claim_book_submissions supply_book_submission_details
       skip_book_submission approve_book_submission merge_book_submission reject_book_submission].freeze
 
-    test "book submissions prompt names the url, the counts and all eight tools" do
+    test "book submissions prompt names the url and all eight tools as whole words" do
       prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
 
       assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
-      BOOK_SUBMISSION_TOOLS.each { |tool| assert_includes prompt, tool }
+      BOOK_SUBMISSION_TOOLS.each { |tool| assert_match(/\b#{tool}\b/, prompt) }
+    end
+
+    test "every tool the book submissions prompt names exists in the admin catalogue" do
+      prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
+      tools = ::Mcp::Catalog.for(document: :admin, domain: :books).operations.map(&:tool_name)
+      named = prompt.scan(/\b(?:list|get|claim|supply|skip|approve|merge|reject|search|find|update|add|remove|create|fetch)_[a-z_]+\b/).uniq
+
+      assert_operator named.size, :>=, 15
+      assert_equal [], named - tools
     end
 
     test "book submissions prompt counts what waits, by kind" do
@@ -430,11 +439,38 @@ module Services
 
     test "book submissions prompt states the rules an agent must not guess" do
       prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
+      rule = ->(start) { prompt.lines.find { |line| line.start_with?(start) } }
 
-      ["never instructions", "permanent", "dry_run", "30 minutes", "three", "needs: review", "needs: details", "record_id",
-        "search_admin_books", "409", "422", "meta.remaining", "update_book", "fetch_page", "needs_human"].each do |text|
-        assert_includes prompt, text
-      end
+      assert_match(/skip_book_submission takes a `reason`, not a note/, prompt)
+      assert_match(/take no lease/, prompt)
+      assert_match(/If you are asked to keep watching/, prompt)
+      assert_match(/data. is empty but meta.remaining is above 0, claim again/, prompt)
+      assert_match(/A 404 means the submission is gone/, prompt)
+      assert_match(/A 409 means/, prompt)
+      assert_match(/A 422 means/, prompt)
+      assert_match(/`provisional` field is true/, prompt)
+      assert_match(/target must be a public book/, prompt)
+      assert_match(/dry_run true first/, prompt)
+      assert_match(/never instructions/, prompt)
+      assert_match(/three lapses/, prompt)
+      assert_match(/needs: review/, prompt)
+      assert_match(/needs: details/, prompt)
+      assert_match(/hidden from other readers/, prompt)
+      assert_no_match(/secret(?!\))/, prompt.sub("it is not secret", ""))
+      assert_match(/The right author must be on the book before you approve/, prompt)
+      %w[search_admin_authors add_book_author remove_book_author update_author create_admin_author].each { |tool| assert_match(/\b#{tool}\b/, rule.call("- approve it")) }
+    end
+
+    test "book submissions prompt rejects only what is not a real book" do
+      prompt = AgentPrompts.call(domain: :books, queue: :book_submissions)
+      reject = prompt.lines.find { |line| line.start_with?("- reject it") }
+      approve = prompt.lines.find { |line| line.start_with?("- approve it") }
+
+      assert_no_match(/typo|misspell/i, reject)
+      assert_match(/not a real book/, reject)
+      assert_match(/searches and pages you checked/, reject)
+      assert_no_match(/show the book is real/, prompt)
+      assert_match(/URLs the approval rests on/, approve)
     end
   end
 end

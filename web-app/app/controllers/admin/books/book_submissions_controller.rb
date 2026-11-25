@@ -17,7 +17,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   before_action :require_domain_write!, only: [:supply_details, :retry]
   before_action :set_submission, only: [:approve, :merge, :reject, :supply_details, :retry]
 
-  helper_method :row_actions, :goodreads_url, :amazon_url
+  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label
 
   def index
     @tab = Submissions::QueueTabs.valid(params[:tab])
@@ -28,6 +28,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
     rows = rows.where(book_id: @book_id) if @book_id
     rows = open_tab? ? rows.order(:created_at, :id) : rows.order(updated_at: :desc, id: :desc)
     @pagy, @submissions = pagy(rows, limit: PER_PAGE)
+    @preview = merge_preview
   end
 
   def approve
@@ -42,26 +43,28 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
     return finish(result, nil) unless result.success?
 
     if dry_run?
-      finish(result, "Dry run: would merge \"#{title_of(@submission.book)}\" into \"#{title_of(::Books::Book.find_by(id: result.data[:target_id]))}\". " \
-        "The first is deleted and its readers' list entries move to the second. Nothing changed.")
+      target = ::Books::Book.includes(:authors).find(result.data[:target_id])
+      notice = "Dry run: would merge #{book_label(@submission.book)} into #{book_label(target)}. " \
+        "The first is deleted and its readers' list entries move to the second. Nothing changed."
+      finish(result, notice, **preview_params(target))
     else
-      warnings = Array(result.data[:warnings]).presence
-      finish(result, "Merged into \"#{title_of(result.data[:target])}\".#{" Warnings: #{warnings.to_sentence}" if warnings}")
+      warnings = Array(result.data[:warnings]).map { |warning| warning.is_a?(Hash) ? (warning[:detail] || warning["detail"]).to_s : warning.to_s }.compact_blank
+      finish(result, "Merged into #{book_label(result.data[:target])}.#{" Warnings: #{warnings.join(" ")}" if warnings.any?}")
     end
   end
 
   def reject
-    book = @submission.book
+    label = book_label(@submission.book)
     result = Submissions::Reject.call(submission: @submission, user: current_user, via: VIA, note: params[:note].to_s,
       sources: sources, dry_run: dry_run?)
     return finish(result, nil) unless result.success?
 
     data = result.data
     message = if dry_run?
-      "Dry run: would delete \"#{title_of(book)}\" with #{view_context.pluralize(data[:author_ids].size, "provisional author")} " \
+      "Dry run: would delete #{label} with #{view_context.pluralize(data[:author_ids].size, "provisional author")} " \
         "and close #{view_context.pluralize(data[:submission_ids].size, "request")} as rejected. Nothing changed."
     else
-      "Rejected. \"#{title_of(book)}\" is deleted."
+      "Rejected. #{label} is deleted."
     end
     finish(result, message)
   end
@@ -86,9 +89,9 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   end
 
   # The redirect keeps the tab the admin was on; a tab that is not one of ours is the default.
-  def finish(result, notice)
+  def finish(result, notice, **query)
     if result.success?
-      redirect_to admin_books_book_submissions_path(tab: tab_param), notice: notice
+      redirect_to admin_books_book_submissions_path(tab: tab_param, **query), notice: notice
     else
       redirect_to admin_books_book_submissions_path(tab: tab_param), alert: result.errors.map { |error| error[:detail] }.to_sentence
     end
@@ -98,7 +101,8 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   def open_tab? = %w[needs_review needs_details].include?(@tab)
 
-  def dry_run? = params[:dry_run] == "true"
+  # Only an explicit "false" is the real thing. A missing or odd value (a hash, an array) is a preview.
+  def dry_run? = params[:dry_run] != "false"
 
   def sources = params[:sources].to_s.lines.map(&:strip).reject(&:blank?)
 
@@ -109,7 +113,32 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
       .transform_values { |value| value.to_s.strip }.reject { |_, value| value.empty? }
   end
 
-  def title_of(book) = book ? book.title.to_s.truncate(80) : "(unknown)"
+  # What the preview carries to the next page, so the admin confirms the book they previewed
+  # with the note and sources they typed. Sources are left out when they would make the URL too long.
+  def preview_params(target)
+    sources_text = params[:sources].to_s
+    {merge_preview: @submission.id, target_id: target.id, note: params[:note].to_s.first(Submissions::Lease::MAX_NOTE),
+     sources: (sources_text unless sources_text.bytesize > 3000)}.compact
+  end
+
+  def merge_preview
+    submission_id = params[:merge_preview].to_s[/\A\d{1,18}\z/]
+    target_id = params[:target_id].to_s[/\A[1-9]\d{0,17}\z/]
+    return unless submission_id && target_id
+
+    target = ::Books::Book.includes(:authors).find_by(id: target_id, provisional: false)
+    return unless target
+
+    {submission_id: submission_id.to_i, target: target, note: params[:note].to_s.first(Submissions::Lease::MAX_NOTE), sources: params[:sources].to_s.first(3000)}
+  end
+
+  # A book as the admin must see it to be sure which one it is.
+  def book_label(book)
+    return "(unknown)" unless book
+
+    authors = book.authors.map(&:name).join(", ").presence || "unknown author"
+    "\"#{book.title.to_s.truncate(80)}\" by #{authors.truncate(80)} (#{[book.first_published_year, "##{book.id}"].compact.join(", ")})"
+  end
 
   def row_actions(row) = Submissions::RowActions.for(row)
 

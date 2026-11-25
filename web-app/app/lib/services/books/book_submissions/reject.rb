@@ -52,6 +52,14 @@ module Services
           @dry_run = dry_run
         end
 
+        # Whether the admin page may offer this row a rejection: open, a provisional book that a
+        # submission created. (Whether anyone else uses the book is the service's answer, found
+        # by its preview.) Read from a loaded row with its book's submissions.
+        def self.available?(row)
+          row.book_id.present? && Lease::OPEN_REVIEWS.include?(row.review_status) && row.book&.provisional? == true &&
+            row.book.submissions.any?(&:created_book?)
+        end
+
         def call
           Lease.acting(@user, @via) { run }
         end

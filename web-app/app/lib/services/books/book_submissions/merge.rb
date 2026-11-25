@@ -54,6 +54,10 @@ module Services
           @dry_run = dry_run
         end
 
+        # Whether the admin page may offer this row a merge: the state_failure rules for the admin
+        # page (a needs_human row is allowed there), read from a loaded row.
+        def self.available?(row) = row.book_id.present? && Lease::OPEN_REVIEWS.include?(row.review_status) && row.book&.provisional? == true
+
         def call
           Lease.acting(@user, @via) { run }
         end

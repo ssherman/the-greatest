@@ -35,6 +35,10 @@ module Services
             note: note, lease_token: lease_token).call
         end
 
+        # Whether the admin page may offer this row the form: no book, still waiting for details,
+        # and a review state the admin path takes. Read from a loaded row.
+        def self.available?(row) = row.book_id.nil? && STATUSES.include?(row.status) && ADMIN_REVIEWS.include?(row.review_status)
+
         def initialize(submission:, title:, author_names:, identifiers:, user:, via:, note:, lease_token:)
           @submission = submission
           @title = title

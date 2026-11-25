@@ -94,6 +94,19 @@ module Admin
         assert_includes body.first["text"], @book.title
       end
 
+      test "search for a submission's merge form leaves out provisional books and labels author and id" do
+        sign_in_as(@admin_user, stub_auth: true)
+        provisional = ::Books::Book.create!(title: "Provisional War", provisional: true)
+        ::Search::Books::Search::BookAutocomplete.expects(:call).with("war", size: 20, book_kind: nil, include_provisional: false)
+          .returns([{id: provisional.id.to_s, score: 1.0, source: {}}, {id: @book.id.to_s, score: 1.0, source: {}}])
+        get search_admin_books_books_path(q: "war", public_only: "1")
+
+        body = JSON.parse(response.body)
+        assert_equal [@book.id], body.map { |entry| entry["value"] }
+        assert_includes body.first["text"], "##{@book.id}"
+        assert_includes body.first["text"], " by "
+      end
+
       test "search returns an empty array when nothing matches" do
         sign_in_as(@admin_user, stub_auth: true)
         ::Search::Books::Search::BookAutocomplete.stubs(:call).returns([])

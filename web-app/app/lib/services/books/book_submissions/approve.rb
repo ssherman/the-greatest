@@ -37,6 +37,10 @@ module Services
           @sources = sources
         end
 
+        # Whether the admin page may offer this row an approval: still open, and a book that is
+        # still provisional (the service refuses a public one). Read from a loaded row.
+        def self.available?(row) = row.book_id.present? && Lease::OPEN_REVIEWS.include?(row.review_status) && row.book&.provisional? == true
+
         def call
           Lease.acting(@user, @via) { run }
         end
