@@ -10,7 +10,7 @@ Every admin tool takes integer ids, never slugs or names. Take each id from the 
 
 `merge_book`, `merge_author`, `merge_categories`, `delete_admin_category` and `delete_admin_author` are permanent. A merge folds the source records into the target and deletes them, with no undelete. Deleting a category removes every book and author link to it, and restoring the category does not bring the links back. Fiction, Nonfiction, Poetry and Religion & Spirituality are protected: they cannot be deleted or merged, as source or target, and the tools refuse. Do not rename them or change their parent either; the API would allow it, but other parts of the site depend on those four. To keep the links of any other category, merge it into another category instead of deleting it. `delete_admin_author` deletes only an author no book credits and who holds no translator or editor credit: an empty record left by a merge or split, or a junk name that is no person. A duplicate of a real person is merged with `merge_author` instead, so its old page redirects.
 
-These four tools take `dry_run`, and it defaults to false. So for every one of them, dry-run it, check it, then run it:
+These five tools take `dry_run`, and so do `merge_book_submission` and `reject_book_submission`; it defaults to false. So for every one of them, dry-run it, check it, then run it:
 
 1. Call it with `dry_run: true`. It changes nothing.
 2. Check the dry run names the records you mean, the right way round: which record is the target and which the source, and for categories the book and author link counts you expect.

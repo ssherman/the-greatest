@@ -959,7 +959,9 @@ Steps marked "Shane runs with `!`" change production, so an agent does not run t
 A reader adds a book the site lacks from a list page; an admin or an agent approves it. Details:
 `docs/features/user-added-books.md`. Steps marked "Shane runs with `!`" use production, so an agent does
 not run them. The deploy's four migrations only add a table (`books_book_submissions`) and columns to it,
-so they are safe to run live and need no downtime.
+so they are safe to run live and need no downtime. One condition: do not merge while the legacy sync or
+another bulk writer is running, because creating the table briefly locks writes on `users`, `user_lists`,
+`user_list_items`, `match_decisions` and `books_books`.
 
 1. **Confirm both new Sidekiq queues are being worked.** After the deploy, Sidekiq must have restarted
    and be serving `goodreads_fetch_priority` and `serial_priority` (they sit in the `goodreads_fetch` and
@@ -969,8 +971,9 @@ so they are safe to run live and need no downtime.
    `goodreads_fetch_priority` is not served, a Goodreads add never fetches and the sweep fails the row as
    "lost job"; if `serial_priority` is not served, the Amazon step of the early lookups stalls.
 2. **Check Amazon's `get_items` response. Shane runs with `!`.** This uses none of the new code, so it can run before the merge. One real call for a known ASIN and one
-   for an unknown one, each with `bin/rails runner` on a production host (not a console):
-   `ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV["ASIN"]], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'`
+   for an unknown one, each with `bin/rails runner` in a shell inside the worker container (not a console;
+   `ASIN=x docker compose exec ...` does not pass the variable in):
+   `ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV.fetch("ASIN")], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'`
    Run it once as shown, then again with `ASIN=B0ZZZZZZZZ`. It prints only the status, the top-level keys
    and the titles, never headers or credentials (the same command is in
    `docs/features/amazon-creators-api.md`, "Known gaps"). The known
