@@ -25,13 +25,16 @@ module Services
           # holds one as a whole word is not a given name.
           BLOCKED_WORDS = %w[saint st sir dame lord lady king queen emperor empress pope prince princess duke duchess
             count countess baron baroness earl marquis bishop archbishop cardinal rabbi of and inc ltd llc co company
-            press publishing university ministry department &].freeze
+            press publishing university ministry department & dr mr mrs ms miss mx prof professor rev revd].freeze
           # Corporate and connective words: a surname part holding one is a body,
           # not a person ("University of California, Los Angeles"). Not the title
           # words: King, Pope and Bishop are real surnames.
           CORPORATE_WORDS = %w[of and & inc ltd llc co company press publishing university ministry department].freeze
           # Suffixes and credentials never belong inside a given-name part.
           POST_NAME_WORDS = %w[jr sr ii iii iv phd ph md mba cpa esq rn dds dvm jd msc bsc].freeze
+          # Credentials never belong inside a surname part either ("Airton PhD, Lee");
+          # Jr, Sr and the numerals do ("King Jr., Martin Luther").
+          CREDENTIALS = (POST_NAME_WORDS - %w[jr sr ii iii iv]).freeze
           # Two or more people in one value.
           SEVERAL_PEOPLE = %r{[/;|&،]}
           # Native order there is surname first, so a "Last, First" flip would reverse it.
@@ -76,6 +79,18 @@ module Services
           #   Output is "First Last" (or "First Last Jr.").
           # - Anything else with a comma (an epithet part, a part mixing words
           #   and dates, a lowercase given name) is nil.
+          # An Amazon contributor name. Amazon writes most of them "Last, First"
+          # (86% of the comma credits on our stored Amazon editions flip to the
+          # book's own author), so a name with a comma is read by the same
+          # rules as a WorldCat creator, and nil when it is not a shape we are
+          # sure of. A name with no comma is taken as Amazon gives it.
+          def amazon_person(raw)
+            name = text(raw)
+            return name unless name&.include?(",")
+
+            world_cat_person(name)
+          end
+
           def world_cat_person(raw)
             raw = scrubbed(raw)
             return nil if raw.match?(SEVERAL_PEOPLE)
@@ -126,11 +141,11 @@ module Services
           def comma_person(name)
             surname, *parts = name.split(",", -1).map { |part| tidy_part(part) }
             parts.pop while parts.last == ""
-            return nil if surname.empty? || corporate?(surname)
+            return nil if surname.empty? || corporate?(surname) || credential?(surname)
 
             given = suffix = nil
             parts.each_with_index do |part, index|
-              if part.match?(LIFE_DATES) || ROLES.include?(part)
+              if part.match?(LIFE_DATES) || ROLES.include?(part.downcase)
                 next
               elsif part.match?(SUFFIX) && suffix.nil? && (index.zero? || given)
                 suffix = part
@@ -146,6 +161,10 @@ module Services
           # A period standing alone between words is dropped, then the closing period.
           def tidy_part(part)
             strip_closing_period(part.squish.gsub(/(?<=\S)\s+\.\s+(?=\S)/, " "))
+          end
+
+          def credential?(text)
+            text.split.any? { |word| CREDENTIALS.include?(word.downcase.delete(".,")) }
           end
 
           def corporate?(text)

@@ -26,11 +26,16 @@ module Services
               .filter_map { |product| answer(product) }.first
           end
 
+          # One author name we cannot read makes the whole product unusable:
+          # leaving that person out could credit the book to someone else.
           def answer(product)
+            people = ::Services::Books::AmazonBookCheck.author_names(product).map { |name| Names.amazon_person(name) }
+            return nil if people.include?(nil)
+
             title, subtitle = ::Services::Books::AmazonBookCheck.split_title(product.dig("itemInfo", "title", "displayValue"))
             answer = Answer.build(
               title: title, subtitle: subtitle,
-              author_names: ::Services::Books::AmazonBookCheck.author_names(product),
+              author_names: people,
               year: product.dig("itemInfo", "contentInfo", "publicationDate", "displayValue")
             )
             answer if answer.usable?
