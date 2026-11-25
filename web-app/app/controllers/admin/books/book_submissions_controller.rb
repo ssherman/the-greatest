@@ -17,7 +17,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   before_action :require_domain_write!, only: [:supply_details, :retry]
   before_action :set_submission, only: [:approve, :merge, :reject, :supply_details, :retry]
 
-  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label, :return_params, :queue_path
+  helper_method :row_actions, :goodreads_url, :amazon_url, :book_label, :return_params, :queue_path, :landing_path
 
   def index
     load_page
@@ -88,13 +88,13 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
 
   def set_submission
     @submission = ::Books::BookSubmission.find_by(id: params[:id])
-    redirect_to admin_books_book_submissions_path(submission_id: params[:id], **return_params), alert: "That submission no longer exists." unless @submission
+    redirect_to landing_path(params[:id]), alert: "That submission no longer exists." unless @submission
   end
 
   # Every action lands on that one submission as it now is (its row, its status, its book or the
   # lack of one), with the notice or the alert, and the way back to the tab and page the admin came from.
   def finish(result, notice)
-    path = admin_books_book_submissions_path(submission_id: @submission.id, **return_params)
+    path = landing_path(@submission.id)
     if result.success?
       redirect_to path, notice: "#{notice}#{moved_note}"
     else
@@ -134,6 +134,10 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
       page: params[:page].to_s[/\A[1-9]\d{0,6}\z/]&.to_i
     }.compact
   end
+
+  # One submission's own view, wherever its row now sits in the queue, keeping the way back. Any link or
+  # redirect that means "this submission" goes here: a tab or a page may no longer hold its row.
+  def landing_path(id) = admin_books_book_submissions_path(submission_id: id, **return_params)
 
   # The queue as the admin left it. A page past the end (its last row was settled) is the last page.
   def queue_path

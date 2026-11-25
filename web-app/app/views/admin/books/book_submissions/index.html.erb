@@ -22,12 +22,13 @@
     <% end %>
   </div>
 
-  <% if @preview_only || @single_view %>
+  <% one_submission = @preview_only || @single_view %>
+  <% if one_submission && @submissions.any? %>
     <div class="alert alert-info" data-testid="single-submission">
       <span><%= @preview_only ? "Showing the submission you are previewing. Nothing has changed yet." : "Showing the one submission, as it is now." %></span>
       <%= link_to "Back to the queue", queue_path, class: "btn btn-sm btn-ghost", data: {testid: "back-to-queue"} %>
     </div>
-  <% elsif @book_id %>
+  <% elsif @book_id && !one_submission %>
     <div class="alert alert-info" data-testid="book-filter">
       <span>Showing the submissions for book
         <% if ::Books::Book.exists?(@book_id) %><%= link_to "##{@book_id}", admin_books_book_path(@book_id), class: "link" %><% else %>#<%= @book_id %> (deleted)<% end %>
@@ -45,5 +46,6 @@
     <% end %>
   <% else %>
     <p class="text-base-content/70" data-testid="no-submissions">Nothing here.</p>
+    <% if one_submission %><%= link_to "Back to the queue", queue_path, class: "btn btn-sm btn-ghost", data: {testid: "back-to-queue"} %><% end %>
   <% end %>
 </div>

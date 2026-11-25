@@ -115,7 +115,7 @@
                 <div class="rounded-box border border-base-300 p-3 text-sm [overflow-wrap:anywhere]" data-testid="merge-target">
                   <p>Merge <strong><%= book_label(book) %></strong></p>
                   <p>into <strong data-testid="merge-target-label"><%= book_label(preview[:target]) %></strong></p>
-                  <%= link_to "Pick a different book", queue_path, class: "link" %>
+                  <%= link_to "Pick a different book", landing_path(submission.id), class: "link" %>
                 </div>
                 <%= render "admin/books/book_submissions/decision_fields", rows: 2, note: preview[:note], sources: preview[:sources] %>
                 <p class="text-sm text-base-content/70">This deletes the provisional book permanently and moves its readers' list entries to the target.</p>

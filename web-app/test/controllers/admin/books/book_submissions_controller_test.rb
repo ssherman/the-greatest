@@ -531,6 +531,56 @@ module Admin
         assert_select "[data-submission-id]", minimum: 1
       end
 
+      # "Pick a different book", followed from where the admin was: back on that submission, unfilled, way back kept
+
+      test "pick a different book returns to a submission whose lookup added its book after supply details" do
+        row = stuck_row
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(tab: "needs_details")
+        submit_form(:supply_details, row, note: "found", title: "T", authors: "A")
+        assert_lands_on(row, tab: "needs_details")
+        row.update_columns(status: ::Books::BookSubmission.statuses[:added], book_id: ::Books::Book.create!(title: "Looked Up", provisional: true).id,
+          created_book: true, review_status: ::Books::BookSubmission.review_statuses[:pending])
+        get landing(row, tab: "needs_details")
+
+        assert_pick_a_different_book_returns(row, tab: "needs_details")
+        get css_select("[data-testid=back-to-queue]").first["href"]
+        assert_select "#submission-#{row.id}", count: 0
+      end
+
+      test "pick a different book returns to a submission reached from the user-added badge, past page one of all" do
+        many_rows(55)
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(tab: "all")
+        assert_select "#submission-#{@row.id}", count: 0
+        get admin_books_book_path(@row.book)
+        get css_select("[data-testid=user-added-badge]").first["href"]
+
+        assert_pick_a_different_book_returns(@row, tab: "all")
+      end
+
+      test "pick a different book returns to a submission opened alone whose queue row is past page one" do
+        many_rows(52)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(tab: "needs_review")
+        assert_select "#submission-#{last.id}", count: 0
+        get landing(last, tab: "needs_review")
+
+        assert_pick_a_different_book_returns(last, tab: "needs_review")
+      end
+
+      test "pick a different book from page two returns to the submission with page two as the way back" do
+        many_rows(52)
+        last = reviewable_submission(user: @reader, title: "The Last Row")
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(tab: "needs_review", page: 2)
+
+        assert_pick_a_different_book_returns(last, tab: "needs_review", page: 2)
+        get css_select("[data-testid=back-to-queue]").first["href"]
+        assert_select "#submission-#{last.id}"
+      end
+
       test "an unknown or non-digit submission id shows an empty page with the tabs, not an error" do
         sign_in_as(@admin, stub_auth: true)
 
@@ -540,6 +590,35 @@ module Admin
           assert_select "[data-testid=no-submissions]"
           assert_select "[data-testid=submission-tabs]"
         end
+      end
+
+      test "the single submission banner shows only over a row, and an unknown id claims no filter either" do
+        sign_in_as(@admin, stub_auth: true)
+        get landing(@row)
+        assert_select "[data-testid=single-submission]", count: 1
+        assert_select "[data-testid=back-to-queue]", count: 1
+
+        get admin_books_book_submissions_path(submission_id: "999999999", book_id: @row.book_id)
+        assert_select "[data-testid=no-submissions]"
+        assert_select "[data-testid=single-submission]", count: 0
+        assert_select "[data-testid=book-filter]", count: 0
+
+        get admin_books_book_submissions_path(tab: "approved")
+        assert_select "[data-testid=no-submissions]"
+        assert_select "[data-testid=back-to-queue]", count: 0
+      end
+
+      test "a submission that no longer exists still offers the way back to the page the admin was on" do
+        many_rows(52)
+        sign_in_as(@admin, stub_auth: true)
+        post approve_admin_books_book_submission_path(id: 0), params: {note: "n", tab: "needs_review", page: "2"}
+        follow_redirect!
+
+        assert_select "[data-testid=single-submission]", count: 0
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(tab: "needs_review", page: 2)
+        get css_select("[data-testid=back-to-queue]").first["href"]
+        assert_select "[data-submission-id]", minimum: 1
+        assert_equal 2, @controller.view_assigns["pagy"].page
       end
 
       test "tab links carry no filter and a filter whose book is gone shows no dead link" do
@@ -653,6 +732,29 @@ module Admin
 
       # The dry-run notice, as rendered on the page the preview answers with.
       def notice_text = css_select(".alert").map(&:text).join(" ")
+
+      # Posts a row's form as the page rendered it: its own action and hidden fields, plus what the admin types.
+      def submit_form(action, row, **typed)
+        form = css_select("#submission-#{row.id} details[data-action-name=#{action}] form").first
+        hidden = form.css("input[type=hidden]").to_h { |input| [input["name"], input["value"]] }
+        post form["action"], params: hidden.merge(typed.stringify_keys)
+      end
+
+      # From the page now open: previews a merge into the wrong book, follows the link, and asserts it opens
+      # that submission alone, with no target picked, the autocomplete back and the way back kept.
+      def assert_pick_a_different_book_returns(row, **back)
+        submit_form(:merge, row, note: "same", target_id: @target.id, dry_run: "true")
+        assert_response :unprocessable_entity
+        link = css_select("#submission-#{row.id} [data-testid=merge-target] a").first
+
+        get link["href"]
+        assert_response :success
+        assert_select "#submission-#{row.id}"
+        assert_select "[data-submission-id]", count: 1
+        assert_select "#submission-#{row.id} [data-testid=merge-preview]"
+        assert_select "#submission-#{row.id} [data-testid=merge-target]", count: 0
+        assert_select "[data-testid=back-to-queue][href=?]", admin_books_book_submissions_path(**back)
+      end
 
       # A textarea's content as the admin sees it (the browser drops the newline right after the tag).
       def field(name, action = "merge") = css_select("details[data-action-name=#{action}] textarea[name=#{name}]").first.text.sub(/\A\n/, "")
