@@ -284,8 +284,8 @@ new books. The old-site change is a separate repo; the doc work is last.
 - [ ] **Step 2: Launch todo rewrite** to spec section 6's structure. Inputs, all to be re-checked, never copied blind:
   the 2026-11-26 command audit (fix: §1/§2 tasks refuse after `sync_init`; §11's "replay stays paused" vs the weekly
   `goodreads_replay:apply`; §5 step 5's full replay pass is retired; §12 "stage two of section 11" → section 11 step 5;
-  §9 step 8's deadline is 25 s, not 5 s; `SIDEKIQ_CONCURRENCY` defaults to 5 in `config/sidekiq.yml`, so say what
-  production should return to after a pass; §18's `reparse` needs a `parser_version` bump; §15 step 13 skips books with
+  §9 step 8's deadline is 25 s, not 5 s; remove §12 step 1's "lower it to 10" line (Shane keeps
+  `SIDEKIQ_CONCURRENCY` high until cutover; add no step for it); §18's `reparse` needs a `parser_version` bump; §15 step 13 skips books with
   any failed source). Every status (DONE date / PARTIAL / NOT RUN) comes from a read-only production check run by
   read-only check of production (Shane allowed read-only access on 2026-11-26:
   `ssh deploy@45.33.28.21 'docker exec -i the-greatest-worker bin/rails runner -' < script.rb`, counts and config

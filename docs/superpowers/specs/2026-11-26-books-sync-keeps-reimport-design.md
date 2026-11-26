@@ -181,8 +181,9 @@ Structure:
 
 Rules: every command is checked against the code (task name, arguments, environment variables, guards such as tasks
 that refuse after `sync_init`); every status is checked read-only against production; nothing is marked DONE without
-evidence. New entries this work found: lower `SIDEKIQ_CONCURRENCY` to 10 and switch `GOODREADS_REIMPORT_ENABLED` off
-between passes (or say why it stays on); the re-import sample check (its result was not found: the worker log was reset
+evidence. New entries this work found: switch `GOODREADS_REIMPORT_ENABLED` off between passes (or say why it stays on);
+`SIDEKIQ_CONCURRENCY` stays high until cutover (Shane, 2026-11-26), so section 12's "lower it" line goes, with no
+replacement step; the re-import sample check (its result was not found: the worker log was reset
 by the 2026-11-26 deploy); the empty import-made books at cutover; adaptation title notes; the two duplicate pairs
 merged 2026-11-26 (Cosmicomics 251937 → 250177, Why We Eat 253586 → 253135).
 
