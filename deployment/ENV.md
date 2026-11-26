@@ -161,7 +161,7 @@ The server itself is configured from `secrets/.env.postgres` (SOPS), not from th
 
 #### RECOMMENDATIONS_R2_ACCESS_KEY / RECOMMENDATIONS_R2_SECRET_KEY / RECOMMENDATIONS_R2_BUCKET
 - **Description**: The private R2 bucket the collaborative-filtering loop uses as a mailbox (`docs/features/recommendations.md`, "Collaborative signal"): Rails writes the nightly positive-pair export there and reads the model the home server publishes. Its own bucket, holding nothing else, in the same R2 account as the other buckets (see `RECOMMENDATIONS_R2_ENDPOINT`). The home server's trainer uses the same bucket through `RECOMMENDATIONS_R2_*` in `secrets/home-server.env`.
-- **Required**: No. With all three unset, `Recommendations::ExportInteractionsJob` and `Recommendations::LoadModelJob` log "recommendations store not configured; skipping" and do nothing; with only some set, they raise. The recommendations page works either way (no model loaded means no collaborative signal). Set all three when the bucket exists (`docs/launch-todo.md`, section 3).
+- **Required**: No. With all three unset, `Recommendations::ExportInteractionsJob` and `Recommendations::LoadModelJob` log "recommendations store not configured; skipping" and do nothing; with only some set, they raise. The recommendations page works either way (no model loaded means no collaborative signal). Set all three when the bucket exists (done in production; `docs/launch-todo.md`, section 6).
 - **Used By**: worker (Sidekiq cron), rake
 - **Security**: Never commit; lives in `secrets/.env.production`. Use a token scoped to this bucket, with object read and write (Rails writes exports and reads models; one bucket cannot split that by prefix).
 
@@ -247,7 +247,7 @@ These variables are used by nginx's built-in template system for environment var
 - **Required**: No
 - **Default**: `5`
 - **Recommended**: `10`. Raise it (e.g. `25`) for a bulk run whose jobs mostly wait on a remote API, such as the
-  Goodreads re-import's matching (`docs/launch-todo.md` §12), then lower it again. Check Postgres headroom
+  Goodreads re-import's matching (`docs/launch-todo.md` section 3.2), then lower it again. Check Postgres headroom
   (`max_connections` 200) before going much higher.
 
 #### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD

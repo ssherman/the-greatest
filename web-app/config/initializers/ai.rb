@@ -44,6 +44,6 @@ Rails.application.configure do
   # this is on. Off, it writes one skipped "disabled" row and nothing else, so
   # the backfill still plans the book once it is on. Turned on in production
   # after the dev rehearsal is signed off and the definitions are written
-  # (docs/launch-todo.md section 14). ENV: BOOKS_CATEGORIES_JUDGE_ENABLED.
+  # (docs/launch-todo.md, "Origins and categories"). ENV: BOOKS_CATEGORIES_JUDGE_ENABLED.
   config.x.ai.categories_judge_enabled = %w[1 true].include?(ENV["BOOKS_CATEGORIES_JUDGE_ENABLED"].to_s.strip.downcase)
 end

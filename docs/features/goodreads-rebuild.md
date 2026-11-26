@@ -14,7 +14,7 @@ The rebuild runs in this order, and repeats after each weekly `data_migration:sy
    merge duplicates. This is now the re-import: see `docs/features/goodreads-reimport.md`.
 4. The sweep: merge or delete the import-made books nothing needs any more.
 
-Built so far: the foundation (cohorts, retiring the replay's proposals) and the stage one survey, pass 1. Production steps are in `docs/launch-todo.md` §11.
+Built so far: the foundation (cohorts, retiring the replay's proposals) and the stage one survey, pass 1. Production steps are in `docs/launch-todo.md` (what ran: section 6; what remains: section 4).
 
 ## Cohorts: which books are trusted
 

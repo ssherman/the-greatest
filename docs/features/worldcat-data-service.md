@@ -303,7 +303,8 @@ tables is missing, `manifest.json` is missing, its `gates_passed` is not `true`,
 - **Rails setting.** `WORLDCAT_SERVICE_URL` (documented in `deployment/ENV.md`) is the only new
   setting. The client also sends `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET`,
   the same pair it sends to the Open Library and fetcher services.
-- **The sequence for launch** is section 9 of `docs/launch-todo.md`. Cloudflare, DNS and Access steps
+- **The sequence for launch** is in `docs/launch-todo.md`: what ran is in section 6, the backfill is section 4
+  step 9, and it repeats weekly (section 3). Cloudflare, DNS and Access steps
   are owner steps; an agent does not schedule them.
 
 ## Rails side
