@@ -1018,3 +1018,15 @@ another bulk writer is running, because creating the table briefly locks writes 
    `GOODREADS_PRIORITY_RESERVED` (100, the part of the daily Goodreads cap kept for readers),
    `BOOK_SUBMISSION_LOOKUP_RUNS` (100, early lookup runs in 24 hours) and
    `BOOK_SUBMISSION_LOOKUPS_ENABLED` (on; `0` stops the early lookups without a deploy).
+
+## 21. Title notes repair (once, after the deploy that adds it)
+
+Joins the 72 titles the Goodreads rebuild cut at a colon inside their brackets ("Accounting 2 (Quick Study" /
+"Business)") and takes closing series or format notes ("(Brides of Nap City Book 1)", "(Spanish Edition)") off
+about 580 titles and subtitles. Any other bracket stays. Measured 2026-11-25: 652 books. Matching is unaffected.
+
+1. `DRY_RUN=1 bin/rails books:titles:repair_notes` and skim the list.
+2. `bin/rails books:titles:repair_notes`. A second run reports 0.
+
+The ~2,000 titles left with brackets (publisher series such as "(Dover Thrift Editions)", junk such as
+"[(American Psycho)] [Author: …]") need judgment: an agent with the admin MCP, not a rule.
