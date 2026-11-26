@@ -22,10 +22,16 @@ class Services::BooksMigration::SyncKeepsReimportTest < ActiveSupport::TestCase
     @copy_to = ::Books::Book.create!(title: "Copy to")
     @shelved = ::Books::Book.create!(title: "Shelved elsewhere")
     @fresh = ::Books::Book.create!(title: "Reviewed only on legacy")
+    @removed = ::Books::Book.create!(title: "Removed on legacy")
+    @mixed = ::Books::Book.create!(title: "Mixed Lump", book_kind: :standalone)
+    @mixed_to = ::Books::Book.create!(title: "Mixed destination")
     # Legacy-origin lists (ids below the ceiling) and review; the sync ignores the default lists User.create! made.
     @shelf = ::Books::UserList.create!(id: 600, user: @user, name: "Legacy list", list_type: :custom)
     @other_shelf = ::Books::UserList.create!(id: 601, user: @user, name: "Second legacy list", list_type: :custom)
-    [@from, @copy_from, @shelved].each_with_index do |book, index|
+    # The reader's default Read list is legacy-origin too, as in production: the apply writes the add and the copy to it.
+    list(:read).destroy!
+    @read = ::Books::UserList.create!(id: 602, user: @user, name: "Read", list_type: :read)
+    [@from, @copy_from, @shelved, @mixed, @removed].each_with_index do |book, index|
       UserListItem.create!(user_list: @shelf, listable: book, position: index + 1)
     end
     @review = ::Review.create!(id: 700, user: @user, reviewable: @from, rating: 3)
@@ -44,37 +50,62 @@ class Services::BooksMigration::SyncKeepsReimportTest < ActiveSupport::TestCase
   def apply(verdict)
     result = Services::Books::GoodreadsReimport::Apply::Row.call(verdict: verdict)
     assert_equal :applied, result.data[:outcome], result.data.inspect
-    verdict.reload
+    # ApplyVerdicts stamps applied_at after the handler returns; Mixed and the sweeps read it.
+    verdict.reload.tap { |applied| applied.update!(applied_at: Time.current) }
   end
+
+  def migrate(scope, items, reviews)
+    items_migrator = Services::BooksMigration::UserListItemMigrator.new(sync: scope)
+    items_migrator.define_singleton_method(:legacy_items_for) { |ids| items.select { |row| ids.include?(row["user_list_id"]) } }
+    items_migrator.define_singleton_method(:legacy_item_count) { items.size }
+    review_migrator = Services::BooksMigration::ReviewMigrator.new(sync: scope)
+    review_migrator.stubs(:legacy_each).multiple_yields(*reviews.zip)
+    [items_migrator.call, review_migrator.call]
+  end
+
+  def reimport_hold(redirects) = Services::BooksMigration::ReimportHold.load(redirects: redirects)
 
   test "an applied re-import survives the sync while an unrelated legacy edit still syncs" do
     move = apply(row_verdict(csv_row(rating: 4.5), action: "move", review: true))
     add = apply(row_verdict(csv_row, action: "add", from: nil, to: @added))
     copy = apply(row_verdict(csv_row, action: "copy", from: @copy_from, to: @copy_to))
-    verdicts = [move, add, copy]
+    # A mixed book: the reader's row is copied to @mixed_to, then the real Mixed handler deletes it, recording M -> T.
+    mixed = ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:#{@mixed.id}", decided_by: :rule,
+      status: :approved, payload: {"book_id" => @mixed.id, "redirect_to_book_id" => @mixed_to.id, "archive" => {}})
+    mixed_copy = apply(row_verdict(csv_row, action: "copy", from: @mixed, to: @mixed_to))
+    mixed_result = Services::Books::GoodreadsReimport::Apply::Mixed.call(verdict: mixed)
+    assert_equal :applied, mixed_result.data[:outcome], mixed_result.data.inspect
+    assert_not ::Books::Book.exists?(@mixed.id)
+    assert_equal 1, mixed.reload.payload["deleted"].size
+    verdicts = [move, add, copy, mixed_copy]
     assert_equal [@to.id, 4.5], [@review.reload.reviewable_id, @review.rating.to_f]
     assert UserListItem.exists?(user_list: @shelf, listable: @to)
+    assert_not UserListItem.exists?(user_list: @shelf, listable: @copy_from), "the apply's leftover sweep removed the original"
 
-    # Legacy still shows the pre-apply state, plus one unrelated shelf move and one new review by the same reader.
-    items = [legacy_item(1, @shelf, @from, 1), legacy_item(2, @shelf, @copy_from, 2), legacy_item(3, @other_shelf, @shelved, 1)]
+    # Legacy still shows the pre-apply state, plus one unrelated shelf move, one unrelated deletion (@removed is gone
+    # from every legacy list) and one new review by the same reader. Legacy still names the deleted mixed book, on the second list only: a sync without the hold would route it
+    # to its destination there and drop the destination the copy put on the first list.
+    items = [legacy_item(1, @shelf, @from, 1), legacy_item(2, @shelf, @copy_from, 2), legacy_item(3, @other_shelf, @shelved, 1),
+      legacy_item(4, @other_shelf, @mixed, 2)]
     reviews = [legacy_review(701, @fresh, 5), legacy_review(700, @from, 3)]
     legacy = FakeLegacySource.new(
-      user_list_versions: {600 => T, 601 => T}, user_list_items: items, user_list_owners: {600 => @user.id, 601 => @user.id},
+      user_list_versions: {600 => T, 601 => T, 602 => T}, user_list_items: items,
+      user_list_owners: {600 => @user.id, 601 => @user.id, 602 => @user.id},
       review_rows: reviews.map { |row| row.values_at("id", "user_id", "book_id", "updated_at") }
     )
-    hold = Services::BooksMigration::ReimportHold.load(redirects: Services::BooksMigration::Redirects.new([]))
-    scope = sync_scope(hold: hold)
+    redirects = [["Books::Book", @mixed.id, @mixed_to.id]]
+    scope = sync_scope(redirects: redirects, hold: reimport_hold(Services::BooksMigration::Redirects.new(redirects)))
 
-    items_migrator = Services::BooksMigration::UserListItemMigrator.new(sync: scope)
-    items_migrator.define_singleton_method(:legacy_items_for) { |ids| items.select { |row| ids.include?(row["user_list_id"]) } }
-    items_migrator.define_singleton_method(:legacy_item_count) { items.size }
-    item_result = items_migrator.call
-    review_migrator = Services::BooksMigration::ReviewMigrator.new(sync: scope)
-    review_migrator.stubs(:legacy_each).multiple_yields(*reviews.zip)
-    review_result = review_migrator.call
+    # The report, computed first on the same data, must agree with what the run then does.
+    diff = Services::BooksMigration::UserDataDiff.call(scope: scope, legacy: legacy)
+    item_result, review_result = migrate(scope, items, reviews)
 
     assert item_result[:success], item_result[:error]
     assert review_result[:success], review_result[:error]
+    item_keys = [:inserted, :deleted, :held_legacy, :held_here]
+    assert_equal diff[:user_list_items].slice(*item_keys), item_result[:data].slice(*item_keys)
+    assert_equal diff[:reviews].slice(:inserted, :deleted, :held), review_result[:data].slice(:inserted, :deleted, :held)
+    assert_equal [1, 2], item_result[:data].values_at(:inserted, :deleted), "only the unrelated shelf move (1 in, 1 out) and removal (1 out) sync"
 
     # Everything the re-import recorded is still where it put it.
     verdicts.each do |verdict|
@@ -87,18 +118,26 @@ class Services::BooksMigration::SyncKeepsReimportTest < ActiveSupport::TestCase
       end
     end
     assert_equal [@to.id, 4.5], [@review.reload.reviewable_id, @review.rating.to_f]
-    assert_empty UserListItem.where(listable_id: @from.id, user_list_id: [@shelf.id, @other_shelf.id])
+    assert_empty UserListItem.where(listable_id: @from.id, user_list_id: [@shelf.id, @other_shelf.id, @read.id])
     assert_empty ::Review.where(reviewable_id: @from.id)
     assert UserListItem.exists?(user_list: @shelf, listable: @to)
     assert UserListItem.exists?(user_list: @shelf, listable: @copy_to)
+    assert UserListItem.exists?(user_list: @read, listable: @added), "the add"
+    assert UserListItem.exists?(user_list: @read, listable: @copy_to), "the copy's Read item"
+    assert UserListItem.exists?(user_list: @shelf, listable: @mixed_to), "the mixed copy's destination"
+    assert_not UserListItem.exists?(user_list: @shelf, listable: @copy_from), "the swept original stays gone"
+    # The deleted mixed book comes back neither as itself nor as its destination on the list the reader never had it on.
+    assert_empty UserListItem.where(listable_type: "Books::Book", listable_id: @mixed.id)
+    assert_not UserListItem.exists?(user_list: @other_shelf, listable: @mixed_to), "legacy's mixed-book row stays held"
 
     # The unrelated legacy edits came over.
     assert_equal [@other_shelf.id], UserListItem.where(listable_id: @shelved.id, user_list_id: [@shelf.id, @other_shelf.id]).pluck(:user_list_id)
+    assert_not UserListItem.exists?(user_list: @shelf, listable: @removed), "the unrelated legacy deletion"
     assert_equal @fresh.id, ::Review.find(701).reviewable_id
 
-    # The report agrees with what the sync did: nothing left to insert, delete or update.
-    diff = Services::BooksMigration::UserDataDiff.call(scope: scope, legacy: legacy)
-    assert_equal [0, 0], diff[:user_list_items].values_at(:inserted, :deleted)
-    assert_equal [0, 0, 0], diff[:reviews].values_at(:inserted, :deleted, :updated)
+    # And the report now has nothing left to do.
+    after = Services::BooksMigration::UserDataDiff.call(scope: scope, legacy: legacy)
+    assert_equal [0, 0], after[:user_list_items].values_at(:inserted, :deleted)
+    assert_equal [0, 0, 0], after[:reviews].values_at(:inserted, :deleted, :updated)
   end
 end
