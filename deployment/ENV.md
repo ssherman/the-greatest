@@ -246,9 +246,9 @@ These variables are used by nginx's built-in template system for environment var
   The database pool (`config/database.yml`) grows to at least this plus 5, so every thread gets a connection.
 - **Required**: No
 - **Default**: `5`
-- **Recommended**: `10`. Raise it (e.g. `25`) for a bulk run whose jobs mostly wait on a remote API, such as the
-  Goodreads re-import's matching (`docs/launch-todo.md` section 3.2), then lower it again. Check Postgres headroom
-  (`max_connections` 200) before going much higher.
+- **Recommended**: `10` for a new setup. `25` suits bulk runs whose jobs mostly wait on a remote API, such as the
+  Goodreads re-import's matching (`docs/launch-todo.md` section 3.2). Production runs at `25` and stays there until
+  the books cutover (Shane, 2026-11-26). Check Postgres headroom (`max_connections` 200) before going much higher.
 
 #### SIDEKIQ_ADMIN_USERNAME / SIDEKIQ_ADMIN_PASSWORD
 - **Description**: Basic-auth credentials for the Sidekiq dashboard at `/sidekiq-admin`
