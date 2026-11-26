@@ -6,17 +6,22 @@ module Services
     # sync from the re-import verdicts and read through held?.
     #
     # Each book id is expanded through the merges recorded since (Redirects), so a pair matches both the
-    # legacy book id a row names and the book it routes to here. The one redirect NOT followed is the one a
-    # deleted mixed book left (spec 5.1): it points at the mixed book's most-read destination, which the
-    # re-import did not touch for every reader of the mixed book, so following it would hold pairs nobody
-    # changed. The mixed book itself stays held; a legacy row naming it is caught by the legacy id.
+    # legacy book id a row names and the book it routes to here. The redirects NOT followed are the ones a
+    # deleted mixed book left (spec 5.1): its own, and the ones of books merged into it earlier, which
+    # Apply::Mixed repointed at the same place. They point at the mixed book's most-read destination, which
+    # the re-import did not touch for every reader of the mixed book, so following them would hold pairs
+    # nobody changed. A mixed book the re-import kept is an ordinary book: a later merge of it is followed.
+    #
+    # Immutable. A merge that commits while the sync runs changes the redirects; with_redirects gives the
+    # hold expanded through the new ones, so the hold and the BookRoute reading them agree.
     class ReimportHold
       BOOK = "Books::Book"
 
-      # Verdicts that recorded a change: their payload has `moved` or `leftovers_removed`, applied or not, current or
-      # superseded (a superseded guess can already carry `moved`)
-      # (a change can be recorded before applied_at is).
+      # Verdicts that recorded a change: their payload has `moved` or `leftovers_removed`. Applied or not (a change
+      # can be recorded before applied_at is), current or superseded (a superseded guess can already carry `moved`).
       CHANGED = "(payload ? 'moved' OR payload ? 'leftovers_removed')"
+
+      attr_reader :redirects
 
       def self.none = new(pairs: [], redirects: Redirects.new([]))
 
@@ -29,19 +34,35 @@ module Services
           [from_id, to_id].each { |book_id| pairs << [user_id, book_id] if user_id && book_id }
         end
 
-        mixed_book_ids = Set.new
-        verdicts.reimport_mixed.pluck(Arel.sql("payload->>'book_id'"), Arel.sql("payload->'deleted'")).each do |book_id, deleted|
+        # Apply::Mixed writes redirect_written (false, then true once the redirect is recorded) in the same
+        # transaction that deletes the book, and nowhere else, so the key marks a mixed book that was deleted.
+        # A kept one has `deleted` items too (its removed leftovers), but no redirect of its own to skip.
+        unfollowed = Set.new
+        mixed = verdicts.reimport_mixed.pluck(Arel.sql("payload->>'book_id'"), Arel.sql("payload->'deleted'"),
+          Arel.sql("payload ? 'redirect_written'"), Arel.sql("payload->'redirected_here'"))
+        mixed.each do |book_id, deleted, book_deleted, redirected_here|
           next unless book_id
 
-          mixed_book_ids << book_id.to_i
-          Array(deleted).each { |item| pairs << [item["user_id"], book_id] if item["user_id"] }
+          readers = Array(deleted).filter_map { |item| item["user_id"] }
+          readers.each { |user_id| pairs << [user_id, book_id] }
+          next unless book_deleted
+
+          # A legacy row can still name a book merged into the mixed book before it was deleted: hold the reader
+          # there too, without following that book's redirect (now the mixed book's destination).
+          here = Array(redirected_here)
+          unfollowed << book_id.to_i
+          unfollowed.merge(here.map(&:to_i))
+          here.each { |from_id| readers.each { |user_id| pairs << [user_id, from_id] } }
         end
 
-        new(pairs: pairs.map { |user_id, book_id| [user_id.to_i, book_id.to_i] }, redirects: redirects, mixed_book_ids: mixed_book_ids)
+        new(pairs: pairs.map { |user_id, book_id| [user_id.to_i, book_id.to_i] }, redirects: redirects, mixed_book_ids: unfollowed)
       end
 
-      # pairs: Enumerable of [user_id, book_id] Integers.
+      # pairs: Enumerable of [user_id, book_id] Integers. mixed_book_ids: the books whose redirect is not followed.
       def initialize(pairs:, redirects:, mixed_book_ids: Set.new)
+        @pairs = pairs
+        @redirects = redirects
+        @mixed_book_ids = mixed_book_ids
         @held = Set.new
         pairs.each do |user_id, book_id|
           current = book_id
@@ -53,6 +74,13 @@ module Services
             current = redirects.target(BOOK, current)
           end
         end
+      end
+
+      # This hold expanded through +redirects+ instead (the same object when they are the ones it has).
+      def with_redirects(redirects)
+        return self if redirects.equal?(@redirects)
+
+        self.class.new(pairs: @pairs, redirects: redirects, mixed_book_ids: @mixed_book_ids)
       end
 
       def held?(user_id, book_id)

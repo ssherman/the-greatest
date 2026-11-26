@@ -56,11 +56,11 @@ class Services::BooksMigration::ReimportHoldTest < ActiveSupport::TestCase
     verdict(:reimport_row, "hold:row:2", {"user_id" => 2, "from_book_id" => 201, "to_book_id" => 202, "leftovers_removed" => []}, status: :rejected)
     verdict(:reimport_row, "hold:row:3", {"user_id" => 3, "from_book_id" => 301, "to_book_id" => 302})
     verdict(:reimport_guess, "hold:guess:1", {"user_id" => 4, "from_book_id" => 401, "to_book_id" => 402, "moved" => {}})
-    verdict(:reimport_mixed, "hold:mixed:1", {"book_id" => 50, "deleted" => [{"id" => 1, "user_id" => 9}]})
+    verdict(:reimport_mixed, "hold:mixed:1", {"book_id" => 50, "deleted" => [{"id" => 1, "user_id" => 9}], "redirect_written" => true})
 
     verdict(:reimport_guess, "hold:guess:2", {"user_id" => 6, "from_book_id" => 701, "to_book_id" => 702, "moved" => {}}, superseded_at: Time.current)
     verdict(:reimport_row, "hold:row:4", {"user_id" => 5, "from_book_id" => 601, "to_book_id" => 602, "moved" => {}})
-    verdict(:reimport_mixed, "hold:mixed:2", {"book_id" => 603})
+    verdict(:reimport_mixed, "hold:mixed:2", {"book_id" => 603, "redirect_written" => true})
     redirects = Services::BooksMigration::Redirects.new([
       ["Books::Book", 50, 77], ["Books::Book", 602, 603], ["Books::Book", 603, 604]
     ])
@@ -82,6 +82,45 @@ class Services::BooksMigration::ReimportHoldTest < ActiveSupport::TestCase
     assert subject.held?(5, 603)
     assert_not subject.held?(5, 604)
     assert_equal 12, subject.size
+  end
+
+  test "follows a later merge of a mixed book the re-import kept" do
+    # Kept: no redirect_written, the book is still here. Merging it later is an ordinary merge, and the
+    # reader whose leftover was removed from it must stay held on the survivor.
+    verdict(:reimport_mixed, "hold:mixed:kept", {"book_id" => 80, "kept" => true, "deleted" => [{"id" => 1, "user_id" => 9}]})
+    redirects = Services::BooksMigration::Redirects.new([["Books::Book", 80, 90]])
+
+    subject = Services::BooksMigration::ReimportHold.load(redirects: redirects)
+
+    assert subject.held?(9, 80)
+    assert subject.held?(9, 90)
+  end
+
+  test "holds the reader on a book merged into a deleted mixed book, without following its redirect" do
+    # 70 was merged into the mixed book 60 before 60 was deleted; Apply::Mixed repointed 70 at 60's destination, 61.
+    verdict(:reimport_mixed, "hold:mixed:here", {"book_id" => 60, "deleted" => [{"id" => 1, "user_id" => 9}],
+      "redirect_written" => true, "redirected_here" => [70]})
+    redirects = Services::BooksMigration::Redirects.new([["Books::Book", 60, 61], ["Books::Book", 70, 61]])
+
+    subject = Services::BooksMigration::ReimportHold.load(redirects: redirects)
+
+    assert subject.held?(9, 60)
+    assert subject.held?(9, 70)
+    assert_not subject.held?(9, 61)
+    assert_equal 2, subject.size
+  end
+
+  test "with_redirects expands the same pairs through newer redirects" do
+    original = hold([[7, 20], [7, 50]], mixed: Set[50])
+    newer = Services::BooksMigration::Redirects.new([["Books::Book", 20, 30], ["Books::Book", 50, 60]])
+
+    subject = original.with_redirects(newer)
+
+    assert subject.held?(7, 30)
+    assert_not subject.held?(7, 60)
+    assert_same newer, subject.redirects
+    assert_not original.held?(7, 30)
+    assert_same subject, subject.with_redirects(newer)
   end
 
   test "none holds nothing" do
