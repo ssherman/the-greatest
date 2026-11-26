@@ -64,7 +64,8 @@ module Services
         @here_ids = legacy_here.map(&:first).to_set
         # Reviews the Goodreads re-import moved or rated sit on held pairs: the run
         # neither rewrites nor deletes them, whether or not legacy still has the row.
-        @held_ids = legacy_here.select { |_, user_id, book_id| sync.hold.held?(user_id, book_id) }.map(&:first).to_set
+        @here_held_ids = legacy_here.select { |_, user_id, book_id| sync.hold.held?(user_id, book_id) }.map(&:first).to_set
+        @held_ids = @here_held_ids.dup
         @kept_ids = Set.new
         @written_keys = Set.new
         @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0}
@@ -93,6 +94,15 @@ module Services
       def build_rows(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("reviews", attrs["id"])
 
+        # Held is checked before routing (as list items do), so a held row on a deleted or
+        # waiting book counts as held. A legacy row naming a held review's id is held too:
+        # legacy's own book merge moves reviews keeping their ids, and writing that row
+        # would move the re-imported review off its pair.
+        if sync && (@here_held_ids.include?(attrs["id"]) || sync.hold.held?(attrs["user_id"], attrs["book_id"]))
+          @held_ids << attrs["id"]
+          return []
+        end
+
         book_id = sync ? routed_book_id(attrs) : attrs["book_id"]
         return [] if book_id.nil?
 
@@ -106,8 +116,8 @@ module Services
           raise "no migrated ::User for legacy reviews.user_id=#{user_id.inspect}"
         end
 
-        # Before the collision check: a held row must not claim the pair in @seen.
-        if sync && (sync.hold.held?(user_id, attrs["book_id"]) || sync.hold.held?(user_id, book_id))
+        # Routed book held; before the collision check: a held row must not claim the pair in @seen.
+        if sync&.hold&.held?(user_id, book_id)
           @held_ids << attrs["id"]
           return []
         end

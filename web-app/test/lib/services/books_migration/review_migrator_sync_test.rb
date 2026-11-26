@@ -68,8 +68,47 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
       hold: hold_for([@user.id, @survivor.id]))
 
     assert result[:success], result[:error]
-    assert_equal [@book.id, 5], [::Review.find(102).reviewable_id, ::Review.find(102).rating.to_f]
+    review = ::Review.find(102)
+    assert_equal [@book.id, 5], [review.reviewable_id, review.rating.to_f]
     assert_equal 0, result[:data][:held]
+  end
+
+  test "a legacy row naming a held review's id cannot move it" do
+    other = ::Books::Book.create!(title: "Legacy merge target")
+    here_review(103, book: @survivor, rating: 3.75)
+
+    result = run_sync([legacy_review(103, "book_id" => other.id, "rating" => 3)], hold: hold_for([@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    review = ::Review.find(103)
+    assert_equal [@survivor.id, 3.75], [review.reviewable_id, review.rating.to_f]
+    assert_equal [0, 1], [result[:data][:deleted], result[:data][:held]]
+  end
+
+  test "a row held only through its routed book is not written" do
+    result = run_sync([legacy_review(104, "book_id" => 200_001)],
+      redirects: [["Books::Book", 200_001, @survivor.id]], hold: hold_for([@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    refute ::Review.exists?(104)
+    assert_equal 1, result[:data][:held]
+  end
+
+  test "a row held only on its legacy book is not written onto the redirect target" do
+    result = run_sync([legacy_review(105, "book_id" => 200_002)],
+      redirects: [["Books::Book", 200_002, @survivor.id]], hold: hold_for([@user.id, 200_002]))
+
+    assert result[:success], result[:error]
+    refute ::Review.exists?(105)
+    assert_equal [1, 0], result[:data].values_at(:held, :dropped)
+  end
+
+  test "a held row on a deleted legacy book counts as held, not dropped" do
+    result = run_sync([legacy_review(106, "book_id" => 200_003)],
+      redirects: [["Books::Book", 200_003, nil]], hold: hold_for([@user.id, 200_003]))
+
+    assert result[:success], result[:error]
+    assert_equal [1, 0], result[:data].values_at(:held, :dropped)
   end
 
   test "a row rerouted onto a held pair is skipped" do
