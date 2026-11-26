@@ -23,7 +23,8 @@ module Services
 
       # legacy_rows: legacy user_list_books attribute hashes (String keys).
       # here_rows: [[id, user_list_id, listable_type, listable_id], ...] for the same lists.
-      def self.call(legacy_rows, here_rows, route, hold: ReimportHold.none, list_users: {})
+      # list_users is required: without it every pair's reader is nil and the hold silently holds nothing.
+      def self.call(legacy_rows, here_rows, route, list_users:, hold: ReimportHold.none)
         keep = {}
         counts = Hash.new(0)
         missing = []

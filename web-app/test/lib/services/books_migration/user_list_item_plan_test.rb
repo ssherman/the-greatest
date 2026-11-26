@@ -13,7 +13,7 @@ class Services::BooksMigration::UserListItemPlanTest < ActiveSupport::TestCase
 
   test "counts as inserted only the items not already here" do
     plan = Services::BooksMigration::UserListItemPlan.call(
-      [row(1, 7, 10, 1), row(2, 7, 20, 2)], [[90, 7, "Books::Book", 10]], route
+      [row(1, 7, 10, 1), row(2, 7, 20, 2)], [[90, 7, "Books::Book", 10]], route, list_users: {}
     )
 
     assert_equal [[7, 10], [7, 20]], plan.keep.keys
@@ -23,7 +23,7 @@ class Services::BooksMigration::UserListItemPlanTest < ActiveSupport::TestCase
 
   test "an item here that legacy does not have is stale, whatever its type" do
     plan = Services::BooksMigration::UserListItemPlan.call(
-      [row(1, 7, 10, 1)], [[90, 7, "Books::Book", 30], [91, 7, "Games::Game", 10]], route
+      [row(1, 7, 10, 1)], [[90, 7, "Books::Book", 30], [91, 7, "Games::Game", 10]], route, list_users: {}
     )
 
     assert_equal [90, 91], plan.stale_ids
@@ -31,7 +31,7 @@ class Services::BooksMigration::UserListItemPlanTest < ActiveSupport::TestCase
 
   test "a null position sorts last when collapsing a collision" do
     plan = Services::BooksMigration::UserListItemPlan.call(
-      [row(1, 7, 5, nil), row(2, 7, 20, 4)], [], route(redirects: [["Books::Book", 5, 20]])
+      [row(1, 7, 5, nil), row(2, 7, 20, 4)], [], route(redirects: [["Books::Book", 5, 20]]), list_users: {}
     )
 
     assert_equal 2, plan.keep[[7, 20]]["id"]
@@ -39,7 +39,7 @@ class Services::BooksMigration::UserListItemPlanTest < ActiveSupport::TestCase
   end
 
   test "collects missing books instead of raising" do
-    plan = Services::BooksMigration::UserListItemPlan.call([row(1, 7, 99, 1)], [], route)
+    plan = Services::BooksMigration::UserListItemPlan.call([row(1, 7, 99, 1)], [], route, list_users: {})
 
     assert_equal [1], plan.missing
   end
