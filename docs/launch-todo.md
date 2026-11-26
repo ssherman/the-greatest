@@ -10,7 +10,7 @@ Every command was checked against the code, and every status against production 
 > **Do not run `data_migration:sync` until the sync fix is deployed.** The sync fix is the branch
 > `worktree-sync-keeps-reimport` (spec `docs/superpowers/specs/2026-11-26-books-sync-keeps-reimport-design.md`).
 > Without it, a sync puts legacy readers' lists and reviews back the way the old importer left them,
-> which undoes the Goodreads re-import applied on 2026-11-17 to 11-20. The order is:
+> which undoes the Goodreads re-import applied on 2026-11-17 to 11-21. The order is:
 >
 > 1. The old site's Goodreads upload pause is deployed (section 4, step 1).
 > 2. The sync fix is deployed (section 4, step 2).
@@ -29,7 +29,7 @@ Every command was checked against the code, and every status against production 
 - **Hostname switch**: thegreatestbooks.org starts pointing at this app. Books runs at
   `new.thegreatestbooks.org` until then.
 - **Re-import pass**: one run of the Goodreads re-import steps over the legacy imports not yet covered
-  (section 3.2). The first, full pass applied 2026-11-17 to 11-20.
+  (section 3.2). The first, full pass applied 2026-11-17 to 11-21.
 - **Shane runs with `!`**: the step changes production, DNS or the home server, so an agent does not run it.
 
 ## 2. Where things stand (2026-11-26)
@@ -86,6 +86,7 @@ Do not merge to `main` (a merge deploys) while the sync runs.
    shows `held_legacy` and `held_here`, the `reviews` step `held`. A step that would delete more than
    5% of a table (and over 500 rows) refuses; if the deletions are real, re-run with
    `SYNC_ALLOW_DELETES=1`. A failed run moves no watermark, so running it again is safe.
+   Avoid book merges (admin, MCP agents, replay apply, submissions) while the sync runs.
 3. **`bin/rails data_migration:sync_report` again.** Every insert, update, delete and dropped count
    is 0, every "would insert" is 0, and there is no `MISSING` line. The held counts are still printed,
    and the totals (legacy and here columns, redirects recorded, users deleted on legacy, merge
@@ -100,7 +101,8 @@ Do not merge to `main` (a merge deploys) while the sync runs.
    in a row show they changed nothing.
 6. **`bin/rails books:goodreads_replay:load`.** Copies the legacy Goodreads imports made since the
    last load (it needs the `LEGACY_R2_*` variables, which production has). It reuses imports already
-   loaded. If it loaded any new complete import, run a re-import pass (3.2) this week.
+   loaded. If it loaded any new complete import, run a re-import pass (3.2) now, then continue with
+   step 7.
 7. **`bin/rails books:titles:repair_notes`.** `DRY_RUN=1` first to see the list. The sync never
    rewrites the title of a book we already have, but the books it adds arrive with legacy's titles,
    series notes included. Idempotent: a second run reports 0.
@@ -171,7 +173,7 @@ lands: `docs/features/goodreads-reimport.md`. Do not run `books:verify` while a 
     ("Goodreads re-import sample check"), not in a file; note it somewhere, because the next deploy
     resets the log. **Any "no" stops the run** until its cause is fixed.
 
-Then rankings (section 3, step 12).
+Then continue with section 3, step 7.
 
 ## 4. Before cutover, once (not yet done)
 
@@ -211,7 +213,8 @@ In order. Each step says whether it is safe now or what it waits for.
    until its cause is fixed.
 5. **Re-import: the 11 proposed author fixes.** Safe now. Admin, Repair verdicts, filtered to
    `reimport_author` and proposed. Approve or reject each; the next `apply` (in the pass of step 3)
-   carries out the approved ones.
+   carries out the approved ones, or run `bin/rails books:goodreads_reimport:apply` once reviewed,
+   while `GOODREADS_REIMPORT_ENABLED` is on.
 6. **Re-import: enrichment on.** Safe now. Set `GOODREADS_REIMPORT_ENRICHMENT=true` in
    `secrets/.env.production` (SOPS) and merge, which deploys and restarts the worker. The books the
    re-import created then join the rebuild's enrichment queue, after the rebuild's fixes, under the same
@@ -281,9 +284,12 @@ In order. Each step says whether it is safe now or what it waits for.
 11. **Publisher intake. Shane runs with `!`.** Safe now. Penguin Random House is enabled; its first run
     starts at the 06:20 UTC daily job (or `bin/rails "books:publisher_intake:run[penguin_random_house_us]"`
     on the worker). It is about 10,000 reads, roughly five days at the default cap. Watch it on
-    `/admin/publisher_intake` or with `bin/rails books:publisher_intake:status`. Then add Macmillan:
+    `/admin/publisher_intake` or with `bin/rails books:publisher_intake:status`. A sitemap file over the
+    fetcher's file size cap shows on the run as `unavailable`; the size reason is only in the log, and the
+    remedy is raising the fetcher's `FETCHER_MAX_FILE_BYTES`. Then add Macmillan:
     `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us` in the SOPS file, merge,
-    and after its first (baseline) run finishes, release its baseline titles with
+    and watch its first (baseline) run's duration: its product sitemap files were never measured, and
+    discovery writes one row per URL. After that run finishes, release its baseline titles with
     `bin/rails "books:publisher_intake:release_baseline[macmillan_us,<limit>]"` in slices the daily cap
     allows, repeating until none you want remain. After a parser fix, `books:publisher_intake:reparse[<source>]`
     re-reads only listings below the source's `parser_version`, so the fix must raise that version.

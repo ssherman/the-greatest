@@ -122,11 +122,18 @@ is harmless and those readers' other edits keep coming over. Measured on a copy 
 2026-11-26: 26,648 held pairs.
 
 **Merges.** Each book id is followed through the merges recorded since (`record_redirects`), so a
-pair matches both the legacy book id a legacy row names and the book it lands on here. The one
-redirect not followed is the one a deleted mixed book left: it points at the mixed book's most-read
-destination, which the re-import did not touch for every reader of the mixed book, and following it
-would hold pairs nobody changed. The mixed book itself stays held, so a legacy row naming it is held
-by its legacy id.
+pair matches both the legacy book id a legacy row names and the book it lands on here. The redirects
+not followed are the ones a deleted mixed book left: its own, and those of books merged into it before
+it was deleted, which point at the same place. That place is the mixed book's most-read destination,
+which the re-import did not touch for every reader of the mixed book, and following it would hold
+pairs nobody changed. The mixed book itself stays held, and so do the books merged into it earlier,
+so a legacy row naming either is held by its legacy id. A mixed book the re-import kept is an
+ordinary book: if it is merged later, the hold follows that merge.
+
+The hold is built when the run starts. A merge that commits while the run goes on (`record_redirects`
+changed) is picked up before each batch of list items and reviews: the redirects are read again and the
+hold is expanded through them, so a held item a merge moved stays held. Avoid merging books while the
+sync runs all the same.
 
 **What the sync does with a held pair.**
 
@@ -150,7 +157,9 @@ sync that holds, so new legacy rows on those pairs are hand edits, not imports.
 not written) and `held_here` (rows here left alone), and `reviews` carries `held` (review ids neither
 written nor deleted). `sync_report` prints the same numbers on the `user_list_items` and `reviews`
 lines ("held for the Goodreads re-import"), computed the way the run applies them, so a report right
-after a sync shows 0 inserts, updates and deletes with the held counts still printed.
+after a sync shows 0 inserts, updates and deletes with the held counts still printed. The report plans
+only the lists whose digest differs from legacy, while the run plans every legacy-origin list, so the
+report's held list-item counts can be lower than the run's; its insert and delete counts agree.
 
 The re-import report's loss check ("users whose list item or review count dropped") is for right
 after a re-import apply. A later sync's real deletions (a reader removing a book on legacy) show up in
@@ -168,8 +177,9 @@ narrows the 2026-10-08 rule that every new legacy identifier comes over (Shane, 
 New books still arrive whole, with every identifier legacy holds for them, below the identifier
 watermark or not. The other identifier steps (book work, edition, edition ISBN, the edition Amazon
 backfill) only ever touched the run's new books. The `book_identifiers` watermark still advances over
-every new legacy row. `sync_report` prints "book_identifiers (on new books only)" and a line
-"skipped: legacy identifier on an existing book".
+every new legacy row. The skipped identifiers are counted in `sync_report`, not in the run's output:
+it prints "book_identifiers (on new books only)" and a line "skipped: legacy identifier on an existing
+book".
 
 ## Not synced
 
