@@ -31,11 +31,13 @@ module Services
           subtitled = book("Forging Worlds", "A Mini Guide (Step by Step Worldbuilding Book 8)")
           rejoined = book("Lady of Terras (The Vayde Chronicles", "Book 1)")
           tagged = book("Teresa de Jesús (Spanish Edition)")
+          dangling = book("The Flash", "Hocus Pocus: (The Flash Book 1)")
 
           RepairNotes.call
 
-          assert_equal [["BOOM goes the Bride", nil], ["Forging Worlds", "A Mini Guide"], ["Lady of Terras", nil], ["Teresa de Jesús", nil]],
-            [titled, subtitled, rejoined, tagged].map { |record| parts(record) }
+          assert_equal [["BOOM goes the Bride", nil], ["Forging Worlds", "A Mini Guide"], ["Lady of Terras", nil], ["Teresa de Jesús", nil],
+            ["The Flash", "Hocus Pocus"]],
+            [titled, subtitled, rejoined, tagged, dangling].map { |record| parts(record) }
         end
 
         test "a bracket that may say which book this is stays" do
