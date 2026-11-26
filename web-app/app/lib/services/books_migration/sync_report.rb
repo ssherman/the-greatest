@@ -43,9 +43,12 @@ module Services
           format(USER_COLUMNS, "User data", "legacy", "here", "insert", "update", "delete", "dropped", "waiting", ""),
           user_line("users", data[:users], "#{number(data[:users][:deleted_on_legacy])} deleted on legacy (counted, not applied)"),
           user_line("user_lists", data[:user_lists]),
-          user_line("user_list_items", data[:user_list_items], "#{number(data[:user_list_items][:collisions])} merge collisions"),
+          user_line("user_list_items", data[:user_list_items],
+            "#{number(data[:user_list_items][:collisions])} merge collisions, " \
+            "#{number(data[:user_list_items][:held_legacy] + data[:user_list_items][:held_here])} held for the Goodreads re-import"),
           user_line("reviews", data[:reviews],
-            "#{number(data[:reviews][:collisions])} collisions, #{number(data[:reviews][:held_by_new_app])} held by a new-app review"),
+            "#{number(data[:reviews][:collisions])} collisions, #{number(data[:reviews][:held_by_new_app])} held by a new-app review, " \
+            "#{number(data[:reviews][:held])} held for the Goodreads re-import"),
           user_line("saved_searches", data[:saved_searches],
             "#{number(data[:saved_searches][:categories_removed])} deleted categories removed from criteria"),
           user_line("reading_goals", data[:reading_goals]),
