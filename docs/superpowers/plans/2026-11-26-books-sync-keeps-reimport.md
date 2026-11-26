@@ -291,7 +291,9 @@ new books. The old-site change is a separate repo; the doc work is last.
   `ssh deploy@45.33.28.21 'docker exec -i the-greatest-worker bin/rails runner -' < script.rb`, counts and config
   reads only; never a rake task that writes). Add the new entries spec section 6 lists. The weekly cycle is: `sync_report`,
   `sync`, `sync_report` (held counts printed, 0 changes), `merge_unknown`, `goodreads_replay:load`, a re-import pass
-  when there are new legacy imports (with `snapshot[new_pass]` before its apply), rankings.
+  when there are new legacy imports (with `snapshot[new_pass]` before its apply),
+  `books:titles:repair_notes` (idempotent; the sync never rewrites an existing book's title, but books it adds arrive
+  with legacy's titles), rankings.
 - [ ] **Step 3: Commit** — "Docs: the sync's re-import hold; launch todo rewritten and re-checked".
 - [ ] **Step 4: Dev rehearsal — only after Shane says go** (it replaces the dev database:
   `bin/snapshot-dev-db.sh --label pre-sync-hold` first, then `bin/refresh-dev-db.sh --legacy`, from the repo root).
