@@ -23,8 +23,8 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
   end
 
   # Rows newest first, as the real legacy_each yields them.
-  def run_sync(rows, redirects: [], books_watermark: Float::INFINITY, sync: :default)
-    scope = (sync == :default) ? sync_scope(redirects: redirects, books_watermark: books_watermark) : sync
+  def run_sync(rows, redirects: [], books_watermark: Float::INFINITY, sync: :default, hold: Services::BooksMigration::ReimportHold.none)
+    scope = (sync == :default) ? sync_scope(redirects: redirects, books_watermark: books_watermark, hold: hold) : sync
     migrator = Services::BooksMigration::ReviewMigrator.new(sync: scope)
     stub = migrator.stubs(:legacy_each)
     stub.multiple_yields(*rows.zip) if rows.any?
@@ -36,6 +36,54 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
   end
 
   def stats(result) = result[:data].slice(:inserted, :deleted, :dropped, :waiting, :collisions, :held_by_new_app)
+
+  def hold_for(*pairs) = Services::BooksMigration::ReimportHold.new(pairs: pairs.to_set, redirects: Services::BooksMigration::Redirects.new([]))
+
+  test "leaves a moved review's id on its new book" do
+    here_review(100, book: @survivor, rating: 3.75)
+
+    result = run_sync([legacy_review(100, "book_id" => @book.id, "rating" => 3)],
+      hold: hold_for([@user.id, @book.id], [@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    review = ::Review.find(100)
+    assert_equal [@survivor.id, 3.75], [review.reviewable_id, review.rating.to_f]
+    assert_equal 0, result[:data][:deleted]
+    assert_equal 1, result[:data][:held]
+  end
+
+  test "keeps a re-import review legacy lacks" do
+    here_review(101, book: @survivor)
+
+    result = run_sync([], hold: hold_for([@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    assert ::Review.exists?(101)
+    assert_equal 0, result[:data][:deleted]
+    assert_equal 1, result[:data][:held]
+  end
+
+  test "an unheld review of the same reader still syncs" do
+    result = run_sync([legacy_review(102, "book_id" => @book.id, "rating" => 5)],
+      hold: hold_for([@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    assert_equal [@book.id, 5], [::Review.find(102).reviewable_id, ::Review.find(102).rating.to_f]
+    assert_equal 0, result[:data][:held]
+  end
+
+  test "a row rerouted onto a held pair is skipped" do
+    stale = Services::BooksMigration::BookRoute.new(sync_scope, book_ids_here: Set[200_001, @survivor.id])
+    Services::BooksMigration::BookRoute.stubs(:new).returns(stale)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 200_001, to_id: @survivor.id)
+
+    result = run_sync([legacy_review(131, "book_id" => 200_001, "rating" => 5)],
+      redirects: [], hold: hold_for([@user.id, @survivor.id]))
+
+    assert result[:success], result[:error]
+    refute ::Review.exists?(131)
+    assert_equal 1, result[:data][:held]
+  end
 
   test "overwrites a review legacy edited" do
     here_review(100, rating: 2)

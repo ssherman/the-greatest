@@ -60,7 +60,11 @@ module Services
         return unless sync
 
         @route = BookRoute.new(sync, book_ids_here: @book_ids)
-        @here_ids = legacy_origin_reviews.pluck(:id).to_set
+        legacy_here = legacy_origin_reviews.pluck(:id, :user_id, :reviewable_id)
+        @here_ids = legacy_here.map(&:first).to_set
+        # Reviews the Goodreads re-import moved or rated sit on held pairs: the run
+        # neither rewrites nor deletes them, whether or not legacy still has the row.
+        @held_ids = legacy_here.select { |_, user_id, book_id| sync.hold.held?(user_id, book_id) }.map(&:first).to_set
         @kept_ids = Set.new
         @written_keys = Set.new
         @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0}
@@ -76,7 +80,7 @@ module Services
       end
 
       def extra_result_data
-        sync ? @stats : {}
+        sync ? @stats.merge(held: @held_ids.size) : {}
       end
 
       # Newest-first so the dedup below keeps the newer of a duplicated pair.
@@ -100,6 +104,12 @@ module Services
         user_id = attrs["user_id"]
         unless @user_ids.include?(user_id)
           raise "no migrated ::User for legacy reviews.user_id=#{user_id.inspect}"
+        end
+
+        # Before the collision check: a held row must not claim the pair in @seen.
+        if sync && (sync.hold.held?(user_id, attrs["book_id"]) || sync.hold.held?(user_id, book_id))
+          @held_ids << attrs["id"]
+          return []
         end
 
         # First occurrence wins, and rows arrive newest-first.
@@ -195,6 +205,10 @@ module Services
           unless book_id.is_a?(Integer)
             raise "legacy reviews.id=#{row[:id]}: book #{row[:reviewable_id]} is neither here nor redirected"
           end
+          if sync.hold.held?(row[:user_id], book_id)
+            @held_ids << row[:id]
+            next
+          end
           key = [row[:user_id], book_id]
           if @written_keys.include?(key) || !batch_keys.add?(key)
             @stats[:collisions] += 1
@@ -210,7 +224,7 @@ module Services
       # it lost a collision, or its book was deleted here. Counted against the
       # ids here at the start, as UserDataDiff counts them.
       def delete_reviews_legacy_lacks
-        doomed = (@here_ids - @kept_ids).to_a.sort
+        doomed = (@here_ids - @kept_ids - @held_ids).to_a.sort
         Services::BooksMigration.guard_deletion!("reviews", doomed.size, @here_ids.size)
         doomed.each_slice(1_000) { |ids| ::Review.where(id: ids).delete_all }
         @stats[:inserted] = (@kept_ids - @here_ids).size
