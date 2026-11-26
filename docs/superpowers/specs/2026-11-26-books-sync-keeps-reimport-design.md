@@ -80,6 +80,10 @@ The set the sync leaves alone, computed once at the start of each sync (and of `
   most-read destination) is **not** followed: the re-import did not touch that destination for every reader of the
   mixed book, and following it would hold pairs nobody changed. Those redirects are told apart by the mixed verdict's
   `book_id`. A legacy row naming the mixed book itself is still held through the legacy-book-id check.
+  Only a mixed book the re-import deleted (its verdict has `redirect_written`) stops the walk; a kept mixed book's
+  later merge is followed. A book that had been merged into a deleted mixed book (`redirected_here`) is held for
+  that reader too, and its redirect is not followed either (Apply::Mixed pointed it at the same destination).
+  The hold is re-expanded when the redirects change during a run (a merge that commits mid-sync).
 
 Measured 2026-11-26: 20,090 changed verdicts, 26,648 distinct pairs, 640 readers, 725 items deleted with mixed books.
 Keeps that changed nothing (about 442,000) are not in the set: legacy agrees with them, so syncing them is harmless and
