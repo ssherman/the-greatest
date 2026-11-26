@@ -9,7 +9,8 @@ module BooksLegacySyncHelper
       category_ids: [], books_updated_count: 0, max_book_identifier_id: 0,
       user_versions: {}, user_list_versions: {}, saved_search_versions: {}, review_rows: [],
       correction_rows: [], reading_goal_ids: [], recommendation_config_count: 0, user_list_items: [],
-      saved_search_criteria: [], user_list_owners: {})
+      saved_search_criteria: [], user_list_owners: {}, book_identifier_books: {})
+      @book_identifier_books = book_identifier_books
       @user_list_owners = user_list_owners
       @book_rows = book_rows
       @author_rows = author_rows
@@ -51,6 +52,10 @@ module BooksLegacySyncHelper
     def author_rows_above(id) = @author_rows.select { |row_id, _| row_id > id }
 
     def book_identifier_rows_above(id) = @book_identifier_rows.select { |row_id, _| row_id > id }
+
+    def book_identifier_book_ids(ids) = @book_identifier_books.slice(*ids)
+
+    def book_identifier_ids_for_books(book_ids) = @book_identifier_books.select { |_id, book_id| book_ids.include?(book_id) }.keys
 
     def book_ids = @book_ids || @book_rows.map(&:first)
 

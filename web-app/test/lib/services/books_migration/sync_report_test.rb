@@ -12,10 +12,11 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
     init_watermarks(books: 100, authors: 50, book_identifiers: 500)
     RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 9)
 
-    out = render(book_rows: [[101, 3.days.ago], [102, 1.hour.ago]], book_identifier_rows: [[501, 3.days.ago]], books_updated_count: 87)
+    out = render(book_rows: [[101, 3.days.ago], [102, 1.hour.ago]], book_identifier_rows: [[501, 3.days.ago]], book_identifier_books: {501 => 7}, books_updated_count: 87)
 
     assert_match(/books \(above watermark\)\s+2\s+0\s+1\s+1/, out)
-    assert_includes out, "book_identifiers (new legacy rows; deduped on insert)"
+    assert_includes out, "book_identifiers (on new books only)"
+    assert_includes out, "skipped: legacy identifier on an existing book: 1"
     assert_includes out, "redirects recorded: books merged 1, deleted 0; authors merged 0, deleted 0"
     assert_includes out, "legacy edits to existing books, not synced: 87"
   end

@@ -101,16 +101,23 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
     Identifier.where(identifiable_type: "Books::Book", identifiable_id: book_id, identifier_type: :books_work_goodreads_id).pluck(:value)
   end
 
-  test "sync mode adds a new identifier row to a book already here" do
+  test "sync mode skips a new identifier on a book we already have" do
     book = ::Books::Book.create!(id: 90300, title: "Existing Book")
 
-    result = run_sync([
-      {"id" => 601, "book_id" => book.id, "identifier_type" => 5, "identifier" => "111"},
-      {"id" => 602, "book_id" => book.id, "identifier_type" => 5, "identifier" => "222"}
-    ], sync_scope(identifier_ids: [601]))
+    result = run_sync([{"id" => 5, "book_id" => book.id, "identifier_type" => 5, "identifier" => "111"}],
+      sync_scope(identifier_ids: [5], book_ids: []))
 
     assert result[:success], result[:error]
-    assert_equal ["111"], goodreads_ids(book.id)
+    assert_empty goodreads_ids(book.id)
+  end
+
+  test "sync mode copies the identifiers of a book new in this sync" do
+    book = ::Books::Book.create!(id: 90310, title: "Brand New")
+
+    run_sync([{"id" => 6, "book_id" => book.id, "identifier_type" => 5, "identifier" => "222"}],
+      sync_scope(identifier_ids: [6], book_ids: [book.id]))
+
+    assert_equal ["222"], goodreads_ids(book.id)
   end
 
   test "sync mode takes every identifier of a new book, even below the identifier watermark" do
@@ -125,14 +132,14 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
     survivor = ::Books::Book.create!(id: 90302, title: "Survivor")
 
     run_sync([{"id" => 603, "book_id" => 1_301, "identifier_type" => 5, "identifier" => "444"}],
-      sync_scope(identifier_ids: [603], redirects: [["Books::Book", 1_301, survivor.id]]))
+      sync_scope(book_ids: [1_301], identifier_ids: [603], redirects: [["Books::Book", 1_301, survivor.id]]))
 
     assert_equal ["444"], goodreads_ids(survivor.id)
   end
 
   test "sync mode drops and counts an identifier of a deleted book" do
     result = run_sync([{"id" => 604, "book_id" => 1_302, "identifier_type" => 5, "identifier" => "555"}],
-      sync_scope(identifier_ids: [604], redirects: [["Books::Book", 1_302, nil]]))
+      sync_scope(book_ids: [1_302], identifier_ids: [604], redirects: [["Books::Book", 1_302, nil]]))
 
     assert result[:success], result[:error]
     assert_equal 1, result[:data][:dropped_deleted]
@@ -140,7 +147,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "fails the run naming the legacy row when the book is neither here nor redirected" do
-    result = run_sync([{"id" => 605, "book_id" => 1_303, "identifier_type" => 5, "identifier" => "666"}], sync_scope(identifier_ids: [605]))
+    result = run_sync([{"id" => 605, "book_id" => 1_303, "identifier_type" => 5, "identifier" => "666"}], sync_scope(book_ids: [1_303], identifier_ids: [605]))
 
     refute result[:success]
     assert_includes result[:error], "legacy id=605"

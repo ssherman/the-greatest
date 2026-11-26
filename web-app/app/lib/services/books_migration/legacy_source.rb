@@ -12,6 +12,12 @@ module Services
 
       def book_ids = LegacyBooks::Book.pluck(:id)
 
+      # {identifier_id => book_id}, one query for the whole window.
+      def book_identifier_book_ids(ids) = LegacyBooks::BookIdentifier.where(id: ids).pluck(:id, :book_id).to_h
+
+      # Every legacy identifier row of these books, whatever its id: what the migrator copies.
+      def book_identifier_ids_for_books(book_ids) = LegacyBooks::BookIdentifier.where(book_id: book_ids.to_a).pluck(:id)
+
       def author_ids = LegacyBooks::Author.pluck(:id)
 
       def category_ids = LegacyBooks::Category.pluck(:id)

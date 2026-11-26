@@ -40,6 +40,15 @@ class Services::BooksMigration::SyncPlanTest < ActiveSupport::TestCase
     assert_equal 0, result.report[:books][:waiting]
   end
 
+  test "counts window identifiers on new books as would_insert and the rest as skipped" do
+    init_watermarks(books: 100, authors: 50, book_identifiers: 500)
+
+    result = plan(book_rows: [[101, OLD]], book_identifier_rows: [[501, OLD], [502, OLD]],
+      book_identifier_books: {501 => 101, 502 => 7, 10 => 101})
+
+    assert_equal({would_insert: 2, skipped_existing_book: 1, waiting: 0}, result.report[:book_identifiers])
+  end
+
   test "scopes authors and book identifiers the same way" do
     init_watermarks(books: 100, authors: 50, book_identifiers: 500)
 
