@@ -40,6 +40,13 @@ module DataImporters
           }.each { |given, expected| assert_equal expected, TitleForms.without_note(given), given }
         end
 
+        test "without_note leaves no colon, semicolon or comma dangling where the note was" do
+          assert_equal "Hocus Pocus", TitleForms.without_note("Hocus Pocus: (The Flash Book 1)")
+          assert_equal "Cauldron: Ghosts & Grimmothers", TitleForms.without_note("Cauldron: Ghosts & Grimmothers: (Cauldron: Great Lakes Grimoire Book 6)")
+          assert_equal "Gedichte.", TitleForms.without_note("Gedichte. (German Edition)")
+          assert_equal "Hocus Pocus:", TitleForms.without_note("Hocus Pocus:")
+        end
+
         test "without_note drops a closing language or format tag" do
           assert_equal "Enrique IV (Teatro)", TitleForms.without_note("Enrique IV (Teatro) (Spanish Edition)")
           assert_equal "Dune", TitleForms.without_note("Dune (Kindle Edition)")
