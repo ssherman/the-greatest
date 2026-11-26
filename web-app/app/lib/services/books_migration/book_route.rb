@@ -7,6 +7,10 @@ module Services
     # the row up). :missing is a book that is none of these: removed here without
     # callbacks (delete_all, raw SQL). The caller decides whether that fails the run.
     class BookRoute
+      # The redirects it routes through, the newer ones after a refresh! or a failed lock. A ReimportHold is
+      # expanded through these (ReimportHold#with_redirects), so the two agree on where a book went.
+      attr_reader :redirects
+
       def initialize(scope, book_ids_here: ::Books::Book.pluck(:id).to_set)
         @redirects = scope.redirects
         @watermark = scope.books_watermark
@@ -34,9 +38,26 @@ module Services
         ids = book_ids.uniq.sort
         return true if ::Books::Book.where(id: ids).order(:id).lock("FOR SHARE").pluck(:id).size == ids.size
 
+        reload
+        false
+      end
+
+      # Call before planning a batch. lock only notices a merge that removed a book the batch writes to; a
+      # merge that moved a reader's held item (and only deletes rows) would go unseen, and the item be deleted
+      # as stale. When record_redirects changed since they were read, reloads them and the books here, and
+      # returns true.
+      def refresh!
+        return false unless @redirects.stale?
+
+        reload
+        true
+      end
+
+      private
+
+      def reload
         @redirects = Redirects.load
         @here = ::Books::Book.pluck(:id).to_set
-        false
       end
     end
   end

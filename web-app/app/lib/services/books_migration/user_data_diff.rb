@@ -18,9 +18,11 @@ module Services
 
       def initialize(scope:, legacy:)
         @legacy = legacy
-        @hold = scope.hold
         # The run's own new books count as here: the user-data steps run after them.
         @route = BookRoute.new(scope, book_ids_here: ::Books::Book.pluck(:id).to_set | scope.book_ids)
+        # Expanded through the route's redirects, as the migrators do. The report reads the redirects once: a merge
+        # committing while it runs is the run's to pick up (BookRoute#refresh!), not the report's.
+        @hold = scope.hold.with_redirects(@route.redirects)
       end
 
       def call

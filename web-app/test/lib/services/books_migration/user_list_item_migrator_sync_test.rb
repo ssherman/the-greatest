@@ -53,6 +53,24 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
     assert_equal [1, 1], [result[:data][:held_here], result[:data][:held_legacy]]
   end
 
+  test "a held item whose book is merged after the run read its redirects stays" do
+    # The re-import moved the reader's item from @book to dest. SyncPlan read the redirects and built the hold;
+    # then, before the list items step, an admin merged dest into @survivor.
+    dest = ::Books::Book.create!(title: "Re-import destination")
+    add_here(@list, dest, 1)
+    redirects = Services::BooksMigration::Redirects.load
+    hold = Services::BooksMigration::ReimportHold.new(pairs: [[@user.id, @book.id], [@user.id, dest.id]], redirects: redirects)
+    UserListItem.where(listable_id: dest.id).update_all(listable_id: @survivor.id)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: dest.id, to_id: @survivor.id)
+    dest.delete
+
+    result = run_sync([legacy_item(1, @book.id, 1)], redirects: redirects, hold: hold)
+
+    assert result[:success], result[:error]
+    assert_equal [@survivor.id], listed
+    assert_equal [0, 1, 1], result[:data].values_at(:deleted, :held_here, :held_legacy)
+  end
+
   test "routes an item on a merged book onto the survivor" do
     result = run_sync([legacy_item(1, 200_001, 1)], redirects: [["Books::Book", 200_001, @survivor.id]])
 

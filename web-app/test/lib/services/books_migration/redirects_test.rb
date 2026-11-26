@@ -64,6 +64,26 @@ class Services::BooksMigration::RedirectsTest < ActiveSupport::TestCase
     )
   end
 
+  test "loaded redirects go stale when a merge, delete or repoint commits after them" do
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 9)
+    loaded = Services::BooksMigration::Redirects.load
+    assert_not loaded.stale?
+
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 6, to_id: 9)
+    assert loaded.stale?
+
+    reloaded = Services::BooksMigration::Redirects.load
+    RecordRedirect.where(from_id: 5).update_all(to_id: 12, updated_at: 1.minute.from_now)
+    assert reloaded.stale?
+  end
+
+  test "redirects built from rows are never stale" do
+    subject = redirects([["Books::Book", 5, 9]])
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 6, to_id: 9)
+
+    assert_not subject.stale?
+  end
+
   test "load reads the record_redirects table" do
     RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 9)
 

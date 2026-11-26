@@ -124,6 +124,73 @@ class Services::BooksMigration::ReviewMigratorSyncTest < ActiveSupport::TestCase
     assert_equal 1, result[:data][:held]
   end
 
+  test "a held review whose book is merged after the run read its redirects is kept" do
+    # The re-import put review 140 on dest; legacy never had it. Dest was merged into @survivor after
+    # SyncPlan built the hold, before the reviews step.
+    dest = ::Books::Book.create!(title: "Re-import destination")
+    redirects = Services::BooksMigration::Redirects.load
+    hold = Services::BooksMigration::ReimportHold.new(pairs: [[@user.id, dest.id]], redirects: redirects)
+    here_review(140, book: @survivor)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: dest.id, to_id: @survivor.id)
+    dest.delete
+
+    result = run_sync([], sync: sync_scope(redirects: redirects, hold: hold))
+
+    assert result[:success], result[:error]
+    assert ::Review.exists?(140)
+    assert_equal [0, 1], result[:data].values_at(:deleted, :held)
+  end
+
+  test "a legacy row written onto a pair a mid-run merge made held does not displace the re-import's review" do
+    # Review 141 (the re-import's) sits on dest, a held pair. Legacy also has the reader's review 142 on
+    # @survivor. Dest is merged into @survivor while the step runs, after the reviews here were read:
+    # (reader, @survivor) is now held, so legacy's row must not be written over the re-import's review.
+    dest = ::Books::Book.create!(title: "Re-import destination")
+    redirects = Services::BooksMigration::Redirects.load
+    hold = Services::BooksMigration::ReimportHold.new(pairs: [[@user.id, dest.id]], redirects: redirects)
+    here_review(141, book: dest, rating: 3.75)
+    migrator = Services::BooksMigration::ReviewMigrator.new(sync: sync_scope(redirects: redirects, hold: hold))
+    row = legacy_review(142, "book_id" => @survivor.id, "rating" => 1)
+    merge = lambda do
+      ::Review.where(id: 141).update_all(reviewable_id: @survivor.id)
+      RecordRedirect.create!(item_type: "Books::Book", from_id: dest.id, to_id: @survivor.id)
+      dest.delete
+    end
+    migrator.define_singleton_method(:legacy_each) do |&block|
+      merge.call
+      block.call(row)
+    end
+
+    result = migrator.call
+
+    assert result[:success], result[:error]
+    review = ::Review.find(141)
+    assert_equal [@survivor.id, 3.75], [review.reviewable_id, review.rating.to_f]
+    refute ::Review.exists?(142)
+  end
+
+  test "a review a mid-run merge moves onto a held pair is not deleted" do
+    # Review 143 sits on an unheld book when the step starts, and legacy lacks it. A merge while the step runs
+    # moves it onto (reader, dest), a held pair: it is now the reader's review there, and is kept.
+    dest = ::Books::Book.create!(title: "Re-import destination")
+    other = ::Books::Book.create!(title: "Merged into dest")
+    redirects = Services::BooksMigration::Redirects.load
+    hold = Services::BooksMigration::ReimportHold.new(pairs: [[@user.id, dest.id]], redirects: redirects)
+    here_review(143, book: other)
+    migrator = Services::BooksMigration::ReviewMigrator.new(sync: sync_scope(redirects: redirects, hold: hold))
+    migrator.define_singleton_method(:legacy_each) do |&_block|
+      ::Review.where(id: 143).update_all(reviewable_id: dest.id)
+      RecordRedirect.create!(item_type: "Books::Book", from_id: other.id, to_id: dest.id)
+      other.delete
+    end
+
+    result = migrator.call
+
+    assert result[:success], result[:error]
+    assert ::Review.exists?(143)
+    assert_equal [0, 1], result[:data].values_at(:deleted, :held)
+  end
+
   test "overwrites a review legacy edited" do
     here_review(100, rating: 2)
 
