@@ -26,4 +26,23 @@ class Books::GoodreadsReimport::SnapshotJobTest < ActiveSupport::TestCase
 
     assert JSON.parse(@path.read).key?("users")
   end
+
+  test "a refused new pass does not advise redo" do
+    Services::Books::GoodreadsReimport::Report.stubs(:snapshot).with(replace: false, new_pass: true).returns(nil)
+    Rails.logger.expects(:warn).with { |line| line.include?("new_pass again") && !line.include?("redo") }
+
+    Books::GoodreadsReimport::SnapshotJob.new.perform(false, true)
+  end
+
+  test "new_pass writes a further file and leaves the existing one alone" do
+    dir = @path.dirname
+    Services::Books::GoodreadsReimport::Report.unstub(:snapshot_path)
+    Services::Books::GoodreadsReimport::Report.stubs(:storage_dir).returns(dir)
+    @path.write("old")
+
+    Books::GoodreadsReimport::SnapshotJob.new.perform(false, true)
+
+    assert_equal "old", @path.read
+    assert_equal 1, dir.glob("counts-*.json").size
+  end
 end

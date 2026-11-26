@@ -53,4 +53,28 @@ class Services::BooksMigration::BookRouteTest < ActiveSupport::TestCase
     refute stale.lock([200_001, survivor.id])
     assert_equal survivor.id, stale.call(200_001)
   end
+
+  test "refresh! reloads the redirects and books here when a merge committed since they were read" do
+    survivor = ::Books::Book.create!(title: "Survivor")
+    merged = ::Books::Book.create!(title: "Merged")
+    subject = Services::BooksMigration::BookRoute.new(sync_scope(redirects: Services::BooksMigration::Redirects.load))
+    assert_not subject.refresh!
+
+    RecordRedirect.create!(item_type: "Books::Book", from_id: merged.id, to_id: survivor.id)
+    merged.delete
+    before = subject.redirects
+
+    assert subject.refresh!
+    assert_not_same before, subject.redirects
+    assert_equal survivor.id, subject.call(merged.id)
+    assert_not subject.refresh!
+  end
+
+  test "refresh! leaves redirects that did not come from the table alone" do
+    subject = route(redirects: [["Books::Book", 5, 20]])
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 10)
+
+    assert_not subject.refresh!
+    assert_equal 20, subject.call(5)
+  end
 end

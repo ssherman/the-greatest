@@ -5,7 +5,8 @@ module Services
     # every other book or author id is routed through. books_watermark is the
     # books watermark this run advances to: a legacy book above it has not been
     # copied yet, so user data on it waits for a later run (spec §6). Built by
-    # SyncPlan, read by the migrators through their sync: argument.
-    SyncScope = Struct.new(:book_ids, :author_ids, :identifier_ids, :redirects, :books_watermark, keyword_init: true)
+    # hold (a ReimportHold) names the reader/book pairs the Goodreads re-import changed, which the sync leaves
+    # alone. Built by SyncPlan, read by the migrators through their sync: argument.
+    SyncScope = Struct.new(:book_ids, :author_ids, :identifier_ids, :redirects, :books_watermark, :hold, keyword_init: true)
   end
 end

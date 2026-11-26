@@ -306,4 +306,4 @@ Research run on `gpt-6-astra` with web search: about 15 cents (measured 2026-09-
 ## Not done here
 
 Authors, series and a ledger UI. See the spec's Non-goals. The origin and categories backfill is
-`Services::Books::Categorize::Backfill` (`docs/launch-todo.md` section 14).
+`Services::Books::Categorize::Backfill` (`docs/launch-todo.md` section 4, step 10).

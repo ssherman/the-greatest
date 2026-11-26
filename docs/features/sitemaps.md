@@ -86,5 +86,5 @@ categories qualify.
 ## Search Console
 
 Submitting `/sitemap.xml` in Google Search Console is manual, once per site. Music and games are
-submitted after deploy; books after the switch is on (`docs/launch-todo.md`, section 7). Search
+submitted after deploy; books after the switch is on (`docs/launch-todo.md`, section 5.2). Search
 engines are not pinged (Google retired its ping endpoint).

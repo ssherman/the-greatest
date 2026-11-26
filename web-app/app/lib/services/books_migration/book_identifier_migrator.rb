@@ -50,20 +50,21 @@ module Services
         )
       end
 
-      # The run's new book_identifiers rows on any book, plus every row of the run's
-      # new books: one created between the final :all and sync_init sits below the
-      # identifier watermark (spec §5; find_or_create makes the overlap harmless).
+      # Only the rows of the run's new books. The old site's Goodreads importer stamps
+      # each CSV row's Goodreads id and ISBNs onto whatever book it guessed, so copying
+      # a new identifier onto a book we already have would pull later imports onto the
+      # wrong book (spec 5.6; Shane, 2026-11-26: option A). New books arrive whole, so
+      # this also takes their rows that sit below the identifier watermark. The
+      # watermark still advances over every new row (SyncPlan#next_watermarks).
       def in_sync_scope?(attrs)
         return true unless sync
 
-        sync.identifier_ids.include?(attrs["id"]) || sync.book_ids.include?(attrs["book_id"])
+        sync.book_ids.include?(attrs["book_id"])
       end
 
       def legacy_each(&block)
         relation = legacy_model
-        if sync
-          relation = legacy_model.where(id: sync.identifier_ids.to_a).or(legacy_model.where(book_id: sync.book_ids.to_a))
-        end
+        relation = legacy_model.where(book_id: sync.book_ids.to_a) if sync
         relation.find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
       end
 

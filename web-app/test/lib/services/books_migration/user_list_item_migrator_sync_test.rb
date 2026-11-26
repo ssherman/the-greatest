@@ -17,9 +17,9 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
     }
   end
 
-  def run_sync(rows, redirects: [], books_watermark: Float::INFINITY)
+  def run_sync(rows, redirects: [], books_watermark: Float::INFINITY, hold: Services::BooksMigration::ReimportHold.none)
     migrator = Services::BooksMigration::UserListItemMigrator.new(
-      sync: sync_scope(redirects: redirects, books_watermark: books_watermark)
+      sync: sync_scope(redirects: redirects, books_watermark: books_watermark, hold: hold)
     )
     migrator.define_singleton_method(:legacy_items_for) do |list_ids|
       rows.select { |row| list_ids.include?(row["user_list_id"]) }
@@ -35,6 +35,40 @@ class Services::BooksMigration::UserListItemMigratorSyncTest < ActiveSupport::Te
       user_list_id: list.id, listable_type: "Books::Book", listable_id: book.id, position: position,
       created_at: Time.current, updated_at: Time.current
     }])
+  end
+
+  test "leaves a held reader/book pair alone, here and in legacy" do
+    add_here(@list, @survivor, 1)
+    UserListItem.where(listable_id: @survivor.id).update_all(completed_on: Date.new(2024, 5, 5))
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@user.id, @book.id], [@user.id, @survivor.id]], redirects: Services::BooksMigration::Redirects.new([])
+    )
+
+    result = run_sync([legacy_item(1, @book.id, 1)], hold: hold)
+
+    assert result[:success], result[:error]
+    assert_equal [@survivor.id], listed
+    item = UserListItem.find_by!(listable_id: @survivor.id)
+    assert_equal [1, Date.new(2024, 5, 5)], [item.position, item.completed_on]
+    assert_equal [1, 1], [result[:data][:held_here], result[:data][:held_legacy]]
+  end
+
+  test "a held item whose book is merged after the run read its redirects stays" do
+    # The re-import moved the reader's item from @book to dest. SyncPlan read the redirects and built the hold;
+    # then, before the list items step, an admin merged dest into @survivor.
+    dest = ::Books::Book.create!(title: "Re-import destination")
+    add_here(@list, dest, 1)
+    redirects = Services::BooksMigration::Redirects.load
+    hold = Services::BooksMigration::ReimportHold.new(pairs: [[@user.id, @book.id], [@user.id, dest.id]], redirects: redirects)
+    UserListItem.where(listable_id: dest.id).update_all(listable_id: @survivor.id)
+    RecordRedirect.create!(item_type: "Books::Book", from_id: dest.id, to_id: @survivor.id)
+    dest.delete
+
+    result = run_sync([legacy_item(1, @book.id, 1)], redirects: redirects, hold: hold)
+
+    assert result[:success], result[:error]
+    assert_equal [@survivor.id], listed
+    assert_equal [0, 1, 1], result[:data].values_at(:deleted, :held_here, :held_legacy)
   end
 
   test "routes an item on a merged book onto the survivor" do

@@ -60,7 +60,14 @@ module Services
         return unless sync
 
         @route = BookRoute.new(sync, book_ids_here: @book_ids)
-        @here_ids = legacy_origin_reviews.pluck(:id).to_set
+        @hold = sync.hold
+        refresh_hold
+        legacy_here = legacy_origin_reviews.pluck(:id, :user_id, :reviewable_id)
+        @here_ids = legacy_here.map(&:first).to_set
+        # Reviews the Goodreads re-import moved or rated sit on held pairs: the run
+        # neither rewrites nor deletes them, whether or not legacy still has the row.
+        @here_held_ids = legacy_here.select { |_, user_id, book_id| @hold.held?(user_id, book_id) }.map(&:first).to_set
+        @held_ids = @here_held_ids.dup
         @kept_ids = Set.new
         @written_keys = Set.new
         @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0}
@@ -76,7 +83,7 @@ module Services
       end
 
       def extra_result_data
-        sync ? @stats : {}
+        sync ? @stats.merge(held: @held_ids.size) : {}
       end
 
       # Newest-first so the dedup below keeps the newer of a duplicated pair.
@@ -89,6 +96,15 @@ module Services
       def build_rows(attrs)
         Services::BooksMigration.raise_if_at_ceiling!("reviews", attrs["id"])
 
+        # Held is checked before routing (as list items do), so a held row on a deleted or
+        # waiting book counts as held. A legacy row naming a held review's id is held too:
+        # legacy's own book merge moves reviews keeping their ids, and writing that row
+        # would move the re-imported review off its pair.
+        if sync && (@here_held_ids.include?(attrs["id"]) || @hold.held?(attrs["user_id"], attrs["book_id"]))
+          @held_ids << attrs["id"]
+          return []
+        end
+
         book_id = sync ? routed_book_id(attrs) : attrs["book_id"]
         return [] if book_id.nil?
 
@@ -100,6 +116,12 @@ module Services
         user_id = attrs["user_id"]
         unless @user_ids.include?(user_id)
           raise "no migrated ::User for legacy reviews.user_id=#{user_id.inspect}"
+        end
+
+        # Routed book held; before the collision check: a held row must not claim the pair in @seen.
+        if sync && @hold.held?(user_id, book_id)
+          @held_ids << attrs["id"]
+          return []
         end
 
         # First occurrence wins, and rows arrive newest-first.
@@ -140,11 +162,16 @@ module Services
       # side of a merge collision, or one a replay relink moved here) is deleted
       # first, so the unique index takes the winner. A new-app review holding it
       # wins instead, and the legacy row is skipped.
+      #
+      # The rows were checked against the hold as it stood when they were built. A
+      # merge committed since can have moved a held review onto a pair a row now
+      # claims, so they are routed and checked again first when one has.
       def flush(rows)
         return super unless sync
 
         writable = []
         ::Review.transaction do
+          rows = reroute(rows) if refresh_hold
           attempts = 0
           until rows.empty? || @route.lock(rows.map { |row| row[:reviewable_id] })
             raise "reviews: books kept vanishing mid-run; re-run the sync" if (attempts += 1) > 3
@@ -185,6 +212,7 @@ module Services
       # pair an earlier batch already wrote holds the newer review: a row rerouted
       # onto it is a collision, not a replacement.
       def reroute(rows)
+        refresh_hold
         batch_keys = Set.new
         rows.filter_map do |row|
           book_id = @route.call(row[:reviewable_id])
@@ -194,6 +222,10 @@ module Services
           end
           unless book_id.is_a?(Integer)
             raise "legacy reviews.id=#{row[:id]}: book #{row[:reviewable_id]} is neither here nor redirected"
+          end
+          if @hold.held?(row[:user_id], book_id)
+            @held_ids << row[:id]
+            next
           end
           key = [row[:user_id], book_id]
           if @written_keys.include?(key) || !batch_keys.add?(key)
@@ -210,11 +242,31 @@ module Services
       # it lost a collision, or its book was deleted here. Counted against the
       # ids here at the start, as UserDataDiff counts them.
       def delete_reviews_legacy_lacks
-        doomed = (@here_ids - @kept_ids).to_a.sort
+        doomed = (@here_ids - @kept_ids - @held_ids).to_a.sort
+        doomed -= now_held(doomed)
         Services::BooksMigration.guard_deletion!("reviews", doomed.size, @here_ids.size)
         doomed.each_slice(1_000) { |ids| ::Review.where(id: ids).delete_all }
         @stats[:inserted] = (@kept_ids - @here_ids).size
         @stats[:deleted] = doomed.size
+      end
+
+      # Reloads the route's redirects when a merge has committed since they were
+      # read, and expands the hold through the route's redirects, so the two agree.
+      # True when the redirects were reloaded.
+      def refresh_hold
+        reloaded = @route.refresh!
+        @hold = @hold.with_redirects(@route.redirects)
+        reloaded
+      end
+
+      # Reviews a merge has moved onto a held pair since @here_held_ids was taken.
+      # A review sitting on a held pair is never deleted, as a list item is not.
+      def now_held(ids)
+        refresh_hold
+        held = legacy_origin_reviews.where(id: ids).pluck(:id, :user_id, :reviewable_id)
+          .select { |_, user_id, book_id| @hold.held?(user_id, book_id) }.map(&:first)
+        @held_ids.merge(held)
+        held
       end
 
       def legacy_origin_reviews

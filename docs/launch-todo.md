@@ -1,1032 +1,506 @@
 # Books launch todo
 
-The manual steps for moving thegreatestbooks.org onto this app, and for the weeks after. Nothing here
-runs on deploy. When a merge leaves a step that someone has to run by hand at launch, add it here, with
-a pointer to the doc that explains it.
+The manual steps for moving thegreatestbooks.org onto this app, in the order to run them. Nothing here
+runs on deploy. When a merge leaves a step someone has to run by hand, add it here with a pointer to
+the doc that explains it. Keep this the one list: details belong in the feature docs it points to.
 
-Production's books data is not truncated before launch any more. Until the switch-over (section 2) the
-weekly `data_migration:all` keeps it in step with legacy. From the switch-over on, this database's
-books catalog is the master: merges, deletes and fixes made here stay, and the weekly
-`data_migration:sync` brings over only what is new on legacy while keeping legacy users' lists,
-reviews and saved searches matched to legacy. Details: `docs/features/books-legacy-sync.md`.
+Every command was checked against the code, and every status against production (read-only), on
+2026-11-26. Re-check a status before acting on it.
 
-## 1. Until the switch-over: the weekly full migration
+> **Do not run `data_migration:sync` until the sync fix is deployed.** The sync fix is the branch
+> `worktree-sync-keeps-reimport` (spec `docs/superpowers/specs/2026-11-26-books-sync-keeps-reimport-design.md`).
+> Without it, a sync puts legacy readers' lists and reviews back the way the old importer left them,
+> which undoes the Goodreads re-import applied on 2026-11-17 to 11-21. The order is:
+>
+> 1. The old site's Goodreads upload pause is deployed (section 4, step 1).
+> 2. The sync fix is deployed (section 4, step 2).
+> 3. `bin/rails data_migration:sync_report`, then `bin/rails data_migration:sync`, then
+>    `bin/rails data_migration:sync_report` again (section 4, step 3).
+>
+> To see whether the fix is in production: `sync_report` (read-only) prints "held for the Goodreads
+> re-import" on its `user_list_items` and `reviews` lines only when it is.
 
-Run these in this order after each `data_migration:all`.
+## 1. Words used here
 
-1. **`bin/rails data_migration:all`.** It includes `penalties:reconcile`, `author_countries`,
-   `recommendation_configs` and the favorites-list rebuild.
-2. **Search and rankings.** The migrators load with search indexing off, so run
-   `bin/rails search:books:recreate_and_reindex_all`.
-   Then use the admin **Refresh Rankings** action on the books primary. That one run reweighs,
-   ranks and requests the author rankings when it lands. The 04:00 UTC author cron is the safety
-   net.
-3. **Cover images.** Make sure Sidekiq is up, because this queues about 148k jobs. Then run
-   `bin/rails data_migration:book_images`. It is idempotent, and the primary-image count should
-   come out close to 37,296.
-4. **V1 Firebase accounts.** Follow the four steps in `docs/features/v1-user-migration.md`,
-   "Running it": export, import, `firebase:backfill_v1_uids`, then shred the file. The import comes
-   before the backfill. The user overwrite resets `users.auth_uid`, so the backfill runs every time.
+- **Legacy**: the old site (thegreatestbooks.org, repo `the-greatest-books`) and its database.
+- **Switch-over**: `data_migration:sync_init`. It ran in production on 2026-10-10. From then on this
+  database's books catalog is the master, and the weekly sync brings over only what is new on legacy.
+- **Cutover**: legacy goes offline and the last sync runs with `FINAL=1`. Not yet scheduled.
+- **Hostname switch**: thegreatestbooks.org starts pointing at this app. Books runs at
+  `new.thegreatestbooks.org` until then.
+- **Re-import pass**: one run of the Goodreads re-import steps over the legacy imports not yet covered
+  (section 3.2). The first, full pass applied 2026-11-17 to 11-21.
+- **Shane runs with `!`**: the step changes production, DNS or the home server, so an agent does not run it.
 
-The duplicate sweep can already run: `bin/rails "books:find_duplicates[100]"` first, then `[all]`
-(about 21k ranked books on the `serial` queue, days). It only writes candidate pairs, and those
-survive the weekly run. Do not merge, delete or edit books yet: the next `:all` would undo it.
+## 2. Where things stand (2026-11-26)
 
-## 2. Switching over (once)
+Checked read-only in production on 2026-11-26 at about 03:50 UTC. DONE means the evidence shows it ran.
 
-1. **Before** starting the final `:all`, read legacy's highest `book_identifiers` id:
-   `bin/rails runner 'puts LegacyBooks::BookIdentifier.maximum(:id)'`.
-2. Run the final `data_migration:all` and the section 1 steps after it.
-3. `BOOK_IDENTIFIERS_FROM=<that id> bin/rails data_migration:sync_init`.
+| Area | Status | Evidence |
+|---|---|---|
+| Switch-over (`sync_init`) | DONE 2026-10-10 | Sync watermarks created 2026-10-10 04:44 UTC. |
+| Weekly sync | PAUSED since 2026-11-13 | Last successful sync 2026-11-13 00:43 UTC (watermarks: books 178,056, authors 80,892, book_identifiers 553,842). Legacy has 580 books above the watermark and 10 Goodreads imports since. Waits for section 4, steps 1-3. |
+| Goodreads re-import, first pass | DONE 2026-11-17 to 11-21 | All verdicts applied: 462,166 rows (434,759 keep, 14,758 add, 8,090 copy, 4,559 move), 188,321 matches, 1,668 mixed books, 14,949 strips, 129 guesses, 135 author fixes. 11 `reimport_author` proposals still wait for review. Report `report-20261121T053123Z.md`; snapshot `counts.json` of 2026-11-20 04:28. |
+| Re-import sample check | UNKNOWN | No record found; the result is only in the Sidekiq log, which the 2026-11-26 01:25 deploy reset. Settled by running it (section 4, step 4). |
+| Re-import enrichment (`GOODREADS_REIMPORT_ENRICHMENT`) | NOT RUN | Unset in production. |
+| Re-import gate (`GOODREADS_REIMPORT_ENABLED`) | ON | `true` in production. |
+| Legacy Goodreads imports since the last load | NOT LOADED | 10 legacy imports (ids above 835) are not loaded here. They load after the first fixed sync. |
+| Old site: Goodreads upload paused | NOT DEPLOYED | Branch `goodreads-import-paused` in `the-greatest-books`, not merged. The newest legacy import is from 2026-11-23. |
+| Recommendations model | DONE | Active books model 42, from the 2026-11-25 export. The before-go-live work (section 4, step 17) is open. |
+| Identifier provenance (`identifiers:mark_legacy`) | DONE | 0 books identifiers without a source. |
+| Stored-name normalization | DONE | The read-only report finds 0 books and 0 authors to change. |
+| Verification pass | PARTIAL | Ranked pre-import books and the trusted post-import books are done (21,241 rows; the last on 2026-10-29). Second chance and keep-bigger are done. The post-import pass (`books:verify[all,post_import]`) has not run, and 226 verified books have legacy identifiers newer than their check. |
+| Duplicate queue | ONGOING | 14 pending, 3,533 merged, 786 not duplicates. |
+| Category cleanup | DONE | 64,296 decisions applied. |
+| WorldCat genre data | PARTIAL | Genre cleanup and aliases done (3 audiences; Noir and Hardboiled under Crime Fiction; `apply_aliases` would add 0). The backfill has not run: no category link has source `worldcat`. |
+| Alternate titles cleanup | DONE 2026-10-25, repeating step due | 2,033 findings undone on 2026-10-24/25. The last review decision is from 2026-11-20; 5,190 books have alternate titles not yet judged (most arrived since, from merges and enrichment). |
+| Goodreads rebuild | DONE 2026-11-01, enrichment running | 39,148 of 39,152 approved fixes and 194 of 207 approved book merges applied, the last on 2026-11-01. The fixed books still enrich: 299 Goodreads fetches wait at the in-flight cap. `GOODREADS_DAILY_FETCH_CAP` is unset (default 1,500). |
+| MCP sign-in (OAuth) | PARTIAL | 9 OAuth connections since 2026-11-09, 5 of them to `/api/mcp/admin`, so discovery and admin sign-in work. The docs-only acceptance (section 4, step 15) is not recorded. |
+| Origins and categories (enrichment) | PARTIAL | Judge on (`BOOKS_CATEGORIES_JUDGE_ENABLED=1`), research to the agent queues (`AI_RESEARCH_VIA=queue`). Genre and audience definitions written (a dry run would write 0). Agent queues pending: book facts 213, author facts 70, origin 1,008, categories 580. The paced backfill has not started (no `backfill` runs of the categorize workflow). |
+| Local Wikidata | DONE | Service live; the ranked-author enrichment ran 2026-11-10 to 11-12 (13,574 completed runs). The re-check after refresh is off (an after-launch step). |
+| Ranking archives | DONE | 44 archives: 43 copied from legacy, 1 automatic. |
+| Cover dimensions | DONE | 0 book cover images without a width (12 edition images remain). The Discord check is not recorded. |
+| Publisher intake | PARTIAL | Hachette: one finished run, 1,397 titles, all 1,470 read pages at the current parser version. Penguin Random House is enabled but has no run yet. Macmillan is not enabled. |
+| List audits | ONGOING | 48 audits finished. Penalty consolidation, renames (5, 11) and guidance are done: every guidance row matches the YAML, and no dynamic penalty is attached. |
+| User-added books | PARTIAL | Deployed; 1 submission (added and approved). Both new Sidekiq queues are served, and 2 tokens with `books:admin:merge` exist. The Amazon `get_items` check and the three end-to-end adds are not recorded. |
+| Title notes repair | DONE 2026-11-26 | Ran about 02:39 UTC with #551 deployed (book 11563 changed then). A dry run now finds 0. |
+| V1 Firebase accounts | NOT RUN | 0 users carry a `tgbv1-` uid. A cutover step. |
+| Membership emails, search indexing | NOT YET (correct) | `MEMBERSHIP_EMAIL_SCOPE` and `BOOKS_PUBLIC_INDEXING` are unset; `BOOKS_DOMAIN` is `new.thegreatestbooks.org`. Hostname-switch steps. |
+| `SIDEKIQ_CONCURRENCY` | 25 | Stays at 25 (Shane, 2026-11-26). |
 
-From then on `data_migration:all`, the catalog tasks and the user-data tasks the sync replaces refuse
-to run. Cleanup can start (section 5).
+## 3. Every week until cutover
 
-## 3. The collaborative-filtering model (once, after spec 2 increment 2 merges)
+Run these in this order, once the first fixed sync (section 4, step 3) has run. Each is safe to repeat.
+Do not merge to `main` (a merge deploys) while the sync runs.
 
-Depends only on spec 2's increment 2 (the home-server timer) being merged, not on the switch-over.
-Until the store is configured, the nightly export and hourly load jobs log "recommendations store
-not configured; skipping" and do nothing; if only some of the `RECOMMENDATIONS_R2_*` variables are
-set, they raise. Details: `docs/features/recommendations.md`, "Collaborative signal".
+1. **`bin/rails data_migration:sync_report`.** Read-only. A `MISSING` line means the sync will fail
+   on rows whose book was removed without callbacks: look at those ids first. A large delete count
+   means legacy looks wrong: check it before syncing. The `user_list_items` and `reviews` lines say
+   how many rows are held for the Goodreads re-import.
+2. **`bin/rails data_migration:sync`.** About 10 minutes. It brings over new books and authors (with
+   their identifiers, covers and search indexing), users, user lists and list items, reading goals,
+   saved searches, recommendation settings, reviews and corrections, then rebuilds the favorites
+   lists. It leaves alone every reader/book pair the Goodreads re-import changed, and it copies no new
+   legacy identifier onto a book we already have (`docs/features/books-legacy-sync.md`, "The Goodreads
+   re-import hold" and "Identifiers"). Its output lists each step's result; the `user_list_items` step
+   shows `held_legacy` and `held_here`, the `reviews` step `held`. A step that would delete more than
+   5% of a table (and over 500 rows) refuses; if the deletions are real, re-run with
+   `SYNC_ALLOW_DELETES=1`. A failed run moves no watermark, so running it again is safe.
+   Avoid book merges (admin, MCP agents, replay apply, submissions) while the sync runs.
+3. **`bin/rails data_migration:sync_report` again.** Every insert, update, delete and dropped count
+   is 0, every "would insert" is 0, and there is no `MISSING` line. The held counts are still printed,
+   and the totals (legacy and here columns, redirects recorded, users deleted on legacy, merge
+   collisions, the "legacy edits to existing books" line) stay non-zero. All of that is expected.
+4. **`bin/rails books:authors:merge_unknown`.** A dry run. If it lists authors, run it again with
+   `APPLY=1`: the sync brings legacy authors over directly, so a new "Anonymous" or "Unknown Author"
+   skips the import finder. It prints "Nothing to merge." when there is nothing (2026-11-26: nothing).
+5. **`bin/rails books:goodreads_replay:apply`, then `bin/rails books:goodreads_replay:repair_ratings`.**
+   The sync overwrites legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75);
+   `repair_ratings` puts the quarter-star rating back. `apply` re-runs the replay's approved verdicts,
+   each a no-op when already done. Read the tallies they print. Keep running both until several weeks
+   in a row show they changed nothing.
+6. **`bin/rails books:goodreads_replay:load`.** Copies the legacy Goodreads imports made since the
+   last load (it needs the `LEGACY_R2_*` variables, which production has). It reuses imports already
+   loaded. If it loaded any new complete import, run a re-import pass (3.2) now, then continue with
+   step 7.
+7. **`bin/rails books:titles:repair_notes`.** `DRY_RUN=1` first to see the list. The sync never
+   rewrites the title of a book we already have, but the books it adds arrive with legacy's titles,
+   series notes included. Idempotent: a second run reports 0.
+8. **Alternate titles.** `bin/rails "books:alternate_titles:review[all]"` (one AI call per book with
+   undecided titles, on the `low` queue; wait for it), then `bin/rails books:alternate_titles:undo_findings`
+   (a dry run: read the counts and samples), then `bin/rails "books:alternate_titles:undo_findings[apply]"`.
+   Each handles only rows it has not handled before. Details: `docs/features/books-alternate-titles.md`.
+9. **Verification of new books, once section 4 step 8 has run.**
+   `bin/rails "books:verify[all,post_import]"`. It verifies the ranked books not yet verified, the
+   ones the sync added included. Never while a re-import pass is matching (both need Open Library's
+   one `/resolve` slot).
+10. **WorldCat, once section 4 step 9 has run.** `bin/rails "worldcat:backfill[verified]"`, after
+    step 9 above. It is additive and idempotent: it links only books that have no WorldCat links yet,
+    and reads verified ISBN-13s only, so it reaches new books once they are verified.
+11. **Origins and categories, once section 4 step 10's backfill has finished (optional).**
+    `bin/rails "books:categorize:backfill[all,all,weekly]"`, then again with `APPLY=1`. It plans only
+    the books the sync added and the books a deferral or failure left undone. Before that backfill
+    has run, `all` would plan the whole catalog: do not run it early.
+12. **Rankings.** On the admin page of the books primary ranking configuration, use **Refresh
+    Rankings**. It reweighs the lists, ranks the books and requests the author rankings when it lands
+    (the 04:00 UTC author cron is the safety net).
 
-1. **The bucket.** Create the private R2 bucket and a token scoped to it. Put
-   `RECOMMENDATIONS_R2_ACCESS_KEY/SECRET_KEY/BUCKET` in the production SOPS secrets (the endpoint defaults to `STORAGE_ENDPOINT`), and `RECOMMENDATIONS_R2_*` +
-   `HC_RECOMMENDER` in `secrets/home-server.env`.
-2. **The check.** Create the healthchecks.io check `recommender-train` (period 1 day, grace 2 days).
-3. **The home server.** Run `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE` set) so the `ol` VM gets the new env. A VM tracking `main` installs `recommender-train.timer` and builds the trainer image within 15 minutes of the merge, before anyone provisions; `provision` then pushes the env file and forces an immediate deploy. `provision --verify` then reports `ol: recommender-train.timer is enabled`. If the VMs were pointed at a branch to test this, `provision --ref main` goes **before** the merge: GitHub deletes the merged branch and a VM tracking it fails its next deploy. Until the first export exists in the bucket, each 04:00 run pings `fail` with `no export published for books`; that is expected, and step 4 the same day ends it.
-4. **The first model.** `Recommendations::ExportInteractionsJob.perform_async("books")` from a
-   console (or wait for the 02:30 UTC run), let the home server's `recommender-train` timer run (04:00 UTC;
-   or `sudo systemctl start recommender-train` on the `ol` VM, then `journalctl -u recommender-train` for the trainer's output), then confirm `Recommendations::LoadModelJob`
-   loaded it (`RecommendationModel.active_for(:books)`) and that
-   `bin/rails recommendations:show USER_ID=…` lists `collaborative`.
+The recommendations export (02:30 UTC), training (04:00 UTC) and model load (hourly) pick up the
+synced data by themselves.
 
-After that the nightly export, daily train and hourly load keep it current through every weekly
-`data_migration:sync`; after a sync, the next 02:30 export and 04:00 train pick it up by themselves; running step 4's
-`perform_async` and `systemctl start` by hand only helps before that day's 04:00 run, because a
-second export on the same day reuses the day's file name and the trainer reports it already trained.
+### 3.1 Not weekly
 
-5. **Before books goes live.**
-   - Cap the shelf the signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL today),
-     and profile the +140-215 ms the signal adds on the 20-99 and 100+ segments (the harness `ms` column is confounded by variant order; see the data-quality record).
-   - Depth: the three settings now build three different pages (2026-10-10); the collaborative
-     list still ignores the quality prior, which at its 0.25 weight is two picks in twenty (see
-     "Known gaps" in `docs/features/recommendations.md`).
+- `firebase:backfill_v1_uids` runs after each sync only once the V1 Firebase import has run. It has
+  not (0 `tgbv1-` uids on 2026-11-26), and it is a cutover step (section 5.1). Before that import, the
+  backfill would point about 30,000 accounts at Firebase identities that do not exist.
+- `books:verify[all,recheck]` re-verified books that got new legacy identifiers. The sync no longer
+  adds legacy identifiers to books we already have, so after the one-off run in section 4 step 8 it has
+  nothing new to find.
 
-## 4. Every week after the switch-over
+### 3.2 A re-import pass (when `goodreads_replay:load` brings new imports)
 
-1. **`bin/rails data_migration:sync_report`.** Read-only, safe any time. A `MISSING` line means the
-   sync will fail on rows whose book was removed without callbacks. A large delete count means
-   legacy looks wrong: check it before syncing.
-2. **`bin/rails data_migration:sync`.** It brings over new books and authors (with their cover
-   images and search indexing), new book identifiers, users, user lists and list items, reading
-   goals, saved searches, recommendation settings, reviews and corrections, then rebuilds the
-   favorites lists. A step that would delete more than 5% of a table (and over 500 rows) refuses;
-   if the deletions are real, re-run with `SYNC_ALLOW_DELETES=1`.
-3. **`bin/rails firebase:backfill_v1_uids`, only once the V1 Firebase import has run** (section 1
-   step 4). The user overwrite resets `auth_uid` from legacy, and this puts the V1 uids back. Before
-   that import it would point about 30,000 accounts at Firebase identities that do not exist yet:
-   skip it until then (production had none on 2026-11-12).
-4. **`bin/rails books:goodreads_replay:apply`.** The sync puts legacy users' list items and reviews
-   back the way legacy has them, which undoes the replay's approved relinks until this re-applies
-   them. It re-runs every approved verdict of every kind (fixes, author and book merges, relinks,
-   strips, provisional marks), applied or not; each handler does nothing when its change is already
-   there. On 2026-11-12 there were no approved relinks, and the 42 approved verdicts never applied all
-   named books already merged away, so it changes nothing.
-5. **`bin/rails books:goodreads_replay:repair_ratings`.** Run it after `apply`. The sync overwrites
-   legacy-origin reviews with legacy's truncated integer rating (3 for a 3.75), and this puts the
-   fractional rating back.
-6. **Rankings.** The books list weights and book rankings. Author rankings follow.
-   While the section 12 re-import is still to run, also run `bin/rails books:goodreads_replay:load`
-   after the sync: it adds the legacy Goodreads imports made since the last load (27 on 2026-11-12),
-   so the re-import covers them. It reuses imports already loaded.
-7. **`bin/rails "books:verify[all,recheck]"`** after the sync, once the pass has run, and never while
-   the section 12 re-import is matching: both need Open Library's one `/resolve` slot. The sync keeps
-   adding legacy identifiers; this re-verifies the books that got new ones. Once the `post_import`
-   books have been verified, the recheck needs `post_import` too
-   (`books:verify[all,recheck,post_import]`).
-8. **`bin/rails "worldcat:backfill[verified]"`** (once section 9 is live), after the recheck above. The
-   sync brings over new books without WorldCat-derived categories, and the backfill reads verified
-   ISBN-13s only, which the new books do not have until the recheck verifies them. It is additive and
-   idempotent, so a full run only adds links for books that have none yet; links are recorded as
-   source `worldcat`. It is a repeating step, not a one-off. `books:verify` covers ranked books by default,
-   so unranked books added by the sync get no WorldCat links; that is by design.
-9. **`bin/rails books:authors:merge_unknown`, then again with `APPLY=1`.** The sync brings legacy
-   authors over directly, so a new "Anonymous" or "Unknown Author" from legacy skips the import finder
-   that maps those names onto the one Unknown author. The dry run lists what it would merge; `APPLY=1`
-   queues `Books::MergeUnknownAuthorsJob`, which merges them through the author merger and asks for one
-   author ranking refresh. Idempotent: with nothing left it prints "Nothing to merge." The first run
-   after the deploy that adds it merges the backlog (in dev, 35 authors into "Unknown").
-10. **Optional, manual: `bin/rails "books:categorize:backfill[all,all,weekly]" APPLY=1`**. It covers origin and
-   categories; under `all` each book is planned with only the judgment it still lacks. Run it only after
-   section 14 step 2 (the definitions), step 3 (the categories judge switch) and step 11 (the origin backfill and the categories backfill, or one `[all,...]`
-   run) have been done once: `all` weekly before the categories backfill would plan the whole catalog for
-   categories. It needs `APPLY=1` like those steps. Re-running it
-   after the sync picks up the books the sync added; it plans only the books the sync added and the books a deferred
-   research or a failure left undone (with `AI_RESEARCH_VIA=api`, deferred books only while `categorize_backfill_research_daily_cap` is above 0: at 0 they wait until you raise it; with `AI_RESEARCH_VIA=queue`, raising the cap does nothing, a deferred book counts as done, and gets a pending row in the origin or categories agent queue when it has no row in that queue yet and still has the gap). Books with a running import are left to their import. While the
-   section 14 backfill is still running, the weekly run reports almost every book as reused, and new books
-   start after the backfill's last slot.
+Each step queues a Sidekiq job and only takes work not done yet; wait for each to finish before the
+next. The `books:goodreads_reimport:*` tasks abort unless `GOODREADS_REIMPORT_ENABLED=true` (the
+report, snapshot and sample work without it). Finish a pass, through the report, between two syncs: a sync in the middle deletes what
+readers removed on legacy, and the loss check counts that as a drop. Details and where each output
+lands: `docs/features/goodreads-reimport.md`. Do not run `books:verify` while a pass runs.
 
-## 5. Cleanup, after the switch-over
+1. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The new legacy
+   books are classified; the mixed books are read from it.
+2. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It deletes nothing.
+3. **Match.** `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions it
+   left. Each match spends AI calls.
+4. **Review.** `bin/rails books:goodreads_reimport:report`, then in Admin, Repair verdicts, filtered
+   to `reimport_match`: approve the right proposals and **correct** the wrong ones ("Correct this
+   match": the right book's id, or create a new book). Do not reject a wrong pick: a rejected match is
+   never matched again and its readers stay where they are.
+5. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. It writes the approved matches
+   and creates the new books.
+6. **Decide.** `bin/rails "books:goodreads_reimport:decide[all]"`, and once it has finished, `decide[all]`
+   again: the second run decides the guesses for mixed books, which wait until their rows are decided.
+7. **Snapshot.** `bin/rails "books:goodreads_reimport:snapshot[new_pass]"`. It writes
+   `counts-<UTC time>.json` beside the first pass's `counts.json` and never touches an existing file.
+   Take it right before the apply that moves rows.
+8. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
+9. **Authors.** `bin/rails "books:goodreads_reimport:check_authors[all]"`. Every author verdict is a
+   proposal: review them in Admin, Repair verdicts, filtered to `reimport_author` (its Copy prompt hands
+   the review to an admin agent). Then `bin/rails books:goodreads_reimport:apply` again. Do not merge
+   authors by hand between the first `check_authors` and that apply.
+10. **Report.** `bin/rails books:goodreads_reimport:report`. It compares against the newest snapshot.
+    The acceptance lines at the bottom should each print 0; read the conflicts and the verdicts closed
+    with nothing to do.
+11. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log
+    ("Goodreads re-import sample check"), not in a file; note it somewhere, because the next deploy
+    resets the log. **Any "no" stops the run** until its cause is fixed.
 
-These change the catalog, so they wait for section 2. Each runs once, not after every sync, because
-the sync never undoes them.
+Then continue with section 3, step 7.
 
-1. **Stored-name normalization.** `ANALYZE` the tables that have `lower()` expression indexes. Then
-   run `bin/rails books:normalize_names:report`, and after reading its output,
-   `books:normalize_names:apply`.
-2. **Identifier provenance, once.** After the deploy that adds `identifiers.source`, run
-   `bin/rails identifiers:mark_legacy`. It marks every books identifier with no source `legacy` and
-   prints how many; a second run prints 0. Details: `docs/features/identifier-provenance.md`.
-3. **Book verification pass.** Run `bin/rails "books:verify[200]"`, read `bin/rails books:verify_report`
-   (hand-check the risky list and the samples), then `bin/rails "books:verify[all]"`. It settles each
-   ranked book's Open Library work, takes identifiers from the work's editions, confirms held ISBNs
-   against WorldCat and records signals. Next run
-   `bin/rails "books:verify[all,post_import,trusted]"`: the post-import books on a real list, which you
-   added by hand, so they don't wait for the rebuild. After the Goodreads rebuild, run
-   `bin/rails "books:verify[all,post_import]"`; `unranked` is optional and takes the rest of the
-   catalogue. The ranked `pre_import` books are estimated at 3-4 days. It shares Open Library's one
-   `/resolve` slot with the wizard and the Goodreads replay, so all of them slow down while it
-   runs. It pauses 4 seconds after each `/resolve` so the others can get the slot, but do not run
-   the Goodreads replay or the legacy-import finishing steps while it runs: when they cannot get
-   the slot they decide rows without Open Library. A deploy puts a running pass back on the queue
-   and it carries on under the same run id; logged books resume at their stage. If the worker
-   crashes instead, the run is lost: run the task again. Details:
-   `docs/features/book-verification.md`.
-   **Unsure books second chance, once, after the deploy that carries it:** first wait for the
-   running `books:verify[all]` pass to finish (only one run works at a time, and the second chance
-   should see every book that pass leaves unsure). Then check with a count that every done unsure or
-   removed row is ranked `pre_import`, because the default scope covers only those:
-   ```bash
-   bin/rails runner 'ranked = RankedItem.where(ranking_configuration_id: Books::RankingConfiguration.default_primary.id, item_type: "Books::Book").where.not(rank: nil).select(:item_id); rows = Books::Verification.stage_done.where(work_outcome: %i[unsure removed]); puts "all #{rows.count}, ranked pre_import #{rows.where(book_id: ranked).where.not(book_id: Services::Books::Verification::Cohort.post_import_range).count}"'
-   ```
-   (2026-10-24: both 4,137.) Run the alternate-titles `undo_findings[apply]` (section 10) first,
-   so the second chance compares against the cleaned titles. Start with a batch of 50:
-   `bin/rails "books:verify[50,second_chance]"`, then `bin/rails books:verify_report`, and check the
-   books that settled (the dev rehearsal of 2026-10-24 settled 22 of 50, about 30 seconds a book).
-   Then, if the two numbers are equal, run `bin/rails "books:verify[all,second_chance]"` (about a
-   day and a half for 4,137 books); if not, add
-   `unranked` and/or `post_import` to cover the rest. Settled books go on through stages 2-4, so the
-   run makes more Open Library calls and writes than the lookups alone. Then
-   `bin/rails books:verify_report`. Spot-check per route: read the "via <route>" samples for
-   `resolve_candidate`, `exact_title`, `held_key` and `worldcat_isbns`, the `second_chance_matcher`
-   count, and the top books by Goodreads rows. If a route is wrong, undo it with
-   `bin/rails "books:verify_revert_route[<route>]"` (`second_chance_matcher` undoes the books the
-   run settled through Open Library's own matcher); undo one book with
-   `bin/rails "books:verify_revert[<book id>]"`, which undoes only its second chance. Leave the flag
-   off routine runs: a rerun repeats the same lookups.
-   (2026-10-26: second chance done in production, unsure 4,011 to 2,482.)
-   **Keep the bigger held work, once, after the deploy that carries it:** `bin/rails
-   books:verify_keep_bigger` (dry run: about 278 books on the 2026-10-26 copy, with samples), then
-   `bin/rails "books:verify_keep_bigger[apply]"`. It reverts those books and queues a redo run over
-   them (about 30 seconds a book, so roughly 2½ hours); nothing else may run verification meanwhile.
-   Then `books:verify_report`, and the dry run again: it should list almost none. Details:
-   `docs/features/book-verification.md`, "Keeping the bigger held work".
-4. **Duplicates.** Review the pairs the sweep found in the Duplicates queue and merge them. Every
-   merge is recorded as a redirect, so the sync never brings the merged book back.
-5. **The Goodreads replay.** Run these in order. Sidekiq must be running for `resolve`.
-   Deploy the quarter-star ratings branch before the first production `books:goodreads_replay:load`.
-   `ParseRows` skips rows it already wrote, and pre-branch code drops fractional and `4.0` ratings
-   as unreadable. After that, `repair_ratings` finds no candidates and `finish_legacy` writes
-   unrated reviews.
+## 4. Before cutover, once (not yet done)
 
-   ```bash
-   bin/rails books:goodreads:seed_legacy_pages   # legacy scraped Goodreads pages into the page cache (~39k)
-   bin/rails books:goodreads_replay:load         # the legacy imports: uploads (legacy R2) and rows
-   bin/rails books:goodreads_replay:fix_slugs
-   bin/rails books:goodreads_replay:apply
-   bin/rails books:goodreads_replay:resolve      # queues jobs; re-run until both counts are 0
-   bin/rails books:goodreads_replay:duplicates
-   bin/rails books:goodreads_replay:junk
-   bin/rails books:goodreads_replay:apply
-   bin/rails books:goodreads_replay:repair_ratings   # quarter-star ratings the legacy importer truncated
-   bin/rails "books:goodreads_replay:report[../docs/data-quality/goodreads-replay.md]"
-   ```
+In order. Each step says whether it is safe now or what it waits for.
 
-   - `seed_legacy_pages` only needs to run once. It never overwrites a cached page, so running it
-     again is harmless.
-   - `apply` changes the catalog only through approved verdicts, under Books → Repair Verdicts.
-     `config.x.goodreads_replay.auto_apply` gates it and has been on since 2026-10-14, after the
-     first production replay's 50-per-kind hand check (spec §12.9).
-   - Its merges and provisional marks are catalog changes and stick. Its relinks of legacy users'
-     list items and reviews are undone by each sync and re-applied by `apply` (section 4).
-     `repair_ratings` repeats every pass for the same reason: each sync puts
-     legacy's truncated integer rating (3 for a 3.75) back.
-   - Details: `docs/features/goodreads-import.md`, "Legacy seed" and "Legacy replay".
-6. **Books categories cleanup.** Run the runbook in `docs/features/books-categories.md` in production
-   from a fresh backup: propose every stage, report, owner review and reject, apply, then trim
-   (dry run first). It can run before or after cutover, because the post-sync step keeps new legacy
-   categories in line once a cleanup has been applied. Re-run `propose` occasionally for what that
-   step leaves undecided.
-7. **Open Library `/resolve` under parallel load: done in #358.** On 2026-10-06 four Goodreads imports
-   resolving at once left `/resolve` timing out at 60 s for 25 minutes, until the API container was
-   restarted. Queries the Rails client had abandoned kept running and piled up in one 6 GB DuckDB pool.
-   #358 runs one `/resolve` at a time, answers the rest with an instant 503 busy, and stops a query at
-   a server-side deadline. The Rails client waits out a busy reply within its 60 s budget, and busy
-   never counts toward the breaker.
-   - What remains is capacity. A `/resolve` takes about 13 s, and every caller shares the one slot.
-     A client that cannot get the slot within its budget gives up, and the finder decides that row
-     without Open Library. Watch the flag rate when many members upload at once after launch.
+**Shared bottlenecks.** Steps that share one of these must not run at the same time:
 
-### Decide at launch
+- **Open Library's one `/resolve` slot**: `books:verify`, a re-import pass's `match`, member Goodreads
+  imports and `goodreads_replay:finish_legacy`, and the list wizard. A caller that cannot get the slot
+  within its budget decides without Open Library, so its results get worse, not just slower.
+- **The Wikimedia pace** (one request a second): `books:authors:enrich` and
+  `books:categorize:backfill`. Two at once halves each.
+- **Goodreads fetches** (`GOODREADS_DAILY_FETCH_CAP`, default 1,500 a day): the enrichment of the
+  rebuild's fixed books (300 in flight on 2026-11-26), the re-import's new books once their enrichment is
+  on, and readers' Goodreads links (100 a day reserved).
+- **Sidekiq threads** (`SIDEKIQ_CONCURRENCY` 25): a re-import `match[all]` fills them waiting on the AI.
+- **AI spend**: re-import match, decide, author check and sample; `alternate_titles:review`; the
+  categorize backfill; `enrichment_queue:work` (paid research, about 15 cents a row).
 
-- **Author enrichment:** `bin/rails "books:authors:enrich[all]"`, or `[13333]` for the ranked
-  authors only (the 2026-11-09 count; section 15 step 11 runs it). About 58k authors have no ranked book. After the switch-over.
-- **Book AI enrichment:** `bin/rails "books:enrich_missing[<limit>]"`. Nothing queues it
-  automatically.
-- **Amazon enrichment of ranked books:** `bin/rails books:amazon_enrich_ranked`. It has never been
-  run. It now also writes book-level `books_work_*` identifiers (source amazon) and raises
-  `identifier_collision` duplicate candidates. Run it AFTER the verification pass and WorldCat stamping, so
-  the verified-collision guard has verified values to compare against.
+1. **Pause Goodreads uploads on the old site. Shane merges and deploys.** Safe now. The change is the
+   branch `goodreads-import-paused` in `the-greatest-books` (spec section 5.3): the upload refuses with
+   a message, the import page and the recommendations card show it instead of the upload button, and
+   imports already running finish. Merging there deploys. Afterwards, open `/goodreads_imports` and
+   `/user_lists` on the old site and check the message shows.
+2. **Deploy the sync fix.** Waits for the dev rehearsal (it replaces the development database, so it
+   needs Shane's go) and for step 1. Then merge the branch `worktree-sync-keeps-reimport` (merging
+   deploys).
+3. **The first sync after the fix.** Waits for steps 1 and 2. `bin/rails data_migration:sync_report`
+   (check it prints the "held for the Goodreads re-import" counts; if not, the fix is not deployed:
+   stop), `bin/rails data_migration:sync`, `bin/rails data_migration:sync_report` (0 changes, held
+   counts printed). Then section 3 from step 4 on; its step 6 loads the 10 legacy imports made since
+   2026-11-13 and any made before step 1 deployed, and the re-import pass (3.2) covers them. From
+   then on, run section 3 every week.
+4. **Re-import: the sample check.** Safe now; read-only, hundreds of AI calls.
+   `bin/rails books:goodreads_reimport:sample`, then find "Goodreads re-import sample check" in the
+   Sidekiq log and write the result down (section 2 lists it as UNKNOWN). Any "no" stops the next pass
+   until its cause is fixed.
+5. **Re-import: the 11 proposed author fixes.** Safe now. Admin, Repair verdicts, filtered to
+   `reimport_author` and proposed. Approve or reject each; the next `apply` (in the pass of step 3)
+   carries out the approved ones, or run `bin/rails books:goodreads_reimport:apply` once reviewed,
+   while `GOODREADS_REIMPORT_ENABLED` is on.
+6. **Re-import: enrichment on.** Safe now. Set `GOODREADS_REIMPORT_ENRICHMENT=true` in
+   `secrets/.env.production` (SOPS) and merge, which deploys and restarts the worker. The books the
+   re-import created then join the rebuild's enrichment queue, after the rebuild's fixes, under the same
+   Goodreads fetch cap.
+7. **Re-import: gate off.** Waits for the pass in step 3. With uploads paused on the old site, no
+   further pass is expected. Remove `GOODREADS_REIMPORT_ENABLED` (or set it to `false`) in the SOPS
+   file and merge. While it is off, `archive_mixed`, `match`, `decide`, `apply` and `check_authors`
+   abort. If `goodreads_replay:load` later brings a new import, turn it back on for that pass.
+8. **Verification: the post-import books and the recheck.** Waits for the pass in step 3 (both need
+   the `/resolve` slot). `bin/rails "books:verify[all,post_import,recheck]"`: it verifies the ranked
+   books not yet verified, post-import ones included, and redoes the verified books in its scope that
+   got legacy identifiers after their check (226 such books of every scope on 2026-11-26). Only one
+   verification run works at a time; a deploy puts a running pass back on the queue. Then `bin/rails books:verify_report`. Add `unranked` only if you want the rest of the
+   catalog. Details: `docs/features/book-verification.md`.
+9. **WorldCat: the backfill.** Safe now, best after step 8 (it reads verified ISBN-13s, so more books
+   qualify after it). If the development rehearsal has not been done (no record of it), do it first:
+   `bin/snapshot-dev-db.sh --label pre-worldcat` from the repo root, then with the local WorldCat API
+   running (`docker compose --profile worldcat up -d worldcat` in `data-sources/`),
+   `bin/rails "worldcat:backfill[2000]"`; read the "WorldCat backfill" log line and spot-check ten books
+   (no book should get both Fiction and Nonfiction); `bin/snapshot-dev-db.sh --restore` if the links look
+   wrong. Before the production run, time one full batch on the VM (Shane runs with `!`): from
+   the dev machine, after `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`,
+   `test "$(wc -l < /home/shane/wc-data/our_isbns.txt)" -ge 500 || { echo "export has fewer than 500 ISBNs"; exit 1; }; head -500 /home/shane/wc-data/our_isbns.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
+   twice (cold, then warm). The VM's address: `ssh pve-mini qm guest cmd 130 network-get-interfaces`.
+   Both times should be well under the service's 25 s deadline (`WC_API_DEADLINE_S`); a `504` or a
+   time near it means lower the backfill's batch size (100) or raise the deadline first. Then, in
+   production (Shane runs with `!`), `bin/rails "worldcat:backfill[verified]"`. Read the worker log's
+   "WorldCat backfill" line. The map sends some terms to "Police Procedural", which is not an active
+   genre in production (2026-11-26), so the backfill links nothing for them: create the genre (the
+   genre plan lists it) or change the map first if you want those links. If the genre map changed
+   during review, re-run `bin/rails worldcat:report` in development and commit
+   `docs/data-quality/worldcat-genre-mapping.md`. From then on it is weekly (section 3, step 10). Details: `docs/features/worldcat-data-service.md`.
+10. **Origins and categories.** The agent queues are safe now; the paced backfill waits.
+    Details: `docs/features/enrichment-queue.md` and `docs/features/books_enrichment.md`.
+    1. **Work the agent queues**, in this order, each until it is empty (a claim returns no items and
+       `remaining` is 0): book facts, author facts, origin, categories. For each, Fill on
+       `/admin/enrichment_queues` (or `bin/rails "enrichment_queue:fill[books.book_facts,ranked]"`, and
+       the same with `books.author_facts`, `books.origin`, `books.categories`), reload until Pending
+       stops moving, then Copy prompt on its row and give it to an agent on the admin MCP server. Check
+       Done and Failed afterwards and Re-queue a failed row once its cause is fixed. Work the queues
+       before the backfill: once the backfill has planned a run for a book, a fill skips it until the
+       run finishes. Fill again after the re-import pass of step 3, which creates and deletes books.
+    2. **Optional, spends money: the paid worker** for rows you would rather pay for than give to an
+       agent. `bin/rails "enrichment_queue:work[books.origin,100]"` (any of the four kinds; the limit is
+       required). It reaches only pending rows and rows whose claim expired; to send it a row an agent
+       skipped, press Re-queue on that row first.
+    3. **Read what the agents did**: `bin/rails "books:origin:report[agent]"`,
+       `bin/rails "books:categories:report[agent]"`, then `bin/rails "books:categories:add_aliases[agent]"`
+       (a dry run) and again with `APPLY=1` (add `NAMES=a,b` for only the names you checked).
+    4. **Re-run the stage 2 rehearsal in development** (`docs/features/books_enrichment.md`), now that
+       it covers the categories judgment. The dev Sidekiq process needs `BOOKS_CATEGORIES_JUDGE_ENABLED=1`.
+       There is no record that this re-run happened.
+    5. **The paced backfill. Shane runs with `!`.** Waits for 1, 4, the re-import pass of step 3, and no
+       `books:authors:enrich` running (the Wikimedia pace). `bin/rails "books:categorize:backfill[all,all,<label>]"`
+       prints the count and hours; run it again with `APPLY=1`. One book every 8 seconds, ranked books
+       first: about 15 days for the whole catalog. With `AI_RESEARCH_VIA=queue` it never researches;
+       a book whose judgment wanted research gets a pending row in the origin or categories queue,
+       unless it already has a row there.
+    6. **After it finishes**: work the origin and categories queues again (no fill needed for the rows the
+       backfill queued). Rows an agent skipped, or whose answer applied nothing, are closed: press
+       Re-queue on each one to reach it (one at a time). Then `bin/rails "books:origin:report[<label>]"` and
+       `bin/rails "books:categories:report[<label>]"`; `bin/rails "books:categories:add_aliases[<label>]"`
+       (dry run, then `APPLY=1`); `bin/rails "books:origin:accept_disagreements[<label>]"` with `IDS=` and
+       `APPLY=1`. If a run removed links it should not have, `bin/rails "books:categories:restore_removals[<label>]"`
+       prints the count and `APPLY=1` restores them. Then rankings (section 3, step 12): origins change
+       the western-canon penalty.
+11. **Publisher intake. Shane runs with `!`.** Safe now. Penguin Random House is enabled; its first run
+    starts at the 06:20 UTC daily job (or `bin/rails "books:publisher_intake:run[penguin_random_house_us]"`
+    on the worker). It is about 10,000 reads, roughly five days at the default cap. Watch it on
+    `/admin/publisher_intake` or with `bin/rails books:publisher_intake:status`. A sitemap file over the
+    fetcher's file size cap shows on the run as `unavailable`; the size reason is only in the log, and the
+    remedy is raising the fetcher's `FETCHER_MAX_FILE_BYTES`. Then add Macmillan:
+    `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us` in the SOPS file, merge,
+    and watch its first (baseline) run's duration: its product sitemap files were never measured, and
+    discovery writes one row per URL. After that run finishes, release its baseline titles with
+    `bin/rails "books:publisher_intake:release_baseline[macmillan_us,<limit>]"` in slices the daily cap
+    allows, repeating until none you want remain. After a parser fix, `books:publisher_intake:reparse[<source>]`
+    re-reads only listings below the source's `parser_version`, so the fix must raise that version.
+    To stop a source, remove it from `PUBLISHER_INTAKE_SOURCES` and deploy. Nothing here touches the
+    catalog. Details: `docs/features/publisher-intake.md`.
+12. **List audits.** Safe now; ongoing. Open `/admin/list_audits` on the books host, Copy prompt, and
+    give it to an agent on the admin MCP endpoint with a `books:admin:write` token. **Release** frees a
+    list whose lease got stuck. After each batch, Refresh Rankings (section 3, step 12): audits change
+    list fields and penalties, never the weight directly. Details: `docs/features/list-audits.md`.
+13. **Duplicates.** Safe now; ongoing. Work the pending pairs in the admin Duplicates queue. A merge is
+    recorded as a redirect, so the sync never brings the merged book back.
+14. **User-added books checks.** Safe now. Details: `docs/features/user-added-books.md`.
+    1. **Amazon's `get_items` response. Shane runs with `!`.** In a shell inside the worker container
+       (not a console; `ASIN=x docker compose exec ...` does not pass the variable in):
+       `ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV.fetch("ASIN")], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'`,
+       then again with `ASIN=B0ZZZZZZZZ`. It prints only the status, the top-level keys and the titles.
+       The known ASIN must answer with the key `itemsResult` and the right title; the unknown one must
+       come back empty, not as an error (an error reads as "Amazon is down" and the request retries for
+       an hour). If the key differs, fix `Client#get_items` before relying on Amazon links.
+    2. **Add three books end to end. Shane runs with `!`.** Signed in on the books site, on one of your
+       own lists, search for a book that is not there and use "Can't find it? Add a book": one by ISBN,
+       one by Goodreads link, one by Amazon `/dp/` link. Each should appear on the list within a few
+       minutes and under "Needs review" in `/admin/book_submissions`. Reject all three afterwards, which
+       also removes the list items.
+    3. **The review agent.** Copy prompt on `/admin/book_submissions` and give it to an agent on the
+       admin MCP endpoint (a `books:admin:merge` token exists). The defaults of `GOODREADS_PRIORITY_RESERVED` (100),
+       `BOOK_SUBMISSION_LOOKUP_RUNS` (100) and `BOOK_SUBMISSION_LOOKUPS_ENABLED` (on; `0` stops the early
+       lookups without a deploy) need no setting.
+15. **MCP sign-in acceptance from the docs alone.** Safe now. Following only `/developers`, connect
+    claude.ai, Claude Code and Codex to `https://<books host>/api/mcp` by signing in and ask each one
+    question. Then Revoke each on `/developers/tokens` and confirm each asks to sign in again. Record
+    the result on the acceptance line of `docs/features/mcp-server.md`.
+16. **Cover thumbnails in Discord.** Safe now. Paste a ranked book link and a ranked game link you have
+    not shared before into Discord; both should show a small cover. First check the page's HTML has
+    `og:image` (`curl -s <url> | grep og:image`): pages are edge-cached for up to a day.
+17. **Recommendations, before books goes live** (code work, safe now). Cap the shelf the collaborative
+    signal scores (an 18,534-book shelf takes 1.1 s in the neighbour SQL) and profile the 140-215 ms
+    it adds on the 20-99 and 100+ segments. The collaborative list still ignores the quality prior.
+    Details: `docs/features/recommendations.md`, "Known gaps".
+18. **Goodreads fetch cap (optional).** Read `bin/rails books:goodreads_rebuild:fixes_report`'s
+    enrichment section. If nothing failed and the gate never blocked, raise `GOODREADS_DAILY_FETCH_CAP`
+    (SOPS, merge). Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
+19. **Amazon enrichment of ranked books (decide).** `bin/rails books:amazon_enrich_ranked`. Waits for
+    steps 8 and 9: it writes book-level identifiers (source amazon) and raises `identifier_collision`
+    duplicate pairs, and its collision guard needs verified values to compare against. No record that
+    it has run.
+20. **Book AI enrichment (decide).** `bin/rails "books:enrich_missing[<limit>]"`. Nothing queues it.
+21. **Adaptations with the original's title (decide).** About 75 books the re-import created (approved)
+    share the exact title and author of the original: audio dramas, abridgments, adaptations. Nothing on
+    the page tells them apart yet. No design.
+22. **Author enrichment beyond the ranked authors (decide).** `bin/rails "books:authors:enrich[all]"`.
+    Most of the 76,931 authors have no ranked book. One author every 2 seconds on the Wikimedia pace, so not at
+    the same time as step 10's backfill. Check it with `bin/rails "books:authors:enrich_report[<the time it printed>]"`.
 
-## 6. Cutover
+## 5. Cutover, hostname switch, after launch
+
+### 5.1 Cutover day
 
 1. Take legacy offline.
-2. `FINAL=1 bin/rails data_migration:sync`. `FINAL=1` drops the 24-hour delay, so the last day's
-   books come over too. Run `sync_report` with `FINAL=1` first.
-3. Section 4, steps 3-10.
+2. `FINAL=1 bin/rails data_migration:sync_report`, then `FINAL=1 bin/rails data_migration:sync`, then
+   `FINAL=1 bin/rails data_migration:sync_report`. `FINAL=1` drops the 24-hour delay, so the last day's
+   books come over too.
+3. Section 3, steps 4-12, with a re-import pass (3.2) if `goodreads_replay:load` brought new imports.
 4. **Finish the failed and stuck legacy Goodreads imports.** Only now: they write into legacy users'
-   lists, which every sync rewrites to match legacy, so a finishing import run earlier is undone by
-   the next sync.
-   - `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy` lists what it would do. Then run
-     `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at a time, and wait until it is
-     no longer in progress before running the next. Running imports are skipped, not counted, so
-     starting them back to back queues them all at once. Four at once overloaded the Open Library VM
-     on 2026-10-06 (section 5, item 7). Each import also fetches Goodreads pages on the line member
-     uploads use.
-   - Approve or reject each one under Books → Goodreads Imports. See `docs/features/goodreads-import.md`,
-     "Finishing legacy imports".
-5. **The Firebase bulk import, one last time** (`docs/features/v1-user-migration.md`, "Running it"),
-   then never again (section 8).
-6. **Let the new worker server reach search.** When web and worker move to separate servers, add the
-   worker server's IPv4 to `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run
-   the "Deploy OpenSearch" workflow before the worker starts using search. See
-   `docs/features/opensearch-server.md`, "Add or remove an app server".
+   lists, which a sync would rewrite. `DRY_RUN=1 bin/rails books:goodreads_replay:finish_legacy` lists
+   what it would do. Then `bin/rails "books:goodreads_replay:finish_legacy[1]"`, one import at a time:
+   wait until it is no longer in progress before the next, because running imports are skipped, not
+   counted, and four at once overloaded Open Library on 2026-10-06. Each also uses Goodreads fetches.
+   Approve or reject each under Books, Goodreads Imports. Details: `docs/features/goodreads-import.md`,
+   "Finishing legacy imports".
+5. **V1 Firebase accounts, once.** Follow "Running it" in `docs/features/v1-user-migration.md`: export,
+   import, `firebase:backfill_v1_uids`, then shred the file. Import before backfill. After the final
+   sync, because the sync's user overwrite resets `users.auth_uid`. All four domains share one Firebase
+   project, so imported accounts can sign in to music and games at once.
+6. **The empty import-made books (decide).** About 1,700 books the old importer made had no reader
+   items and no reviews on 2026-11-26. Measure again, then decide whether to delete them. No design yet.
+7. **If web and worker move to separate servers**, add the worker server's IPv4 to
+   `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run the "Deploy OpenSearch"
+   workflow before the worker uses search (`docs/features/opensearch-server.md`, "Add or remove an app
+   server").
 
-## 7. Pointing thegreatestbooks.org at this app
+### 5.2 Hostname switch (thegreatestbooks.org points here)
 
-- **Issue the TLS certificate on the server before merging the hostname change.** Merging deploys.
-  If nginx references a certificate that doesn't exist, it crash-loops, and one nginx container
-  fronts every site. The deploy job still shows green.
-- **Firebase authorized domains** must list every books hostname that sign-in and the reset emails
-  use. A missing domain fails silently on password reset.
+- **Issue the TLS certificate on the server before merging the hostname change.** Merging deploys. If
+  nginx names a certificate that does not exist, it crash-loops, and one nginx container fronts every
+  site. The deploy job still shows green.
+- **`BOOKS_DOMAIN` lists the apex first.** `config.hosts` and the MCP transport's allowed hosts come
+  from it, and the first entry is the OAuth issuer, the base of every metadata URL and the sitemap host.
 - **Stripe, in this order** (`docs/guides/stripe-account-setup.md`, sections 7 and 11):
-  1. Re-check the legacy guard just before launch (section 8).
+  1. Re-check the legacy guard just before launch.
   2. Delete legacy's webhook endpoint by hand in the Stripe Dashboard. Never run
-     `rake stripe:delete_webhooks` once the hostname points here: it would delete this app's
-     endpoint.
+     `rake stripe:delete_webhooks` once the hostname points here: it would delete this app's endpoint.
   3. Retire legacy's `/support`.
-  4. Run `bin/rails billing:backfill_email_stamps`.
+  4. `bin/rails billing:backfill_email_stamps`.
   5. Set `MEMBERSHIP_EMAIL_SCOPE=all`.
 
-  If you reverse steps 4 and 5, or skip step 4, every legacy member gets a welcome email at the
-  next 05:00 UTC sweep.
-- After the deploy, check Admin → Webhook Events for `ignored` rows.
-- **Turn on search indexing: set `BOOKS_PUBLIC_INDEXING=true`.** Until this is set, every books
-  page renders `noindex` (`Books::PublicIndexing`, decision D2 in
-  `docs/superpowers/specs/2026-07-31-books-public-ui-design.md`). Set it only after
-  thegreatestbooks.org serves this app and `BOOKS_DOMAIN` lists the apex first. Turned on earlier,
-  `new.thegreatestbooks.org` competes with the live legacy site as duplicate content. Add it with
-  `sops secrets/.env.production`, then merge (merging deploys). Pages are edge-cached for up to
-  24h with their old `noindex` tag, so purge the books cache afterwards or wait a day. Then spot-check
-  a ranked book page: `meta name="robots"` should read `index, follow`.
-- **Sitemap, once `BOOKS_PUBLIC_INDEXING` is on.** Until then books serves no sitemap
-  (`docs/features/sitemaps.md`, "The books gate"). After the switch is on, check that
-  `https://thegreatestbooks.org/sitemap.xml` returns 200 and that `/robots.txt` ends with its
-  `Sitemap:` line, then submit `/sitemap.xml` in Google Search Console for the books site.
-  `robots.txt` is edge-cached for 24h: purge `/robots.txt` (and `/sitemap.xml`) after flipping, or
-  wait up to 24h. Sitemap URLs use the FIRST host in `BOOKS_DOMAIN`, so it must be the apex at
-  cutover (see the "Confirm the production books hostname is admitted" step below).
+  Reversing 4 and 5, or skipping 4, sends every legacy member a welcome email at the next 05:00 UTC sweep.
+  After the deploy, check Admin, Webhook Events for `ignored` rows.
+- **Search indexing: set `BOOKS_PUBLIC_INDEXING=true`** (`sops secrets/.env.production`, merge), only
+  after thegreatestbooks.org serves this app and `BOOKS_DOMAIN` lists the apex first. Until then every
+  books page is `noindex`. Pages are edge-cached for up to 24 hours with the old tag, so purge the books
+  cache or wait a day, then check a ranked book page reads `index, follow`.
+- **Sitemap**, once indexing is on: `https://thegreatestbooks.org/sitemap.xml` returns 200 and
+  `/robots.txt` ends with its `Sitemap:` line; purge both from the edge cache or wait 24 hours. Then
+  submit `/sitemap.xml` in Google Search Console (`docs/features/sitemaps.md`).
+- **MCP connectors.** Tell members who connected before the switch to remove the connector and add
+  `https://thegreatestbooks.org/api/mcp`: claude.ai drops `Authorization` across redirects, so a
+  connector on the old hostname cannot get in.
 
-## 8. After launch
+### 5.3 After launch
 
-- **Stop re-running the Firebase bulk import.** An import replaces the whole account, so once real
-  people use these accounts it would reset changed passwords and verified emails. The export and
-  `firebase:backfill_v1_uids` stay safe to re-run.
-- **The Open Library key and duplicate-key backfill** (books list wizard) waits until after the
-  switch. It is not specced yet.
-- **Remove the `LEGACY_R2_*` credentials from production secrets** after the last replay load and
-  the last cover-image run.
-- **Remove the old site's server from the search allowlist.** When the old site's web/worker server
-  is shut down, remove its IP from `OPENSEARCH_ALLOWED_IPS` and run the "Deploy OpenSearch"
-  workflow. Removing an IP does not cut connections it already has open; the runbook's "Add or remove
-  an app server" says how.
-- **Remove the stale `FIREBASE_PROJECT_ID`** from production secrets. The project id is hardcoded
-  now, so the variable does nothing and could mislead someone later.
+- **Never run the Firebase bulk import again.** An import replaces the whole account, so it would reset
+  changed passwords and verified emails. The export and `firebase:backfill_v1_uids` stay safe.
+- **Remove the `LEGACY_R2_*` credentials** from production secrets once the final sync and the last
+  replay load are done: both read legacy's R2 (the sync for new books' covers).
+- **Remove the old site's server from the search allowlist** when it shuts down: take its IP out of
+  `OPENSEARCH_ALLOWED_IPS` and run the "Deploy OpenSearch" workflow. Removing an IP does not cut
+  connections it already has open (see the runbook).
+- **Optional: the Wikidata re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
+  (`config/initializers/wikidata.rb`) and deploy. The 06:00 UTC cron then re-checks books and authors
+  created in the last 90 days that found no QID, after each new dump. `bin/rails wikidata:recheck` is a
+  dry run; `APPLY=1` queues the work. It skips any book whose evidence lists a failed source.
+- **The Open Library key and duplicate-key backfill** (list wizard). Not specced yet.
 
-## 9. WorldCat genre data (the service once; the backfill repeats)
+## 6. Done
 
-Adds the WorldCat exact-lookup service on the home server and backfills genre categories from it.
-Independent of section 2: the switch-over ran on 2026-10-10 (`data_migration:sync_init`), so the
-category links the backfill writes in production are kept across the weekly `data_migration:sync`.
-The sync does add new books, though, so the backfill (step 15) is also section 4 step 8: it re-runs
-after every sync and again at cutover (section 6, step 3).
-Details: `docs/features/worldcat-data-service.md`; the VM runbook is
-`docs/features/home-server.md`, "Loading the WorldCat artifact (once)".
+Finished one-off steps, with what someone needs to run them again. Newest areas last.
 
-Steps marked "Shane runs with `!`" change DNS, Cloudflare or production, so an agent does not run them.
-
-1. **Build the artifact on the dev machine.** Export our ISBNs for the coverage gate, then build with
-   them (the `--catalogue-isbns` file is what the gate checks against; the command is in
-   `data-sources/README.md`, "Running the WorldCat API"):
-   `bin/rails "worldcat:export_isbns[/home/shane/wc-data/our_isbns.txt]"`, then
-   `uv run python -m worldcat.pipeline.build ... --catalogue-isbns /home/shane/wc-data/our_isbns.txt`
-   from `data-sources/`. The result will be `/home/shane/wc-data/versions/2025-09-04/`, and the build
-   fails unless every gate passes. If it dies after extract (an hour), rerun with `--resume` to
-   distill the shards it left rather than extracting again.
-2. **Cloudflare, before anything touches the home server. Shane runs with `!`. DONE 2026-10-14.**
-   Nothing here is done in the dashboard: `bin/cfzerotrust apply --secrets-root <this checkout>` in
-   `the-greatest-cloudflare` reads `zerotrust/home-server.yml`, which now names the `worldcat-api`
-   Access app (the `prod-rails` service token), the `home-worldcat` tunnel with ingress
-   `http://worldcat:8082`, and its CNAME. The same apply writes `WORLDCAT_TUNNEL_TOKEN` into
-   `secrets/home-server.env` and `WORLDCAT_SERVICE_URL` into `secrets/.env.production`, so there is
-   no token to copy. The bot skip is the `skip_edge_for_home_server` rule in
-   `zones/thegreatestbooks.org.yml`, applied with `bin/cfrules apply thegreatestbooks.org`.
-3. **healthchecks.io. DONE 2026-10-14.** Create `worldcat-heartbeat` (period 5 min, grace 15 min) and `worldcat-deploy`
-   (period 15 min, grace 1 h), and copy their ping URLs.
-4. **Secrets, before the first `provision`. Shane runs with `!`. DONE 2026-10-14.** Step 2's apply
-   already wrote `WORLDCAT_TUNNEL_TOKEN`; add only `HC_WORLDCAT_HEARTBEAT` and `HC_WORLDCAT_DEPLOY` to
-   `secrets/home-server.env` (`sops secrets/home-server.env`). The host already has tunnels enabled,
-   so the VM that `provision` creates starts `cloudflared` at once. With the token missing it starts
-   with an empty one and nothing alerts.
-5. **Confirm VMID 130 is unused, immediately before step 6.** It was free on 2026-10-14, but that
-   does not carry over to a later day. `ssh pve-mini qm list` must not list 130. `provision` adopts
-   a VM it finds at that id instead of creating one.
-6. **Create the VM. Shane runs with `!`.** `deployment/home-server/provision` (`SOPS_AGE_KEY_FILE`
-   set) creates VM 130 `worldcat` and installs its env and units. Tunnels are already enabled on the
-   host, so `provision --enable-tunnels` is not needed again; it dies unless all three tunnel tokens
-   are set. The API will not start until step 7 puts an artifact on the VM.
-7. **Load the artifact.** (Deploy order: the service image must be rebuilt and deployed before, or
-   together with, the Rails deploy that uses `POST /records`. Until then evidence rows list `worldcat`
-   in `sources_failed`; that is safe and a later run re-gathers them.) Follow "Loading the WorldCat artifact (once)" in `docs/features/home-server.md`:
-   find the VM's address (`ssh pve-mini qm guest cmd 130 network-get-interfaces`; DHCP on the LAN),
-   rsync the version directory as `debian@<vm-address>` with `--mkpath --rsync-path="sudo rsync"` (the
-   only SSH user is `debian`, `/srv/wc-data` is root-owned and has no `versions/` yet),
-   `sudo chmod -R a+rX /srv/wc-data/versions/2025-09-04` (the container runs as uid 10001), write
-   `/srv/wc-data/current-version`, touch
-   `/var/lib/the-greatest/force-deploy` and start `the-greatest-deploy.service`. Then curl
-   `https://worldcat-api.thegreatestbooks.org/version` with the service token. `worldcat-heartbeat`
-   should go green within a few minutes.
-8. **Time a full batch on the VM. Shane runs with `!`.** The service has a 5 s per-request deadline
-   and a 500-ISBN batch is the largest `/lookup` accepts (the backfill sends 100). Time one from the
-   dev machine through the VM's loopback, twice (cold, then warm):
-   `test "$(wc -l < /home/shane/wc-data/our_isbns.txt)" -ge 500 || { echo "export has fewer than 500 ISBNs"; exit 1; }; head -500 /home/shane/wc-data/our_isbns.txt | jq -R . | jq -sc '{isbn13s: .}' | ssh debian@<vm-address> "curl -s -o /dev/null -w '%{time_total}\n' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8082/lookup"`
-   (`/home/shane/wc-data/our_isbns.txt` is the export step 1 writes; the guard stops the step on a
-   missing or short file, which would otherwise "pass" in milliseconds on an empty batch). On the
-   development machine at the container's two threads the same batch took 3.3 s and a 100-ISBN
-   one 1.2 s, so expect the VM to be slower than that. Both times should be well under the 25 s deadline before the
-   backfill; a `504` or a time near the deadline means stop and lower the backfill's batch size
-   or raise `WC_API_DEADLINE_S`.
-9. **Production setting. Shane runs with `!`.** Step 2's apply added
-   `WORLDCAT_SERVICE_URL=https://worldcat-api.thegreatestbooks.org` to the production SOPS secrets
-   (2026-10-14); what remains is getting it onto the app server and deploying.
-10. **The genre map, in development.** `worldcat:vocabulary` and `worldcat:map` need the local WorldCat
-   API running: `docker compose --profile worldcat up -d worldcat` in `data-sources/`. Run
-   `bin/rails worldcat:vocabulary`, `worldcat:map` and `worldcat:report`. Review and edit
-   `config/worldcat/genre_map.yml` by hand, then commit it. The reviewed map must be merged and
-   deployed before steps 14 and 15 run in production.
-11. **Rehearse the backfill in development.** The dev database is not disposable, so snapshot it
-    first: `bin/snapshot-dev-db.sh --label pre-worldcat` (from the repo root). Then, with the local WorldCat API running,
-    `bin/rails "worldcat:backfill[2000]"`. Read the worker log's line for the run (grep the Sidekiq
-    log for "WorldCat backfill") and its counts ("genre links", "unresolved subject phrases",
-    "type conflicts"), then spot-check ten of those books in the admin: each
-    genre should be one you would have chosen, and none should carry both Fiction and Nonfiction.
-    Fix the map and rerun if not. Restore with `bin/snapshot-dev-db.sh --restore` if the links look
-    wrong.
-12. **Old site: stop the Goodreads import creating genres. Shane merges and deploys. DONE 2026-10-18.** The change is
-    `the-greatest-books` PR #10 (branch `stop-goodreads-genre-creation`): the Goodreads genre loop in
-    `admin/app/models/book.rb` skips a genre it cannot find instead of creating it. Merging there
-    deploys. Deploy it before the genre apply.
-13. **Genre cleanup, in production. Shane runs with `!`.** Needs the plan files merged and deployed
-    (`config/books/genre_plan.yml`, `genre_split_assignments.csv`, the retargeted
-    `config/worldcat/genre_map.yml`). Dump the four tables first (the command in the category cleanup
-    runbook, `docs/features/books-categories.md`) and add `-t saved_searches -t recommendation_configs`,
-    because the apply also rewrites `criteria` on those, so a restore brings back a consistent state, then `bin/rails categories:genres:apply`. If it
-    exits non-zero, read its remedy lines before re-running. If it stops on a genre missing from the
-    plan, run `categories:genres:map` in development for it, review, and ship the updated file. The
-    `/categories` Audiences tab appears only as edge-cached `/categories` pages expire after
-    audiences are created. Details: "Genre cleanup and audiences" in
-    `docs/features/books-categories.md`. Steps 14 and 15 wait for this step.
-    After a clean apply, set the parent of **Noir** and **Hardboiled** to **Crime Fiction** in the admin
-    category form (the plan file cannot set parents).
-14. **Aliases, in production. Shane runs with `!`.** `bin/rails worldcat:apply_aliases`.
-15. **The backfill, in production. Shane runs with `!`.** `bin/rails "worldcat:backfill[verified]"`. It
-    reads verified ISBN-13s only (`[all]` is retired), so it no longer waits on the ISBN cleanup; it
-    needs the branch that makes it verified-only deployed.
-16. **The report, if the map changed.** After the backfill, if the map was edited during review, re-run
-    `bin/rails worldcat:report` in development and commit the regenerated
-    `docs/data-quality/worldcat-genre-mapping.md`. It depends only on the map file, not on the backfill.
-
-## 10. Alternate titles cleanup (the review and the undo repeat)
-
-Spec: `docs/superpowers/specs/2026-10-23-alternate-titles-cleanup-design.md`; explained in
-`docs/features/books-alternate-titles.md`. Do the dev rehearsal and its hand checks first (the doc's
-"Proving it"). Needs Sidekiq running for the review.
-
-1. **Deploy.** The migration creates `alternate_titles`; the code writes through it from then on.
-2. **`bin/rails books:alternate_titles:backfill`.** Idempotent; creates a `legacy` row per existing
-   alternate title. Run once.
-3. **`bin/rails "books:alternate_titles:review[ranked]"`.** Queues one AI call per ranked book on the
-   `low` queue. Wait for the queue to empty, then `bin/rails books:alternate_titles:report` and check
-   by hand: the known cases, 50 random removals, 50 random keeps, every non-Latin removal. Work the
-   `review` rows on the admin review page.
-4. **`bin/rails "books:alternate_titles:review[all]"`.** The rest of the catalogue.
-5. **`bin/rails books:alternate_titles:undo_findings`** (dry run). Read the counts, the wrong-work list
-   and the samples. Then **`bin/rails "books:alternate_titles:undo_findings[apply]"`**.
-   `redo_finding[id]` reverses one.
-
-**Repeating steps: `review` and `undo_findings`.** Run `review[all]` and then `undo_findings` (dry run,
-then `[apply]`) again after merges, after each weekly `data_migration:sync`, after working the review
-page or accepting corrections, and in the final launch sequence. Each only handles rows it has not
-handled before, so repeating is safe. A finding `undo_findings` leaves alone ("held with another
-source") is not retried by re-running: the apply run stamps the book's removed rows, so it is
-re-judged only when another title on that book is later removed. `undone_findings[book_id]` lists a
-book's undone findings for `redo_finding`.
-
-The unsure-books second-chance verification run follows this cleanup.
-
-## 11. Goodreads rebuild (repeats until cutover)
-
-Repairs the books legacy's Goodreads imports made, from the export rows. Design:
-`docs/superpowers/specs/2026-10-27-goodreads-rebuild-design.md`; how it works: `docs/features/goodreads-rebuild.md`.
-The Goodreads replay (`books:goodreads_replay:*`) stays paused: do not approve or apply its proposals.
-
-1. **See which books are trusted.** `bin/rails books:goodreads_rebuild:cohorts` is read-only. It prints how
-   many post-import books are trusted (on a real list, so you added them by hand) and how many are
-   derived (import-made, to be rebuilt). Expect about 9,400 trusted and 138,000 derived.
-2. **Retire the replay's old proposals, once.** They were judged on legacy's stripped titles, so approving
-   any of them would apply a guess. `bin/rails books:goodreads_rebuild:retire_replay_proposals` is a dry run:
-   expect about 2,691 relinks and 2,091 strips. Then run
-   `bin/rails "books:goodreads_rebuild:retire_replay_proposals[apply]"`. They disappear from the admin
-   repair-verdict page. A second run prints 0s.
-3. **Survey the import-made books.** This is read-only: it changes no book. It only reads our own
-   database, so it's safe to run while a verification run is going.
-   - Run `bin/rails "books:goodreads_rebuild:survey[all]"`, then wait for the Sidekiq job to finish.
-   - Run `bin/rails books:goodreads_rebuild:survey_report`. It counts the lumps, the books whose
-     title or authors disagree with the Goodreads export, and the books that are the wrong book
-     altogether, with samples of each. Read the samples: they are what the next step will fix.
-   - If the job stops, run the same command again. It carries on from the books not yet surveyed.
-4. **Bring in survey pass 2's evidence.** This is read-only for books. The WorldCat and Open Library
-   lookups for every import-made edition run on Shane's PC, not in production. That's the recipe in
-   `docs/features/goodreads-rebuild.md`, "Survey pass 2", and it takes about 22 hours. It ends with a
-   file, `tmp/rebuild_edition_evidence.jsonl.gz`. Copy that file into the production container, then:
-   - `bin/rails "books:goodreads_rebuild:import_evidence[<path to the file>]"`. It prints how many
-     rows it imported. A second run is safe.
-   - `bin/rails "books:goodreads_rebuild:survey[all,redo]"`, and wait for the job.
-   - `bin/rails books:goodreads_rebuild:survey_report`. The lump count should drop: translations on
-     one Open Library work no longer count as lumps. The report now shows how often WorldCat agreed.
-5. **The fixes.** About 47,400 books on dev; see `docs/features/goodreads-rebuild.md`, "Fixes (increment 2b)".
-   All of these runs are yours; do them in this order.
-   1. `bin/rails "books:goodreads_rebuild:decide_fixes[200]"`, wait for the Sidekiq jobs, then
-      `bin/rails books:goodreads_rebuild:fixes_report`. Hand-check the samples against the export.
-      No book is changed yet. Some verdicts are approved automatically and the next `apply` carries
-      them out; the rest are proposals that wait for you.
-   2. `bin/rails "books:goodreads_rebuild:decide_fixes[all]"`. It calls the AI on undecided books, about
-      47,000 of them, on Sidekiq `low`, so it takes a while. Run it again for any books reported as
-      `retry`, then `fixes_report` again.
-      Lump records (Goodreads rows of several different books) are skipped; they wait for a later
-      split step. The first runs recorded some lump verdicts, so once, before approving anything:
-      `bin/rails books:goodreads_rebuild:retire_lump_verdicts` (a dry run; check the counts and
-      samples, and that "already applied" and "applied, survey gone" are both 0; if either is not, stop and look at those books before going on), then `bin/rails "books:goodreads_rebuild:retire_lump_verdicts[apply]"`.
-   3. In Admin, Repair verdicts: review and bulk-approve the `fix_identity` proposals, then the
-      `merge_books` ones.
-   3b. Before `apply`, retire the fixes whose book is already right (only Goodreads series/edition noise
-      differs): `bin/rails books:goodreads_rebuild:retire_unneeded_fixes` (a dry run; check the counts and
-      samples), then `bin/rails "books:goodreads_rebuild:retire_unneeded_fixes[apply]"`. Of the fixes that
-      remain, those whose only difference is a missing subtitle change just the title and subtitle on apply.
-   4. `bin/rails books:goodreads_replay:apply`, then `bin/rails books:goodreads_replay:repair_ratings`.
-      `apply` re-runs every pass but applies each fix only once, and leaves alone any book put on a real
-      list since. Each reset saves what it removed (Amazon ASINs and links too) on the verdict.
-      Afterwards run `bin/rails "books:goodreads_rebuild:survey[all,redo]"` before any later
-      `decide_fixes`: a fixed book's old survey still says it disagrees with its export, so it cannot be
-      found as a merge target until it is surveyed again.
-   5. From then on the 10-minute job enriches the fixed books nonstop, at the Goodreads fetch cap
-      (300 waiting at once).
-   6. After a day or two, read `fixes_report`'s enrichment section. If nothing failed and the gate never
-      blocked, raise `GOODREADS_DAILY_FETCH_CAP` in the production env (SOPS) and restart the worker.
-      Above 5,760 a day, lower `GOODREADS_FETCH_INTERVAL` too.
-
-## 12. Goodreads re-import (one run, then repeats only if the sync is changed)
-
-Matches every legacy CSV row to the exact book it names and moves each reader's entries there. Design:
-`docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md`; how it works, and where each output lands:
-`docs/features/goodreads-reimport.md`. It replaces stage two of section 11.
-
-**Sync first, then not again until the sync is changed.** A `data_migration:sync` before the first row moves is
-safe, and it brings over the legacy books, users and imports this run should cover. A dev rehearsal on 2026-11-12
-(copies of production and legacy from 2026-11-11) changed no existing book, author, category, identifier or
-new-app list. Before step 1:
-
-1. `bin/rails data_migration:sync_report`: no `MISSING` line.
-2. `bin/rails data_migration:sync` (about 10 minutes; do not deploy while it runs).
-3. `bin/rails data_migration:sync_report` again: every "would insert", insert, update, delete and dropped count
-   is 0, and there is no `MISSING` line. Totals stay non-zero (the legacy and here columns, redirects recorded,
-   users deleted on legacy, merge collisions), and the "legacy edits to existing books" line counts the books
-   the sync just copied; all of that is expected.
-4. `bin/rails books:authors:merge_unknown`, and `APPLY=1` only if it lists authors.
-5. `bin/rails books:goodreads_replay:load`.
-6. Rankings (section 4 step 6).
-
-Skip section 4's `firebase:backfill_v1_uids` (see its condition) and `books:verify[all,recheck]` (after this run).
-
-Once step 9 below has moved a row, **do not run `data_migration:sync` until it has been checked against this run
-and changed so it cannot revert it** (spec section 3.9). As it stands it rewrites legacy users' lists and would
-undo moved rows.
-
-Do not start until the new enrichment steps (categories, origin) and the Goodreads search page fix are deployed.
-Every step below only queues a Sidekiq job; wait for the jobs to finish before the next step.
-
-1. **Gate on, enrichment off.** Set `GOODREADS_REIMPORT_ENABLED=true` in the production env (SOPS) and restart
-   the worker. Leave `GOODREADS_REIMPORT_ENRICHMENT` unset. Check `SIDEKIQ_CONCURRENCY` is `25`: each match
-   spends ~11 s waiting on the AI (flex tier), so ~210k editions take about a day at 25 threads and about five
-   at 5. Lower it to `10` once the run is finished.
-2. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The mixed books are read
-   from it.
-3. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It records verdicts and
-   deletes nothing.
-4. **Match every edition.** `bin/rails "books:goodreads_reimport:match[200]"` first, then
-   `bin/rails "books:goodreads_reimport:match[all]"`. Run `[all]` again for any editions left.
-   **Once, for the 2026-11-13 production run only:** its "create a new book" verdicts were recorded before the match
-   searched again by English title, so run `bin/rails "books:goodreads_reimport:recheck_creates[all]"` (about 5,700
-   verdicts, a few AI calls each) and wait for it, then run `recheck_creates[all]` again to pick up any it had to
-   retry. Verdicts you already approved or rejected by hand are left alone. Later runs do this as part of `match`.
-5. **Report and review.** `bin/rails books:goodreads_reimport:report`; find the file at
-   `storage/goodreads_reimport/report-<UTC time>.md` (the path is in the Sidekiq log). The worker writes it
-   into the shared storage volume, mounted in both web and worker, so read it from either container. The
-   snapshot's `counts.json` lands in the same folder. Then in Admin, Repair
-   verdicts, review the proposed `reimport_match` ones: approve the right ones, and **correct** the wrong ones
-   ("Correct this match": the right book's id, or create a new book). Do not reject a wrong pick: a rejected match
-   is never matched again and its readers stay put. The two rejected on 2026-11-13 (*Flowers for Algernon*, verdict
-   56769, should be book #4418; *One Hundred Years of Solitude*, verdict 56747, should be book #266) need correcting.
-6. **Apply the matches.** `bin/rails books:goodreads_reimport:apply`. This writes approved matches and creates
-   the new books.
-7. **Decide.** `bin/rails "books:goodreads_reimport:decide[200]"`, then `decide[all]`. Run `decide[all]` a
-   second time once the first has finished: the second pass decides the guesses for mixed books, which wait
-   until their rows are decided.
-8. **Snapshot.** `bin/rails books:goodreads_reimport:snapshot`, before the first apply that moves rows. It
-   refuses to replace an existing snapshot; `snapshot[redo]` does, but never use it after a row has moved.
-   A `counts.json` taken before the by-id check holds counts but no ids, and the report then prints "NOT CHECKED. The
-   snapshot predates id tracking". Run `bin/rails "books:goodreads_reimport:snapshot[redo]"` once, before any row
-   has been applied, to replace it.
-9. **Apply.** `bin/rails books:goodreads_reimport:apply`. Re-running is safe.
-10. **Check the authors, review, then apply.** `bin/rails "books:goodreads_reimport:check_authors[200]"`, then
-    `check_authors[all]`. Every author verdict is a proposal: review them in Admin, Repair verdicts, filtered to
-    `reimport_author` (its Copy prompt hands the review to an admin agent). Then `bin/rails books:goodreads_reimport:apply`
-    again. Pause author merges from the first `check_authors` until that apply finishes.
-11. **Report.** `bin/rails books:goodreads_reimport:report` again. The acceptance lines at the bottom should
-    each print 0. Conflicts and verdicts closed because there was nothing left to do are listed in it; read them.
-12. **Sample.** `bin/rails books:goodreads_reimport:sample`. The result is in the Sidekiq log (search
-    "Goodreads re-import sample check"), not in a file. If a deploy interrupted it, enqueue it again. **Any
-    "no" stops the run** until its cause is fixed.
-13. **Enrichment on.** Only after the new enrichment steps have landed: set
-    `GOODREADS_REIMPORT_ENRICHMENT=true` and restart the worker. The new books then enrich.
-
-Each job can be stopped and run again safely. If a deploy interrupts a long job, run the same task again.
-
-## 13. MCP sign-in (OAuth)
-
-Lets members connect claude.ai, Claude Desktop and mobile to `/api/mcp` by signing in, with no token to paste.
-How it works: `docs/features/mcp-server.md`, "Signing in with OAuth". Design:
-`docs/superpowers/specs/2026-11-02-mcp-oauth-design.md` (D15, D17). Nothing here runs on deploy, but step 1 depends on one.
-
-1. **Deploy, then apply the edge change for the `/.well-known/oauth-*` paths, then make the first claude.ai connection.**
-   Deploy this branch first. Apply the edge change only after the two `/.well-known/oauth-*` documents answer
-   200 from the origin. The edge change is a rule in the private Cloudflare repo, prepared as a PR there. Merge
-   it, then apply it by hand with that repo's own process. claude.ai's backend cannot solve a challenge, so until the rule is live its
-   discovery request fails and the connector never reaches the sign-in page. No detail of the rule belongs
-   in this repo. To check it, fetch `https://<books host>/.well-known/oauth-authorization-server` from
-   outside, with no browser cookies, and expect JSON.
-2. **Confirm the production books hostname is admitted.** Both lists come from `BOOKS_DOMAIN` through
-   `config.domains`: `config.hosts` (`config/initializers/host_authorization.rb`) and the MCP transport's
-   `allowed_hosts` (`Api::McpController#transport`). Check that the production env's `BOOKS_DOMAIN` holds the
-   hostname members will type, and that its first entry is the one that should appear in the metadata:
-   `Api::Host.base_url` uses the first entry as the issuer and in every endpoint URL. A mismatch fails
-   with a Host-header refusal or a protected-resource `resource` that differs from the URL the client typed.
-3. **At the thegreatestbooks.org switch (section 7), members re-add the connector with the new URL.**
-   A connection records its resource as a key, not a URL, so existing connections keep working under the new
-   host. But claude.ai drops `Authorization` across redirects, so a connector still pointed at the old
-   hostname is redirected, arrives with no token, and cannot get in. Tell members who connected before the switch to
-   remove the connector and add `https://thegreatestbooks.org/api/mcp`. Books is not live yet, so few
-   connections will exist by then.
-4. **Acceptance for the admin endpoint.** As an admin, add `https://<books host>/api/mcp/admin` as a second
-   claude.ai connector (it is a separate resource from `/api/mcp`), sign in, approve, and ask for a dry-run
-   merge of two duplicate books. Admin approvals need renewing every 30 days.
-5. **Acceptance from the docs alone.** Following only `/developers`, connect claude.ai, Claude Code and Codex to
-   `https://<books host>/api/mcp` by signing in, and ask each one question. Then Revoke each on
-   `/developers/tokens` and confirm each asks to sign in again. Record the result in the PR or on the
-   acceptance line of `docs/features/mcp-server.md`.
-
-## 14. Book origins and categories (the backfill once, then weekly)
-
-Fills in each book's country of origin, genres, audience, subjects and locations through the
-`books.book_categorize` workflow. Only you start the
-backfill, by hand, with `APPLY=1`; nothing schedules it or starts it automatically. Run it after the
-Goodreads re-import (section 12) is done, since that removes crufty books and finds duplicates, and
-the books and authors it creates already go through the full import workflow, origin and categories steps included. The
-backfill runs once here; the weekly run is section 4, step 10, and is optional.
-
-1. Run the author Wikidata enrichment first (section 15, step 11): the work match depends on author QIDs.
-   The dev rehearsal is done and you have signed off on the review (stage 2 plan, Task 10). It needs a local
-   Wikidata copy first (section 15): remote Wikidata refuses requests whenever its lag passes 5 seconds, which in November
-   2026 was most of the day, so it cannot carry a bulk run (Wikimedia asks bulk readers to use the dumps).
-2. Before any categories run, write the genre and audience definitions the categories judge reads.
-   `bin/rails books:categories:write_definitions` is a dry run; run it again with `APPLY=1` to write them (the plan
-   overwrites any description that differs; those print as `replaced`). Fill in the description in the admin for any genre or audience it prints as `missing`.
-3. **Turn the categories judge on (after the rehearsal sign-off and the definitions in step 2).** The judge is off
-   everywhere until `BOOKS_CATEGORIES_JUDGE_ENABLED=1` is set (`config.x.ai.categories_judge_enabled`, default off).
-   Until then every import and every Goodreads-rebuild book gets a skipped `disabled` row in place of a judgment,
-   and those books stay candidates for the backfill. Set it in the production env (SOPS secrets) and restart the
-   web and worker processes. Do it before any categories run below; the origin backfill does not need it.
-4. **Send web searches to the agent queues.** Set `AI_RESEARCH_VIA=queue` in the production env (SOPS secrets) and restart
-   the web and worker processes, the way step 3 sets `BOOKS_CATEGORIES_JUDGE_ENABLED`
-   (`config.x.ai.research_via`, default `api`). From then on no enricher or judge spends a web search through the
-   API. Where one would have, the book and author enrichers write a skipped research row (reason `queued`), and the
-   origin and categories judges mark their knowledge row `deferred_research` with `deferred_reason: "queued"`.
-   A pending row in the matching agent queue (`books.book_facts`, `books.author_facts`, `books.origin`,
-   `books.categories`) is inserted only when the record has no row of that kind yet and the queue still needs the
-   record. The paced backfill stops researching too (raising its cap does nothing) and counts a book whose research
-   was deferred as done; a deferred book gets a pending row in the origin or categories queue when it has no row in that queue yet and still has the gap (step 12). The page
-   `/admin/enrichment_queues` says which mode is on. Do it before step 6, so the deferrals made from here on reach the
-   queues.
-   (`docs/features/enrichment-queue.md`, "The web-search switch".) Set it back to `api` to spend through the API again.
-5. **Book facts through the agent queue** (`docs/features/enrichment-queue.md`). Do it before the origins and categories
-   queues in steps 7 and 8: an agent's book facts row counts as web-verified evidence for the origin and categories
-   answers that follow (for origin, the paid judge's medium answer is written when that row's origin countries name the same country; an agent's medium origin answer is written either way). Do it after section 12's apply is finished (it empties and deletes books). Fill the queue for
-   the ranked books: `bin/rails "enrichment_queue:fill[books.book_facts,ranked]"`, or Fill on `/admin/enrichment_queues`
-   on the books host. It runs in Sidekiq; reload the page until the Pending count stops moving. Then Copy prompt on the
-   "Book facts" row, paste it into an agent connected to the admin MCP server, and let it run until the queue is empty
-   (a claim returns no items and `remaining` is 0). Its answers fill a missing first published year, original language
-   and description and are applied in the background, so check the page's Done and Failed counts afterwards; Re-queue
-   a failed row once the cause is fixed.
-6. **Author facts through the agent queue.** Do it before step 7: the origin payload shows author nationalities. An
-   author is offered when the newest `books.author_facts` row, leaving aside failed runs and agent answers that applied nothing, is a skipped research row (not a placeholder, no running
-   author run). Two groups qualify: authors already refused a web search for budget (`budget_exhausted`), which exist
-   whatever `AI_RESEARCH_VIA` is, and authors enriched in `queue` mode that no Wikidata or VIAF record matched and the
-   model did not know well (reason `queued`), which in practice are the authors imports create. The bulk author
-   enrichment (section 15 step 11) never researches, so it does not feed this queue and should not be re-run to fill it.
-   `bin/rails "enrichment_queue:fill[books.author_facts,ranked]"` (or Fill on the page), Copy prompt on the "Author
-   facts" row, paste it, and let it run to empty. Expect it to be small until imports have run in `queue` mode.
-7. **Origins through the agent queue** (`docs/features/enrichment-queue.md`). Do it after section 12's apply is
-   finished (it empties and deletes books), after the author Wikidata enrichment (step 1) and after steps 5 and 6
-   (the payload shows author nationalities and the web-verified book facts). Fill the queue for the ranked books: `bin/rails "enrichment_queue:fill[books.origin,ranked]"`, or
-   Fill on `/admin/enrichment_queues` on the books host. It runs in Sidekiq; reload the page until the Pending count
-   stops moving. Run the queues before you start the paced backfill in step 11: the backfill plans a run for every book up front, and a fill offers no book that has a running run, so once the backfill is planned a fill finds none of them until their runs finish. Then Copy prompt on the "Book origin" row, paste it into an agent connected to the admin MCP server,
-   and let it run until the queue is empty (a claim returns no items and `remaining` is 0). Sub-agents are fine.
-   The agent's answers are applied in the background by a Sidekiq job, so check the page's Done and Failed counts
-   afterwards; Re-queue a failed row once the cause is fixed.
-8. **Categories through the agent queue**, only after the definitions are written (step 2: the reference list the agent
-   is sent contains them). The judge switch in step 3 does not matter here: an agent's answer applies either way.
-   `bin/rails "enrichment_queue:fill[books.categories,ranked]"` (or Fill on the page), Copy prompt on the "Book
-   categories" row, paste it, and let it run to empty.
-9. Read what the agents did, under the label `agent`: `bin/rails "books:origin:report[agent]"` and
-   `bin/rails "books:categories:report[agent]"`, then the alias step `bin/rails "books:categories:add_aliases[agent]"`
-   (dry run first, then `APPLY=1`, as in step 13 below). Held answers stay for the paced backfill in step 11, which is
-   now the path for whatever is left. With `AI_RESEARCH_VIA=queue` it never runs a web search; it gathers evidence and
-   judges from knowledge. For books the queue never reached, a judgment that is not enough defers research and queues the
-   book (`research_wanted`). For books an agent skipped, or whose agent answer was held or applied nothing, the evidence
-   (the Wikidata shortcut, a supported medium answer) can settle some of them; the rest are not queued again, because
-   their queue row is already closed (step 12 says how to reach them).
-10. **The paid worker, a second worker for rows still waiting (optional, spends money).** Use it for a queue, or the
-   rest of one, that you choose to pay for rather than give to an agent. It reaches only claimable rows: pending, or
-   claimed with an expired lease. An item an agent skipped is closed and is never claimed: to send it to the paid worker,
-   press Re-queue on its row on the admin page first, one row at a time (there is no bulk re-queue).
-   `bin/rails "enrichment_queue:work[books.origin,100]"` runs the paid research for up to 100 claimable
-   rows of the queue, one Sidekiq job per row, whatever `AI_RESEARCH_VIA` says and outside `research_daily_cap`. With
-   nothing claimable the task prints that it queued 0 jobs. Each job makes at most one research call (about 15 cents; a
-   call can run more than one search; an origin the stored Wikidata evidence settles spends none). The kind is any of the four
-   (`books.origin`, `books.categories`, `books.book_facts`, `books.author_facts`); the limit is required. Start with a
-   small limit and read the rows' outcomes on the page (Done, Failed, and `paid_research` in the "via" filter) before
-   a large one. For `books.categories` while the judge is off (step 3) the task refuses
-   ("Not queued: the categories judge is switched off") and queues nothing; a judge switched off after the jobs were
-   queued closes each remaining row Failed with "skipped: disabled" and spends nothing. A failed row is not retried by itself: Re-queue it on the page. A job killed
-   mid-run leaves its row claimed for 30 minutes; after that the row can be researched again. Read the rows under the
-   label `queue`: `bin/rails "books:origin:report[queue]"` and `bin/rails "books:categories:report[queue]"`.
-11. In production (you run it by hand with `!`; this is the only way it starts), `bin/rails "books:categorize:backfill[origin_only,all,origin-v1]"`
-   to see the count, then again with `APPLY=1`. It paces itself at one book every 8 seconds, so the whole
-   catalog (about 159,000 books) takes about 15 days; the dry run prints the hours. The ranked books go first. The research cap for the backfill is
-   `config.x.ai.categorize_backfill_research_daily_cap`, which is 0 until raised. With `AI_RESEARCH_VIA=api`, books whose
-   judgment deferred research wait until you raise it, and the backfill leaves them alone meanwhile. With
-   `AI_RESEARCH_VIA=queue` (step 4) the backfill never researches whatever the cap, raising it does nothing, and a book
-   whose judgment deferred research counts as done and, when it has no row in the `books.origin` or `books.categories`
-   queue yet (and still has the gap), gets a pending one (step 12). Until
-   WorldCat is reachable from production, evidence rows list `worldcat` in `sources_failed`; the origin
-   judge works without it.
-   Run the categories after the origins with `bin/rails "books:categorize:backfill[categories_only,all,categories-v1]"`
-   (dry run, then `APPLY=1`). Or, preferably, run `[all,all,<label>]` once in place of both: one evidence gather
-   serves both judgments, and each book is planned with only the judgment it still needs. The categories judge
-   spends the same backfill research cap (`categorize_backfill_research_daily_cap`), which counts origin and
-   categories research together.
-12. **With `AI_RESEARCH_VIA=queue`, work the origin and categories queues again once the backfill has finished.** The
-   judges inserted a pending `books.origin` or `books.categories` row (reason `research_wanted`) for each book they
-   deferred that still had the gap and had no row in that queue yet; a book that already has a row there, in any status,
-   gets none. Copy prompt on the "Book origin" and "Book categories" rows again, or step 10's
-   `enrichment_queue:work`, to clear the pending ones. No fill is needed for those rows, though a fill does no harm.
-   Books an agent skipped, or whose agent answer was held or applied nothing, that the backfill did not settle are not
-   in that pending set: their rows are closed. To reach one, press Re-queue on its row on the admin page (the Skipped
-   tab, and the Done tab filtered to the outcome `nothing_to_apply` or `unrecognized`), then run an agent or `work` again. Re-queue is one
-   row at a time; there is no bulk re-queue.
-13. `bin/rails "books:origin:report[<label>]"` and `bin/rails "books:categories:report[<label>]"`, with the
-   label you ran under (`origin-v1` and `categories-v1` if you ran them separately). The
-   categories report lists type conflicts, unmatched subject and location names, and genre names the evidence
-   used that we do not list, each with the genre the judge said it means; add them as alternative names on existing
-   genres, never as new genres.
-   Then the alias step: `bin/rails "books:categories:add_aliases[<label>]"` is a dry run that lists each name and the genre it
-   would join (and skips a name an active genre already matches). Run it again with `APPLY=1`, and `NAMES=a,b` to add
-   only the names you checked. `MIN=n` sets a minimum count. Aliases take effect for books judged after them; the next
-   backfill pass uses them.
-14. Accept or skip the origin disagreements: `bin/rails "books:origin:accept_disagreements[<label>]"`, with
-   `IDS=` and `APPLY=1`.
-15. **Undo, if a run removed links it should not have.** A re-judge removes legacy links the evidence does not
-   support. `bin/rails "books:categories:restore_removals[<label>]"` prints how many links on how many books it would
-   put back (it does not list them); with `APPLY=1` it restores them.
-16. **Rankings.** Refresh the books list weights and the book rankings, then the author rankings. Filling
-   origins changes `percentage_western` and so the western-canon penalty.
-
-## 15. Local Wikidata (the service once; the re-check repeats after each refresh)
-
-Replaces remote Wikidata for bulk reads with a copy built from the weekly dump, served from the home
-server through a Cloudflare tunnel behind Cloudflare Access. Details:
-`docs/features/wikidata-data-service.md`; spec: `docs/superpowers/specs/2026-11-08-wikidata-data-service-design.md`.
-The work ships as two PRs: the Wikidata service and home-server tooling first, the Rails switch second.
-
-Steps marked "Shane runs with `!`" change the home server, Cloudflare or production, so an agent does not run them.
-The order matters: the Cloudflare step writes the tunnel token that `provision` hands the new VM. The host
-already has tunnels enabled, so a VM created before the token exists starts `cloudflared` with an empty one.
-
-1. **Free the old MusicBrainz VM. Shane runs with `!`. DONE 2026-11-09.** On pve-mini: `qm set 101 --onboot 0`,
-   so VM 101 stops competing with VM 150 for memory after a reboot. Then check production's `MUSICBRAINZ_URL`:
-   if it points at VM 101, point it at `https://musicbrainz.org` before VM 101 is ever stopped.
-2. **Prove the build on the dev machine. DONE 2026-11-09.** The dev build passes every gate (81 min, peak
-   9.5 GiB of 10 GiB; numbers in the feature doc's "Measured build").
-3. **Merge PR 1** (#473, the Wikidata service and the home-server tooling). **DONE 2026-11-09.** Nothing in
-   production calls the service yet.
-4. **Cloudflare, before anything touches the home server. Shane runs with `!`. DONE 2026-11-09** (both
-   applies in sync; the SOPS files committed with this section). Nothing is done in the
-   dashboard. In `the-greatest-cloudflare`, merge the branch `wikidata-tunnel`: it adds the `wikidata-api`
-   Access app (the existing `prod-rails` service token, nothing new), the `home-wikidata` tunnel with ingress
-   `http://wikidata:8083`, `WIKIDATA_SERVICE_URL` to the production values, and
-   `wikidata-api.thegreatestbooks.org` to the `skip_edge_for_home_server` bot-skip rule. Then, from an
-   up-to-date checkout of that repo (`CLOUDFLARE_ZT_API_TOKEN` and `CLOUDFLARE_API_TOKEN` in its `.env`,
-   `SOPS_AGE_KEY_FILE` set):
-   - `bin/cfzerotrust diff --secrets-root /home/shane/dev/the-greatest` lists one app, one tunnel, one
-     CNAME and two secret writes to create, and nothing to change for the other three services.
-   - `bin/cfzerotrust apply --secrets-root /home/shane/dev/the-greatest` creates them, writes
-     `WIKIDATA_TUNNEL_TOKEN` into `secrets/home-server.env` and `WIKIDATA_SERVICE_URL` into
-     `secrets/.env.production`. There is no token to copy.
-   - `bin/cfrules diff thegreatestbooks.org` shows only the skip rule's host list gaining the new hostname
-     (if it reports dashboard drift, `pull` and merge first, per that repo's AGENTS.md), then
-     `bin/cfrules apply thegreatestbooks.org`.
-   - Commit the two changed SOPS files in this repo on a branch and merge it. Production picks up
-     `WIKIDATA_SERVICE_URL` the way section 9 step 9 did; nothing reads it until PR 2 merges.
-5. **healthchecks.io (optional).** Create `wikidata-heartbeat` (period 5 min, grace 15 min),
-   `wikidata-deploy` (15 min, 1 h) and `wikidata-refresh` (1 day, 12 h), then add their ping URLs as
-   `HC_WIKIDATA_HEARTBEAT`, `HC_WIKIDATA_DEPLOY` and `HC_WIKIDATA_REFRESH` with
-   `sops secrets/home-server.env`. Blank means no ping, so this can wait, but do it before step 7 or
-   re-run `provision` afterwards.
-6. **Confirm VMID 150 is unused, immediately before step 7.** `ssh pve-mini qm list` must not list 150.
-   `provision` adopts a VM it finds at that id instead of creating one.
-7. **Create the VM. Shane runs with `!`.** From this repo's main checkout, up to date with `main` and with
-   step 4's secrets: `SOPS_AGE_KEY_FILE=~/.config/sops/age/production.txt deployment/home-server/provision`.
-   It creates VM 150 `wikidata` (8 vCPU, 12 GB, a 400 GB data disk on `rpool2`), installs its env and
-   timers, and leaves the other VMs alone. `cloudflared` starts at once; the API does not, because there is
-   no built version yet. Check: `ssh pve-mini qm list` shows 150 running, and
-   `deployment/home-server/provision --verify` passes, with the wikidata `/version` check reported as SKIP.
-8. **The first build runs by itself.** `wikidata-refresh.timer` fires 15 minutes after the VM boots: about
-   4.5 h to download the dump, then about 1.5 h to build, gate and promote. Nothing to do but wait.
-   To watch it, find the VM's address (`ssh pve-mini qm guest cmd 150 network-get-interfaces`), then
-   `ssh debian@<vm-address> journalctl -fu wikidata-refresh`. It is done when
-   `ssh debian@<vm-address> curl -s 127.0.0.1:8083/version` prints `"gates_passed":true` with a dump
-   date, and `wikidata-heartbeat` goes green. A failed gate leaves nothing served and pings
-   `wikidata-refresh` with the gate names; the dump is kept, so a retry does not download it again.
-9. **Confirm production reaches the service. Shane runs with `!`.** From a production host:
-   `curl -s -H "CF-Access-Client-Id: $CLOUDFLARE_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CLOUDFLARE_ACCESS_CLIENT_SECRET" https://wikidata-api.thegreatestbooks.org/version`
-   answers with the same dump date. A 403 means the Access app or token; a challenge page means the
-   bot-skip rule from step 4 is not applied.
-10. **Only then merge PR 2** (#474, the Rails switch): mark it ready for review, let CI and Codex finish,
-    merge. It deploys the client. Merging it before step 9 passes leaves production imports with no
-    Wikidata at all.
-11. **Enrich the authors from the local Wikidata, ranked authors first. Shane runs with `!`.**
-   `bin/rails "books:authors:enrich[13333]"`. The limit is how many authors to queue, ranked authors first:
-   13,333 authors had a ranked book on dev on 2026-11-09, and a few hundred more only reaches unranked
-   authors with the most books. Authors already processed are skipped, and its first line prints how many
-   it planned. It queues the Wikidata step, then VIAF on a miss, then AI with research off, one author every
-   2 seconds (`Backfill::SPACING`), so about 7.5 hours for the ranked authors. Check it with
-   `bin/rails "books:authors:enrich_report[<ISO time it printed>]"`. Do this BEFORE the section 14 origin
-   backfill, because the work match rate depends on author QIDs. Measured on dev 2026-11-09: only 714 of
-   76,006 authors have a Wikidata QID. On a 40-book sample the local copy matched 5 of 10 top-ranked books,
-   1 of 10 mid-ranked and 1 of 20 unranked, all through identifiers. When the author was found by name,
-   the author-works route matched 8 of the 14 ranked books that were still unmatched.
-12. **Re-run the stage 2 rehearsal** (section 14, step 1); it now covers the categories judgment too (stage 3, Task 11).
-   The dev rehearsal needs `BOOKS_CATEGORIES_JUDGE_ENABLED=1` in the environment of the dev Sidekiq process; without it every
-   book gets a skipped `disabled` row. That is a dev setting only and does not touch production.
-13. **After launch, optionally turn on the re-check.** Set `config.x.wikidata.recheck_after_refresh = true`
-   (`config/initializers/wikidata.rb`; it is off everywhere until you do) and deploy. The 06:00 UTC cron
-   (`wikidata_recheck_after_refresh`) then reads `/version` daily and, when the dump date is new, re-checks
-   books and authors created in the last 90 days (`config.x.wikidata.recheck_window`) that found no QID,
-   one start every 8 seconds. To see the counts first, `bin/rails wikidata:recheck` is a dry run;
-   `APPLY=1` queues the work. It selects no book while their evidence rows list `worldcat` in
-   `sources_failed` (until WorldCat is reachable from production), because those books are left to a normal re-gather.
-
-## 16. Ranking archives (the migration once; the monthly job needs nothing)
-
-Frozen copies of the books ranking, shown at `/rankings/archive`. The monthly job is scheduled and
-needs no action; the one manual step is copying the archived legacy rankings in. Details:
-`docs/features/ranking-archives.md`.
-
-Steps marked "Shane runs with `!`" change production, so an agent does not run them.
-
-1. **After deploy, check the first automatic archive.** The next 05:15 UTC run creates an archive named
-   for the month it is deployed in. Check `/admin/ranking_archives`. If it should not be public, hide it;
-   do not delete it, because the next run would create it again.
-2. **Copy the legacy archives. Shane runs with `!`.** In production,
-   `bin/rails data_migration:ranking_archives`. Expect `unknown: 0` and a `count` of about 43 (43 on the
-   2026-11-10 development run); `skipped_empty` lists any archived ranking with no ranked rows. An unknown
-   id is a book id that is neither a live book nor a `record_redirects` row. If the task aborts with
-   unknown ids there are two causes. The books sync may be behind legacy: run the read-only
-   `bin/rails data_migration:sync_report` to see, then `data_migration:sync` (a plain sync holds back the
-   last 24 hours of legacy changes unless `FINAL=1`), and retry. Or a book was removed here without
-   callbacks: stop and investigate the listed ids before retrying, and do not force the migration.
-3. **Re-running it at cutover is harmless.** It creates only archives that do not exist yet, so it
-   reports `count: 0` if legacy archived nothing new.
-4. **Spot-check.** Open `/rankings/archive` and one old archive.
-
-## 17. Measure migrated cover images (once, production only)
-
-The July 2026 image migration left about 6,756 book covers unmeasured: their blobs have
-`{"identified": true}` and no width or height. Link previews only show a cover thumbnail when both
-dimensions are known and at least 200, so these books get no thumbnail until they are measured.
-
-1. **After deploy, run the backfill.** In production, `bin/rails images:analyze_missing_dimensions`. It
-   enqueues `Images::AnalyzeDimensionsJob` in slices of 500 on the `low` queue and prints the blob and job
-   counts. It is safe to re-run: it selects only blobs still missing a width, and the job skips any that
-   gained one. A blob that cannot be read is logged and the rest of its batch carries on.
-2. **Production only. Do not run it in development.** The development database is a production restore, so
-   its book blob keys point at files in the production bucket, not the development one. In development every
-   download fails, and each failure is logged.
-3. **Check the edge cache first.** Book and game show pages are edge-cached for up to 24 hours (plus 1 hour
-   stale-while-revalidate), so right after deploy, and again after the backfill drains, Cloudflare may still
-   serve HTML without `og:image`. Run `curl -s <url> | grep og:image` on the page first. If the tag is
-   missing, wait a day or purge that single URL before testing in Discord. Do not purge the whole zone.
-4. **Check.** Paste a ranked book link and a ranked game link into Discord. Both should show a small cover
-   thumbnail. Discord cannot reach dev hostnames, so this can only be checked in production. Discord caches
-   unfurls per URL, so test with a link you have not shared before.
-
-## 18. Switch publisher intake on (one source at a time)
-
-The weekly intake of publishers' new and upcoming titles ships switched off: nothing runs until
-`PUBLISHER_INTAKE_SOURCES` names a source. It writes only to its own three tables and reads pages
-through the page fetcher. Details: `docs/features/publisher-intake.md`.
-
-Steps marked "Shane runs with `!`" change production, so an agent does not run them.
-
-**How a source is switched on or off.** `PUBLISHER_INTAKE_SOURCES` lives in
-`secrets/.env.production` (`deployment/SECRETS.md`). That one file becomes the `.env` both the web
-and the Sidekiq container read, and a deploy recreates both, so the change is: edit the file with
-`sops`, commit it on a branch, merge. The Sidekiq side does the fetching; the web side needs the
-value too because the admin screen's "Enabled" column is computed there. After the deploy the daily
-job (06:20 UTC) starts the source's first run; to start it sooner run
-`bin/rails "books:publisher_intake:run[<source>]"` on the worker, which refuses a source that is not
-enabled or already has a run running.
-
-1. **Confirm the production fetcher answers `POST /fetch_file`. DONE 2026-11-24** (Hachette's
-   discovery used it). The home-server fetcher must be running an image built after the file-fetch
-   work merged on 2026-11-18. Intake's sitemap and API requests use that route and fail without it.
-2. **Enable the first source. Shane runs with `!`. DONE 2026-11-24.**
-   `PUBLISHER_INTAKE_SOURCES=hachette_us`. The sweep reads what a run finds every ten minutes.
-   `PUBLISHER_INTAKE_FETCH_INTERVAL` and `PUBLISHER_INTAKE_DAILY_FETCH_CAP` stay at their defaults
-   (10 seconds, 2,000 a day).
-3. **Watch the first run. DONE 2026-11-24** for Hachette: 5.5 hours, 2,669 listings, 1,397 titles,
-   nothing unparseable or blocked. Open `/admin/publisher_intake` (or run `bin/rails
-   books:publisher_intake:status`): the run's status, listings by state, titles ready and held by
-   reason, and today's fetches against the cap. Look at a few titles. `unparseable` listings mean the
-   site's markup differs from what the parser expects: run
-   `bin/rails "books:publisher_intake:reparse[<source>]"` after a parser fix, no new fetch needed.
-   A blocked source shows "blocked until" and resumes by itself.
-4. **Re-classify Hachette's stored pages, once, after the deploy that carries the hold fixes. Shane
-   runs with `!`.** On the worker: `bin/rails "books:publisher_intake:reparse[hachette_us]"`. It
-   re-reads the 1,470 stored pages with the current parser and fetches nothing. Expect about 46
-   titles to move from ready to held `not_a_book` (bookmarks, memo pads, blank journals sold as
-   "General merchandise", "Diary" or "Postcard book or pack") and one all-Spanish title to
-   `non_english`. Running it again changes nothing.
-5. **Add Penguin Random House. Shane runs with `!`.** Its first run is about 10,000 reads, roughly
-   five days at the default cap, so add it only after the first source looks right.
-   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us`. A sitemap file over the fetcher's
-   file size cap shows on the run as `unavailable`; the size reason is only in the log. The remedy
-   is raising the fetcher's `FETCHER_MAX_FILE_BYTES`.
-6. **Add Macmillan. Shane runs with `!`.**
-   `PUBLISHER_INTAKE_SOURCES=hachette_us,penguin_random_house_us,macmillan_us`. Its first run only
-   reads the first 20 titles of its "Coming Soon" and "New Releases" collections; every other
-   already-listed title is held as `baseline`. Its product sitemap files were not measured in the
-   rehearsal, and discovery writes one row per URL, so watch the first (baseline) run's duration.
-7. **Release Macmillan's baseline titles after its first run finishes. Shane runs with `!`.** Once
-   `status` shows its last run `finished`, run
-   `bin/rails "books:publisher_intake:release_baseline[macmillan_us,<limit>]"`, highest ISBN first,
-   in slices small enough for the daily cap. This step repeats: each call releases at most `limit`
-   more, so run it again until `status` shows no `baseline` listings you want read. Titles that
-   appear after the first run are read without it.
-8. **To stop a source. Shane runs with `!`.** Remove its key from `PUBLISHER_INTAKE_SOURCES` in
-   `secrets/.env.production` and deploy; jobs already queued for it then skip without fetching. A run
-   the switched-off source left `running` is failed by the three-day rule on the next day when
-   some other source is still enabled; with none enabled the daily job does nothing, so that run
-   stays `running` until a source is enabled again.
-9. **Nothing here touches the catalog.** Creating books from stored titles is a later design; until
-   then the tables only grow, in the private imports storage.
-
-## 19. List audits (after the deploy that adds them)
-
-An admin's agent audits the books lists one at a time. Details: `docs/features/list-audits.md`.
-Steps marked "Shane runs with `!`" change production, so an agent does not run them.
-
-1. **Consolidate the geography penalties. Shane runs with `!`.** `bin/rails penalties:consolidate` is
-   a dry run: read the report (lists flagged, attachments moved, penalties deleted with their list
-   counts, values set per books configuration, penalties renamed). Nothing may be refused. Then
-   `APPLY=1 bin/rails penalties:consolidate`. It is idempotent, so a second run reports nothing to
-   do. Weights change on the next ranking refresh: geography values move, and removing #21
-   (value 40 on the books year rankings) raises the weight of the lists that carried it on those
-   rankings (Shane accepted this, 2026-11-22). Every books configuration without a #15 value gets
-   one (20), the year configurations included; that has no effect until a location-specific list
-   feeds them. Run it before the guidance load, and before `penalties:backfill`, which now expects the
-   new names of 44 and 46.
-2. **Load the penalty guidance. Shane runs with `!`.** `bin/rails penalties:load_guidance`. It fills
-   blank `guidance` columns only; add `OVERWRITE=1` to replace guidance that differs from the YAML. Check the output: `mismatched` and `missing` must be empty, and
-   `filled` should hold the penalties you expect. Edit any wording on the admin penalties form.
-3. **Detach hand-attached dynamic penalties. Shane runs with `!`.** `bin/rails penalties:detach_dynamic`
-   is a dry run that prints only `list_penalty` ids. Check it lists one row (dev had exactly one). If it
-   lists more, inspect each (`ListPenalty.find(id)` with its list and penalty) before running
-   `APPLY=1 bin/rails penalties:detach_dynamic`. Detaching changes no weight: the calculator skips
-   non-static attachments.
-4. **Work the queue.** Open `/admin/list_audits` on the books host, use **Copy
-   prompt**, and give it to an agent on the admin MCP endpoint with a `books:admin:write` token. A
-   list is audited once; **Release** frees a list whose lease got stuck.
-5. **Refresh the ranking configuration afterwards. Shane runs with `!`.** Audits change list fields
-   and penalties but never the weight. Use the admin **Refresh Rankings** action on the books primary
-   once the batch is done, and again after later audits.
-6. **Reload the penalty guidance after the burden-of-proof deploy. Shane runs with `!`.** The
-   guidance for penalties 3, 6, 15 and 18 changed. In production run
-   `bin/rails penalties:load_guidance OVERWRITE=1` and check `mismatched` and `missing` are empty.
-   The deploy also adds `lists.items_need_revision` (migration, default false). Lists the agent flags
-   show an "Items need revision" badge, and the books lists index filters them with "Needs item
-   revision"; only an admin clears the flag, on the list's edit form.
-7. **Rename penalty 11, then reload the guidance. Shane does both.** On the admin penalties form set
-   penalty 11's name to "Voters: limited to one demographic group (gender, race, age, etc.)"
-   and its description to "Only people of one gender, race, age group or similar could vote, so the list reflects that group's preferences rather than a general consensus."
-   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 11, 13, 14 and 18 changed).
-   It exits 1 and reports 11 as `mismatched` if the rename has not been done.
-8. **Rename penalty 5, then reload the guidance. Shane does both.** On the admin penalties form set
-   penalty 5's name to "List: only covers creators of one group (gender, race, ethnicity, etc.)"
-   and its description to "Restricted to creators of one gender, race, ethnicity or similar group, so it surveys part of the field rather than all of it."
-   Then run `bin/rails penalties:load_guidance OVERWRITE=1` (guidance for 1 and 5 changed). It reports
-   5 as `mismatched` if the rename has not been done.
-9. **Reload the guidance for penalty 3. Shane runs with `!`.**
-   `bin/rails penalties:load_guidance OVERWRITE=1`, after the deploy that adds the impact test.
-
-## 20. User-added books (after the deploy that adds them)
-
-A reader adds a book the site lacks from a list page; an admin or an agent approves it. Details:
-`docs/features/user-added-books.md`. Steps marked "Shane runs with `!`" use production, so an agent does
-not run them. The deploy's four migrations only add a table (`books_book_submissions`) and columns to it,
-so they are safe to run live and need no downtime. One condition: do not merge while the legacy sync or
-another bulk writer is running, because creating the table briefly locks writes on `users`, `user_lists`,
-`user_list_items`, `match_decisions` and `books_books`.
-
-1. **Confirm both new Sidekiq queues are being worked.** After the deploy, Sidekiq must have restarted
-   and be serving `goodreads_fetch_priority` and `serial_priority` (they sit in the `goodreads_fetch` and
-   `serial` capsules). If it still runs the old config, a reader's Goodreads link waits for nothing.
-   Check the Sidekiq admin page's Busy tab, or from a console
-   `Sidekiq::ProcessSet.new.flat_map { |p| p["queues"] }.uniq.sort`, for both names. If
-   `goodreads_fetch_priority` is not served, a Goodreads add never fetches and the sweep fails the row as
-   "lost job"; if `serial_priority` is not served, the Amazon step of the early lookups stalls.
-2. **Check Amazon's `get_items` response. Shane runs with `!`.** This uses none of the new code, so it can run before the merge. One real call for a known ASIN and one
-   for an unknown one, each with `bin/rails runner` in a shell inside the worker container (not a console;
-   `ASIN=x docker compose exec ...` does not pass the variable in):
-   `ASIN=0143039431 bin/rails runner 'a = Services::Amazon::Client.new; r = a.send(:client).get_items(marketplace: Services::Amazon::Client::MARKETPLACE, partner_tag: a.send(:partner_tag), item_ids: [ENV.fetch("ASIN")], resources: Services::Books::AmazonProductService::AMAZON_RESOURCES); b = r.parse; puts r.status.code, b.keys.inspect; puts b.values.flat_map { |p| p.is_a?(Hash) ? Array(p["items"]) : [] }.map { |i| i.dig("itemInfo", "title", "displayValue") }'`
-   Run it once as shown, then again with `ASIN=B0ZZZZZZZZ`. It prints only the status, the top-level keys
-   and the titles, never headers or credentials (the same command is in
-   `docs/features/amazon-creators-api.md`, "Known gaps"). The known
-   ASIN must answer with the key `itemsResult` and the right title. The unknown ASIN (`B0ZZZZZZZZ`)
-   must come back as an empty answer, not an error: an error is read as "Amazon is down" and the request
-   retries for an hour. If the key is different, fix `Client#get_items` before relying on Amazon links.
-3. **Add one book by ISBN, one by Goodreads link and one by Amazon link, end to end. Shane runs with `!`.** Signed in on the
-   books site, open one of your own lists, search for a book that is not there, and use "Can't find it?
-   Add a book". Pick an ISBN of a book the site lacks, then a Goodreads link to another, then an Amazon `/dp/` link to a
-   third (the by-ASIN path that step 2 checks). Each should appear on the list within a few minutes
-   with the strip saying it was added. Each is under "Needs review" in `/admin/book_submissions` as soon
-   as it is added; the Goodreads and Amazon details arrive after the early lookups. Delete all three from the admin page afterwards with Reject, which also removes the list item.
-4. **Mint an admin token for the agent. Shane runs with `!`.** At `/developers/tokens` on the books host,
-   with the scope `books:admin:merge` (it implies read and write) and an expiry; an admin token must expire.
-   Then use **Copy prompt** on `/admin/book_submissions` and give it to an agent on the admin MCP endpoint.
-5. **Settings.** Defaults are right; set them only to change them:
-   `GOODREADS_PRIORITY_RESERVED` (100, the part of the daily Goodreads cap kept for readers),
-   `BOOK_SUBMISSION_LOOKUP_RUNS` (100, early lookup runs in 24 hours) and
-   `BOOK_SUBMISSION_LOOKUPS_ENABLED` (on; `0` stops the early lookups without a deploy).
-
-## 21. Title notes repair (once, after the deploy that adds it)
-
-Joins the 72 titles the Goodreads rebuild cut at a colon inside their brackets ("Accounting 2 (Quick Study" /
-"Business)") and takes closing series or format notes ("(Brides of Nap City Book 1)", "(Spanish Edition)") off
-about 580 titles and subtitles. Any other bracket stays. Measured 2026-11-25: 652 books. Matching is unaffected.
-
-1. `DRY_RUN=1 bin/rails books:titles:repair_notes` and skim the list.
-2. `bin/rails books:titles:repair_notes`. A second run reports 0.
-
-The ~2,000 titles left with brackets (publisher series such as "(Dover Thrift Editions)", junk such as
-"[(American Psycho)] [Author: …]") need judgment: an agent with the admin MCP, not a rule.
+- **Full migration and switch-over** (the old sections 1 and 2). The weekly `data_migration:all`, the
+  cover images (`data_migration:book_images`), the search reindex and `sync_init` (watermarks created
+  2026-10-10 04:44 UTC, with `BOOK_IDENTIFIERS_FROM`). `data_migration:all`, `data_migration:book_images`
+  and every other task the sync replaced now refuse with "use data_migration:sync"; the sync brings new
+  books' covers itself. Details: `docs/features/books-legacy-sync.md`.
+- **Firebase authorized domains.** Every host the app serves is authorized (Shane, 2026-09-05). All
+  domains share one Firebase project.
+- **Recommendations model** (old section 3, steps 1-4). R2 bucket and secrets, the `recommender-train`
+  healthcheck, the home-server timer, the first model. Active: model 42, from the 2026-11-25 export. A
+  second export on the same day reuses the day's file name, so a run by hand only helps before 04:00
+  UTC. Details: `docs/features/recommendations.md`, "Collaborative signal".
+- **Stored-name normalization** (`books:normalize_names:report`, then `books:normalize_names:apply`). The
+  report finds 0 to change on 2026-11-26.
+- **Identifier provenance** (`identifiers:mark_legacy`). 0 books identifiers without a source; a second
+  run prints 0.
+- **Verification pass.** `books:verify[all]` over the ranked pre-import books,
+  `books:verify[all,post_import,trusted]`, the unsure second chance (2026-10-26: unsure 4,011 to 2,482),
+  and keep-the-bigger-work (2026-10-27, 278 books). 21,241 rows, the last on 2026-10-29. To undo a route
+  or one book (`books:verify_revert_route`, `books:verify_revert`): `docs/features/book-verification.md`.
+- **Duplicate sweep** (`books:find_duplicates`). 3,533 pairs merged, 786 marked not duplicates. The
+  queue keeps filling from other sources (section 4, step 13).
+- **Goodreads replay** (the old section 5, step 5). Loaded, resolved and applied in October. The
+  rebuild and the re-import replaced it: its 2,691 relink and 2,091 strip proposals were retired
+  unapplied, and its proposal steps (`fix_slugs`, `resolve`, `duplicates`, `junk`) are not run again.
+  `load`, `apply` and `repair_ratings` stay weekly (section 3). Details: `docs/features/goodreads-import.md`.
+- **Category cleanup** (runbook in `docs/features/books-categories.md`). 64,296 decisions applied. The
+  sync's `category_cleanup` step keeps new legacy categories in line; re-run `propose` now and then for
+  what that step leaves undecided.
+- **Open Library `/resolve` under load** (#358). One `/resolve` at a time; the rest get an instant 503
+  busy (section 4, "Shared bottlenecks").
+- **WorldCat service and genre cleanup** (old section 9, steps 1-7, 9, 10 and 12-14). Artifact built; Cloudflare,
+  healthchecks and secrets (2026-10-14); VM 130 with the artifact; `WORLDCAT_SERVICE_URL` in production
+  (0 of 5,984 match decisions in the week to 2026-11-26 list `worldcat` as failed); the old site stops
+  creating genres (`the-greatest-books` PR #10, 2026-10-18); genre map reviewed; `categories:genres:apply`
+  (3 audiences; Noir and Hardboiled under Crime Fiction); `worldcat:apply_aliases` (would add 0 now; it
+  reports "Police Procedural" as a mapped genre that does not exist). What remains: section 4, step 9.
+- **Alternate titles cleanup** (old section 10, steps 1-5). Backfill, `review[ranked]`, `review[all]`,
+  `undo_findings[apply]` (2,033 findings undone, 2026-10-24 and 25). `redo_finding[<id>]` reverses one
+  finding; `undone_findings[<book id>]` lists a book's. Repeating steps: section 3, step 8. Details:
+  `docs/features/books-alternate-titles.md`.
+- **Goodreads rebuild** (old section 11, steps 1-5). Cohorts, retired replay proposals, survey and its
+  pass-2 evidence, `decide_fixes`, `retire_lump_verdicts`, review, `retire_unneeded_fixes`, apply. 39,148
+  of 39,152 approved fixes and 194 of 207 approved book merges applied, the last on 2026-11-01. The
+  10-minute job enriches the fixed books by itself. Before any later `decide_fixes`, run
+  `books:goodreads_rebuild:survey[all,redo]`. What remains: section 4, step 18. Details:
+  `docs/features/goodreads-rebuild.md`.
+- **Goodreads re-import, first pass** (old section 12, steps 1-11). Gate on, survey, archive, match (with
+  the one-off `recheck_creates`), review, apply, decide twice, snapshot (`counts.json`, 2026-11-20 04:28
+  UTC), apply, author check, apply, report (`report-20261121T053123Z.md`). Numbers in section 2. What
+  remains: section 4, steps 3-7.
+- **Two duplicates the re-import created, merged 2026-11-26** through the admin MCP: *Cosmicomics* 251937
+  into 250177, *Why We Eat (Too Much)* 253586 into 253135 (redirects recorded 01:53 UTC).
+- **MCP sign-in** (old section 13, steps 1, 2 and 4). The edge rule for `/.well-known/oauth-*` is live,
+  `BOOKS_DOMAIN` admits `new.thegreatestbooks.org`, and admin sign-in works: 9 OAuth connections since
+  2026-11-09, 5 of them to `/api/mcp/admin`. Admin approvals need renewing every 30 days. What remains:
+  section 4, step 15, and section 5.2. Details: `docs/features/mcp-server.md`, "Signing in with OAuth".
+- **Origins and categories setup** (old section 14, steps 1-4). Author Wikidata enrichment; the genre and
+  audience definitions (`books:categories:write_definitions`, a dry run would write 0);
+  `BOOKS_CATEGORIES_JUDGE_ENABLED=1`; `AI_RESEARCH_VIA=queue` (set it to `api` to spend through the API
+  again). What remains: section 4, step 10.
+- **Local Wikidata** (old section 15, steps 1-4 and 6-11; the optional healthchecks of step 5 are not recorded). VM 150, tunnel, PR #473 and PR #474, and the
+  ranked-author enrichment `books:authors:enrich[13333]` (2026-11-10 to 11-12, 13,574 completed runs; check
+  one with `books:authors:enrich_report[<the time it printed>]`). 0 of 5,984 match decisions in the week
+  to 2026-11-26 list `wikidata` as failed. What remains: section 4, step 10.4, and section 5.3. Details:
+  `docs/features/wikidata-data-service.md`.
+- **Ranking archives** (old section 16). `data_migration:ranking_archives` copied 43 legacy archives; the
+  monthly job made one more. Re-running it at cutover only creates archives that do not exist. If it
+  aborts with unknown ids, either the sync is behind legacy or a book was removed without callbacks: do
+  not force it. Details: `docs/features/ranking-archives.md`.
+- **Cover dimensions** (old section 17, step 1). `images:analyze_missing_dimensions` (production only; in
+  development every download fails). 0 book covers lack a width. What remains: section 4, step 16.
+- **Publisher intake, Hachette** (old section 18, steps 1-4). The fetcher's `/fetch_file`, Hachette
+  enabled, its first run (2026-11-24: 5.5 hours, 2,669 listings, 1,397 titles) and the reparse (every
+  read listing at parser version 3). What remains: section 4, step 11.
+- **List audit setup** (old section 19, steps 1-3 and 6-9). `penalties:consolidate` (penalty 21 gone, 44
+  and 46 renamed), the renames of penalties 5 and 11, every guidance reload (all 29 rows match
+  `config/penalties/guidance.yml`), `penalties:detach_dynamic` (none attached). After a later guidance
+  edit: `bin/rails penalties:load_guidance OVERWRITE=1`; it exits 1 when a penalty's name differs from
+  the file. What remains: section 4, step 12.
+- **User-added books** (old section 20, steps 1 and 4). Both new queues (`goodreads_fetch_priority`,
+  `serial_priority`) are served; admin tokens with `books:admin:merge` exist. What remains: section 4,
+  step 14.
+- **Title notes repair** (old section 21). `books:titles:repair_notes`, 2026-11-26. It repeats weekly
+  for the books the sync adds (section 3, step 7). About 2,000 titles keep brackets that need judgment
+  (publisher series, junk): an agent with the admin MCP, not a rule.
+- **Stale `FIREBASE_PROJECT_ID`.** Not set in the production worker's environment on 2026-11-26.

@@ -185,4 +185,126 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
     assert_equal({inserted: 1, dropped: 1, waiting: 1, missing: 0}, expected[:corrections].slice(*correction_keys))
     assert_equal expected[:corrections].slice(*correction_keys), correction_result[:data].slice(*correction_keys)
   end
+
+  # The held counts must be what the sync reports on the same data, or a second report
+  # after a sync never reaches 0. Held ids are the union of three routes: a row here whose
+  # pair is held, a legacy row naming a held book, and a legacy row routed onto one.
+  test "counts the re-import hold the way the migrators apply it" do
+    init_watermarks(books: 200_000, authors: 100_000, book_identifiers: 0)
+    plain = ::Books::Book.create!(id: 199_001, title: "Plain")
+    fresh = ::Books::Book.create!(id: 199_002, title: "Fresh")
+    held_book = ::Books::Book.create!(id: 199_010, title: "Held")
+    moved_book = ::Books::Book.create!(id: 199_011, title: "Moved Here")
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 199_003, to_id: held_book.id)
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@user.id, held_book.id], [@user.id, moved_book.id]].to_set, redirects: Services::BooksMigration::Redirects.new([])
+    )
+
+    list = ::Books::UserList.create!(id: 800, user: @user, name: "Kept", list_type: :custom)
+    UserListItem.create!(user_list: list, listable: plain, position: 1)
+    UserListItem.create!(user_list: list, listable: held_book, position: 2)
+    ::Review.create!(id: 900, user: @user, reviewable: held_book, rating: 3)
+    ::Review.create!(id: 950, user: @user, reviewable: moved_book, rating: 3)
+
+    item = ->(id, book_id, position) {
+      {"id" => id, "user_list_id" => 800, "book_id" => book_id, "position" => position, "read_date" => nil,
+       "created_at" => @t, "updated_at" => @t}
+    }
+    items = [item.call(1, plain.id, 1), item.call(2, held_book.id, 2), item.call(3, fresh.id, 3)]
+    review = ->(id, book_id) {
+      {"id" => id, "user_id" => @user.id, "book_id" => book_id, "title" => nil, "body" => nil, "rating" => 4,
+       "created_at" => @t, "updated_at" => @t}
+    }
+    # 950 sits here only, on a held pair legacy no longer has. 903 is free; 902 reaches the held book through a redirect; 900 is held by its id and its book.
+    reviews = [review.call(903, plain.id), review.call(902, 199_003), review.call(900, held_book.id)]
+    legacy = FakeLegacySource.new(
+      user_list_versions: {800 => @t}, user_list_items: items, user_list_owners: {800 => @user.id},
+      review_rows: reviews.map { |row| row.values_at("id", "user_id", "book_id", "updated_at") }
+    )
+    scope = Services::BooksMigration::SyncPlan.build(legacy: legacy).scope
+    scope.hold = hold
+
+    expected = Services::BooksMigration::UserDataDiff.call(scope: scope, legacy: legacy)
+
+    items_migrator = Services::BooksMigration::UserListItemMigrator.new(sync: scope)
+    items_migrator.define_singleton_method(:legacy_items_for) { |ids| items.select { |row| ids.include?(row["user_list_id"]) } }
+    items_migrator.define_singleton_method(:legacy_item_count) { items.size }
+    item_result = items_migrator.call
+    review_migrator = Services::BooksMigration::ReviewMigrator.new(sync: scope)
+    review_migrator.stubs(:legacy_each).multiple_yields(*reviews.zip)
+    review_result = review_migrator.call
+
+    assert_equal({inserted: 1, deleted: 0, held_legacy: 1, held_here: 1}, expected[:user_list_items].slice(:inserted, :deleted, :held_legacy, :held_here))
+    assert_equal expected[:user_list_items].slice(:inserted, :deleted, :held_legacy, :held_here),
+      item_result[:data].slice(:inserted, :deleted, :held_legacy, :held_here)
+    # updated is asserted literally: the migrator does not track it.
+    assert_equal({inserted: 1, deleted: 0, updated: 0, held: 3}, expected[:reviews].slice(:inserted, :deleted, :updated, :held))
+    assert_equal expected[:reviews].slice(:inserted, :deleted, :held), review_result[:data].slice(:inserted, :deleted, :held)
+  end
+
+  test "a hold with no list_users would hold nothing, so the diff must pass them" do
+    plain = ::Books::Book.create!(id: 199_001, title: "Plain")
+    list = ::Books::UserList.create!(id: 800, user: @user, name: "Kept", list_type: :custom)
+    UserListItem.create!(user_list: list, listable: plain, position: 1)
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@user.id, plain.id]].to_set, redirects: Services::BooksMigration::Redirects.new([])
+    )
+    row = {"id" => 1, "user_list_id" => 800, "book_id" => 199_002, "position" => 1, "read_date" => nil, "created_at" => @t, "updated_at" => @t}
+    ::Books::Book.create!(id: 199_002, title: "Other")
+    legacy = FakeLegacySource.new(user_list_versions: {800 => @t}, user_list_items: [row], user_list_owners: {800 => @user.id})
+
+    result = Services::BooksMigration::UserDataDiff.call(scope: sync_scope(hold: hold), legacy: legacy)
+
+    assert_equal [1, 0, 1], result[:user_list_items].values_at(:inserted, :deleted, :held_here)
+  end
+
+  test "a list that exists only on legacy holds its item on a held pair" do
+    plain = ::Books::Book.create!(id: 199_001, title: "Plain")
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@user.id, plain.id]].to_set, redirects: Services::BooksMigration::Redirects.new([])
+    )
+    row = {"id" => 1, "user_list_id" => 805, "book_id" => plain.id, "position" => 1, "read_date" => nil, "created_at" => @t, "updated_at" => @t}
+    legacy = FakeLegacySource.new(
+      user_list_versions: {805 => @t}, user_list_items: [row], user_list_owners: {805 => @user.id}
+    )
+
+    result = Services::BooksMigration::UserDataDiff.call(scope: sync_scope(hold: hold), legacy: legacy)
+
+    assert_equal [0, 1], result[:user_list_items].values_at(:inserted, :held_legacy)
+  end
+
+  test "a list whose owner changed on legacy is held by legacy's owner, as the run does" do
+    plain = ::Books::Book.create!(id: 199_001, title: "Plain")
+    ::Books::Book.create!(id: 199_002, title: "Other")
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@editor.id, plain.id]].to_set, redirects: Services::BooksMigration::Redirects.new([])
+    )
+    list = ::Books::UserList.create!(id: 800, user: @user, name: "Kept", list_type: :custom)
+    UserListItem.create!(user_list: list, listable: plain, position: 1)
+    list_row = {"id" => 800, "user_id" => @editor.id, "name" => "Kept", "description" => nil, "list_type" => 4,
+                "view_mode" => nil, "public" => true, "position" => 1, "created_at" => @t, "updated_at" => @t + 1.day}
+    item = ->(id, book_id, position) {
+      {"id" => id, "user_list_id" => 800, "book_id" => book_id, "position" => position, "read_date" => nil,
+       "created_at" => @t, "updated_at" => @t}
+    }
+    items = [item.call(1, plain.id, 1), item.call(2, 199_002, 2)]
+    legacy = FakeLegacySource.new(
+      user_list_versions: {800 => @t + 1.day}, user_list_items: items, user_list_owners: {800 => @editor.id}
+    )
+    scope = sync_scope(hold: hold)
+
+    expected = Services::BooksMigration::UserDataDiff.call(scope: scope, legacy: legacy)
+
+    lists_migrator = Services::BooksMigration::UserListMigrator.new(sync: scope)
+    lists_migrator.stubs(:legacy_each).multiple_yields([list_row])
+    lists_migrator.call
+    items_migrator = Services::BooksMigration::UserListItemMigrator.new(sync: scope)
+    items_migrator.define_singleton_method(:legacy_items_for) { |ids| items.select { |row| ids.include?(row["user_list_id"]) } }
+    items_migrator.define_singleton_method(:legacy_item_count) { items.size }
+    result = items_migrator.call
+
+    keys = %i[inserted deleted held_legacy held_here]
+    assert_equal 1, expected[:user_list_items][:held_legacy]
+    assert_equal expected[:user_list_items].slice(*keys), result[:data].slice(*keys)
+  end
 end

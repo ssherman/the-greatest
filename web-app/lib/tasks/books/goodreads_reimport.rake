@@ -74,13 +74,17 @@ namespace :books do
     end
 
     desc "Queue the snapshot of each affected user's list item and review counts (read-only). Run before apply. " \
-      "It refuses to replace an existing snapshot; snapshot[redo] does"
-    task :snapshot, [:redo] => :environment do |_task, args|
-      abort "usage: books:goodreads_reimport:snapshot[redo]" unless [nil, "redo"].include?(args[:redo])
+      "It refuses to replace an existing snapshot; snapshot[redo] does (only before any apply moved rows); " \
+      "snapshot[new_pass] writes a further counts-<UTC time>.json for a later pass and leaves the earlier files alone"
+    task :snapshot, [:mode] => :environment do |_task, args|
+      abort "usage: books:goodreads_reimport:snapshot[redo] or snapshot[new_pass]" unless [nil, "redo", "new_pass"].include?(args[:mode])
 
-      Books::GoodreadsReimport::SnapshotJob.perform_async(args[:redo] == "redo")
-      puts "queued the snapshot; it will be written to #{Services::Books::GoodreadsReimport::Report.snapshot_path} " \
-        "(left alone if one exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
+      report = Services::Books::GoodreadsReimport::Report
+      Books::GoodreadsReimport::SnapshotJob.perform_async(args[:mode] == "redo", args[:mode] == "new_pass")
+      # A new pass's file is named by the job when it runs, not now: only the pattern is known here.
+      target = (args[:mode] == "new_pass") ? report.storage_dir.join("counts-<UTC time>.json") : report.snapshot_path
+      puts "queued the snapshot; it will be written to #{target} " \
+        "(left alone if it exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
     end
 
     desc "Queue the independent AI sample check (read-only); the job logs its result"

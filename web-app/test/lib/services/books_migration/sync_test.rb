@@ -72,7 +72,7 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
 
   def watermarks = LegacySyncWatermark.pluck(:key, :value).to_h
 
-  test "brings over a new legacy book with its author and edition, and nothing for a book already here but its new identifier" do
+  test "brings over a new legacy book with its author and edition, and nothing for a book already here, identifiers included" do
     result = Services::BooksMigration::Sync.call(legacy: legacy)
 
     assert result.success?, result.errors.inspect
@@ -81,7 +81,7 @@ class Services::BooksMigration::SyncTest < ActiveSupport::TestCase
     assert_equal 1_001, ::Books::Edition.find(LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 7_001)).book_id
     assert_equal "Cleaned Here", @existing.reload.title
     assert_nil LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 7_002)
-    assert Identifier.exists?(identifiable_type: "Books::Book", identifiable_id: 900, value: "424242")
+    refute Identifier.exists?(identifiable_type: "Books::Book", identifiable_id: 900, value: "424242")
     refute ::Books::Book.exists?(1_002)
   end
 

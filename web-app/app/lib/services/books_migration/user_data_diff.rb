@@ -20,6 +20,9 @@ module Services
         @legacy = legacy
         # The run's own new books count as here: the user-data steps run after them.
         @route = BookRoute.new(scope, book_ids_here: ::Books::Book.pluck(:id).to_set | scope.book_ids)
+        # Expanded through the route's redirects, as the migrators do. The report reads the redirects once: a merge
+        # committing while it runs is the run's to pick up (BookRoute#refresh!), not the report's.
+        @hold = scope.hold.with_redirects(@route.redirects)
       end
 
       def call
@@ -63,16 +66,19 @@ module Services
         here_digests = here_item_digests
         counts = {
           legacy: legacy_digests.values.sum(&:first), here: here_digests.values.sum(&:first),
-          inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, missing: 0
+          inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, missing: 0, held_legacy: 0, held_here: 0
         }
         changed = legacy_list_ids.reject { |id| legacy_digests[id] == here_digests[id] }
         changed.each_slice(LIST_BATCH) do |list_ids|
           here = ::UserListItem.where(user_list_id: list_ids).pluck(:id, :user_list_id, :listable_type, :listable_id)
-          plan = UserListItemPlan.call(@legacy.user_list_items_for(list_ids), here, @route)
+          # Without list_users every reader is nil and nothing is held, silently. The run upserts
+          # every legacy list first (upsert_all rewrites user_id), so the owner is legacy's.
+          list_users = @legacy.user_list_owners(list_ids)
+          plan = UserListItemPlan.call(@legacy.user_list_items_for(list_ids), here, @route, hold: @hold, list_users: list_users)
           counts[:inserted] += plan.inserted
           counts[:deleted] += plan.stale_ids.size
           counts[:missing] += plan.missing.size
-          %i[dropped waiting collisions].each { |key| counts[key] += plan.public_send(key) }
+          %i[dropped waiting collisions held_legacy held_here].each { |key| counts[key] += plan.public_send(key) }
         end
         counts
       end
@@ -90,16 +96,30 @@ module Services
 
       # Mirrors ReviewMigrator: newest first, the first row per user and routed
       # book wins, and a key a new-app review holds stays the new-app review's.
+      # A row on a held reader/book pair (ReimportHold) is neither written nor deleted,
+      # and checked before the collision logic, as the migrator does: before routing
+      # (a held review id here, or the legacy book) and again on the routed book.
+      # `held` counts distinct review ids, as the migrator's does.
       def reviews
         counts = {dropped: 0, waiting: 0, collisions: 0, held_by_new_app: 0, missing: 0}
         new_app_keys = ::Review.where(reviewable_type: "Books::Book", id: ceiling("reviews")..)
           .pluck(:user_id, :reviewable_id).to_set
+        here_rows = ::Review.where(reviewable_type: "Books::Book", id: ...ceiling("reviews"))
+          .pluck(:id, :updated_at, :user_id, :reviewable_id)
+        here_held = here_rows.select { |_, _, user_id, book_id| @hold.held?(user_id, book_id) }.map(&:first).to_set
+        held_ids = here_held.dup
         seen = Set.new
         kept = {}
         rows = @legacy.review_rows
         rows.each do |id, user_id, book_id, updated_at|
+          if here_held.include?(id) || @hold.held?(user_id, book_id)
+            held_ids << id
+            next
+          end
           routed = @route.call(book_id)
-          if routed.is_a?(Symbol)
+          if routed.is_a?(Integer) && @hold.held?(user_id, routed)
+            held_ids << id
+          elsif routed.is_a?(Symbol)
             counts[(routed == :deleted) ? :dropped : routed] += 1
           elsif !seen.add?([user_id, routed])
             counts[:collisions] += 1
@@ -110,13 +130,14 @@ module Services
           end
         end
 
-        here = ::Review.where(reviewable_type: "Books::Book", id: ...ceiling("reviews")).pluck(:id, :updated_at).to_h
+        here = here_rows.to_h { |id, updated_at, _, _| [id, updated_at] }
         counts.merge(
+          held: held_ids.size,
           legacy: rows.size,
           here: here.size,
           inserted: kept.keys.count { |id| !here.key?(id) },
           updated: kept.count { |id, updated_at| here.key?(id) && updated_at > here[id] },
-          deleted: here.keys.count { |id| !kept.key?(id) }
+          deleted: here.keys.count { |id| !kept.key?(id) && !held_ids.include?(id) }
         )
       end
 

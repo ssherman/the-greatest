@@ -14,7 +14,7 @@ State of delivery: spec 1 is done (preferences store, engine, harness, tuning, t
 wizard and settings pages). Spec 2's first increment (export, trainer, load, signal, measured in
 development) is done; its second, the home-server timer that trains in production, is built
 (`deployment/home-server/guest/recommender-train.sh`); the one-time setup that gives production its
-first model is `docs/launch-todo.md`, section 3.
+first model is recorded in `docs/launch-todo.md`, section 6; what remains before go-live is section 4.
 
 Where it lives:
 
@@ -278,7 +278,7 @@ and the trainer as the `recommender` compose service under `recommender-train.ti
 `recommender-train` (`docs/features/home-server.md`). Nothing on the home server listens, and nothing
 in Rails calls it; if it is off, the model goes stale, never down. Until the bucket's values are in
 both secrets files, the Rails jobs log a skip, the timer logs `RECOMMENDATIONS_R2_* not set` and exits,
-and the signal stays unavailable. The launch steps are `docs/launch-todo.md`, section 3.
+and the signal stays unavailable. The launch steps are recorded in `docs/launch-todo.md`, section 6.
 
 **Time zones.** The Sidekiq crons run in the Rails server's zone, which is UTC (the app sets no
 `config.time_zone`), so "02:30" is 02:30 UTC. The `ol` VM's clock is UTC too, so the 04:00 train runs

@@ -4,7 +4,7 @@ module Services
   module Penalties
     # Folds the books geography penalties into the `location_specific` flag plus
     # one add-on (46), merges 32 into 44, and deletes 21 and 27. See
-    # docs/launch-todo.md section 19. One transaction; a dry run runs the same
+    # docs/launch-todo.md, "List audit setup". One transaction; a dry run runs the same
     # code and rolls it back, so the report is exactly what an apply would do.
     #
     # The id -> name map is a constant, not an injectable, because the ids ARE the
