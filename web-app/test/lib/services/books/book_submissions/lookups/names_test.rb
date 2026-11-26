@@ -127,6 +127,17 @@ module Services
             "Smith, 1900-, Jr." => nil,
             "Smith, author, John" => nil,
             "Smith, John 1900" => nil,
+            # role words in any case; honorifics and credentials anywhere
+            "Richard Hamer, Editor" => "Richard Hamer",
+            "Austen, Jane, Author" => "Jane Austen",
+            "Dyer, Dr. Wayne W." => nil,
+            "Stawell, Mrs Rodolph" => nil,
+            "Smith, Prof. John" => nil,
+            "Airton PhD, Lee" => nil,
+            "Amen M.D., Daniel G." => nil,
+            "Bauman Ph.D., Yoram" => nil,
+            "Neely Jr., Mark E." => "Mark E. Neely Jr.",
+            "Baxter III, James Phinney" => "James Phinney Baxter III",
             "(Author)" => nil,
             "" => nil
           }
@@ -164,6 +175,38 @@ module Services
           TITLES.each do |(title, subtitle), expected|
             test "title #{title.inspect} with subtitle #{subtitle.inspect}" do
               assert_equal expected, Names.world_cat_title(title, subtitle)
+            end
+          end
+
+          # raw Amazon contributor name => the author name, or nil
+          AMAZON_PEOPLE = {
+            "Daisy Johnson" => "Daisy Johnson",
+            "Johnson, Daisy" => "Daisy Johnson",
+            "Le Guin, Ursula K." => "Ursula K. Le Guin",
+            "García Márquez, Gabriel" => "Gabriel García Márquez",
+            "King Jr., Martin Luther" => "Martin Luther King Jr.",
+            "Arthur M. Schlesinger, Jr." => "Arthur M. Schlesinger Jr.",
+            "Tolkien, J.R.R." => "J.R.R. Tolkien",
+            "  Johnson,   Daisy " => "Daisy Johnson",
+            "Dr. Peter Attia" => "Dr. Peter Attia",
+            "村上春樹" => "村上春樹",
+            "Penn & Teller" => "Penn & Teller",
+            "Richard Hamer, Editor" => "Richard Hamer",
+            "Smith, John (Editor)" => "John Smith",
+            "Dyer, Dr. Wayne W." => nil,
+            "Airton PhD, Lee" => nil,
+            "hooks, bell" => nil,
+            "村上, 春樹" => nil,
+            "Smith, John, and Jane Doe" => nil,
+            "Smith, John; Doe, Jane" => nil,
+            "Scott, Sir Walter" => nil,
+            "" => nil,
+            nil => nil
+          }
+
+          AMAZON_PEOPLE.each do |raw, expected|
+            test "amazon contributor #{raw.inspect}" do
+              expected.nil? ? assert_nil(Names.amazon_person(raw)) : assert_equal(expected, Names.amazon_person(raw))
             end
           end
 

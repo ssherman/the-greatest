@@ -242,6 +242,39 @@ module Services
           assert_equal :no_record, result.data[:outcome]
         end
 
+        test "amazon's Last, First authors are read as First Last" do
+          ::Services::Amazon::Client.stubs(:get_items).returns([amazon_product(authors: ["Le Guin, Ursula K.", "Smith, Zadie"])])
+
+          assert_equal ["Ursula K. Le Guin", "Zadie Smith"], resolve(amazon_submission).data[:author_names]
+        end
+
+        test "an amazon author we cannot read makes the product unusable, and the isbn chain answers" do
+          ::Services::Amazon::Client.stubs(:get_items).returns([amazon_product(authors: ["Le Guin, Ursula K.", "Scott, Sir Walter"])])
+          stub_world_cat([wc_record])
+
+          result = resolve(amazon_submission(isbn13: ISBN13))
+
+          assert_equal "worldcat", result.data[:source]
+          assert_equal ["Ursula K. Le Guin"], result.data[:author_names]
+        end
+
+        test "an amazon author we cannot read is no_record when there is no isbn to try" do
+          ::Services::Amazon::Client.stubs(:get_items).returns([amazon_product(authors: ["Dyer, Dr. Wayne W."])])
+
+          assert_equal :no_record, resolve(amazon_submission).data[:outcome]
+        end
+
+        test "amazon by isbn flips its authors too" do
+          ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product(authors: ["Johnson, Daisy"])])
+          stub_world_cat([])
+          stub_open_library
+
+          result = resolve(submission(:isbn, isbn13: ISBN13, raw_input: ISBN13))
+
+          assert_equal "amazon", result.data[:source]
+          assert_equal ["Daisy Johnson"], result.data[:author_names]
+        end
+
         test "amazon with no item is no_record" do
           ::Services::Amazon::Client.stubs(:get_items).returns([])
 

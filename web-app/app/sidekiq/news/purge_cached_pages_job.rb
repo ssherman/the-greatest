@@ -8,9 +8,10 @@ module News
   #
   # Takes the URLs rather than a record id, unlike Reviews::PurgeCachedPageJob:
   # a destroyed post cannot be looked up and its news_post_topics rows are gone
-  # with it, so the set is computed by Services::News::CachedUrls in the
-  # controller while the record still exists. Both arguments are JSON-native, so
-  # they survive Sidekiq's serialisation unchanged.
+  # with it, so the set is computed by Services::News::CachedUrls in the write
+  # path (Services::News::SavePost, or destroy) while the record still exists.
+  # Both arguments are JSON-native, so they survive Sidekiq's serialisation
+  # unchanged.
   class PurgeCachedPagesJob
     include Sidekiq::Job
 
