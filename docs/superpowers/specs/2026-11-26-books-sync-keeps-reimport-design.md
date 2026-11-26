@@ -70,7 +70,7 @@ hand-picked books the sync can copy as they are.
 
 The set the sync leaves alone, computed once at the start of each sync (and of `sync_report`) from the database:
 
-- For every current `reimport_row` and `reimport_guess` verdict that recorded a change (its payload has `moved` or
+- For every `reimport_row` and `reimport_guess` verdict, current or superseded and of any status, that recorded a change (its payload has `moved` or
   `leftovers_removed`), whether or not `applied_at` is set: `(user_id, from_book_id)` and `(user_id, to_book_id)`.
   A change can be recorded before `applied_at` is (a lost mark; `DecideRow#applied?` already reads `moved` as applied).
 - For every `reimport_mixed` verdict with `deleted` items, applied or not (a kept mixed book still waiting on a copy has
