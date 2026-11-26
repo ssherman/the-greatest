@@ -13,14 +13,15 @@ module Services
     class ReimportHold
       BOOK = "Books::Book"
 
-      # Verdicts that recorded a change: their payload has `moved` or `leftovers_removed`, applied or not
+      # Verdicts that recorded a change: their payload has `moved` or `leftovers_removed`, applied or not, current or
+      # superseded (a superseded guess can already carry `moved`)
       # (a change can be recorded before applied_at is).
       CHANGED = "(payload ? 'moved' OR payload ? 'leftovers_removed')"
 
       def self.none = new(pairs: [], redirects: Redirects.new([]))
 
       def self.load(redirects:)
-        verdicts = ::Books::RepairVerdict.current
+        verdicts = ::Books::RepairVerdict.all
         pairs = []
         moves = verdicts.where(kind: [:reimport_row, :reimport_guess]).where(Arel.sql(CHANGED))
           .pluck(Arel.sql("payload->>'user_id'"), Arel.sql("payload->>'from_book_id'"), Arel.sql("payload->>'to_book_id'"))

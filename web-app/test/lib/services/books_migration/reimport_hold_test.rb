@@ -9,8 +9,8 @@ class Services::BooksMigration::ReimportHoldTest < ActiveSupport::TestCase
     )
   end
 
-  def verdict(kind, key, payload, status: :approved, applied_at: Time.current)
-    Books::RepairVerdict.create!(kind: kind, subject_key: key, decided_by: :rule, status: status, payload: payload, applied_at: applied_at)
+  def verdict(kind, key, payload, status: :approved, applied_at: Time.current, superseded_at: nil)
+    Books::RepairVerdict.create!(kind: kind, subject_key: key, decided_by: :rule, status: status, payload: payload, applied_at: applied_at, superseded_at: superseded_at)
   end
 
   test "holds both books of a move" do
@@ -58,7 +58,14 @@ class Services::BooksMigration::ReimportHoldTest < ActiveSupport::TestCase
     verdict(:reimport_guess, "hold:guess:1", {"user_id" => 4, "from_book_id" => 401, "to_book_id" => 402, "moved" => {}})
     verdict(:reimport_mixed, "hold:mixed:1", {"book_id" => 50, "deleted" => [{"id" => 1, "user_id" => 9}]})
 
-    subject = Services::BooksMigration::ReimportHold.load(redirects: Services::BooksMigration::Redirects.new([]))
+    verdict(:reimport_guess, "hold:guess:2", {"user_id" => 6, "from_book_id" => 701, "to_book_id" => 702, "moved" => {}}, superseded_at: Time.current)
+    verdict(:reimport_row, "hold:row:4", {"user_id" => 5, "from_book_id" => 601, "to_book_id" => 602, "moved" => {}})
+    verdict(:reimport_mixed, "hold:mixed:2", {"book_id" => 603})
+    redirects = Services::BooksMigration::Redirects.new([
+      ["Books::Book", 50, 77], ["Books::Book", 602, 603], ["Books::Book", 603, 604]
+    ])
+
+    subject = Services::BooksMigration::ReimportHold.load(redirects: redirects)
 
     assert subject.held?(1, 101)
     assert subject.held?(1, 102)
@@ -69,7 +76,12 @@ class Services::BooksMigration::ReimportHoldTest < ActiveSupport::TestCase
     assert subject.held?(4, 401)
     assert subject.held?(4, 402)
     assert subject.held?(9, 50)
-    assert_equal 7, subject.size
+    assert_not subject.held?(9, 77)
+    assert subject.held?(6, 701)
+    assert subject.held?(6, 702)
+    assert subject.held?(5, 603)
+    assert_not subject.held?(5, 604)
+    assert_equal 12, subject.size
   end
 
   test "none holds nothing" do
