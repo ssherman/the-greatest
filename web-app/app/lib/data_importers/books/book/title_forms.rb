@@ -62,7 +62,7 @@ module DataImporters
         def without_note(text)
           kept = text.to_s
           while (match = TRAILING_NOTE.match(kept))
-            rest = match.pre_match.strip
+            rest = match.pre_match.strip.sub(/\s*[:;,]\z/, "")
             break if rest.empty? || !droppable?(match[:note].strip, rest)
 
             kept = rest
