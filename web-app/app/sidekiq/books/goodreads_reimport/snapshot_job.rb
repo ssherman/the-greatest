@@ -10,7 +10,11 @@ class Books::GoodreadsReimport::SnapshotJob
   def perform(replace = false, new_pass = false)
     report = ::Services::Books::GoodreadsReimport::Report
     count = report.snapshot(replace: replace, new_pass: new_pass)
-    if count.nil?
+    if count.nil? && new_pass
+      # Only a file named for this very second refuses a new pass; redo would replace the first pass's counts.json instead.
+      Rails.logger.warn("Goodreads re-import snapshot: a counts-<UTC time>.json for this second already exists; " \
+        "left alone (enqueue new_pass again)")
+    elsif count.nil?
       Rails.logger.warn("Goodreads re-import snapshot: #{report.snapshot_path} already exists; left alone (enqueue with redo to replace it)")
     else
       Rails.logger.info("Goodreads re-import snapshot: recorded the counts of #{count} users in #{report.snapshot_path}")

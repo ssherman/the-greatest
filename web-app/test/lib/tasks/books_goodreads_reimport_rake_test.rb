@@ -101,13 +101,19 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
 
   test "snapshot only enqueues the job and redo is passed on" do
     @config.enabled = false
-    JOBS::SnapshotJob.expects(:perform_async).with(false)
+    JOBS::SnapshotJob.expects(:perform_async).with(false, false)
     Services::Books::GoodreadsReimport::Report.expects(:snapshot).never
     assert_match(/queued the snapshot/, run_task("snapshot"))
 
     Rake::Task["books:goodreads_reimport:snapshot"].reenable
-    JOBS::SnapshotJob.expects(:perform_async).with(true)
+    JOBS::SnapshotJob.expects(:perform_async).with(true, false)
     run_task("snapshot", "redo")
+  end
+
+  test "snapshot new_pass names the file pattern, not a time the job will not use" do
+    JOBS::SnapshotJob.expects(:perform_async).with(false, true)
+
+    assert_match(/counts-<UTC time>\.json/, run_task("snapshot", "new_pass"))
   end
 
   test "sample only enqueues the job, even with the gate off" do

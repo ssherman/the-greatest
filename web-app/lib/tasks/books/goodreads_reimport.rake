@@ -81,7 +81,8 @@ namespace :books do
 
       report = Services::Books::GoodreadsReimport::Report
       Books::GoodreadsReimport::SnapshotJob.perform_async(args[:mode] == "redo", args[:mode] == "new_pass")
-      target = (args[:mode] == "new_pass") ? report.new_pass_path : report.snapshot_path
+      # A new pass's file is named by the job when it runs, not now: only the pattern is known here.
+      target = (args[:mode] == "new_pass") ? report.storage_dir.join("counts-<UTC time>.json") : report.snapshot_path
       puts "queued the snapshot; it will be written to #{target} " \
         "(left alone if it exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
     end
