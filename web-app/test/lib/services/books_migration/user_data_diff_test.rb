@@ -206,8 +206,6 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
     ::Review.create!(id: 900, user: @user, reviewable: held_book, rating: 3)
     ::Review.create!(id: 950, user: @user, reviewable: moved_book, rating: 3)
 
-    {"id" => 800, "user_id" => @user.id, "name" => "L", "description" => nil, "list_type" => 4,
-     "view_mode" => nil, "public" => true, "position" => 1, "created_at" => @t, "updated_at" => @t}
     item = ->(id, book_id, position) {
       {"id" => id, "user_list_id" => 800, "book_id" => book_id, "position" => position, "read_date" => nil,
        "created_at" => @t, "updated_at" => @t}
@@ -239,6 +237,7 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
     assert_equal({inserted: 1, deleted: 0, held_legacy: 1, held_here: 1}, expected[:user_list_items].slice(:inserted, :deleted, :held_legacy, :held_here))
     assert_equal expected[:user_list_items].slice(:inserted, :deleted, :held_legacy, :held_here),
       item_result[:data].slice(:inserted, :deleted, :held_legacy, :held_here)
+    # updated is asserted literally: the migrator does not track it.
     assert_equal({inserted: 1, deleted: 0, updated: 0, held: 3}, expected[:reviews].slice(:inserted, :deleted, :updated, :held))
     assert_equal expected[:reviews].slice(:inserted, :deleted, :held), review_result[:data].slice(:inserted, :deleted, :held)
   end
@@ -257,5 +256,20 @@ class Services::BooksMigration::UserDataDiffTest < ActiveSupport::TestCase
     result = Services::BooksMigration::UserDataDiff.call(scope: sync_scope(hold: hold), legacy: legacy)
 
     assert_equal [1, 0, 1], result[:user_list_items].values_at(:inserted, :deleted, :held_here)
+  end
+
+  test "a list that exists only on legacy holds its item on a held pair" do
+    plain = ::Books::Book.create!(id: 199_001, title: "Plain")
+    hold = Services::BooksMigration::ReimportHold.new(
+      pairs: [[@user.id, plain.id]].to_set, redirects: Services::BooksMigration::Redirects.new([])
+    )
+    row = {"id" => 1, "user_list_id" => 805, "book_id" => plain.id, "position" => 1, "read_date" => nil, "created_at" => @t, "updated_at" => @t}
+    legacy = FakeLegacySource.new(
+      user_list_versions: {805 => @t}, user_list_items: [row], user_list_owners: {805 => @user.id}
+    )
+
+    result = Services::BooksMigration::UserDataDiff.call(scope: sync_scope(hold: hold), legacy: legacy)
+
+    assert_equal [0, 1], result[:user_list_items].values_at(:inserted, :held_legacy)
   end
 end

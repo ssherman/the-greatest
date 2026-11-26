@@ -9,7 +9,8 @@ module BooksLegacySyncHelper
       category_ids: [], books_updated_count: 0, max_book_identifier_id: 0,
       user_versions: {}, user_list_versions: {}, saved_search_versions: {}, review_rows: [],
       correction_rows: [], reading_goal_ids: [], recommendation_config_count: 0, user_list_items: [],
-      saved_search_criteria: [])
+      saved_search_criteria: [], user_list_owners: {})
+      @user_list_owners = user_list_owners
       @book_rows = book_rows
       @author_rows = author_rows
       @book_identifier_rows = book_identifier_rows
@@ -40,6 +41,8 @@ module BooksLegacySyncHelper
         [ids.size, Digest::MD5.hexdigest(ids.join(","))]
       end
     end
+
+    def user_list_owners(list_ids) = @user_list_owners.slice(*list_ids)
 
     def user_list_items_for(list_ids) = @user_list_items.select { |row| list_ids.include?(row["user_list_id"]) }
 

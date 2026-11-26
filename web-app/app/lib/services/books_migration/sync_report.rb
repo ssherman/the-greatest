@@ -45,7 +45,8 @@ module Services
           user_line("user_lists", data[:user_lists]),
           user_line("user_list_items", data[:user_list_items],
             "#{number(data[:user_list_items][:collisions])} merge collisions, " \
-            "#{number(data[:user_list_items][:held_legacy] + data[:user_list_items][:held_here])} held for the Goodreads re-import"),
+            "#{number(data[:user_list_items][:held_legacy])} legacy rows / #{number(data[:user_list_items][:held_here])} rows here " \
+            "held for the Goodreads re-import"),
           user_line("reviews", data[:reviews],
             "#{number(data[:reviews][:collisions])} collisions, #{number(data[:reviews][:held_by_new_app])} held by a new-app review, " \
             "#{number(data[:reviews][:held])} held for the Goodreads re-import"),

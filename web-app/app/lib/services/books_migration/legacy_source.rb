@@ -48,6 +48,9 @@ module Services
           .to_h { |list_id, count, digest| [list_id, [count, digest]] }
       end
 
+      # {user_list_id => user_id}: the owner of lists the run inserts before it plans their items.
+      def user_list_owners(list_ids) = LegacyBooks::UserList.where(id: list_ids).pluck(:id, :user_id).to_h
+
       def user_list_items_for(list_ids) = LegacyBooks::UserListBook.where(user_list_id: list_ids).map(&:attributes)
 
       private

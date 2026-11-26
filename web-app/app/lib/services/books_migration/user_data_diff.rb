@@ -69,8 +69,9 @@ module Services
         changed = legacy_list_ids.reject { |id| legacy_digests[id] == here_digests[id] }
         changed.each_slice(LIST_BATCH) do |list_ids|
           here = ::UserListItem.where(user_list_id: list_ids).pluck(:id, :user_list_id, :listable_type, :listable_id)
-          # Without list_users every reader is nil and nothing is held, silently.
-          list_users = ::Books::UserList.where(id: list_ids).pluck(:id, :user_id).to_h
+          # Without list_users every reader is nil and nothing is held, silently. Lists new on
+          # legacy are not here yet, but the run inserts them first, so their owner comes from legacy.
+          list_users = @legacy.user_list_owners(list_ids).merge(::Books::UserList.where(id: list_ids).pluck(:id, :user_id).to_h)
           plan = UserListItemPlan.call(@legacy.user_list_items_for(list_ids), here, @route, hold: @hold, list_users: list_users)
           counts[:inserted] += plan.inserted
           counts[:deleted] += plan.stale_ids.size

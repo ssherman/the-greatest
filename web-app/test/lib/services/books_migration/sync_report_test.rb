@@ -72,7 +72,7 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
 
     out = Services::BooksMigration::SyncReport.new(catalog_report, data).render
 
-    assert_includes out, "5 held for the Goodreads re-import"
+    assert_includes out, "3 legacy rows / 2 rows here held for the Goodreads re-import"
     assert_includes out, "4 held for the Goodreads re-import"
   end
 
