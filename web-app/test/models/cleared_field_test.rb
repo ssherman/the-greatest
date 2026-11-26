@@ -1,5 +1,27 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: cleared_fields
+#
+#  id             :bigint           not null, primary key
+#  clearable_type :string           not null
+#  cleared_via    :integer          not null
+#  field_name     :string           not null
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  clearable_id   :bigint           not null
+#  cleared_by_id  :bigint
+#
+# Indexes
+#
+#  index_cleared_fields_on_clearable_and_field_name  (clearable_type,clearable_id,field_name) UNIQUE
+#  index_cleared_fields_on_cleared_by_id             (cleared_by_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (cleared_by_id => users.id) ON DELETE => nullify
+#
 class ClearedFieldTest < ActiveSupport::TestCase
   setup do
     @book = books_books(:war_and_peace)

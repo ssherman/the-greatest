@@ -186,4 +186,36 @@ class NewsPostTest < ActiveSupport::TestCase
     post.reload.title = "Retitled"
     assert post.save, post.errors.full_messages.to_sentence
   end
+
+  test "status names draft, scheduled and published" do
+    assert_equal %w[draft scheduled published],
+      [:books_draft, :books_scheduled, :books_december_update].map { |name| news_posts(name).status }
+  end
+
+  test "a scheduled post still counts as a draft" do
+    assert news_posts(:books_scheduled).draft?
+  end
+
+  test "with_status with an unknown value returns nothing" do
+    assert_empty NewsPost.with_status("archived")
+  end
+
+  test "at the exact publication instant a post is published, not scheduled, and the statuses partition" do
+    freeze_time do
+      post = news_posts(:books_draft)
+      post.update!(published_at: Time.current)
+      assert_includes NewsPost.with_status("published"), post
+      assert_not_includes NewsPost.with_status("scheduled"), post
+
+      groups = NewsPost::STATUSES.map { |status| NewsPost.books.with_status(status).pluck(:id) }
+      assert_equal NewsPost.books.pluck(:id).sort, groups.flatten.sort
+    end
+  end
+
+  test "with_status selects exactly the matching post" do
+    expected = {"draft" => :books_draft, "scheduled" => :books_scheduled, "published" => :books_december_update}
+    NewsPost::STATUSES.each do |status|
+      assert_equal [news_posts(expected.fetch(status))], NewsPost.books.with_status(status).to_a, status
+    end
+  end
 end

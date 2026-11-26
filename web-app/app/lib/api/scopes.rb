@@ -70,7 +70,7 @@ module Api
       "books:admin:write" => Scope.new(
         name: "books:admin:write",
         writes: true,
-        description: "Create and edit book categories and tag books and authors",
+        description: "Create and edit book categories, tag books and authors, and write and publish news posts",
         admin: true,
         implies: ["books:admin:read"],
         eligible: ->(user, _member) { !user.service? && ::Books::BookPolicy.new(user, ::Books::Book).update? }

@@ -37,17 +37,9 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def create
-    @news_post = NewsPost.new(news_post_params)
-    @news_post.domain = news_domain
-    @news_post.user = current_user
-    # Does NOT share update's ordering bug: has_many_attached#attach only
-    # saves eagerly for a persisted record (`record.persisted? && !record.changed?`);
-    # @news_post here is a NEW record, so that branch never runs and the
-    # attachment always waits for the @news_post.save below, valid or not.
-    attach_body_images
+    @news_post = NewsPost.new(domain: news_domain, user: current_user)
 
-    if @news_post.save
-      enqueue_cache_purge(@news_post)
+    if save_post
       redirect_to news_post_path_for(@news_post), notice: "Post created."
     else
       render :new, status: :unprocessable_entity
@@ -58,41 +50,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
-    # Captured BEFORE assign_attributes, and unioned with the post-save set
-    # below. An update is the one write where neither state contains the other:
-    # unpublishing the 11th post, or dropping the topic that gave a topic index
-    # its 11th, REMOVES /news/page/2 (or the topic's page 2), so a set derived
-    # only from the saved state sees 10 rows, derives one page, and leaves the
-    # disappearing page cached with the retracted post on it for the full 6-hour
-    # TTL. Create can only grow the set and destroy only shrink it, so both are
-    # covered by a single snapshot on the correct side of the write.
-    # Must precede assign_attributes, not merely the save: assigning
-    # news_topic_ids on a persisted record writes the join table immediately.
-    urls_before = Services::News::CachedUrls.call(@news_post)
-
-    # assign_attributes, THEN check valid? BEFORE attach_body_images, and only
-    # attach once known valid: has_many_attached#attach saves eagerly for a
-    # persisted, unchanged record (`record.persisted? && !record.changed?`).
-    # An earlier version of this method relied on assign_attributes always
-    # leaving the record dirty when news_post_params was invalid -- true only
-    # because NewsPost currently validates presence on title/body alone, so
-    # any failing submission necessarily changes one of them. That is a
-    # coupling to today's validation set, not a guarantee: a future
-    # content-type or size validation on body_images itself would not dirty
-    # any column, and changed? would stay false regardless of ordering. Gating
-    # attach_body_images on valid? removes the dependency on changed? entirely
-    # -- nothing is ever attached until the assigned record has already been
-    # found valid, no matter which validation is the one that fails.
-    @news_post.assign_attributes(news_post_params)
-    attach_body_images if @news_post.valid?
-
-    if @news_post.save
-      # Unconditional, with no published? gate: a wrong gate means a published
-      # post that never purges, which is the 24-hour-stale bug this exists to
-      # remove, while a needless purge costs a few origin re-renders. It also
-      # covers the worst case for free -- setting published_at back to nil comes
-      # through here, so a retracted post's page is purged like any other edit.
-      enqueue_cache_purge(@news_post, also: urls_before)
+    if save_post
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
       render :edit, status: :unprocessable_entity
@@ -124,13 +82,12 @@ class Admin::NewsPostsBaseController < Admin::BaseController
 
   private
 
-  # Explicit, not a model callback: an after_commit making an external HTTP call
-  # is invisible to its callers and would fire from the legacy-blog data
-  # migration and from every test that creates a post. Both arguments are
-  # JSON-native so they survive Sidekiq's serialisation unchanged.
-  def enqueue_cache_purge(news_post, also: [])
-    urls = (Services::News::CachedUrls.call(news_post) + also).uniq
-    ::News::PurgeCachedPagesJob.perform_async(news_post.domain, urls)
+  def save_post
+    Services::News::SavePost.call(
+      news_post: @news_post,
+      attrs: news_post_params,
+      body_images: params.dig(:news_post, :body_images) || []
+    ).success?
   end
 
   # Always scoped, never a bare NewsPost.find: authenticate_admin! proves access
@@ -144,16 +101,6 @@ class Admin::NewsPostsBaseController < Admin::BaseController
 
   def available_topics = NewsTopic.where(domain: news_domain).sorted_by_name
   helper_method :available_topics
-
-  # Attached rather than mass-assigned: assigning to a has_many_attached replaces
-  # the whole collection, so editing a post to add one screenshot would silently
-  # drop every image already on it.
-  def attach_body_images
-    uploads = params.dig(:news_post, :body_images)
-    return if uploads.blank?
-
-    @news_post.body_images.attach(uploads.compact_blank)
-  end
 
   def news_post_params
     permitted = params.require(:news_post).permit(
