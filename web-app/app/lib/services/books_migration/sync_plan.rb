@@ -40,7 +40,8 @@ module Services
           author_ids: authors.ids.to_set - redirects.redirected_ids("Books::Author"),
           identifier_ids: identifiers.ids.to_set,
           redirects: redirects,
-          books_watermark: @next_watermarks["books"]
+          books_watermark: @next_watermarks["books"],
+          hold: ReimportHold.load(redirects: redirects)
         )
         @report = build_report(books, authors, identifiers, redirects)
       end

@@ -64,13 +64,15 @@ module BooksLegacySyncHelper
 
   # redirects: rows for Services::BooksMigration::Redirects.new, [[item_type, from_id, to_id], ...]
   # books_watermark defaults to nothing waiting, so a book that is not here is :missing.
-  def sync_scope(book_ids: [], author_ids: [], identifier_ids: [], redirects: [], books_watermark: Float::INFINITY)
+  def sync_scope(book_ids: [], author_ids: [], identifier_ids: [], redirects: [], books_watermark: Float::INFINITY,
+    hold: Services::BooksMigration::ReimportHold.none)
     Services::BooksMigration::SyncScope.new(
       book_ids: book_ids.to_set,
       author_ids: author_ids.to_set,
       identifier_ids: identifier_ids.to_set,
       redirects: Services::BooksMigration::Redirects.new(redirects),
-      books_watermark: books_watermark
+      books_watermark: books_watermark,
+      hold: hold
     )
   end
 end

@@ -24,6 +24,16 @@ class Services::BooksMigration::RedirectsTest < ActiveSupport::TestCase
     assert_equal :deleted, subject.resolve("Books::Book", 6)
   end
 
+  test "target is one step: the merge survivor, nil for a deletion or an untouched id" do
+    subject = redirects([["Books::Book", 5, 9], ["Books::Book", 9, 12], ["Books::Book", 6, nil]])
+
+    assert_equal 9, subject.target("Books::Book", 5)
+    assert_nil subject.target("Books::Book", 6)
+    assert subject.redirected?("Books::Book", 6)
+    assert_nil subject.target("Books::Book", 99)
+    assert_not subject.redirected?("Books::Book", 99)
+  end
+
   test "a cycle raises, naming the ids" do
     subject = redirects([["Books::Book", 5, 9], ["Books::Book", 9, 5]])
 

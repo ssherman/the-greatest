@@ -26,6 +26,13 @@ module Services
         current
       end
 
+      # One step of a redirect: the id +id+ was merged into, or nil when it was deleted (or never redirected;
+      # tell the two apart with redirected?). resolve follows the whole chain; this is for callers that must
+      # stop partway.
+      def target(item_type, id)
+        @targets[[item_type, id]]
+      end
+
       def redirected?(item_type, id)
         @targets.key?([item_type, id])
       end
