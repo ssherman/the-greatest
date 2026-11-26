@@ -1,6 +1,6 @@
 # The weekly sync keeps the Goodreads re-import, and the launch todo is rewritten
 
-Date: 2026-11-26. Status: design, awaiting Shane's approval.
+Date: 2026-11-26. Status: APPROVED by Shane 2026-11-26 (approach 1, identifiers option A).
 
 ## 1. Why
 
@@ -28,8 +28,8 @@ or junk books.
 ## 2. Goals
 
 1. `data_migration:sync`, `sync_report` and `FINAL=1 data_migration:sync` never revert an applied re-import verdict.
-2. Everything else the sync does is unchanged: new books, authors, identifiers, users, user lists, list items,
-   reviews, reading goals, saved searches and the rest.
+2. Everything else the sync does is unchanged: new books, authors, users, user lists, list items, reviews, reading
+   goals, saved searches and the rest. One deliberate change: identifiers (section 5.6).
 3. The old site stops accepting Goodreads uploads and says the new site launches soon with a better import.
 4. The legacy imports made since the re-import (10 on 2026-11-26, plus any made before the old-site change deploys)
    go through the re-import, so they end up as accurate as the rest.
@@ -98,6 +98,26 @@ their readers' other edits keep flowing.
 - `finalize`'s position renumbering of legacy-origin lists is unchanged (it reorders; it does not move a book).
 - **Whole lists**: `UserListMigrator` still deletes a legacy-origin list the reader deleted on legacy, with every item
   in it, held or not. Deleting a list is the reader's own decision.
+
+### 5.6 Identifiers on books we already have (Shane, 2026-11-26: option A)
+
+The old importer stamps each CSV row's Goodreads id and ISBNs onto whatever book it guessed. Since 2026-11-12 legacy
+added 2,608 book identifiers, 1,155 of them on books that already existed. The sync copies them onto our books
+(`BookIdentifierMigrator#in_sync_scope?`: a new identifier id, or an identifier of a new book), and the re-import
+cannot strip them for editions it already matched in its first pass. A wrong ISBN or Goodreads id then pulls later
+imports onto the wrong book.
+
+From this change on, the sync copies a legacy identifier only when its book is new in this sync
+(`sync.book_ids`); a new identifier on a book we already have is skipped and counted ("skipped: legacy identifier on
+an existing book"). New books still arrive whole, with their identifiers. Shane does not add identifiers, lists or
+merges on legacy any more (2026-11-26), so the only identifiers this skips are the old importer's. This narrows his
+2026-10-08 ruling that new legacy identifiers always come over.
+
+The builder applies the same rule to every identifier step of the sync that can attach to an existing book
+(book work identifiers, edition and edition-ISBN identifiers, the edition Amazon backfill), checking each, and
+`sync_report` counts the same way. The identifier watermark keeps advancing. With fewer legacy identifiers arriving,
+the launch todo's weekly `books:verify[all,recheck]` step is re-explained (it re-verified books that got new legacy
+identifiers).
 
 ### 5.3 Old site
 
