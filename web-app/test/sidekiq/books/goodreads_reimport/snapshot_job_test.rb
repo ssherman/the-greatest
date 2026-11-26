@@ -26,4 +26,16 @@ class Books::GoodreadsReimport::SnapshotJobTest < ActiveSupport::TestCase
 
     assert JSON.parse(@path.read).key?("users")
   end
+
+  test "new_pass writes a further file and leaves the existing one alone" do
+    dir = @path.dirname
+    Services::Books::GoodreadsReimport::Report.unstub(:snapshot_path)
+    Services::Books::GoodreadsReimport::Report.stubs(:storage_dir).returns(dir)
+    @path.write("old")
+
+    Books::GoodreadsReimport::SnapshotJob.new.perform(false, true)
+
+    assert_equal "old", @path.read
+    assert_equal 1, dir.glob("counts-*.json").size
+  end
 end

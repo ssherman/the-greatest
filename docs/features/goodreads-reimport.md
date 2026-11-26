@@ -33,7 +33,7 @@ in `app/sidekiq/books/goodreads_reimport/`, logic in `app/lib/services/books/goo
 | Match | `match[<count>\|all]` | Finds the book for each Goodreads edition. An AI check looks at every match. |
 | Apply | `apply` | Carries out approved verdicts, one apply run at a time; each run picks up where the last stopped. |
 | Decide | `decide[<count>\|all]` | Per user: keep, move, copy or add each row. Also queues guesses for mixed books. |
-| Snapshot | `snapshot[redo]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
+| Snapshot | `snapshot[redo]`, `snapshot[new_pass]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
 | Author check | `check_authors[<count>\|all]` | Checks each import-made book's credited authors against its rows. |
 | Report | `report` | Writes the report file. |
 | Sample | `sample` | An independent AI check of random rows. |
@@ -161,8 +161,13 @@ read it from either container and it survives a deploy. It lists:
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what
 the "count dropped" query compares against. Take it before the first apply that moves rows. `snapshot` leaves an existing
-snapshot alone; `snapshot[redo]` replaces it, which you should only do before any apply that moves rows, because a snapshot
-taken afterwards would hide every loss.
+snapshot alone (any `counts*.json`); `snapshot[redo]` replaces it, which you should only do before any apply that moves rows,
+because a snapshot taken afterwards would hide every loss.
+
+A later, smaller pass (a re-import of legacy imports made since) takes its own snapshot right before its apply with
+`snapshot[new_pass]`. It writes `counts-<UTC time>.json` beside the first and never touches an existing file, so the first
+pass's `counts.json` stays as it was. The report compares against the newest snapshot by its `taken_at`. The loss check is
+meant for right after an apply: a later sync's legitimate deletions show up in it as drops.
 
 ## The sample check
 

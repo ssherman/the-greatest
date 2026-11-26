@@ -223,6 +223,33 @@ module Services
           assert_equal 1, Report.snapshot(replace: true)
         end
 
+        test "snapshot(new_pass:) writes a second file, leaves the first byte-identical, and the report reads the newer" do
+          dir = @snapshot.dirname
+          Report.unstub(:snapshot_path)
+          Report.stubs(:storage_dir).returns(dir)
+          list = ::Books::UserList.create!(user: @user, name: "Shelf", list_type: :custom)
+          UserListItem.create!(user_list: list, listable: @book)
+          assert_equal 1, Report.snapshot
+          first = @snapshot.read
+
+          travel_to 1.hour.from_now do
+            assert_equal 1, Report.snapshot(new_pass: true)
+          end
+          second = dir.glob("counts-*.json").sole
+
+          assert_equal first, @snapshot.read
+          assert_equal second, Report.snapshot_path
+          assert_nil Report.snapshot
+          assert_equal first, @snapshot.read
+
+          # The loss check compares against the newer snapshot: an item that existed at the first but not the second is no loss.
+          UserListItem.where(user_list: list).destroy_all
+          travel_to 2.hours.from_now do
+            Report.snapshot(new_pass: true)
+          end
+          assert_includes Report.call, "beyond the destroys recorded: 0"
+        end
+
         test "acceptance: a kept mixed book is counted apart from the ones still to be deleted" do
           MixedBooks.stubs(:ids).returns(Set[@other.id, @book.id])
           verdict(:reimport_mixed, "reimport:book:#{@other.id}", {"book_id" => @other.id, "kept" => true}, applied_at: Time.current)
