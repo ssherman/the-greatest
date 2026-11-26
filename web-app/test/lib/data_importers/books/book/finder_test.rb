@@ -307,6 +307,145 @@ module DataImporters
           assert_match(/\| collection\z/, @finder.describe_candidate(candidate))
         end
 
+        # ---- subtitles ---------------------------------------------------------
+
+        def johnson(title, subtitle = nil, year: nil, author: nil)
+          author ||= ::Books::Author.create!(name: "Hans Trefousse")
+          book = ::Books::Book.create!(title: title, subtitle: subtitle, first_published_year: year)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          book
+        end
+
+        def johnson_query(title, subtitle: nil, year: nil)
+          ImportQuery.new(title: title, subtitle: subtitle, author_names: ["Hans Trefousse"], year: year)
+        end
+
+        test "a whole title matches the book that holds it as title and subtitle, by rule" do
+          book = johnson("Andrew Johnson", "A Biography")
+          expect_no_ai
+
+          match = @finder.call(query: johnson_query("Andrew Johnson: A Biography"))
+
+          assert_equal [book, :high, :rule], [match.record, match.confidence, match.decided_by]
+          assert_includes match.candidates.first.sources, :exact
+        end
+
+        test "a title and subtitle match the book that holds them as one title, by rule" do
+          book = johnson("Andrew Johnson: A Biography")
+          expect_no_ai
+
+          match = @finder.call(query: johnson_query("Andrew Johnson", subtitle: "A Biography"))
+
+          assert_equal [book, :rule], [match.record, match.decided_by]
+        end
+
+        test "a whole title still matches a book that holds it whole" do
+          book = johnson("Andrew Johnson: A Biography")
+          expect_no_ai
+
+          assert_equal book, @finder.call(query: johnson_query("Andrew Johnson: A Biography")).record
+        end
+
+        test "sharing only the part before the colon is a candidate for the AI, never a rule match" do
+          book = johnson("Andrew Johnson", "Seventeenth President")
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "Another book.", same_entity_groups: []})
+
+          match = @finder.call(query: johnson_query("Andrew Johnson: A Biography"))
+
+          assert_equal [[book], :unmatched, :ai], [match.candidates.map(&:record), match.outcome, match.decided_by]
+        end
+
+        test "the whole-title match is found among many books that share the part before the colon" do
+          author = ::Books::Author.create!(name: "Hans Trefousse")
+          6.times { |i| johnson("Andrew Johnson", "Part #{i}", author: author) }
+          book = johnson("Andrew Johnson", "A Biography", author: author)
+          expect_no_ai
+
+          assert_equal book, @finder.call(query: johnson_query("Andrew Johnson: A Biography")).record
+        end
+
+        test "a whole-title match still has to agree on the year and the author" do
+          johnson("Andrew Johnson", "A Biography", year: 1950)
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "Another book.", same_entity_groups: []})
+
+          assert_equal :ai, @finder.call(query: johnson_query("Andrew Johnson: A Biography", year: 1990)).decided_by
+          other = @finder.call(query: ImportQuery.new(title: "Andrew Johnson: A Biography", author_names: ["Someone Else"]))
+          assert_equal [], other.candidates
+        end
+
+        test "with no author, the part before the colon finds nothing" do
+          johnson("Andrew Johnson", "Seventeenth President")
+
+          assert_equal [], @finder.call(query: ImportQuery.new(title: "Andrew Johnson: A Biography")).candidates
+        end
+
+        test "a closing series note does not stop an exact match" do
+          book = johnson("Andrew Johnson", "A Biography")
+          expect_no_ai
+
+          match = @finder.call(query: johnson_query("Andrew Johnson: A Biography (American Presidents Book 17)"))
+
+          assert_equal [book, :rule], [match.record, match.decided_by]
+        end
+
+        test "a closing bracket that may name another book is left to the AI" do
+          johnson("Andrew Johnson")
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "A comic.", same_entity_groups: []})
+
+          ["Andrew Johnson (Classics Illustrated)", "Andrew Johnson (Volume 2)"].each do |title|
+            match = @finder.call(query: johnson_query(title))
+            assert_equal [:unmatched, :ai, 1], [match.outcome, match.decided_by, match.candidates.size], title
+          end
+        end
+
+        test "search also looks for the title without its subtitle and brackets, when the query names an author" do
+          book = johnson("Andrew Johnsen")
+          rest = {authors: ["Hans Trefousse"], year: nil, size: 5}
+          SEARCH.expects(:call).with(title: "Andrew Johnson: A Biography (Penguin Lives)", **rest).returns([])
+          SEARCH.expects(:call).with(title: "Andrew Johnson", **rest).returns([hit(book)])
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "No.", same_entity_groups: []})
+
+          match = @finder.call(query: johnson_query("Andrew Johnson: A Biography (Penguin Lives)"))
+
+          assert_equal [book], match.candidates.map(&:record)
+        end
+
+        test "that second search keeps only books whose author agrees, so another author's title costs no AI call" do
+          SEARCH.stubs(:call).with(has_entry(:title, "Andrew Johnson: A Biography")).returns([])
+          SEARCH.stubs(:call).with(has_entry(:title, "Andrew Johnson")).returns([hit(@crime)])
+          expect_no_ai
+
+          match = @finder.call(query: johnson_query("Andrew Johnson: A Biography"))
+
+          assert_equal [:unmatched, []], [match.outcome, match.candidates]
+        end
+
+        test "the first search still offers other authors' books to the AI" do
+          SEARCH.stubs(:call).with(has_entry(:title, "Andrew Johnson: A Biography")).returns([hit(@crime)])
+          SEARCH.stubs(:call).with(has_entry(:title, "Andrew Johnson")).returns([])
+          stub_ai({selected_index: 0, confidence: "high", reasoning: "No.", same_entity_groups: []})
+
+          assert_equal [@crime], @finder.call(query: johnson_query("Andrew Johnson: A Biography")).candidates.map(&:record)
+        end
+
+        test "search runs once for a title with no subtitle or bracket, and for a query with no author" do
+          SEARCH.expects(:call).with(has_entry(:title, "Andrew Johnson")).once.returns([])
+          @finder.call(query: johnson_query("Andrew Johnson"))
+
+          SEARCH.expects(:call).with(has_entry(:title, "Andrew Johnson: A Biography")).once.returns([])
+          @finder.call(query: ImportQuery.new(title: "Andrew Johnson: A Biography"))
+        end
+
+        test "the AI sees subtitles on both sides and is told the shared part may be a series" do
+          book = johnson("Andrew Johnson", "Seventeenth President")
+          candidate = Candidate.new(record: book, sources: [:exact], evidence: @finder.summarize(book))
+
+          assert_match(/Andrew Johnson \| by Hans Trefousse.*\| subtitle: Seventeenth President/, @finder.describe_candidate(candidate))
+          assert_equal "Andrew Johnson | by Hans Trefousse | subtitle: A Biography",
+            @finder.describe_query(johnson_query("Andrew Johnson", subtitle: "A Biography"))
+          assert_match(/subtitle/i, @finder.send(:domain_guidance))
+        end
+
         # ---- the negative class -----------------------------------------------
 
         test "same title, different author: not exact, the AI decides, and 'none' is unmatched" do

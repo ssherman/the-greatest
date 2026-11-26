@@ -108,6 +108,10 @@ is intended: the replay rebuilds them.
 a book that a same-signature edition created since the finder looked (never one the finder already
 considered), and otherwise creates through `DataImporters::Books::Book::Importer` with:
 
+- `title:` the page's or the edition's title, without its closing series or format note unless the author
+  already has a book under what is left (`BookTitle`). It is never split into title and subtitle: the part before
+  the colon alone would match the author's other books by rule. Whatever is stored, the same export title under
+  another Goodreads id has to match it by rule (`CreateBookTest`);
 - `match:` the finder's match, so the finder and the AI run once;
 - `provisional: true`, for the book and any author it creates;
 - `stamp_identifiers: true`, so the edition's Goodreads id and ISBNs are on the book even when Open

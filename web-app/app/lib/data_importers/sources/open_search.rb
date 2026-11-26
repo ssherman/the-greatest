@@ -6,15 +6,16 @@ module DataImporters
     # hash the search class takes (nil when the query has nothing to
     # search on). Hits are loaded as records; a hit whose record is gone is
     # dropped. A search error propagates so the finder records the source
-    # as failed.
+    # as failed. `keep` is an optional test a hit's record has to pass.
     class OpenSearch
-      def initialize(model_class:, search_class:, params:, size: 5, min_score: nil, includes: [])
+      def initialize(model_class:, search_class:, params:, size: 5, min_score: nil, includes: [], keep: nil)
         @model_class = model_class
         @search_class = search_class
         @params = params
         @size = size
         @min_score = min_score
         @includes = includes
+        @keep = keep
       end
 
       def name
@@ -35,7 +36,7 @@ module DataImporters
 
         hits.filter_map do |hit|
           record = by_id[hit[:id].to_i]
-          next unless record
+          next if record.nil? || (@keep && !@keep.call(record))
 
           Candidate.new(record: record, sources: [:opensearch], scores: {opensearch: hit[:score]})
         end
