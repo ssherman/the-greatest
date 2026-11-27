@@ -265,7 +265,7 @@ module Api
         ["POST", "/api/v1/admin/lists/{id}/items", "404"] => -> { post "/api/v1/admin/lists/999999999/items", params: {book_id: books_books(:war_and_peace).id}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/lists/{id}/items", "409"] => -> {
           ::Services::Books::PromoteProvisionalBook.stubs(:call).returns(::Services::Books::BookSubmissions::Lease::Result.new(success?: false, data: {conflict: true}, errors: ["the book no longer exists"]))
-          post "/api/v1/admin/lists/#{lists(:books_list).id}/items", params: {book_id: ::Books::Book.create!(title: "Coverage Fresh").id}, as: :json, headers: bearer(MERGE)
+          post "/api/v1/admin/lists/#{lists(:books_list).id}/items", params: {book_id: ::Books::Book.create!(title: "Coverage Fresh", provisional: true).id}, as: :json, headers: bearer(MERGE)
         },
         ["POST", "/api/v1/admin/lists/{id}/items", "422"] => -> { post "/api/v1/admin/lists/#{lists(:books_list).id}/items", params: {book_id: books_books(:war_and_peace).id, position: 0}, as: :json, headers: bearer(MERGE) },
         ["POST", "/api/v1/admin/lists/{id}/items", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/lists/#{lists(:books_list).id}/items", params: {book_id: books_books(:war_and_peace).id}, as: :json, headers: bearer(MERGE) } },
@@ -276,7 +276,7 @@ module Api
         ["PATCH", "/api/v1/admin/list_items/{id}", "404"] => -> { patch "/api/v1/admin/list_items/999999999", params: {position: 2}, as: :json, headers: bearer(MERGE) },
         ["PATCH", "/api/v1/admin/list_items/{id}", "409"] => -> {
           ::Services::Books::PromoteProvisionalBook.stubs(:call).returns(::Services::Books::BookSubmissions::Lease::Result.new(success?: false, data: {conflict: true}, errors: ["the book no longer exists"]))
-          patch "/api/v1/admin/list_items/#{::ListItem.create!(list: lists(:books_list), metadata: {"title" => "Loose"}, position: 1).id}", params: {book_id: ::Books::Book.create!(title: "Coverage Fresh").id}, as: :json, headers: bearer(MERGE)
+          patch "/api/v1/admin/list_items/#{::ListItem.create!(list: lists(:books_list), metadata: {"title" => "Loose"}, position: 1).id}", params: {book_id: ::Books::Book.create!(title: "Coverage Fresh", provisional: true).id}, as: :json, headers: bearer(MERGE)
         },
         ["PATCH", "/api/v1/admin/list_items/{id}", "422"] => -> { patch "/api/v1/admin/list_items/#{::ListItem.create!(list: lists(:books_list), metadata: {"title" => "Loose"}, position: 1).id}", params: {position: 0}, as: :json, headers: bearer(MERGE) },
         ["PATCH", "/api/v1/admin/list_items/{id}", "429"] => -> { with_exhausted_limit { patch "/api/v1/admin/list_items/#{::ListItem.create!(list: lists(:books_list), metadata: {"title" => "Loose"}, position: 1).id}", params: {position: 2}, as: :json, headers: bearer(MERGE) } },

@@ -56,7 +56,11 @@ module Services
       # A book that is already public is not promoted and no lock is taken: the
       # book job calls this inside a transaction that holds the book FOR KEY
       # SHARE, where PromoteProvisionalBook's locks would invert Approve's order.
-      # A book never becomes provisional again, so a stale "public" cannot be wrong.
+      # This relies on the book being read fresh: a public book can be flagged
+      # provisional again (GoodreadsReplay::Apply::MarkProvisional), so a caller
+      # holding a stale object could skip a needed promotion. The book job passes
+      # a book it has just locked, and a stale read only means the add proceeds
+      # for a book that was public when it was read.
       def self.promote(book, user)
         return success(book: book, promoted: false) unless book.provisional?
 

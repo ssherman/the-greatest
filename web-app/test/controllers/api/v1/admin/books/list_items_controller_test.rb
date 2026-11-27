@@ -145,7 +145,10 @@ module Api
             ::Services::Books::PromoteProvisionalBook.stubs(:call).returns(
               ::Services::Books::BookSubmissions::Lease::Result.new(success?: false, data: {conflict: true}, errors: ["the book no longer exists"])
             )
-            post_item({book_id: books_books(:war_and_peace).id})
+            provisional = ::Books::Book.create!(title: "Unreviewed", provisional: true)
+            assert_no_difference "ListItem.count" do
+              post_item({book_id: provisional.id})
+            end
 
             assert_response :conflict
           end
