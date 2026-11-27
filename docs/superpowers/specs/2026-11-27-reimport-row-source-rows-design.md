@@ -36,8 +36,10 @@ and stamped this edition's Goodreads id onto it. The risk is a reader who really
 
 - Approve when the CSV row's title and author name the to-book and clearly not the from-book.
 - Reject when the CSV row actually is the from-book, or when it is unclear.
-- Reasoning: the decision is a "move" (not a "copy"), so no other CSV row of that reader lands on the from-book.
-  Rejecting a wrong move leaves the reader where they are; unlike a match, a rejected row move is the safe answer.
+- Rejecting a wrong move leaves the reader where they are; unlike a match, a rejected row move is the safe answer.
+- Correction found in final review: "a move (not a copy) means no other CSV row of that reader lands on the
+  from-book" does not hold. `DecideRow` decides move versus copy from the rows legacy put on the from-book only, so
+  a row of the same reader heading to the from-book from elsewhere is not counted. The prompt and doc do not claim it.
 
 ## Approaches
 

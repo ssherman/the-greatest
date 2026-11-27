@@ -16,7 +16,7 @@
 - The API response shape does not change: `source_rows[]` keeps `import_id, row_number, title, author, isbn13, goodreads_book_id`, and `import_id` stays the old site's import id (`row.import.legacy_import_id`).
 - `reimport_guess` is not touched: its `source_rows` stays empty by design.
 - `correct_repair_verdict` stays `reimport_match`-only.
-- Review rule, word for word in substance in the prompt and the doc: approve when the CSV row's title and author name the to-book and clearly not the from-book; reject when the CSV row actually is the from-book, or when it is unclear. A "move" (not a "copy") means no other CSV row of that reader lands on the from-book. Rejecting a wrong move leaves the reader where they are.
+- Review rule, word for word in substance in the prompt and the doc: approve when the CSV row's title and author name the to-book and clearly not the from-book; reject when the CSV row actually is the from-book, or when it is unclear. Rejecting a wrong move leaves the reader where they are.
 - Lint with `bundle exec standardrb`, never `bin/rubocop`. Minitest 6: use `assert_nil`, not `assert_equal nil`.
 
 ## Review Focus

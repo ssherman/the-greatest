@@ -157,8 +157,10 @@ Goodreads id from the edition. `books` holds the from-book and the to-book.
   reader's entry from the from-book to the to-book.
 - Reject when the CSV row actually is the from-book, or when it is unclear. The move never happens and the reader
   stays where they are, which is the right outcome for a wrong move.
-- A move (not a copy) already means no other CSV row of that reader lands on the from-book, so there is nothing else
-  to check for.
+- A known gap: an approved move takes every entry the reader has on the from-book (`Apply::Row.move`), and
+  `DecideRow` chooses move over copy from the rows legacy put on that book only. A second row of the same reader that
+  heads to the from-book from elsewhere (an add, or a move off another book) is not counted, and when it applied first
+  as a no-op ("the user's lists already hold the book"), approving this move takes the entry that row relied on.
 
 There is no correct: `correct_repair_verdict` takes only `reimport_match`. That view's Copy prompt
 (`config/mcp/books/prompts/row_moves.md.erb`) gives an admin agent this rule.

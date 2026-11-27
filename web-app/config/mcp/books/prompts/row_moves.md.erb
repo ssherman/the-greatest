@@ -12,7 +12,6 @@ For each verdict, compare the CSV row with the two books:
 
 - **Approve** with approve_repair_verdict when the CSV row's title and author name the to-book and clearly not the from-book.
 - **Reject** with reject_repair_verdict when the CSV row actually is the from-book, or when it is unclear. Rejecting a wrong move is the safe answer: the reader keeps the entry they have.
-- The verdict is a move, not a copy, which already means no other CSV row of this reader lands on the from-book. You do not need to look for one.
 - A translated or differently titled edition of the to-book is still the to-book. Use your own web search when the title alone does not settle it.
 
 There is no correct for a row move: correct_repair_verdict takes only reimport_match verdicts. Do not change books, matches or authors from this queue.
