@@ -90,8 +90,18 @@ module Services
         year = product.dig("itemInfo", "contentInfo", "publicationDate", "displayValue").to_s[/\A\d{4}/]
         return false unless Verification::EditionCheck.year_ok?(book, year)
 
-        names = author_names(product)
+        names = comparable_author_names(product)
         names.any? && Verification::Check.authors_agree?(book, Contributors.new(names, []))
+      end
+
+      # Amazon writes most author credits "Last, First" ("Johnson, Daisy"), so
+      # each name is compared as given and, when it holds a comma, read the
+      # other way round (BookSubmissions::Lookups::Names.amazon_person). A
+      # wrong reading ("James Wesley, Rawles") only fails to match, as the name
+      # as given already did.
+      def comparable_author_names(product)
+        names = author_names(product)
+        (names + names.filter_map { |name| BookSubmissions::Lookups::Names.amazon_person(name) }).uniq
       end
 
       def author_names(product)

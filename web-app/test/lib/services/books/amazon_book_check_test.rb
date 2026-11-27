@@ -76,6 +76,12 @@ module Services
         refute AmazonBookCheck.same_book?(book, product(title: "War and Peace", authors: []))
       end
 
+      test "same_book? reads an author credited Last, First, and still refuses another author written that way" do
+        book = books_books(:war_and_peace)
+        assert AmazonBookCheck.same_book?(book, product(title: "War and Peace", authors: ["Tolstoy, Leo"]))
+        refute AmazonBookCheck.same_book?(book, product(title: "War and Peace", authors: ["Else, Someone"]))
+      end
+
       test "same_book? ignores contributors who are not authors" do
         book = books_books(:war_and_peace)
         translator_only = product(title: "War and Peace", authors: ["Leo Tolstoy"], roles: ["Translator"])

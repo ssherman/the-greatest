@@ -51,6 +51,21 @@ namespace :books do
     puts "Done."
   end
 
+  desc "Queue the repair of book ASINs/ISBNs the Amazon enrichment skipped for a \"Last, First\" author credit: " \
+    "books:amazon_book_identifiers_repair[dry_run|apply]"
+  task :amazon_book_identifiers_repair, [:mode] => :environment do |_task, args|
+    dry_run = case args[:mode]
+    when "dry_run" then true
+    when "apply" then false
+    else abort "usage: books:amazon_book_identifiers_repair[dry_run|apply]"
+    end
+    run_id = SecureRandom.uuid
+    Books::AmazonBookIdentifiersRepairJob.perform_async(run_id, dry_run)
+    puts "queued Amazon book identifiers repair #{run_id} (#{dry_run ? "dry run: writes and flags nothing" : "apply"}) over " \
+      "#{Services::Books::AmazonBookIdentifiersRepair.scope.count} editions, #{Services::Books::AmazonBookIdentifiersRepair::CHUNK} " \
+      "at a time on the low queue. Progress and totals: the worker log."
+  end
+
   desc "Enqueue Amazon enrichment for every ranked book, best-ranked first"
   task amazon_enrich_ranked: :environment do
     assert_edition_identifiers_backfilled!(::Books::Edition.all, "editions")

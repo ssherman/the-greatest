@@ -223,6 +223,9 @@ What the `amazon` step does to a book (`Services::Books::AmazonProductService`):
 - Box sets and other multi-book products never become editions: `Services::Books::AmazonBookCheck` (`set?`,
   `same_book?`) filters them, `AmazonProductService#persist_match` refuses a set product, and
   `AmazonBookMatchTask` has non-match criteria for them.
+- `same_book?` compares each Amazon author name as given and, when it holds a comma, read as "Last, First"
+  (`comparable_author_names`): Amazon writes most credits that way. Before 2026-11-27 it compared only the name as
+  given, and `books:amazon_book_identifiers_repair` puts back what that skipped (launch-todo section 4).
 - An exact match (`same_book?`) writes the product's ASIN and ISBNs to the book as `books_work_*` identifiers
   with source `amazon` (`Services::Books::AmazonBookIdentifiers`).
 - `same_book?` also rejects adaptations and study aids (`AmazonBookCheck.derivative?`: graphic novel, abridged,
