@@ -145,6 +145,14 @@ report, snapshot and sample work without it). Finish a pass, through the report,
 readers removed on legacy, and the loss check counts that as a drop. Details and where each output
 lands: `docs/features/goodreads-reimport.md`. Do not run `books:verify` while a pass runs.
 
+0. **Record legacy's book on the new rows.** `bin/rails books:goodreads_reimport:link_legacy_books`.
+   It records, on each new row, the book legacy put it on, read from legacy's own identifiers (the sync
+   no longer copies the old importer's Goodreads ids onto our books). The survey and `decide` both read
+   it: without it every row is decided "add", and legacy's entry stays on the reader's shelf beside the
+   right one. The Sidekiq log line "link_legacy_books batch" gives linked and unlinked counts; a few
+   unlinked rows are normal (legacy never put them on a list). The first pass got this from the old
+   replay's `resolve` (2026-10-14). The 2026-11-26 pass ran steps 1, 2 and 6 before this step existed:
+   run this step, then steps 1, 2 and 6 again.
 1. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The new legacy
    books are classified; the mixed books are read from it.
 2. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It deletes nothing.

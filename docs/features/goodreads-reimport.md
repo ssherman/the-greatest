@@ -29,6 +29,7 @@ in `app/sidekiq/books/goodreads_reimport/`, logic in `app/lib/services/books/goo
 
 | Step | Task | What it does |
 |---|---|---|
+| Link | `link_legacy_books` | Records on each new replay row the book legacy put it on (`legacy_book_id`), from legacy's own identifiers. Run after `books:goodreads_replay:load`; the survey and decide read it. |
 | Archive | `archive_mixed` | Records, for each mixed book, everything on it. Deletes nothing. |
 | Match | `match[<count>\|all]` | Finds the book for each Goodreads edition. An AI check looks at every match. |
 | Apply | `apply` | Carries out approved verdicts, one apply run at a time; each run picks up where the last stopped. |
