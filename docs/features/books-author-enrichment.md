@@ -94,7 +94,7 @@ queues `Books::MergeUnknownAuthorsJob` to merge them through `Books::Author::Mer
 descriptions they brought, whatever their source, and asks for one author ranking refresh. Their
 identifiers (Open Library keys) and any alternate names move onto Unknown, as in any author merge. An
 admin Re-check of a placeholder decision runs the full finder and records a decision. It repeats after each legacy sync
-(`docs/launch-todo.md` section 4), because the sync brings legacy authors over without the finder.
+(`docs/launch-todo.md` section 3), because the sync brings legacy authors over without the finder.
 
 ## Resolution
 

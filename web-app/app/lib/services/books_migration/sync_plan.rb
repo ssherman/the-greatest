@@ -40,7 +40,8 @@ module Services
           author_ids: authors.ids.to_set - redirects.redirected_ids("Books::Author"),
           identifier_ids: identifiers.ids.to_set,
           redirects: redirects,
-          books_watermark: @next_watermarks["books"]
+          books_watermark: @next_watermarks["books"],
+          hold: ReimportHold.load(redirects: redirects)
         )
         @report = build_report(books, authors, identifiers, redirects)
       end
@@ -85,13 +86,23 @@ module Services
           watermarks: @watermarks,
           books: record_counts("books", ::Books::Book, books, @scope.book_ids, @legacy.book_ids),
           authors: record_counts("authors", ::Books::Author, authors, @scope.author_ids, @legacy.author_ids),
-          book_identifiers: {
-            would_insert: (@watermarks["book_identifiers"] ? identifiers.ids.size : nil),
-            waiting: identifiers.waiting
-          },
+          book_identifiers: identifier_counts(identifiers),
           categories_unmapped: (@legacy.category_ids - LegacyIdMap.where(model: "Books::Category").pluck(:legacy_id)).size,
           redirects: redirects.counts,
           legacy_edits_not_synced: (initialized? ? @legacy.books_updated_since(@initialized_at, through_id: @watermarks["books"]) : nil)
+        }
+      end
+
+      # Matches BookIdentifierMigrator: it copies every legacy row of a book new in this
+      # sync, below the watermark or not, and skips new rows on books we already have.
+      def identifier_counts(identifiers)
+        return {would_insert: nil, skipped_existing_book: nil, waiting: identifiers.waiting} unless @watermarks["book_identifiers"]
+
+        book_of = @legacy.book_identifier_book_ids(identifiers.ids)
+        {
+          would_insert: @legacy.book_identifier_ids_for_books(@scope.book_ids).size,
+          skipped_existing_book: identifiers.ids.count { |id| !@scope.book_ids.include?(book_of[id]) },
+          waiting: identifiers.waiting
         }
       end
 

@@ -35,9 +35,11 @@ module Services
         # Per-user counts of list items and reviews on books, for the users the re-import touches. Taken before
         # apply, read by the "users whose count dropped" acceptance query. Returns how many users it recorded, or nil
         # when a snapshot exists and replace is not set: one taken after apply would hide every loss.
-        def snapshot(replace: false)
-          path = snapshot_path
-          return nil if path.exist? && !replace
+        # new_pass writes a further counts-<UTC time>.json for a later, smaller pass and never touches an existing
+        # file, so the first pass's counts.json stays as it was; the report then reads the newest one.
+        def snapshot(replace: false, new_pass: false)
+          path = new_pass ? new_pass_path : snapshot_path
+          return nil if path.exist? && !(replace && !new_pass)
 
           counts = user_counts(in_scope_user_ids)
           FileUtils.mkdir_p(path.dirname)
@@ -72,7 +74,20 @@ module Services
 
         def storage_dir = Rails.root.join(STORAGE_DIR)
 
-        def snapshot_path = storage_dir.join("counts.json")
+        # The newest snapshot by its taken_at (counts.json when none exists yet, which is where a first one goes).
+        def snapshot_path
+          files = Dir.glob([storage_dir.join("counts.json").to_s, storage_dir.join("counts-*.json").to_s])
+          newest = files.max_by { |file| [taken_at_of(file), file] }
+          newest ? Pathname.new(newest) : storage_dir.join("counts.json")
+        end
+
+        def new_pass_path(time = Time.current) = storage_dir.join("counts-#{time.utc.strftime("%Y%m%dT%H%M%SZ")}.json")
+
+        def taken_at_of(file)
+          Time.iso8601(JSON.parse(File.read(file)).fetch("taken_at"))
+        rescue JSON::ParserError, KeyError, ArgumentError, TypeError
+          File.mtime(file)
+        end
 
         def report_path(time = Time.current) = storage_dir.join("report-#{time.utc.strftime("%Y%m%dT%H%M%SZ")}.md")
 

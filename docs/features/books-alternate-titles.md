@@ -149,8 +149,8 @@ All in `web-app/lib/tasks/books/alternate_titles.rake`.
 `review` and `undo_findings` **repeat**: run both again after merges, the weekly sync, work on the
 review page, accepted corrections, and in the final launch sequence. `backfill` is a one-off in
 production (the writer backfills any record it touches). The production steps are in
-`docs/launch-todo.md`, section 10. The unsure-books second-chance verification run follows this
-cleanup.
+`docs/launch-todo.md`, section 3 step 8 (the repeating steps) and section 6 (the one-off steps, done). The
+unsure-books second-chance verification run followed this cleanup.
 
 ## Proving it (dev rehearsal)
 

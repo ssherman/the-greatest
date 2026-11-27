@@ -1,6 +1,7 @@
 # The Goodreads re-import (docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md): re-matches every
 # legacy-replayed CSV row to its exact book and puts each reader's entries there. Every task here only queues a job
-# or prints; the work runs in Sidekiq. Order, and why: archive_mixed, match, (review the proposals), apply, decide,
+# or prints; the work runs in Sidekiq. Order, and why: link_legacy_books (after books:goodreads_replay:load; the
+# survey and decide read legacy's book from it), archive_mixed, match, (review the proposals), apply, decide,
 # snapshot, apply, check_authors, apply, report, sample. Decide waits for the matches to be applied, so apply runs
 # once between match and decide.
 namespace :books do
@@ -19,6 +20,13 @@ namespace :books do
       when /\A[1-9]\d*\z/ then value.to_i
       else abort usage.call(name)
       end
+    end
+
+    desc "Queue the record of legacy's book on replay rows that lack it; run after books:goodreads_replay:load, before the survey"
+    task link_legacy_books: :environment do
+      gate.call
+      puts "queued #{Books::GoodreadsReimport::LinkLegacyBooksJob.enqueue} readers with unlinked rows " \
+        "(the result is in the Sidekiq log: \"link_legacy_books batch\")"
     end
 
     desc "Queue the archive of every mixed book (verdicts only; nothing is deleted)"
@@ -74,13 +82,17 @@ namespace :books do
     end
 
     desc "Queue the snapshot of each affected user's list item and review counts (read-only). Run before apply. " \
-      "It refuses to replace an existing snapshot; snapshot[redo] does"
-    task :snapshot, [:redo] => :environment do |_task, args|
-      abort "usage: books:goodreads_reimport:snapshot[redo]" unless [nil, "redo"].include?(args[:redo])
+      "It refuses to replace an existing snapshot; snapshot[redo] does (only before any apply moved rows); " \
+      "snapshot[new_pass] writes a further counts-<UTC time>.json for a later pass and leaves the earlier files alone"
+    task :snapshot, [:mode] => :environment do |_task, args|
+      abort "usage: books:goodreads_reimport:snapshot[redo] or snapshot[new_pass]" unless [nil, "redo", "new_pass"].include?(args[:mode])
 
-      Books::GoodreadsReimport::SnapshotJob.perform_async(args[:redo] == "redo")
-      puts "queued the snapshot; it will be written to #{Services::Books::GoodreadsReimport::Report.snapshot_path} " \
-        "(left alone if one exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
+      report = Services::Books::GoodreadsReimport::Report
+      Books::GoodreadsReimport::SnapshotJob.perform_async(args[:mode] == "redo", args[:mode] == "new_pass")
+      # A new pass's file is named by the job when it runs, not now: only the pattern is known here.
+      target = (args[:mode] == "new_pass") ? report.storage_dir.join("counts-<UTC time>.json") : report.snapshot_path
+      puts "queued the snapshot; it will be written to #{target} " \
+        "(left alone if it exists and redo was not given; the result is in the Sidekiq log). Re-enqueue if a deploy interrupted it"
     end
 
     desc "Queue the independent AI sample check (read-only); the job logs its result"

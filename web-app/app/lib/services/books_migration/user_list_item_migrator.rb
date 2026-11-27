@@ -29,8 +29,9 @@ module Services
         return super unless sync
 
         @count = 0
-        @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0}
+        @stats = {inserted: 0, deleted: 0, dropped: 0, waiting: 0, collisions: 0, held_legacy: 0, held_here: 0}
         route = BookRoute.new(sync)
+        @hold = sync.hold
         guard_item_deletions
         Services::BooksMigration.without_search_indexing do
           legacy_origin_list_ids.each_slice(LIST_BATCH) { |list_ids| sync_lists(list_ids, route) }
@@ -92,16 +93,24 @@ module Services
         }
       end
 
-      # A merge that commits while this batch is planned shows up in route.lock,
-      # which reloads the redirects; the batch is then planned again. Three tries
-      # covers a merge chain landing mid-batch; more means something is wrong.
+      # A merge that committed since the redirects were read (SyncPlan, minutes
+      # ago, or the last batch) is picked up by route.refresh! before planning:
+      # it can have moved a held item onto a book the hold does not name yet.
+      # One that commits while this batch is planned shows up in route.lock,
+      # which reloads the redirects; the batch is then planned again. Either way
+      # the hold is expanded through the route's redirects, so a held item a
+      # merge moved is still held. Three tries covers a merge chain landing
+      # mid-batch; more means something is wrong.
       def sync_lists(list_ids, route)
+        route.refresh!
         legacy_rows = legacy_items_for(list_ids)
+        list_users = ::Books::UserList.where(id: list_ids).pluck(:id, :user_id).to_h
         plan = nil
         rows = nil
         written = 3.times.any? do
+          @hold = @hold.with_redirects(route.redirects)
           here = ::UserListItem.where(user_list_id: list_ids).pluck(:id, :user_list_id, :listable_type, :listable_id)
-          plan = UserListItemPlan.call(legacy_rows, here, route)
+          plan = UserListItemPlan.call(legacy_rows, here, route, hold: @hold, list_users: list_users)
           if plan.missing.any?
             raise "legacy user_list_books #{plan.missing.first(10).join(", ")} name a book that is neither here " \
               "nor redirected (removed without callbacks)"
@@ -123,7 +132,7 @@ module Services
         @count += rows.size
         @stats[:inserted] += plan.inserted
         @stats[:deleted] += plan.stale_ids.size
-        %i[dropped waiting collisions].each { |key| @stats[key] += plan.public_send(key) }
+        %i[dropped waiting collisions held_legacy held_here].each { |key| @stats[key] += plan.public_send(key) }
       end
 
       # The user_lists guard does not cover a legacy whose lists are restored but

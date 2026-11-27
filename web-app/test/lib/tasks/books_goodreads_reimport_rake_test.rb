@@ -25,10 +25,17 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
     JOBS::MatchEditionsJob.expects(:enqueue).never
     JOBS::ApplyJob.expects(:perform_async).never
 
-    %w[archive_mixed match recheck_creates decide apply check_authors].each do |name|
+    %w[link_legacy_books archive_mixed match recheck_creates decide apply check_authors].each do |name|
       Rake::Task["books:goodreads_reimport:#{name}"].reenable
       assert_raises(SystemExit) { capture_io { Rake::Task["books:goodreads_reimport:#{name}"].invoke("all") } }
     end
+  end
+
+  test "link_legacy_books queues the readers with unlinked rows" do
+    @config.enabled = true
+    JOBS::LinkLegacyBooksJob.expects(:enqueue).returns(9)
+
+    assert_match(/queued 9 readers with unlinked rows/, run_task("link_legacy_books"))
   end
 
   test "archive_mixed reminds about the survey and queues the archive" do
@@ -101,13 +108,19 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
 
   test "snapshot only enqueues the job and redo is passed on" do
     @config.enabled = false
-    JOBS::SnapshotJob.expects(:perform_async).with(false)
+    JOBS::SnapshotJob.expects(:perform_async).with(false, false)
     Services::Books::GoodreadsReimport::Report.expects(:snapshot).never
     assert_match(/queued the snapshot/, run_task("snapshot"))
 
     Rake::Task["books:goodreads_reimport:snapshot"].reenable
-    JOBS::SnapshotJob.expects(:perform_async).with(true)
+    JOBS::SnapshotJob.expects(:perform_async).with(true, false)
     run_task("snapshot", "redo")
+  end
+
+  test "snapshot new_pass names the file pattern, not a time the job will not use" do
+    JOBS::SnapshotJob.expects(:perform_async).with(false, true)
+
+    assert_match(/counts-<UTC time>\.json/, run_task("snapshot", "new_pass"))
   end
 
   test "sample only enqueues the job, even with the gate off" do

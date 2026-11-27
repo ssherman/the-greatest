@@ -30,14 +30,15 @@ module Services
         # built once per batch by the caller (building it scans every row).
         def archive(book, legacy_map: GoodreadsRebuild::LegacyBookMap.build)
           subject_key = "reimport:book:#{book.id}"
-          kept = ::Books::RepairVerdict.find_by(kind: :reimport_mixed, subject_key: subject_key)&.payload || {}
+          existing = ::Books::RepairVerdict.find_by(kind: :reimport_mixed, subject_key: subject_key)
+          kept = existing&.payload || {}
           payload = {
             "book_id" => book.id,
             "title" => kept.fetch("title") { book.title },
             "subtitle" => kept.fetch("subtitle") { book.subtitle },
             "author_names" => kept.fetch("author_names") { book.book_authors.includes(:author).map { |ba| ba.author.name } },
             "archive" => kept["archive"] || snapshot(book),
-            "row_keys" => kept["row_keys"] || row_keys(book, legacy_map)
+            "row_keys" => archived_row_keys(existing, kept, book, legacy_map)
           }
           payload["redirect_to_book_id"] = kept["redirect_to_book_id"] if kept.key?("redirect_to_book_id")
           # A kept verdict keeps its mark and its closing reason through a re-archive, or DecideGuesses could not reopen it.
@@ -96,6 +97,16 @@ module Services
              "blob" => blob && {"id" => blob.id, "key" => blob.key, "filename" => blob.filename.to_s,
                                 "content_type" => blob.content_type, "checksum" => blob.checksum, "byte_size" => blob.byte_size}}
           end
+        end
+
+        # The first snapshot's row keys, plus, while the verdict is unapplied, rows that name the book since (a later
+        # import, or rows whose legacy book was recorded later by LinkLegacyBooks): DecideGuesses waits for every row
+        # in the list, and a row missing from it would have its reader's entry guessed away. An applied verdict keeps
+        # its keys: its book is settled.
+        def archived_row_keys(existing, kept, book, legacy_map)
+          return kept["row_keys"] if kept["row_keys"] && existing&.applied_at
+
+          (Array(kept["row_keys"]) | row_keys(book, legacy_map)).sort
         end
 
         def row_keys(book, legacy_map)

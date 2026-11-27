@@ -126,6 +126,6 @@ Known and left in: `Services::Books::GoodreadsImports::Revert` deleting two book
 | `BOOK_SUBMISSION_LOOKUP_RUNS` | 100 | Early lookup runs a day (rolling 24 hours) |
 | `BOOK_SUBMISSION_LOOKUPS_ENABLED` | on | `0` stops the early lookups |
 
-Both new Sidekiq queues, `goodreads_fetch_priority` and `serial_priority`, are served by the same capsules as `goodreads_fetch` and `serial` (`config/initializers/sidekiq.rb`), so concurrency 1 still holds. The migrations only add a table and columns, but creating the table briefly locks writes on the tables its foreign keys name, so do not merge while the legacy sync or another bulk writer is running. Production steps: `docs/launch-todo.md` section 20.
+Both new Sidekiq queues, `goodreads_fetch_priority` and `serial_priority`, are served by the same capsules as `goodreads_fetch` and `serial` (`config/initializers/sidekiq.rb`), so concurrency 1 still holds. The migrations only add a table and columns, but creating the table briefly locks writes on the tables its foreign keys name, so do not merge while the legacy sync or another bulk writer is running. Production steps: `docs/launch-todo.md` section 4, step 14.
 
 Tests: `bin/rails test test/lib/services/books/book_submissions`, plus E2E `e2e/tests/books/account/add-missing-book.spec.ts` and `e2e/tests/books/admin/book-submissions.spec.ts` (seeded and cleaned by `e2e:book_submissions_seed` and its cleanup task).
