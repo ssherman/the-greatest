@@ -365,7 +365,7 @@ module Services
         "`percentage_western` is computed from the list's books", "`data: null`",
         "change a field only when a source directly contradicts its current value", "Uncertainty is never a reason to change a field",
         "Field values follow what the list's own source states", "Do not reason about which snapshot or edition our copy of the list came from",
-        "set `items_need_revision` to true", "never set `items_need_revision` back to false", "Never edit the list's books",
+        "set `items_need_revision` to true", "never set `items_need_revision` back to false", "Change a row only where the source contradicts it", "Never add a row the source does not name", "Positions are never renumbered",
         "Add a penalty only when its `guidance` clearly applies", "quote in the note the source sentence that shows it and the guidance sentence it meets",
         "If you cannot give what this rule asks for, leave the penalty or field as it is",
         "record every voter in `voter_details`", "not a sample",
