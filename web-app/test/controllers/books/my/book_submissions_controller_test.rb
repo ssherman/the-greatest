@@ -275,6 +275,17 @@ class Books::My::BookSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "queued", submission.reload.status
   end
 
+  test "cancel and dismiss do not reach the user's own admin row" do
+    submission = row(list: nil, origin: :admin, list_id: lists(:books_list).id)
+    sign_in_as @user, stub_auth: true
+
+    post cancel_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
+    assert_response :not_found
+    post dismiss_books_my_book_submission_path(submission), as: :turbo_stream, headers: {"HOST" => @host}
+    assert_response :not_found
+    assert_equal ["queued", nil], [submission.reload.status, submission.dismissed_at]
+  end
+
   test "signed-out cancel and dismiss are 401 streams" do
     post cancel_books_my_book_submission_path(row), as: :turbo_stream, headers: {"HOST" => @host}
     assert_response :unauthorized

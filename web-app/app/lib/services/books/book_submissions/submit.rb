@@ -76,7 +76,7 @@ module Services
           return [:existing, existing, nil] if existing
 
           since = 24.hours.ago
-          return [nil, nil, LIMIT_MESSAGE] if ::Books::BookSubmission.where(user_id: @user.id).where("created_at > ?", since).count >= limit
+          return [nil, nil, LIMIT_MESSAGE] if ::Books::BookSubmission.origin_reader.where(user_id: @user.id).where("created_at > ?", since).count >= limit
 
           submission = ::Books::BookSubmission.create!(
             parsed[:attributes].merge(user: @user, user_list: @list, fingerprint: parsed[:fingerprint], status: :queued)

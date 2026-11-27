@@ -112,6 +112,14 @@ module Services
           refute submit.success?
         end
 
+        test "an admin row today does not use up the reader's cap" do
+          config = Rails.application.config.x.book_submissions
+          config.stubs(:daily_limit).returns(1)
+          row(list: nil, origin: :admin, list_id: lists(:books_list).id)
+
+          assert_equal :created, submit.data[:outcome]
+        end
+
         test "the cap counts the row a request replaces" do
           19.times { row }
           old = row(status: :needs_details)
