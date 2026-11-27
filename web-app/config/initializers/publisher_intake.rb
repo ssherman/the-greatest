@@ -17,6 +17,11 @@ Rails.application.config.x.publisher_intake = ActiveSupport::OrderedOptions.new.
   fetch_interval: GoodreadsEnv.integer("PUBLISHER_INTAKE_FETCH_INTERVAL", 10),
   # Fetches reserved per UTC day. PUBLISHER_INTAKE_DAILY_FETCH_CAP overrides it.
   daily_fetch_cap: GoodreadsEnv.integer("PUBLISHER_INTAKE_DAILY_FETCH_CAP", 2_000),
+  # Part of each source's daily cap kept for discovery requests (Books::FetchGate's
+  # priority lane), so a run's few requests never wait behind a day of page reads.
+  # Reads get the rest. A run with more discovery requests than this takes the
+  # extra ones from the reads' line.
+  priority_reserved: 100,
   # How long a block stops every fetch for a source.
   block_cooldown: 6.hours.to_i,
   # Tries for a fetch that got no answer before it is given up.

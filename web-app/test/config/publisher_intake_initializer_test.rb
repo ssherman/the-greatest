@@ -22,8 +22,8 @@ class PublisherIntakeInitializerTest < ActiveSupport::TestCase
 
   test "defaults when nothing is set" do
     reload_with({}) do |s|
-      assert_equal [[], 10, 2_000, 21_600, 3, 7, 28, 30, 365, 3, 30_000],
-        [s.enabled_sources, s.fetch_interval, s.daily_fetch_cap, s.block_cooldown, s.fetch_attempts,
+      assert_equal [[], 10, 2_000, 100, 21_600, 3, 7, 28, 30, 365, 3, 30_000],
+        [s.enabled_sources, s.fetch_interval, s.daily_fetch_cap, s.priority_reserved, s.block_cooldown, s.fetch_attempts,
           s.run_every_days, s.reread_after_days, s.lookback_days, s.horizon_days, s.stuck_run_days, s.fetch_timeout_ms]
     end
   end

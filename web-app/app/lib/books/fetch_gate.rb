@@ -15,8 +15,10 @@ module Books
   # ordinary line. Reservations split the daily cap: ordinary turns get
   # daily_fetch_cap less config.priority_reserved (itself held to 0..cap), priority
   # turns get the slice, and a priority turn past its slice falls back to an
-  # ordinary reservation. A config with no priority_reserved (the publisher
-  # intake's) reserves nothing. Reservations alone do not hold the cap, though:
+  # ordinary reservation. A config with no priority_reserved reserves nothing.
+  # The publisher intake uses the lane for a run's discovery requests, which
+  # would otherwise wait behind a day of page reads. Reservations alone do not
+  # hold the cap, though:
   # a priority turn pushes the contiguous ordinary backlog back, so a line
   # reserved on one UTC day can run on the next. The hard guards are therefore on
   # actual starts, in spacing_wait: fetch_interval since the last start, and no
