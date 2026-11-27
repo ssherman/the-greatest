@@ -199,7 +199,7 @@ namespace :penalties do
     puts "#{apply ? "Destroyed" : "Would destroy (dry run, APPLY=1 to apply)"} list_penalty ids: #{data[:list_penalty_ids].inspect}"
   end
 
-  desc "Consolidate the books geography penalties (dry run; APPLY=1 writes). See docs/launch-todo.md section 19"
+  desc "Consolidate the books geography penalties (dry run; APPLY=1 writes). See docs/launch-todo.md, \"List audit setup\""
   task consolidate: :environment do
     apply = ENV["APPLY"] == "1"
     result = Services::Penalties::Consolidate.call(dry_run: !apply)

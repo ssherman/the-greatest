@@ -24,6 +24,16 @@ class Services::BooksMigration::RedirectsTest < ActiveSupport::TestCase
     assert_equal :deleted, subject.resolve("Books::Book", 6)
   end
 
+  test "target is one step: the merge survivor, nil for a deletion or an untouched id" do
+    subject = redirects([["Books::Book", 5, 9], ["Books::Book", 9, 12], ["Books::Book", 6, nil]])
+
+    assert_equal 9, subject.target("Books::Book", 5)
+    assert_nil subject.target("Books::Book", 6)
+    assert subject.redirected?("Books::Book", 6)
+    assert_nil subject.target("Books::Book", 99)
+    assert_not subject.redirected?("Books::Book", 99)
+  end
+
   test "a cycle raises, naming the ids" do
     subject = redirects([["Books::Book", 5, 9], ["Books::Book", 9, 5]])
 
@@ -52,6 +62,26 @@ class Services::BooksMigration::RedirectsTest < ActiveSupport::TestCase
       {"Books::Book" => {merged: 1, deleted: 1}, "Books::Author" => {merged: 0, deleted: 1}},
       subject.counts
     )
+  end
+
+  test "loaded redirects go stale when a merge, delete or repoint commits after them" do
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 9)
+    loaded = Services::BooksMigration::Redirects.load
+    assert_not loaded.stale?
+
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 6, to_id: 9)
+    assert loaded.stale?
+
+    reloaded = Services::BooksMigration::Redirects.load
+    RecordRedirect.where(from_id: 5).update_all(to_id: 12, updated_at: 1.minute.from_now)
+    assert reloaded.stale?
+  end
+
+  test "redirects built from rows are never stale" do
+    subject = redirects([["Books::Book", 5, 9]])
+    RecordRedirect.create!(item_type: "Books::Book", from_id: 6, to_id: 9)
+
+    assert_not subject.stale?
   end
 
   test "load reads the record_redirects table" do

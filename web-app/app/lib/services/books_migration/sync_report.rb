@@ -23,7 +23,8 @@ module Services
           format(COLUMNS, "Catalog", "legacy", "here", "would insert", "waiting (<24h)"),
           record_line("books (above watermark)", @report[:books]),
           record_line("authors", @report[:authors]),
-          format("  %-30s %10s %10s %14s %16s", "book_identifiers (new legacy rows; deduped on insert)", "", "", number(@report[:book_identifiers][:would_insert]), number(@report[:book_identifiers][:waiting])),
+          format("  %-30s %10s %10s %14s %16s", "book_identifiers (on new books only)", "", "", number(@report[:book_identifiers][:would_insert]), number(@report[:book_identifiers][:waiting])),
+          "    skipped: legacy identifier on an existing book: #{number(@report[:book_identifiers][:skipped_existing_book])}",
           "  categories (unmapped): #{number(@report[:categories_unmapped])}",
           "  skipped (redirected): books #{@report[:books][:skipped_redirected]}, authors #{@report[:authors][:skipped_redirected]}",
           "  legacy deleted, still here: books #{ids(@report[:books][:legacy_deleted_still_here])}; " \
@@ -43,9 +44,13 @@ module Services
           format(USER_COLUMNS, "User data", "legacy", "here", "insert", "update", "delete", "dropped", "waiting", ""),
           user_line("users", data[:users], "#{number(data[:users][:deleted_on_legacy])} deleted on legacy (counted, not applied)"),
           user_line("user_lists", data[:user_lists]),
-          user_line("user_list_items", data[:user_list_items], "#{number(data[:user_list_items][:collisions])} merge collisions"),
+          user_line("user_list_items", data[:user_list_items],
+            "#{number(data[:user_list_items][:collisions])} merge collisions, " \
+            "#{number(data[:user_list_items][:held_legacy])} legacy rows / #{number(data[:user_list_items][:held_here])} rows here " \
+            "held for the Goodreads re-import"),
           user_line("reviews", data[:reviews],
-            "#{number(data[:reviews][:collisions])} collisions, #{number(data[:reviews][:held_by_new_app])} held by a new-app review"),
+            "#{number(data[:reviews][:collisions])} collisions, #{number(data[:reviews][:held_by_new_app])} held by a new-app review, " \
+            "#{number(data[:reviews][:held])} held for the Goodreads re-import"),
           user_line("saved_searches", data[:saved_searches],
             "#{number(data[:saved_searches][:categories_removed])} deleted categories removed from criteria"),
           user_line("reading_goals", data[:reading_goals]),

@@ -3,7 +3,7 @@
 Matches every legacy Goodreads CSV row to the exact book it names, from scratch, and moves each reader's
 entries there. It replaces stage two of the rebuild (`docs/features/goodreads-rebuild.md`). Design and the
 reasons: `docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md`. Production steps:
-`docs/launch-todo.md` section 12.
+`docs/launch-todo.md` section 3.2 (a pass) and section 4 (what remains); the first pass is under section 6.
 
 Legacy's importer cut titles at the first colon and guessed authors, so readers sit on the wrong books. This
 run ignores legacy's choices (its identifiers never count as evidence) and treats each row as if it had just
@@ -29,11 +29,12 @@ in `app/sidekiq/books/goodreads_reimport/`, logic in `app/lib/services/books/goo
 
 | Step | Task | What it does |
 |---|---|---|
+| Link | `link_legacy_books` | Records on each new replay row the book legacy put it on (`legacy_book_id`), from legacy's own identifiers. Run after `books:goodreads_replay:load`; the survey and decide read it. |
 | Archive | `archive_mixed` | Records, for each mixed book, everything on it. Deletes nothing. |
 | Match | `match[<count>\|all]` | Finds the book for each Goodreads edition. An AI check looks at every match. |
 | Apply | `apply` | Carries out approved verdicts, one apply run at a time; each run picks up where the last stopped. |
 | Decide | `decide[<count>\|all]` | Per user: keep, move, copy or add each row. Also queues guesses for mixed books. |
-| Snapshot | `snapshot[redo]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
+| Snapshot | `snapshot[redo]`, `snapshot[new_pass]` | Saves each affected user's list-item and review counts before the first apply that moves rows. |
 | Author check | `check_authors[<count>\|all]` | Checks each import-made book's credited authors against its rows. |
 | Report | `report` | Writes the report file. |
 | Sample | `sample` | An independent AI check of random rows. |
@@ -161,8 +162,13 @@ read it from either container and it survives a deploy. It lists:
 
 If a deploy interrupts the job, run the task again. The snapshot (`counts.json` in the same folder) is what
 the "count dropped" query compares against. Take it before the first apply that moves rows. `snapshot` leaves an existing
-snapshot alone; `snapshot[redo]` replaces it, which you should only do before any apply that moves rows, because a snapshot
-taken afterwards would hide every loss.
+snapshot alone (any `counts*.json`); `snapshot[redo]` replaces it, which you should only do before any apply that moves rows,
+because a snapshot taken afterwards would hide every loss.
+
+A later, smaller pass (a re-import of legacy imports made since) takes its own snapshot right before its apply with
+`snapshot[new_pass]`. It writes `counts-<UTC time>.json` beside the first and never touches an existing file, so the first
+pass's `counts.json` stays as it was. The report compares against the newest snapshot by its `taken_at`. The loss check is
+meant for right after an apply: a later sync's legitimate deletions show up in it as drops.
 
 ## The sample check
 
@@ -177,6 +183,20 @@ again; nothing is saved part-way.
 
 ## The weekly legacy sync
 
-`data_migration:sync` rewrites legacy users' lists to match legacy and routes deleted books' items through
-`record_redirects`. As it stands it would undo moved rows and send a deleted mixed book's readers to one book.
-Do not run it until it has been checked and changed so it cannot revert this run (spec section 3.9).
+`data_migration:sync` makes legacy users' lists and reviews match legacy. Legacy still holds the old importer's
+guesses, so before 2026-11-26 a sync would have undone every moved, copied and added row and sent a deleted mixed
+book's readers to one book. The sync now leaves alone every reader/book pair this run changed: both books of each
+`reimport_row` and `reimport_guess` that recorded a change (applied or not, current or superseded), and each item a
+`reimport_mixed` verdict deleted. A list the reader deletes on legacy is still deleted, re-imported items included.
+The held counts are printed by `sync` and `sync_report`. How the pairs are built, and why a deleted mixed book's
+redirect is not followed: `docs/features/books-legacy-sync.md`, "The Goodreads re-import hold". The sync also no
+longer copies new legacy identifiers onto books we already have (same doc, "Identifiers"), so the old importer's
+wrong Goodreads ids and ISBNs stop arriving.
+
+A sync can still bring over legacy Goodreads imports made since the last re-import pass. Their rows are the old
+importer's guesses until a further pass covers them: `books:goodreads_replay:load` picks up the new imports, then
+the same steps run again (survey, archive, match, decide, review), with `snapshot[new_pass]` right before that pass's
+apply. Each step only takes work not done yet. The order is in `docs/launch-todo.md`.
+
+The loss check in the report compares against the newest snapshot. Read it right after a pass's apply: a sync run
+after the snapshot deletes what readers removed on legacy, and those deletions show up as drops.

@@ -12,10 +12,11 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
     init_watermarks(books: 100, authors: 50, book_identifiers: 500)
     RecordRedirect.create!(item_type: "Books::Book", from_id: 5, to_id: 9)
 
-    out = render(book_rows: [[101, 3.days.ago], [102, 1.hour.ago]], book_identifier_rows: [[501, 3.days.ago]], books_updated_count: 87)
+    out = render(book_rows: [[101, 3.days.ago], [102, 1.hour.ago]], book_identifier_rows: [[501, 3.days.ago]], book_identifier_books: {501 => 7}, books_updated_count: 87)
 
     assert_match(/books \(above watermark\)\s+2\s+0\s+1\s+1/, out)
-    assert_includes out, "book_identifiers (new legacy rows; deduped on insert)"
+    assert_includes out, "book_identifiers (on new books only)"
+    assert_includes out, "skipped: legacy identifier on an existing book: 1"
     assert_includes out, "redirects recorded: books merged 1, deleted 0; authors merged 0, deleted 0"
     assert_includes out, "legacy edits to existing books, not synced: 87"
   end
@@ -45,8 +46,8 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
     {
       users: {legacy: 69_602, here: 69_590, inserted: 12, updated: 40, deleted_on_legacy: 2},
       user_lists: {legacy: 10, here: 9, inserted: 2, updated: 3, deleted: 1},
-      user_list_items: {legacy: 100, here: 98, inserted: 5, deleted: 3, dropped: 1, waiting: 2, collisions: 1, missing: 0},
-      reviews: {legacy: 20, here: 19, inserted: 1, updated: 2, deleted: 0, dropped: 0, waiting: 0, collisions: 1, held_by_new_app: 0, missing: 0},
+      user_list_items: {legacy: 100, here: 98, inserted: 5, deleted: 3, dropped: 1, waiting: 2, collisions: 1, missing: 0, held_legacy: 0, held_here: 0},
+      reviews: {legacy: 20, here: 19, inserted: 1, updated: 2, deleted: 0, dropped: 0, waiting: 0, collisions: 1, held_by_new_app: 0, missing: 0, held: 0},
       saved_searches: {legacy: 5, here: 5, inserted: 0, updated: 1, deleted: 0, categories_removed: 3},
       reading_goals: {legacy: 3, here: 3, deleted: 0},
       recommendation_configs: {legacy: 33, here: 33},
@@ -63,6 +64,17 @@ class Services::BooksMigration::SyncReportTest < ActiveSupport::TestCase
     assert_match(/user_list_items\s+100\s+98\s+5\s+—\s+3\s+1\s+2/, out)
     assert_includes out, "3 deleted categories removed from criteria"
     refute_includes out, "MISSING"
+  end
+
+  test "says how many rows the Goodreads re-import holds" do
+    data = user_data
+    data[:user_list_items] = data[:user_list_items].merge(held_legacy: 3, held_here: 2)
+    data[:reviews] = data[:reviews].merge(held: 4)
+
+    out = Services::BooksMigration::SyncReport.new(catalog_report, data).render
+
+    assert_includes out, "3 legacy rows / 2 rows here held for the Goodreads re-import"
+    assert_includes out, "4 held for the Goodreads re-import"
   end
 
   test "warns when list items or reviews would fail the sync" do
