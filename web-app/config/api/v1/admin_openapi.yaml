@@ -6743,7 +6743,10 @@ components:
                     outcome: {type: string}
             source_rows:
               type: array
-              description: Up to 20 of the Goodreads import rows the finding came from.
+              description: >-
+                Up to 20 of the Goodreads import rows the finding came from: the rows behind a replay finding, a
+                reimport_row or a reimport_mixed (a reimport_guess has none). Each row's import_id is the old site's
+                import id; a re-import verdict's payload.import_id is our own import id, so the two numbers differ.
               items:
                 type: object
                 required: [import_id, row_number, title, author, isbn13, goodreads_book_id]

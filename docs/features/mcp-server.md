@@ -217,7 +217,7 @@ The match decisions Copy prompt (`config/mcp/books/prompts/match_decisions.md.er
 The books repair verdicts page (`/admin/repair_verdicts`) holds the Goodreads replay's findings, mostly `reimport_match` verdicts proposed for review (see `docs/features/goodreads-reimport.md`). Six admin tools work it. `Services::Books::RepairVerdicts::Filter` and `Review` are shared with the page, so both see the same queue and stamp `reviewed_via` (`admin_ui` or `api`).
 
 - `list_repair_verdicts` (`books:admin:read`). Filters: `kind`, `status` (`proposed` by default), `decided_by`, `confidence`, `guess`.
-- `get_repair_verdict` (`books:admin:read`). The payload with `facts`, `ai` and `candidate_book_ids`, plus `candidate_books`, `books` and `source_rows`.
+- `get_repair_verdict` (`books:admin:read`). The payload with `facts`, `ai` and `candidate_book_ids`, plus `candidate_books`, `books` and `source_rows`. `source_rows` is the Goodreads CSV rows behind a replay finding, a `reimport_row` or a `reimport_mixed`; its `import_id` is the old site's import id, while a re-import verdict's `payload.import_id` is our own, so the two numbers differ.
 - `approve_repair_verdict` (`books:admin:merge`). An approved merge destroys a row on the next apply, so approving takes the merge scope, as the page takes the delete gate.
 - `reject_repair_verdict` (`books:admin:write`).
 - `correct_repair_verdict` (`books:admin:write`). Body `{book_id}` or `{create: true}`; it runs `Services::Books::GoodreadsReimport::CorrectMatch` and approves the corrected answer.

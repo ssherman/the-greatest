@@ -141,6 +141,30 @@ An admin agent can do the same review over the admin MCP server: `list_repair_ve
 The report's "AI agreement" line shows how many matches were approved without anyone looking. A low rate means
 the AI and the finder disagree a lot and most of the review falls to Shane.
 
+## Reviewing proposed row moves
+
+A `reimport_row` is approved by itself unless it is a move off a trusted book (`DecideRow#settle`,
+`GoodreadsRebuild::Cohort.trusted?`: pre-import, new-app, or on a curated list). A reader has at most one entry per
+book per list, so such a move always takes their only one there. The usual cause is that the old site's importer
+guessed the trusted book for the row and stamped this edition's Goodreads id onto it, so the move is a fix. The risk
+is a reader who really does have the trusted book.
+
+Review them in Admin, Repair verdicts, filtered to `reimport_row`. The verdict page's "Source rows" table (and
+`source_rows` in `get_repair_verdict`) shows the reader's CSV row: title and author from the export, ISBN-13 and
+Goodreads id from the edition. `books` holds the from-book and the to-book.
+
+- Approve when the CSV row's title and author name the to-book and clearly not the from-book. `apply` then moves the
+  reader's entry from the from-book to the to-book.
+- Reject when the CSV row actually is the from-book, or when it is unclear. The move never happens and the reader
+  stays where they are, which is the right outcome for a wrong move.
+- A known gap: an approved move takes every entry the reader has on the from-book (`Apply::Row.move`), and
+  `DecideRow` chooses move over copy from the rows legacy put on that book only. A second row of the same reader that
+  heads to the from-book from elsewhere (an add, or a move off another book) is not counted, and when it applied first
+  as a no-op ("the user's lists already hold the book"), approving this move takes the entry that row relied on.
+
+There is no correct: `correct_repair_verdict` takes only `reimport_match`. That view's Copy prompt
+(`config/mcp/books/prompts/row_moves.md.erb`) gives an admin agent this rule.
+
 ## The report
 
 `books:goodreads_reimport:report` queues a job. It writes
