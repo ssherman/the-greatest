@@ -25,10 +25,17 @@ class BooksGoodreadsReimportRakeTest < ActiveSupport::TestCase
     JOBS::MatchEditionsJob.expects(:enqueue).never
     JOBS::ApplyJob.expects(:perform_async).never
 
-    %w[archive_mixed match recheck_creates decide apply check_authors].each do |name|
+    %w[link_legacy_books archive_mixed match recheck_creates decide apply check_authors].each do |name|
       Rake::Task["books:goodreads_reimport:#{name}"].reenable
       assert_raises(SystemExit) { capture_io { Rake::Task["books:goodreads_reimport:#{name}"].invoke("all") } }
     end
+  end
+
+  test "link_legacy_books queues the readers with unlinked rows" do
+    @config.enabled = true
+    JOBS::LinkLegacyBooksJob.expects(:enqueue).returns(9)
+
+    assert_match(/queued 9 readers with unlinked rows/, run_task("link_legacy_books"))
   end
 
   test "archive_mixed reminds about the survey and queues the archive" do

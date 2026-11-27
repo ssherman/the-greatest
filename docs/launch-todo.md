@@ -145,6 +145,14 @@ report, snapshot and sample work without it). Finish a pass, through the report,
 readers removed on legacy, and the loss check counts that as a drop. Details and where each output
 lands: `docs/features/goodreads-reimport.md`. Do not run `books:verify` while a pass runs.
 
+0. **Record legacy's book on the new rows.** `bin/rails books:goodreads_reimport:link_legacy_books`.
+   It records, on each new row, the book legacy put it on, read from legacy's own identifiers (the sync
+   no longer copies the old importer's Goodreads ids onto our books). The survey and `decide` both read
+   it: without it every row is decided "add", and legacy's entry stays on the reader's shelf beside the
+   right one. The Sidekiq log line "link_legacy_books batch" gives linked and unlinked counts; a few
+   unlinked rows are normal (legacy never put them on a list). The first pass got this from the old
+   replay's `resolve` (2026-10-14). The 2026-11-26 pass ran steps 1, 2 and 6 before this step existed:
+   run this step, then steps 1, 2 and 6 again.
 1. **Refresh the survey.** `bin/rails "books:goodreads_rebuild:survey[all,redo]"`. The new legacy
    books are classified; the mixed books are read from it.
 2. **Archive the mixed books.** `bin/rails books:goodreads_reimport:archive_mixed`. It deletes nothing.
@@ -343,6 +351,12 @@ In order. Each step says whether it is safe now or what it waits for.
 22. **Author enrichment beyond the ranked authors (decide).** `bin/rails "books:authors:enrich[all]"`.
     Most of the 76,931 authors have no ranked book. One author every 2 seconds on the Wikimedia pace, so not at
     the same time as step 10's backfill. Check it with `bin/rails "books:authors:enrich_report[<the time it printed>]"`.
+23. **First-pass duplicate entries (decide; no tool yet).** 21 legacy imports loaded on 2026-11-13 reached the first
+    re-import pass without legacy's book on their rows (section 3.2, step 0, did not exist yet), so all 6,358 of their
+    rows were applied as adds. 6,123 changed nothing (legacy had already put the reader on the right book). 234 left
+    legacy's wrong book on the reader's list beside the right one, nearly all for one reader (user 70967, mostly manhwa
+    volumes). Measured read-only 2026-11-27. Removing them needs a small reviewed change (each removal recorded on a
+    verdict, so the sync's hold keeps it); until then they are harmless extra entries.
 
 ## 5. Cutover, hostname switch, after launch
 

@@ -1,6 +1,7 @@
 # The Goodreads re-import (docs/superpowers/specs/2026-11-02-goodreads-reimport-design.md): re-matches every
 # legacy-replayed CSV row to its exact book and puts each reader's entries there. Every task here only queues a job
-# or prints; the work runs in Sidekiq. Order, and why: archive_mixed, match, (review the proposals), apply, decide,
+# or prints; the work runs in Sidekiq. Order, and why: link_legacy_books (after books:goodreads_replay:load; the
+# survey and decide read legacy's book from it), archive_mixed, match, (review the proposals), apply, decide,
 # snapshot, apply, check_authors, apply, report, sample. Decide waits for the matches to be applied, so apply runs
 # once between match and decide.
 namespace :books do
@@ -19,6 +20,13 @@ namespace :books do
       when /\A[1-9]\d*\z/ then value.to_i
       else abort usage.call(name)
       end
+    end
+
+    desc "Queue the record of legacy's book on replay rows that lack it; run after books:goodreads_replay:load, before the survey"
+    task link_legacy_books: :environment do
+      gate.call
+      puts "queued #{Books::GoodreadsReimport::LinkLegacyBooksJob.enqueue} readers with unlinked rows " \
+        "(the result is in the Sidekiq log: \"link_legacy_books batch\")"
     end
 
     desc "Queue the archive of every mixed book (verdicts only; nothing is deleted)"

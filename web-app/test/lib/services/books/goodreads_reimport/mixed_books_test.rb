@@ -130,6 +130,33 @@ module Services
           assert_equal 1, ::Books::RepairVerdict.reimport_mixed.where(subject_key: first.subject_key).count
         end
 
+        test "a re-archive adds rows that name the book since, while the verdict is unapplied" do
+          import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, legacy_import_id: 92)
+          edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 88_002, signature: "mb-sig-2", title: "T", primary_author: "A")
+          import.rows.create!(row_number: 1, legacy_book_id: @derived_lump.id, goodreads_edition: edition)
+          first = MixedBooks.archive(@derived_lump)
+          late = import.rows.create!(row_number: 2, goodreads_edition: edition)
+          late.update_columns(legacy_book_id: @derived_lump.id)
+
+          second = MixedBooks.archive(@derived_lump)
+
+          assert_equal [[import.id, 1]], first.payload["row_keys"]
+          assert_equal [[import.id, 1], [import.id, 2]], second.reload.payload["row_keys"]
+        end
+
+        test "an applied verdict keeps its row keys through a re-archive" do
+          import = ::Books::GoodreadsImport.create!(user: @user, source: :legacy_replay, status: :complete, legacy_import_id: 93)
+          edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 88_003, signature: "mb-sig-3", title: "T", primary_author: "A")
+          import.rows.create!(row_number: 1, legacy_book_id: @derived_lump.id, goodreads_edition: edition)
+          first = MixedBooks.archive(@derived_lump)
+          first.update!(applied_at: Time.current, payload: first.payload.merge("kept" => true))
+          import.rows.create!(row_number: 2, legacy_book_id: @derived_lump.id, goodreads_edition: edition)
+
+          second = MixedBooks.archive(@derived_lump)
+
+          assert_equal [[import.id, 1]], second.reload.payload["row_keys"]
+        end
+
         test "a passed legacy map is used instead of building one" do
           GoodreadsRebuild::LegacyBookMap.expects(:build).never
 
