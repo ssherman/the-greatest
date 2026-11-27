@@ -119,6 +119,33 @@ module Services
       assert_equal before + 1, count.call
     end
 
+    test "row moves renders the admin MCP url, the proposed row move count, the tools and the rule" do
+      count = ::Books::RepairVerdict.reimport_row.proposed.current.count
+      prompt = AgentPrompts.call(domain: :books, queue: :row_moves)
+
+      assert_includes prompt, "#{::Api::Host.base_url}/api/mcp/admin"
+      assert_includes prompt, "#{count} proposed reimport_row"
+      assert_includes prompt, "kind=reimport_row"
+      assert_includes prompt, "source_rows"
+      %w[list_repair_verdicts get_repair_verdict approve_repair_verdict reject_repair_verdict bulk_approve_repair_verdicts].each do |tool|
+        assert_includes prompt, tool
+      end
+    end
+
+    test "row moves counts only proposed, current reimport_row verdicts" do
+      count = -> { AgentPrompts.call(domain: :books, queue: :row_moves)[/(\d+) proposed reimport_row/, 1].to_i }
+      before = count.call
+      attrs = {kind: :reimport_row, decided_by: :rule, confidence: :certain, payload: {}, reason: "t"}
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "tr:approved", status: :approved)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "tr:superseded", status: :proposed, superseded_at: Time.current)
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "tr:match", status: :proposed, kind: :reimport_match)
+      assert_equal before, count.call
+
+      ::Books::RepairVerdict.create!(**attrs, subject_key: "tr:proposed", status: :proposed)
+      assert_equal before + 1, count.call
+    end
+
     test "repair verdicts counts only proposed reimport matches" do
       count = -> { AgentPrompts.call(domain: :books, queue: :repair_verdicts)[/(\d+) high confidence/, 1].to_i }
       before = count.call

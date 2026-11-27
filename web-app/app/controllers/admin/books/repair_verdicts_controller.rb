@@ -22,8 +22,13 @@ class Admin::Books::RepairVerdictsController < Admin::Books::BaseController
     @counts = scope.group(:status).count
     @pagy, @verdicts = pagy(scope.where(status: @status).newest_first, limit: PER_PAGE)
     load_row_context
-    # Filtered to author verdicts, the page copies the prompt for reviewing those; otherwise the one for matches.
-    queue = (params[:kind] == "reimport_author") ? :author_verdicts : :repair_verdicts
+    # Filtered to author verdicts or row moves, the page copies the prompt for reviewing those; otherwise the one
+    # for matches.
+    queue = case params[:kind]
+    when "reimport_author" then :author_verdicts
+    when "reimport_row" then :row_moves
+    else :repair_verdicts
+    end
     @agent_prompt = ::Services::AgentPrompts.call(domain: :books, queue: queue)
   end
 
