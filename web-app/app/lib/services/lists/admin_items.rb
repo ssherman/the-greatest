@@ -52,7 +52,14 @@ module Services
 
       # The promotion's failure re-wrapped in this service's Result, with its data
       # (`conflict`) intact; a success is passed through with data {book:, promoted:}.
+      #
+      # A book that is already public is not promoted and no lock is taken: the
+      # book job calls this inside a transaction that holds the book FOR KEY
+      # SHARE, where PromoteProvisionalBook's locks would invert Approve's order.
+      # A book never becomes provisional again, so a stale "public" cannot be wrong.
       def self.promote(book, user)
+        return success(book: book, promoted: false) unless book.provisional?
+
         result = ::Services::Books::PromoteProvisionalBook.call(book: book, user: user)
         Result.new(success?: result.success?, data: result.data, errors: result.errors)
       end

@@ -19,6 +19,12 @@ module Services
         ::Services::Books::BookSubmissions::Lease::Result.new(success?: false, data: {conflict: true}, errors: ["the book no longer exists"])
       end
 
+      test "a public book is added without taking the promotion's locks" do
+        ::Services::Books::PromoteProvisionalBook.expects(:call).never
+
+        assert AdminItems.create(list: @list, book: @book, position: 5, user: @admin).success?
+      end
+
       test "create adds a verified row at the given position and moves no other row" do
         one = ListItem.create!(list: @list, listable: @other, position: 1)
         two = ListItem.create!(list: @list, metadata: {"title" => "Loose"}, position: 2)
@@ -80,9 +86,10 @@ module Services
 
       test "a failed promotion writes no row" do
         ::Services::Books::PromoteProvisionalBook.stubs(:call).returns(conflict_failure)
+        provisional = ::Books::Book.create!(title: "Unreviewed", provisional: true)
 
         assert_no_difference "ListItem.count" do
-          result = AdminItems.create(list: @list, book: @book, position: 1, user: @admin)
+          result = AdminItems.create(list: @list, book: provisional, position: 1, user: @admin)
 
           assert_not result.success?
           assert_equal true, result.data[:conflict]
