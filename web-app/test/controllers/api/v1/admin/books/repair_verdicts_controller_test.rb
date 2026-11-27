@@ -134,6 +134,25 @@ module Api
             assert_equal [nil, nil], [data[:source_rows].last[:isbn13], data[:source_rows].last[:goodreads_book_id]]
           end
 
+          test "get a reimport_row verdict returns its CSV row and both books" do
+            import = ::Books::GoodreadsImport.create!(user: users(:regular_user), source: :legacy_replay, legacy_import_id: 5151)
+            edition = ::Books::GoodreadsEdition.create!(goodreads_book_id: 888, signature: "sig-888", title: "T", primary_author: "A",
+              isbn13: "9780307387899")
+            import.rows.create!(row_number: 4, raw: {"Title" => "The Wager", "Author" => "David Grann"}, goodreads_edition: edition)
+            move = verdict("reimport:row:#{import.id}:4", kind: :reimport_row,
+              payload: {"import_id" => import.id, "row_number" => 4, "user_id" => users(:regular_user).id, "action" => "move",
+                        "from_book_id" => @crime.id, "to_book_id" => @war.id, "review" => false, "superseded_by" => nil})
+
+            fetch(move.id)
+            assert_api_response_conform(status: 200, api: :admin)
+
+            data = json[:data]
+            assert_equal [{import_id: 5151, row_number: 4, title: "The Wager", author: "David Grann", isbn13: "9780307387899", goodreads_book_id: 888}],
+              data[:source_rows]
+            assert_equal 1, data[:source_row_count]
+            assert_equal [@crime.id, @war.id].sort, data[:books].map { |book| book[:id] }.sort
+          end
+
           def write(path, params = {}, token: ApiTokenSecrets::ADMIN)
             post "/api/v1/admin/repair_verdicts/#{path}", params: params, as: :json, headers: bearer(token)
           end

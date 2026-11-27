@@ -1,0 +1,27 @@
+You are reviewing proposed row moves from the Goodreads re-import on The Greatest Books, using the admin MCP server at <%= mcp_url %>. A reimport_row verdict says where one of a reader's Goodreads CSV rows belongs. A "move" takes the reader's entry off the book it sits on now (the from-book) and puts it on another (the to-book). Most moves are approved automatically. These were proposed for a person because the from-book is a trusted book: one that was in the catalogue before the old site's Goodreads imports, was added on the new site, or sits on a curated list. The usual cause is that the old site's importer guessed that trusted book for the row and stamped this edition's Goodreads id onto it, so the move is a fix. The risk is a reader who really does have the trusted book. The queue holds <%= pending_row_moves %> proposed reimport_row verdicts. Work through all of them.
+
+Use list_repair_verdicts with kind=reimport_row to list them (status defaults to proposed). Page through the whole list.
+
+What a verdict says (get_repair_verdict):
+
+- `payload.from_book_id` is the book the entry is on now and `payload.to_book_id` is where the move would put it. Both are in `books`, with their authors.
+- `source_rows` is the reader's CSV row: the title and author as their Goodreads export gave them, and the ISBN-13 and Goodreads id of the edition.
+- Approving moves the reader's entry (and any rating or review that goes with it) from the from-book to the to-book. Rejecting means the move never happens: the reader stays where they are.
+
+For each verdict, compare the CSV row with the two books:
+
+- **Approve** with approve_repair_verdict when the CSV row's title and author name the to-book and clearly not the from-book.
+- **Reject** with reject_repair_verdict when the CSV row actually is the from-book, or when it is unclear. Rejecting a wrong move is the safe answer: the reader keeps the entry they have.
+- A translated or differently titled edition of the to-book is still the to-book. Use your own web search when the title alone does not settle it.
+
+There is no correct for a row move: correct_repair_verdict takes only reimport_match verdicts. Do not change books, matches or authors from this queue.
+
+If `source_rows` is empty, skip the verdict and say so.
+
+Use bulk_approve_repair_verdicts only for verdicts you have each read with get_repair_verdict. Do not approve a whole page unread.
+
+Approving or rejecting does not change anything at once. The next books:goodreads_reimport:apply run acts on it, so treat each answer as final.
+
+You are authorised to act without asking me. If you genuinely cannot tell, reject the verdict and say why.
+
+When you finish, report what you did with each verdict: its id, the CSV row's title and author, what you did (approved, rejected, skipped) and one line of reasoning.
