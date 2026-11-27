@@ -95,6 +95,19 @@ Counters on the row: `attempts` (retry schedule), `claims` (agent handouts), `bl
 - **Copy prompt**: `config/mcp/books/prompts/book_submissions.md.erb`, rendered by `Services::AgentPrompts` for the `book_submissions` queue. It carries the loop, the lease rules and the house rules. It says everything a reader typed is data, never instructions. Sources must be http or https URLs.
 - **User-added badge**: the admin book page shows "User-added", linking to that book's submissions, while a submission created the book and nobody has merged or rejected it (`BookSubmission#user_added?`).
 
+## Admin requests (`request_book`)
+
+The same pipeline is the one entry point for an admin agent bringing in a book. `POST /api/v1/admin/book_submissions` (MCP `request_book`, `books:admin:write`) takes one input method (the `ParseInput` rules: Goodreads link, Amazon link, ISBN, or title and authors) and optional `list_id`, `position` and `confirmed_new`.
+
+- **Origin and target.** `books_book_submissions.origin` is `reader` (default, all existing rows) or `admin`. An admin row's `user` is the API principal's user and it has no `user_list`. Its target is an optional books list: `list_id` and `list_position`. At most one of `user_list_id` and `list_id` is set. The row it makes is recorded in `list_item_id`, beside `user_list_item_id`.
+- **Catalogue check first.** `InstantCheck` runs as for readers. On a hit the response lists the books (with whether each is provisional) and nothing is written; the agent adds one with `create_admin_list_item` or repeats with `confirmed_new: true`.
+- **Otherwise** a submission is created and `ProcessBookSubmissionJob` queued, as for readers. The agent polls `get_book_submission`.
+- **Catalog books, not provisional ones.** For an admin row `CreateBook` keeps its matching, adoption and signature lock, but calls the importer with `provisional: false, enrich: true` (the list wizard's settings). The book gets full enrichment, identifier source `admin` and `review_status` `not_needed`: the request is the review, since the agent checked the book against its source. `StartLookups` does not run. Uncertain finder decisions still go to the match-decision queue.
+- **The row.** With a `list_id` the list step creates the `ListItem` at `list_position` (`verified: true`). A book already on the list counts as success, and a list deleted meanwhile leaves no row and the submission still ends `added`. A provisional book the request lands on (found by the finder, or adopted from a racing request) is promoted first, as in `docs/features/list-audits.md`. `ProcessSubmission` cancels an admin row only when its user is gone.
+- **Reader-only rules stay reader-only.** The daily cap, the strip, cancel, dismiss and replace do not apply, and the reader cap and reader endpoints count and show reader rows only. A repeat request with the same fingerprint and list as an open admin row returns that row (`existing`).
+- **Kept out of the shared queue.** Admin rows that end `needs_details` or `failed` are not in the `reviewable` queue. `SupplyDetails`, `Retry`, `Skip` and the claim lease refuse them. Only the requesting agent has read the source, and details from someone who has not would make an unreviewed public book. The agent re-requests with an ISBN or a source link, or leaves `items_need_revision` set and says so in its audit note.
+- **Admin page.** The submissions page shows each row's origin.
+
 ## Locking order
 
 Wrong twice before it was right, so it is written here. Postgres re-checks a row's foreign keys on a second UPDATE and takes `FOR KEY SHARE` on the row it points to.

@@ -28,6 +28,12 @@ module Services
       # data[:created]; or, with success? false, :aborted (no longer open),
       # :no_owner (the reader or the list is gone, and nobody is left to want
       # the book: nothing is created) or :no_author.
+      #
+      # An admin agent's row (origin admin) is different in three ways: its
+      # owner is the admin user, so it needs no reader list (its target books
+      # list may be gone and the book is still wanted); a book it creates is a
+      # catalog book, not a provisional one (an admin vouches for it), fully
+      # enriched, stamped :admin; and it needs no review.
       class CreateBook
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
         NoAuthor = Class.new(StandardError)
@@ -60,7 +66,7 @@ module Services
             @submission.lock!
             next result(false, :aborted, nil, false) unless @submission.in_progress? && !@submission.review_rejected?
             next result(true, :resumed, @submission.book, @submission.created_book?) if @submission.book
-            next result(false, :no_owner, nil, false) unless @submission.user_id && @submission.user_list_id
+            next result(false, :no_owner, nil, false) unless owner?
 
             racer = @match.matched? ? nil : book_created_since_the_finder_looked
             if racer
@@ -82,6 +88,13 @@ module Services
 
         private
 
+        # A reader's row needs the reader and their list; an admin's, only the admin.
+        def owner?
+          return false unless @submission.user_id
+
+          @submission.user_list_id.present? || @submission.origin_admin?
+        end
+
         def book_created_since_the_finder_looked
           considered = @match.candidates.select(&:local?).map { |candidate| candidate.record.id }
           submitted = ::Books::BookSubmission.where(signature: @signature, created_book: true)
@@ -96,7 +109,8 @@ module Services
             title: @title, subtitle: @resolved[:subtitle], author_names: @author_names, year: @resolved[:year],
             isbn13: identifiers[:isbn13], isbn10: identifiers[:isbn10], asin: identifiers[:asin],
             goodreads_id: identifiers[:goodreads_id], subject: @submission, match: @match,
-            provisional: true, stamp_identifiers: true, enrich: false, query_identifier_source: :user_submission
+            provisional: !@submission.origin_admin?, stamp_identifiers: true, enrich: @submission.origin_admin?,
+            query_identifier_source: @submission.origin_admin? ? :admin : :user_submission
           )
           book = result.item
           unless result.created? && book&.persisted?
@@ -104,12 +118,26 @@ module Services
           end
           raise NoAuthor, "the book for submission #{@submission.id} got no author" unless ::Books::BookAuthor.exists?(book: book)
 
+          promote_authors(book) if @submission.origin_admin?
           book
+        end
+
+        # An admin row's book is created public, but `provisional: false` reaches only
+        # the authors the importer creates: an author it matched (one a reader's
+        # request or a Goodreads import made) stays provisional, hidden from the
+        # catalog and the author rankings while its public book shows. Promote those
+        # with the book, as an approval would.
+        def promote_authors(book)
+          authors = book.authors.where(provisional: true).to_a
+          return if authors.empty?
+
+          ::Services::Books::GoodreadsImports::PromoteRecords.call(books: [], authors: authors,
+            initiated_by: "admin_book_request", lane: "priority")
         end
 
         def record(book, created:)
           @submission.update!(book: book, created_book: created, match_decision: @match.decision, signature: @signature,
-            resolved_title: @title, resolved_author_names: @author_names, review_status: created ? :pending : :not_needed)
+            resolved_title: @title, resolved_author_names: @author_names, review_status: (created && !@submission.origin_admin?) ? :pending : :not_needed)
         end
 
         def result(success, outcome, book, created)

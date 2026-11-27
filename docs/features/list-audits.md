@@ -25,6 +25,8 @@ All on the admin MCP endpoint (`POST /api/mcp/admin`, see `docs/features/mcp-ser
 | `search_admin_lists` | Books lists with status, item count, weight on the default primary configuration and latest finished audit. Filters `q`, `status`, `audit` (`not_audited`, `verified`, `unverifiable`, `in_progress`), `sort` (`weight`, `name`, `id`) |
 | `get_admin_list` | One list with its editable fields, flags, attached penalties and audit state |
 | `list_admin_list_items` | The list's items, to check against the source |
+| `create_admin_list_item`, `update_admin_list_item`, `delete_admin_list_item` | Add, change and remove one row of a books list (`books:admin:write`, `Books::ListPolicy#update?`). See "List rows" below |
+| `request_book` | Ask for a book the catalogue lacks, optionally landing it on the list at a position. See "List rows" below and `docs/features/user-added-books.md` |
 | `list_admin_penalties` | The books penalty catalogue with each penalty's `guidance` and, for a dynamic one, the list field that drives it |
 | `update_admin_list` | Edit a subset of the list's fields and the nine flags; returns `changed` |
 | `attach_list_penalty`, `detach_list_penalty` | Static penalties only. A dynamic penalty is a 422 naming the field to set instead |
@@ -73,6 +75,18 @@ Geographic scope is the `location_specific` flag (penalty 15, dynamic): it carri
 - `/admin/list_audits` (books host): counts (not audited, verified, unverifiable, in progress), the recent audits, **Copy prompt** (the prompt with no list: the agent starts the queue) and **Release** on an open audit, for a stuck lease.
 - The books admin list page has **Copy audit prompt** (the prompt pinned to that list, with its current weight lines) and the list's audit history.
 - The lists index has a "Last audit" column and an `audit` filter with the same four values as the tool.
+
+## List rows
+
+The agent fixes rows itself instead of only flagging them. The three row tools sit under the admin API: `POST /api/v1/admin/lists/:id/items` (`book_id`, optional `position`), `PATCH /api/v1/admin/list_items/:id` (`book_id` and/or `position`; null clears it) and `DELETE /api/v1/admin/list_items/:id`. They answer with the `ListItemResource` shape, refuse a list that is not a `Books::List` (404), refuse an auto-generated list (422) and refuse unknown body keys (422 naming the accepted ones).
+
+- **Positions are set exactly as given and never renumbered.** Source lists have ties, gaps and unranked rows, so other rows never move.
+- **Rows the agent adds or relinks are `verified: true`.** Delete removes the row only; the book stays.
+- **A provisional book is promoted first.** A book a reader submission or Goodreads import made, not yet reviewed, is made public (the effect of `BookSubmissions::Approve`, without a claim lease) before the row is written, and every open submission on it closes as approved with `reviewed_via: api`. A refused write never promotes. Otherwise a curated row would sit unranked, because the ranking calculator excludes provisional books.
+- **`request_book` is the way to add a book the catalogue lacks** (`POST /api/v1/admin/book_submissions`). It checks the catalogue first and, on a hit, returns the books and writes nothing. Otherwise it queues a submission with origin `admin`, and the agent polls `get_book_submission` until `added`, `needs_details` or `failed`. A repeat request for the same input on the same list returns the one still queued or being looked up as `existing`, with its stored `list_position`; once the earlier request ended (`added`, `needs_details`, `failed`) the same request is a new row.
+- **The prompt's row rules.** Change a row only where the source contradicts it; never add a row the source does not name; search the catalogue before requesting a book; pass the source's position; wait for each request to settle before `finish_list_audit`; keep `items_need_revision` true while anything is left unfixed and say what in the note. The agent never sets it back to false (see below).
+- **The audit record.** The `before` and `after` snapshots also hold `items` (`id`, `book_id`, `position` per row, ordered by id). `changes` gains `items_added`, `items_removed` and `items_changed` (per row, `book_id` and/or `position` from/to). They are compared only when both snapshots have `items`, so audits made before this shipped show none. `changes` also lists `pending_submissions`: the ids of admin requests still queued or being looked up on the list when the audit finished (one that ended `needs_details` is not pending: nothing can move it on). `finish_list_audit` does not refuse to finish for them, because a stuck job would otherwise block the audit. The admin Audits card shows all four.
+- **No ranking refresh.** Row changes move no ranking until someone refreshes in admin.
 
 ## Gaps
 

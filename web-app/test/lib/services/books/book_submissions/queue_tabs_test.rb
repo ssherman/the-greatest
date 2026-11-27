@@ -36,6 +36,24 @@ module Services
           assert_includes ids("all"), @looking.id
         end
 
+        test "admin rows are in neither agent tab" do
+          admin_review = reviewable_submission(origin: :admin)
+          admin_details = reviewable_submission(book: nil, status: :needs_details, created_book: false, origin: :admin)
+
+          assert_not_includes ids("needs_review") + ids("needs_details"), admin_review.id
+          assert_not_includes ids("needs_review") + ids("needs_details"), admin_details.id
+          assert_includes ids("needs_review"), @review.id
+          assert_includes ids("needs_details"), @details.id
+        end
+
+        test "the failed tab leaves out admin rows, which have nothing to do, but all keeps them" do
+          admin_failed = reviewable_submission(book: nil, status: :failed, review_status: :not_needed, created_book: false, origin: :admin)
+
+          assert_not_includes ids("failed"), admin_failed.id
+          assert_includes ids("failed"), @failed.id
+          assert_includes ids("all"), admin_failed.id
+        end
+
         test "needs review and needs details leave out a row nobody can act on" do
           assert_not_includes ids("needs_review") + ids("needs_details"), @looking.id
           assert_not_includes ids("needs_review") + ids("needs_details"), @human.id

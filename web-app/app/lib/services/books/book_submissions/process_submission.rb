@@ -3,7 +3,8 @@
 module Services
   module Books
     module BookSubmissions
-      # Takes one reader's submission from its input to a book on their list.
+      # Takes one submission, a reader's or an admin agent's, from its input to a
+      # book (and its list row, if it names a list).
       # Runs in ProcessBookSubmissionJob, never in a web request. (Not named
       # Process: that would shadow Ruby's ::Process in this namespace.)
       #
@@ -21,7 +22,7 @@ module Services
       # A submission that already has its book skips straight to step 2, so a
       # crash never loses the list item and never makes a second book. Once
       # the book exists a deleted list just means no item; the submission is
-      # still added. Before it exists, a missing user or list means cancelled.
+      # still added. Before it exists, a missing user means cancelled, and so does a missing list for a reader row (an admin row has no user list).
       #
       # Retries are for a source that is down (see RetrySchedule): the
       # resolve step unavailable, or an unmatched finder answer that fell back
@@ -102,7 +103,8 @@ module Services
         def run
           return done unless claim
           return finish(@submission.book) if @submission.book
-          return cancel unless @submission.user && @submission.user_list
+          return cancel unless @submission.user
+          return cancel unless @submission.user_list || @submission.origin_admin?
 
           resolved = ResolveInput.call(submission: @submission)
           case resolved.data[:outcome]
@@ -204,7 +206,17 @@ module Services
         # Goodreads import revert of two) can hold that KEY SHARE from one and then
         # wait for the book this run holds: the two deadlock. Nothing is lost by
         # it, and if this run is the one Postgres stops, the job is retried.
+        #
+        # An admin agent's row (origin admin) goes on a books list instead, and a
+        # provisional book is promoted first, before the transaction: promotion
+        # takes the readers' locks and then the book FOR UPDATE (Approve's order),
+        # which inside this transaction would be taken after the book FOR KEY SHARE.
+        # Inside, the book is public, so AdminItems.create takes no lock of its own.
+        # A deleted list or a book gone for good ends the row as for a reader.
         def finish(book)
+          book = promote_for_admin(book) if @submission.origin_admin?
+          return done unless book
+
           settled = nil
           item = nil
           ActiveRecord::Base.transaction do
@@ -216,9 +228,27 @@ module Services
 
           # Lookups only for the provisional book this run made: a book merged into
           # or promoted to the catalog since is not this feature's to enrich.
-          StartLookups.call(book: settled) if @submission.created_book? && settled.id == book.id && settled.provisional?
+          StartLookups.call(book: settled) if !@submission.origin_admin? && @submission.created_book? && settled.id == book.id && settled.provisional?
           mark_added(item)
           done
+        end
+
+        # Promotes a provisional book for an admin row; nil when the book is gone.
+        # A conflict means the book was deleted or merged away: the submission's
+        # book_id is re-read once, as lock_book does.
+        def promote_for_admin(book)
+          2.times do
+            return book unless book.provisional?
+
+            promoted = ::Services::Books::PromoteProvisionalBook.call(book: book, user: @submission.user)
+            return promoted.data[:book] if promoted.success?
+            raise ListAddFailed, "could not promote book #{book.id}: #{promoted.errors.join("; ")}" unless promoted.data[:conflict]
+
+            id = ::Books::BookSubmission.where(id: @submission.id).pick(:book_id)
+            book = id && ::Books::Book.find_by(id: id)
+            return nil unless book
+          end
+          nil
         end
 
         def lock_book(book)
@@ -238,10 +268,29 @@ module Services
         # written to a row that has gone cancelled).
         def mark_added(item)
           ::Books::BookSubmission.where(id: @submission.id, status: ::Books::BookSubmission::IN_PROGRESS_STATUSES)
-            .update_all(status: ::Books::BookSubmission.statuses[:added], user_list_item_id: item&.id, next_attempt_at: nil, updated_at: Time.current)
+            .update_all(:status => ::Books::BookSubmission.statuses[:added], :next_attempt_at => nil, :updated_at => Time.current,
+              (@submission.origin_admin? ? :list_item_id : :user_list_item_id) => item&.id)
+        end
+
+        # An existing row for the book is recorded (looked up first, and again after
+        # a failure in case a racing write made it); any other failure raises.
+        def add_to_admin_list(book)
+          list = @submission.list
+          return unless list
+
+          existing = -> { ::ListItem.find_by(list: list, listable: book) }
+          found = existing.call
+          return found if found
+
+          result = ::Services::Lists::AdminItems.create(list: list, book: book, position: @submission.list_position, user: @submission.user)
+          return result.data[:item] if result.success?
+
+          existing.call || raise(ListAddFailed, "could not add book #{book.id} to list #{list.id}: #{result.errors.join("; ")}")
         end
 
         def add_to_list(book)
+          return add_to_admin_list(book) if @submission.origin_admin?
+
           list = @submission.user_list
           user = @submission.user
           return unless list && user

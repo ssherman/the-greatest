@@ -7,9 +7,9 @@ module Api
     include McpRpcHelpers
 
     READ_TOOLS = %w[search_admin_lists get_admin_list list_admin_list_items list_admin_penalties search_admin_books search_admin_authors search_admin_categories get_admin_category list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict get_book_identifiers get_author_identifiers find_by_identifier get_book_descriptions get_author_descriptions get_admin_book get_admin_author list_admin_series get_admin_series list_enrichment_queues get_enrichment_queue fetch_page list_book_submissions get_book_submission list_admin_news_posts get_admin_news_post list_news_topics].freeze
-    WRITE_TOOLS = %w[create_admin_author create_admin_category update_admin_category tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author create_admin_series update_admin_series add_series_book update_series_book remove_series_book dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict claim_enrichment_items submit_enrichment_item skip_enrichment_item claim_book_submissions supply_book_submission_details skip_book_submission update_admin_list attach_list_penalty detach_list_penalty start_list_audit finish_list_audit release_list_audit create_news_post update_news_post publish_news_post unpublish_news_post].freeze
+    WRITE_TOOLS = %w[create_admin_author create_admin_category update_admin_category tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author create_admin_series update_admin_series add_series_book update_series_book remove_series_book dismiss_duplicate_candidate review_match_decision add_book_identifier add_author_identifier add_book_description add_author_description update_description set_preferred_description update_book update_author reject_repair_verdict correct_repair_verdict claim_enrichment_items submit_enrichment_item skip_enrichment_item request_book claim_book_submissions supply_book_submission_details skip_book_submission update_admin_list attach_list_penalty detach_list_penalty start_list_audit finish_list_audit release_list_audit create_news_post update_news_post publish_news_post unpublish_news_post create_admin_list_item update_admin_list_item delete_admin_list_item].freeze
     MERGE_TOOLS = %w[delete_admin_author delete_admin_category delete_admin_series merge_admin_series merge_categories merge_book merge_author merge_duplicate_candidate reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts approve_book_submission merge_book_submission reject_book_submission].freeze
-    DESTRUCTIVE_TOOLS = %w[delete_admin_author delete_admin_series merge_admin_series remove_series_book detach_list_penalty merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author remove_book_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts merge_book_submission reject_book_submission].freeze
+    DESTRUCTIVE_TOOLS = %w[delete_admin_author delete_admin_series merge_admin_series remove_series_book detach_list_penalty merge_categories merge_book merge_author merge_duplicate_candidate delete_admin_category untag_book untag_author remove_book_author reject_match_decision_link remove_book_identifier remove_author_identifier delete_description approve_repair_verdict bulk_approve_repair_verdicts merge_book_submission reject_book_submission delete_admin_list_item].freeze
 
     setup do
       host! "dev-new.thegreatestbooks.org"
@@ -59,13 +59,13 @@ module Api
       tools = listed_tools(@write_secret)
 
       assert_equal (READ_TOOLS + WRITE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
-      assert_equal %w[detach_list_penalty remove_book_author remove_series_book untag_author untag_book], destructive_names(tools).sort
+      assert_equal %w[delete_admin_list_item detach_list_penalty remove_book_author remove_series_book untag_author untag_book], destructive_names(tools).sort
     end
 
-    test "a merge token lists all ninety-one tools" do
+    test "a merge token lists all ninety-five tools" do
       tools = listed_tools(ApiTokenSecrets::ADMIN)
 
-      assert_equal 91, tools.size
+      assert_equal 95, tools.size
       assert_equal (READ_TOOLS + WRITE_TOOLS + MERGE_TOOLS).sort, tools.map { |tool| tool["name"] }.sort
       assert_equal DESTRUCTIVE_TOOLS.sort, destructive_names(tools).sort
     end

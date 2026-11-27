@@ -75,7 +75,7 @@ class Books::My::BookSubmissionsController < ApplicationController
   private
 
   def change(permission)
-    submission = current_user.book_submissions.find(params[:id])
+    submission = current_user.book_submissions.origin_reader.find(params[:id])
     authorize submission, permission
     result = yield submission
     list = submission.user_list_id && owned_books_lists.find_by(id: submission.user_list_id)
@@ -100,7 +100,7 @@ class Books::My::BookSubmissionsController < ApplicationController
   # What the strip shows: every open row, and the finished ones the reader has
   # not dismissed, except a cancelled one that was not rejected. Newest first.
   def strip_submissions(list)
-    base = Books::BookSubmission.visible.where(user_id: current_user.id, user_list_id: list.id)
+    base = Books::BookSubmission.origin_reader.visible.where(user_id: current_user.id, user_list_id: list.id)
     base.where.not(status: :cancelled).or(base.where(review_status: :rejected))
       .includes(:book).order(created_at: :desc, id: :desc).limit(STRIP_LIMIT)
   end
@@ -112,7 +112,7 @@ class Books::My::BookSubmissionsController < ApplicationController
   def read_strip(list)
     read_at = Time.current
     rows = strip_submissions(list).to_a
-    in_progress = Books::BookSubmission.visible.where(user_id: current_user.id, user_list_id: list.id, status: Books::BookSubmission::IN_PROGRESS_STATUSES).exists?
+    in_progress = Books::BookSubmission.origin_reader.visible.where(user_id: current_user.id, user_list_id: list.id, status: Books::BookSubmission::IN_PROGRESS_STATUSES).exists?
     [rows, in_progress, read_at]
   end
 
@@ -137,7 +137,7 @@ class Books::My::BookSubmissionsController < ApplicationController
 
     shown = rows.map(&:id)
     shown_added = rows.select(&:added?).map(&:id)
-    pending = Books::BookSubmission.where(user_id: current_user.id, user_list_id: list.id, status: :added, announced_at: nil)
+    pending = Books::BookSubmission.origin_reader.where(user_id: current_user.id, user_list_id: list.id, status: :added, announced_at: nil)
     unshown = pending.where.not(id: shown).where(created_at: ...read_at)
     pending = pending.where(id: shown_added).or(unshown)
     changed = pending.update_all(announced_at: Time.current).positive?

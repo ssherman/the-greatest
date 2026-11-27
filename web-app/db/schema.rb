@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_25_053411) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_150532) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -240,8 +240,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_053411) do
     t.integer "sweeps", default: 0, null: false
     t.integer "fetch_errors", default: 0, null: false
     t.integer "claims", default: 0, null: false
+    t.integer "origin", default: 0, null: false
+    t.bigint "list_id"
+    t.integer "list_position"
+    t.bigint "list_item_id"
     t.index ["book_id"], name: "index_books_book_submissions_on_book_id"
     t.index ["claimed_by_id"], name: "index_books_book_submissions_on_claimed_by_id"
+    t.index ["list_id"], name: "index_books_book_submissions_on_list_id"
+    t.index ["list_item_id"], name: "index_books_book_submissions_on_list_item_id"
     t.index ["match_decision_id"], name: "index_books_book_submissions_on_match_decision_id"
     t.index ["reviewed_by_id"], name: "index_books_book_submissions_on_reviewed_by_id"
     t.index ["signature"], name: "index_books_book_submissions_on_signature"
@@ -249,6 +255,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_053411) do
     t.index ["user_id", "created_at"], name: "index_books_book_submissions_on_user_id_and_created_at"
     t.index ["user_list_id"], name: "index_books_book_submissions_on_user_list_id"
     t.index ["user_list_item_id"], name: "index_books_book_submissions_on_user_list_item_id"
+    t.check_constraint "user_list_id IS NULL OR list_id IS NULL", name: "book_submissions_one_list_target"
   end
 
   create_table "books_books", force: :cascade do |t|
@@ -2002,6 +2009,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_053411) do
   add_foreign_key "books_book_relationships", "books_books", column: "book_id"
   add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
   add_foreign_key "books_book_submissions", "books_books", column: "book_id", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "list_items", on_delete: :nullify
+  add_foreign_key "books_book_submissions", "lists", on_delete: :nullify
   add_foreign_key "books_book_submissions", "match_decisions", on_delete: :nullify
   add_foreign_key "books_book_submissions", "user_list_items", on_delete: :nullify
   add_foreign_key "books_book_submissions", "user_lists", on_delete: :nullify

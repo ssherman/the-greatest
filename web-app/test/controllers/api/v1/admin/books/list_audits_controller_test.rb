@@ -139,6 +139,16 @@ module Api
             assert_response :forbidden
           end
 
+          test "finish conforms when an unlinked row was added during the audit" do
+            start({list_id: @first.id})
+            audit_id = json[:data][:audit][:id]
+            row = ListItem.create!(list: @first, listable: nil, position: 1)
+
+            finish(audit_id, {verdict: "unverifiable", note: "n", sources: []})
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal [{id: row.id, book_id: nil, position: 1}], json[:data][:changes][:items_added]
+          end
+
           test "finish records the verdict and returns the changes made since the audit began" do
             start({list_id: @first.id})
             audit_id = json[:data][:audit][:id]

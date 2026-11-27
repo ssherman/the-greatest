@@ -19,6 +19,16 @@ module Services
             user: @admin, via: via, lease_token: lease_token, note: note)
         end
 
+        test "an admin row is refused" do
+          @submission.update_columns(origin: ::Books::BookSubmission.origins[:admin])
+          before = @submission.reload.attributes
+
+          [supply, supply(via: "admin_ui")].each do |result|
+            assert_failure result, :invalid, "requested by an admin agent"
+          end
+          assert_equal before, fresh(@submission).attributes
+        end
+
         test "stores the details, resets the row to queued and queues the job" do
           ::Books::ProcessBookSubmissionJob.expects(:perform_async).with(@submission.id).once
 

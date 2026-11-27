@@ -8,6 +8,7 @@ module Services
       class CreateBookTest < ActiveSupport::TestCase
         include GoodreadsImportHelper
         include BookSubmissionHelper
+        include BookSubmissionReviewHelper
 
         setup do
           stub_resolution_services
@@ -36,6 +37,72 @@ module Services
             assert_nil submission.reload.book_id
           end
           assert_equal before, ::Books::Book.count
+        end
+
+        def admin_row(**attributes)
+          ::Books::BookSubmission.create!({user: users(:admin_user), user_list: nil, origin: :admin, list: lists(:books_list),
+                                           list_position: 3, input_method: :title_authors, typed_title: "The Quiet Year",
+                                           typed_author_names: ["Anna Brenner"], status: :looking_up}.merge(attributes))
+        end
+
+        test "an admin row creates a catalog book with full enrichment" do
+          submission = admin_row
+          book = ::Books::Book.create!(title: "The Quiet Year", provisional: false)
+          ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Anna Brenner"), position: 1)
+          importer = mock("importer")
+          importer.expects(:call).with(has_entries(provisional: false, enrich: true, stamp_identifiers: true, query_identifier_source: :admin))
+            .returns(stub(item: book, created?: true))
+
+          result = create(submission: submission, importer: importer)
+
+          assert result.success?
+          submission.reload
+          assert_equal ["not_needed", true, book], [submission.review_status, submission.created_book, submission.book]
+        end
+
+        test "an admin row's new book takes its matched provisional author into the catalog" do
+          stub_review_side_effects
+          submission = admin_row
+          book = ::Books::Book.create!(title: "The Quiet Year", provisional: false)
+          author = ::Books::Author.create!(name: "Anna Brenner", provisional: true)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          importer = mock("importer")
+          importer.expects(:call).returns(stub(item: book, created?: true))
+
+          assert create(submission: submission, importer: importer).success?
+          assert_not author.reload.provisional?
+        end
+
+        test "a reader row's new book leaves a provisional author provisional" do
+          submission = @submission
+          book = ::Books::Book.create!(title: "Reader Year", provisional: true)
+          author = ::Books::Author.create!(name: "Reader Author", provisional: true)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          importer = mock("importer")
+          importer.expects(:call).returns(stub(item: book, created?: true))
+
+          assert create(submission: submission, importer: importer).success?
+          assert author.reload.provisional?
+        end
+
+        test "an admin row with no list is not no_owner" do
+          submission = admin_row
+          ::Books::BookSubmission.where(id: submission.id).update_all(list_id: nil)
+
+          result = create(submission: submission.reload, match: finder_match(subject: submission, record: books_books(:war_and_peace)))
+
+          assert result.success?
+          assert_equal :matched, result.data[:outcome]
+        end
+
+        test "an admin row whose user is gone is no_owner" do
+          submission = admin_row
+          ::Books::BookSubmission.where(id: submission.id).update_all(user_id: nil)
+
+          result = create(submission: submission.reload)
+
+          assert_not result.success?
+          assert_equal :no_owner, result.data[:outcome]
         end
 
         test "a submission that already has its book resumes even when its list is gone" do

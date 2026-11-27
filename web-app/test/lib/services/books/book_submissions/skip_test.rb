@@ -24,6 +24,14 @@ module Services
           assert_not_includes ::Books::BookSubmission.claimable.pluck(:id), row.id
         end
 
+        test "an admin row is refused with the same message" do
+          @submission.update_columns(origin: ::Books::BookSubmission.origins[:admin])
+          before = @submission.reload.attributes
+
+          assert_failure skip, :invalid, "requested by an admin agent"
+          assert_equal before, fresh(@submission).attributes
+        end
+
         test "the lease is judged before the reason" do
           assert_failure skip(lease_token: "x", reason: ""), :conflict
           @submission.update_columns(lease_expires_at: 1.minute.ago)

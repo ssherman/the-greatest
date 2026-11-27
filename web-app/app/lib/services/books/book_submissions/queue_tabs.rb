@@ -17,7 +17,7 @@ module Services
           "approved" => -> { ::Books::BookSubmission.review_approved },
           "merged" => -> { ::Books::BookSubmission.review_merged },
           "rejected" => -> { ::Books::BookSubmission.review_rejected },
-          "failed" => -> { ::Books::BookSubmission.failed.where.not(review_status: :rejected) },
+          "failed" => -> { ::Books::BookSubmission.origin_reader.failed.where.not(review_status: :rejected) },
           "all" => -> { ::Books::BookSubmission.all }
         }.freeze
         KEYS = TABS.keys.freeze

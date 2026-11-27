@@ -18,8 +18,10 @@
 #  isbn13                :string
 #  lease_expires_at      :datetime
 #  lease_token           :string
+#  list_position         :integer
 #  lookup                :jsonb
 #  next_attempt_at       :datetime
+#  origin                :integer          default(0), not null
 #  processing_started_at :datetime
 #  raw_input             :text
 #  resolved_author_names :jsonb
@@ -40,6 +42,8 @@
 #  book_id               :bigint
 #  claimed_by_id         :bigint
 #  goodreads_book_id     :bigint
+#  list_id               :bigint
+#  list_item_id          :bigint
 #  match_decision_id     :bigint
 #  reviewed_by_id        :bigint
 #  user_id               :bigint
@@ -50,6 +54,8 @@
 #
 #  index_books_book_submissions_on_book_id                   (book_id)
 #  index_books_book_submissions_on_claimed_by_id             (claimed_by_id)
+#  index_books_book_submissions_on_list_id                   (list_id)
+#  index_books_book_submissions_on_list_item_id              (list_item_id)
 #  index_books_book_submissions_on_match_decision_id         (match_decision_id)
 #  index_books_book_submissions_on_reviewed_by_id            (reviewed_by_id)
 #  index_books_book_submissions_on_signature                 (signature)
@@ -62,6 +68,8 @@
 #
 #  fk_rails_...  (book_id => books_books.id) ON DELETE => nullify
 #  fk_rails_...  (claimed_by_id => users.id) ON DELETE => nullify
+#  fk_rails_...  (list_id => lists.id) ON DELETE => nullify
+#  fk_rails_...  (list_item_id => list_items.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
 #  fk_rails_...  (reviewed_by_id => users.id) ON DELETE => nullify
 #  fk_rails_...  (user_id => users.id) ON DELETE => nullify
@@ -77,12 +85,16 @@ module Books
     belongs_to :book, class_name: "::Books::Book", optional: true
     belongs_to :match_decision, optional: true
     belongs_to :user_list_item, optional: true
+    # An admin agent's request targets a books list instead of a reader's list.
+    belongs_to :list, class_name: "::Books::List", optional: true
+    belongs_to :list_item, optional: true
     belongs_to :reviewed_by, class_name: "::User", optional: true
     belongs_to :claimed_by, class_name: "::User", optional: true
 
     enum :input_method, {goodreads: 0, amazon: 1, isbn: 2, title_authors: 3}, prefix: :method
     enum :status, {queued: 0, looking_up: 1, needs_details: 2, added: 3, failed: 4, cancelled: 5}
     enum :review_status, {not_needed: 0, pending: 1, approved: 2, merged: 3, rejected: 4, needs_human: 5}, prefix: :review
+    enum :origin, {reader: 0, admin: 1}, prefix: :origin
     enum :reviewed_via, {api: 0, admin_ui: 1, system: 2}, prefix: true
 
     OPEN_STATUSES = %w[queued looking_up needs_details].freeze
@@ -109,15 +121,20 @@ module Books
     # rejected), whatever its status.
     # A failed row that got a book and has no review pending (not_needed) is
     # left out: an agent can do nothing with it, the admin page's Retry resumes it.
+    # Only a reader's request: an admin agent's rows are worked by that agent,
+    # never by the shared queue.
     scope :reviewable, -> {
-      where(status: :added, review_status: :pending)
-        .or(where(review_status: %i[not_needed pending], status: %i[needs_details failed])
-          .where("books_book_submissions.book_id IS NULL OR books_book_submissions.review_status = ?", review_statuses[:pending]))
+      origin_reader.merge(
+        where(status: :added, review_status: :pending)
+          .or(where(review_status: %i[not_needed pending], status: %i[needs_details failed])
+            .where("books_book_submissions.book_id IS NULL OR books_book_submissions.review_status = ?", review_statuses[:pending]))
+      )
     }
     scope :claimable, -> { reviewable.where("lease_expires_at IS NULL OR lease_expires_at <= ?", Time.current) }
 
     validate :carries_only_its_own_input
     validate :title_and_authors_are_usable, if: :method_title_authors?
+    validates :list_position, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
 
     def in_progress?
       IN_PROGRESS_STATUSES.include?(status)
@@ -129,7 +146,7 @@ module Books
 
     # A book this request created that nobody has merged away or rejected.
     def user_added?
-      created_book? && !review_merged? && !review_rejected?
+      origin_reader? && created_book? && !review_merged? && !review_rejected?
     end
 
     private

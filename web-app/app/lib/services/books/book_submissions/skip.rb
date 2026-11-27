@@ -25,6 +25,7 @@ module Services
         def call
           row = ::Books::BookSubmission.find_by(id: @submission.id)
           return Lease.failure(:conflict, "the submission no longer exists") unless row
+          return Lease.failure(:invalid, Lease::ADMIN_ROW_REFUSAL) if row.origin_admin?
           return Lease.failure(:conflict, "the submission is #{row.review_status}, not awaiting review") unless reviewable?(row)
 
           refusal = Lease.lease_failure(row, @token, @via) || Lease.input_failure(note: @reason, sources: [])

@@ -59,6 +59,102 @@ module Services
           assert_equal items_for(submission.book).find_by(user_list_id: submission.user_list_id), submission.user_list_item
         end
 
+        # ---- admin rows ----------------------------------------------------
+
+        def admin_submission(**attributes)
+          ::Books::BookSubmission.create!({user: users(:admin_user), user_list: nil, origin: :admin, list: lists(:books_list),
+                                           list_position: 7, input_method: :title_authors, typed_title: "War and Peace",
+                                           typed_author_names: ["Leo Tolstoy"]}.merge(attributes))
+        end
+
+        test "an admin row lands its book on the books list at its position" do
+          submission = admin_submission
+          war_and_peace = books_books(:war_and_peace)
+          stub_finder(finder_match(subject: submission, record: war_and_peace))
+
+          result = process(submission)
+
+          submission.reload
+          assert_equal :done, result.data[:outcome]
+          assert_equal "added", submission.status
+          item = submission.list_item
+          assert_equal [lists(:books_list), war_and_peace, 7, true], [item.list, item.listable, item.position, item.verified]
+          assert_nil submission.user_list_item_id
+        end
+
+        test "an admin row whose book is already on the list records that row" do
+          submission = admin_submission
+          war_and_peace = books_books(:war_and_peace)
+          existing = ListItem.create!(list: lists(:books_list), listable: war_and_peace, position: 40, verified: true)
+          stub_finder(finder_match(subject: submission, record: war_and_peace))
+
+          assert_no_difference "ListItem.count" do
+            process(submission)
+          end
+
+          submission.reload
+          assert_equal ["added", existing], [submission.status, submission.list_item]
+        end
+
+        test "an admin row matched to a provisional book promotes it before adding" do
+          ::Books::PurgeShowPagesJob.stubs(:perform_async)
+          book = provisional_book
+          reader = book_submission(book: book, created_book: true, status: :added, review_status: :pending)
+          submission = admin_submission(typed_title: "The Quiet Year", typed_author_names: ["Anna Brenner"])
+          stub_finder(finder_match(subject: submission, record: book))
+
+          process(submission)
+
+          assert_not book.reload.provisional?
+          assert_equal "approved", reader.reload.review_status
+          assert_equal book, submission.reload.list_item.listable
+          assert_equal "added", submission.status
+        end
+
+        test "an admin row with a deleted list ends added with no item" do
+          submission = admin_submission
+          stub_finder(finder_match(subject: submission, record: books_books(:war_and_peace)))
+          ::Books::BookSubmission.where(id: submission.id).update_all(list_id: nil)
+
+          assert_no_difference "ListItem.count" do
+            process(submission.reload)
+          end
+
+          submission.reload
+          assert_equal "added", submission.status
+          assert_nil submission.list_item_id
+        end
+
+        test "an admin row whose list refuses the row raises" do
+          submission = admin_submission(list_position: 7)
+          war_and_peace = books_books(:war_and_peace)
+          stub_finder(finder_match(subject: submission, record: war_and_peace))
+          ::Services::Lists::AdminItems.stubs(:create).returns(
+            ::Services::Lists::AdminItems::Result.new(success?: false, data: {}, errors: ["Position is invalid"])
+          )
+
+          assert_raises(ProcessSubmission::ListAddFailed) { process(submission) }
+        end
+
+        test "StartLookups never runs for an admin row" do
+          submission = admin_submission
+          stub_finder(finder_match(subject: submission))
+          StartLookups.expects(:call).never
+
+          process(submission)
+
+          assert_equal "added", submission.reload.status
+        end
+
+        test "an admin row whose user is gone is cancelled" do
+          submission = admin_submission
+          ::Books::BookSubmission.where(id: submission.id).update_all(user_id: nil)
+
+          process(submission.reload)
+
+          assert_equal "cancelled", submission.reload.status
+        end
+
         # ---- matches -------------------------------------------------------
 
         test "a catalog book the finder matches goes on the list and needs no review" do

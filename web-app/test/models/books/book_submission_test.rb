@@ -20,8 +20,10 @@ require "test_helper"
 #  isbn13                :string
 #  lease_expires_at      :datetime
 #  lease_token           :string
+#  list_position         :integer
 #  lookup                :jsonb
 #  next_attempt_at       :datetime
+#  origin                :integer          default(0), not null
 #  processing_started_at :datetime
 #  raw_input             :text
 #  resolved_author_names :jsonb
@@ -42,6 +44,8 @@ require "test_helper"
 #  book_id               :bigint
 #  claimed_by_id         :bigint
 #  goodreads_book_id     :bigint
+#  list_id               :bigint
+#  list_item_id          :bigint
 #  match_decision_id     :bigint
 #  reviewed_by_id        :bigint
 #  user_id               :bigint
@@ -52,6 +56,8 @@ require "test_helper"
 #
 #  index_books_book_submissions_on_book_id                   (book_id)
 #  index_books_book_submissions_on_claimed_by_id             (claimed_by_id)
+#  index_books_book_submissions_on_list_id                   (list_id)
+#  index_books_book_submissions_on_list_item_id              (list_item_id)
 #  index_books_book_submissions_on_match_decision_id         (match_decision_id)
 #  index_books_book_submissions_on_reviewed_by_id            (reviewed_by_id)
 #  index_books_book_submissions_on_signature                 (signature)
@@ -64,6 +70,8 @@ require "test_helper"
 #
 #  fk_rails_...  (book_id => books_books.id) ON DELETE => nullify
 #  fk_rails_...  (claimed_by_id => users.id) ON DELETE => nullify
+#  fk_rails_...  (list_id => lists.id) ON DELETE => nullify
+#  fk_rails_...  (list_item_id => list_items.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
 #  fk_rails_...  (reviewed_by_id => users.id) ON DELETE => nullify
 #  fk_rails_...  (user_id => users.id) ON DELETE => nullify
@@ -194,6 +202,46 @@ module Books
 
       submission.assign_attributes(review_status: :pending, created_book: false)
       assert_not submission.user_added?
+    end
+
+    test "user_added? is false for an admin request" do
+      submission = books_book_submissions(:added_title_authors)
+      submission.origin = :admin
+
+      assert_not submission.user_added?
+    end
+
+    test "a row may not target both a user list and a books list" do
+      list = ::Books::List.create!(name: "Target", status: :active)
+      submission = build(user_list: user_lists(:regular_user_books_read), list: list)
+
+      assert_raises(ActiveRecord::StatementInvalid) { submission.save!(validate: false) }
+    end
+
+    test "an admin row's list_position must be positive" do
+      list = ::Books::List.create!(name: "Target", status: :active)
+
+      [0, -1].each do |position|
+        submission = build(user_list: nil, list: list, origin: :admin, list_position: position)
+        assert_not submission.valid?, position
+        assert submission.errors.key?(:list_position)
+      end
+      assert build(user_list: nil, list: list, origin: :admin, list_position: 3).valid?
+      assert build(user_list: nil, list: list, origin: :admin, list_position: nil).valid?
+    end
+
+    test "deleting the row an admin submission recorded nulls list_item_id" do
+      list = ::Books::List.create!(name: "Target", status: :active)
+      item = ListItem.create!(list: list, listable: books_books(:war_and_peace), position: 1)
+      submission = build(user_list: nil, list: list, list_item: item, origin: :admin).tap(&:save!)
+
+      item.destroy!
+
+      assert_nil submission.reload.list_item_id
+    end
+
+    test "origin defaults to reader" do
+      assert_predicate build, :origin_reader?
     end
 
     test "deleting the user, list or book keeps the row with a null id" do

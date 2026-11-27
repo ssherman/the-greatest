@@ -78,7 +78,7 @@ module Api
 
             assert_equal [@submission.id, details.id], json["data"].map { |row| row["id"] }
             assert_equal %w[id method raw_input typed_title typed_author_names resolved_title resolved_author_names parsed_ids status
-              review_status needs lookup decision book list_types submitter review created_at updated_at], json["data"].first.keys
+              review_status origin list_id list_position list_item_id needs lookup decision book list_types submitter review created_at updated_at], json["data"].first.keys
           end
 
           test "needs says whether a book awaits a decision, details are missing, or nothing is for an agent" do
@@ -89,6 +89,17 @@ module Api
             show(details.id)
             assert_equal "details", json["data"]["needs"]
             show(held.id)
+            assert_nil json["data"]["needs"]
+          end
+
+          test "needs is nil for an admin row, which no agent tool can move on" do
+            row = ::Books::BookSubmission.create!(
+              user: users(:admin_user), origin: :admin, input_method: :title_authors, typed_title: "Admin Ask",
+              typed_author_names: ["A"], status: :needs_details, review_status: :not_needed
+            )
+            show(row.id)
+
+            assert_equal "needs_details", json["data"]["status"]
             assert_nil json["data"]["needs"]
           end
 
@@ -586,6 +597,117 @@ module Api
               forbidden.each { |text| assert_not_includes body, text, "#{label} leaked #{text.inspect}" }
               assert_no_match(/"(user_id|user_list_id|user_list_name|email|claimed_by(_id)?|lease_token|lease_expires_at|reviewed_by(_id)?)"/, body, label)
             end
+          end
+
+          def request_book(body, token: ApiTokenSecrets::ADMIN)
+            post "/api/v1/admin/book_submissions", params: body, as: :json, headers: bearer(token)
+          end
+
+          def title_request(extra = {})
+            {method: "title_authors", title: "A Brand New Request", authors: ["Nobody Known"]}.merge(extra)
+          end
+
+          test "request_book queues an admin submission on a books list and conforms" do
+            admin_list = lists(:books_list)
+            assert_difference -> { ::Books::BookSubmission.origin_admin.count }, 1 do
+              request_book(title_request(list_id: admin_list.id, position: 3))
+            end
+            assert_response :created
+            assert_api_response_conform(status: 201, api: :admin)
+
+            data = json["data"]
+            assert_equal "created", data["outcome"]
+            assert_equal ["admin", admin_list.id, 3, nil], data["submission"].values_at("origin", "list_id", "list_position", "list_item_id")
+            assert_equal "queued", data["submission"]["status"]
+          end
+
+          test "request_book works with no list" do
+            request_book(title_request)
+            assert_response :created
+            assert_api_response_conform(status: 201, api: :admin)
+            assert_nil json["data"]["submission"]["list_id"]
+          end
+
+          test "request_book repeated returns the existing submission with its stored position" do
+            list = lists(:books_list)
+            request_book(title_request(list_id: list.id, position: 3))
+            first = json["data"]["submission"]["id"]
+
+            assert_no_difference -> { ::Books::BookSubmission.count } do
+              request_book(title_request(list_id: list.id, position: 9))
+            end
+            assert_response :ok
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "existing", json["data"]["outcome"]
+            assert_equal [first, 3], [json["data"]["submission"]["id"], json["data"]["submission"]["list_position"]]
+          end
+
+          test "request_book answers hits when the catalogue may already hold the book, and confirmed_new goes past them" do
+            book = books_books(:war_and_peace)
+            author = book.authors.first
+            body = {method: "title_authors", title: book.title, authors: [author.name]}
+
+            assert_no_difference -> { ::Books::BookSubmission.count } do
+              request_book(body)
+            end
+            assert_response :ok
+            assert_api_response_conform(status: 200, api: :admin)
+            assert_equal "hits", json["data"]["outcome"]
+            hit = json["data"]["books"].find { |row| row["id"] == book.id }
+            assert_equal [book.title, [author.name]], [hit["title"], hit["authors"]]
+
+            request_book(body.merge(confirmed_new: true))
+            assert_response :created
+            assert_equal "created", json["data"]["outcome"]
+          end
+
+          test "request_book: an unknown list and a music or games list are 404" do
+            request_book(title_request(list_id: 999_999_999))
+            assert_response :not_found
+            assert_api_response_conform(status: 404, api: :admin)
+
+            request_book(title_request(list_id: lists(:music_albums_list).id))
+            assert_response :not_found
+            request_book(title_request(list_id: lists(:games_list).id))
+            assert_response :not_found
+          end
+
+          test "request_book: refusals are 422" do
+            request_book({method: "isbn", isbn: "nope"})
+            assert_response :unprocessable_content
+            assert_api_response_conform(status: 422, api: :admin)
+
+            request_book(title_request(position: 2))
+            assert_response :unprocessable_content
+
+            generated = ::Books::List.create!(name: "Generated Requests", status: :approved, auto_generated_kind: :year_top, auto_generated_year: 1999)
+            request_book(title_request(list_id: generated.id))
+            assert_response :unprocessable_content
+          end
+
+          test "a reader-shaped body with user_list fields is refused" do
+            request_book(title_request(user_list_id: @list.id, list_type: "read"))
+            assert_response :unprocessable_content
+            assert_api_response_conform(status: 422, api: :admin)
+            assert_match(/user_list_id, list_type/, json["detail"])
+            assert_match(/confirmed_new/, json["detail"])
+          end
+
+          test "request_book: a wrong JSON type is a 400" do
+            [{list_id: "1"}, {list_id: 1.5}, {position: "2"}, {confirmed_new: "true"}].each do |bad|
+              request_book(title_request(bad))
+              assert_response :bad_request, bad.inspect
+              assert_api_response_conform(status: 400, api: :admin)
+            end
+            post "/api/v1/admin/book_submissions", params: "[1]", headers: bearer(ApiTokenSecrets::ADMIN).merge("Content-Type" => "application/json")
+            assert_response :bad_request
+          end
+
+          test "request_book needs the write scope" do
+            request_book(title_request, token: ApiTokenSecrets::ADMIN_READ)
+            assert_response :forbidden
+            assert_api_response_conform(status: 403, api: :admin)
+            assert_equal 1, ::Books::BookSubmission.count
           end
 
           test "reader text comes back as JSON strings and nothing else" do
