@@ -5,6 +5,7 @@ module Api
     module Admin
       module Books
         # GET  /api/v1/admin/book_submissions               -- the review queue; status and review_status filters, counts in meta
+        # POST /api/v1/admin/book_submissions               -- {method, goodreads_url|amazon_url|isbn|title+authors, list_id, position, confirmed_new}: ask for a book
         # GET  /api/v1/admin/book_submissions/:id           -- one submission with its lookups, finder decision and book
         # POST /api/v1/admin/book_submissions/claims        -- {limit}: lease a batch of submissions to decide
         # POST /api/v1/admin/book_submissions/:id/details   -- {lease_token, title, author_names, identifiers, note}: a request with no book
@@ -16,18 +17,20 @@ module Api
         # The agent side of the books users ask for that the catalogue lacks. Every rule lives in
         # Services::Books::BookSubmissions, shared with the admin page; this controller parses, authorizes and maps
         # Results: :conflict (a lost lease, a row already decided) is a 409, :invalid a 422. A body field of the
-        # wrong type is a 400, and keys it does not know are ignored. Root-anchor every ::Books:: reference in this
+        # wrong type is a 400, and keys it does not know are ignored (a request for a new book, `create`, is the
+        # exception: an unknown key is a 422 naming the accepted ones). Root-anchor every ::Books:: reference in this
         # namespace.
         class BookSubmissionsController < BaseController
           include ::Api::V1::Admin::StrictIds
           include EnrichmentQueueSupport
           include MergeFlow
 
-          require_scopes index: "books:admin:read", show: "books:admin:read",
+          require_scopes index: "books:admin:read", show: "books:admin:read", create: "books:admin:write",
             claim: "books:admin:write", details: "books:admin:write", skip: "books:admin:write",
             approve: "books:admin:merge", merge: "books:admin:merge", reject: "books:admin:merge"
 
           Submissions = ::Services::Books::BookSubmissions
+          REQUEST_FIELDS = %w[method goodreads_url amazon_url isbn title authors list_id position confirmed_new].freeze
           STATUSES = ::Books::BookSubmission.statuses.keys.freeze
           REVIEW_STATUSES = ::Books::BookSubmission.review_statuses.keys.freeze
 
@@ -49,6 +52,43 @@ module Api
             return if performed?
 
             render json: {data: BookSubmissionResource.one(submission)}
+          end
+
+          # An admin agent asking for a book the site may lack, optionally onto a books list at a position.
+          def create
+            return unless may?(:update?, nil)
+
+            body = required_body
+            unknown = body.keys - REQUEST_FIELDS
+            if unknown.any?
+              return render_problem(::Api::Problem.new(:unprocessable,
+                detail: "Unknown field#{"s" if unknown.size > 1}: #{unknown.join(", ")}. Accepted: #{REQUEST_FIELDS.join(", ")}."))
+            end
+
+            list_id = integer_field!(body, "list_id")
+            position = integer_field!(body, "position")
+            confirmed_new = body["confirmed_new"].nil? ? false : body["confirmed_new"]
+            invalid!("confirmed_new must be true or false") unless [true, false].include?(confirmed_new)
+            list = nil
+            if list_id
+              list = ::Books::List.find_by(id: list_id)
+              return render_problem(::Api::Problem.new(:not_found, detail: "No books list #{list_id}.")) unless list
+            end
+
+            result = Submissions::AdminRequest.call(user: acting_user, params: body.slice(*REQUEST_FIELDS - %w[list_id position confirmed_new]),
+              list: list, position: position, confirmed_new: confirmed_new)
+            unless result.success?
+              return render_problem(::Api::Problem.new(:unprocessable, detail: result.errors.to_sentence))
+            end
+
+            data = result.data
+            log("request", "outcome=#{data[:outcome]}")
+            if data[:outcome] == :hits
+              render json: {data: {outcome: "hits", books: data[:books].map { |book| hit(book) }}}
+            else
+              render json: {data: {outcome: data[:outcome].to_s, submission: BookSubmissionResource.one(data[:submission])}},
+                status: (data[:outcome] == :created) ? :created : :ok
+            end
           end
 
           def claim
@@ -187,6 +227,21 @@ module Api
               invalid!("limit must be an integer from 1 to #{Submissions::Claim::MAX_LIMIT}")
             end
             limit
+          end
+
+          # Absent or null is nil; anything else must be an integer.
+          def integer_field!(body, key)
+            value = body[key]
+            return nil if value.nil?
+
+            invalid!("#{key} must be an integer") unless value.is_a?(Integer)
+
+            value
+          end
+
+          def hit(book)
+            {id: book.id, title: book.title, authors: book.authors.map(&:name), first_published_year: book.first_published_year,
+             provisional: book.provisional}
           end
 
           def string_field!(key)

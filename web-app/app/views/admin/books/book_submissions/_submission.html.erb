@@ -17,6 +17,7 @@
         <% end %>
       </div>
       <div class="flex flex-wrap gap-1">
+        <% if submission.origin_admin? %><span class="badge badge-primary badge-sm" data-testid="submission-admin-request">Admin request</span><% end %>
         <span class="badge badge-ghost badge-sm"><%= submission.input_method.humanize %></span>
         <span class="badge badge-sm <%= status_class %>" data-testid="submission-status"><%= submission.status.humanize %></span>
         <span class="badge badge-sm <%= review_class %>" data-testid="submission-review"><%= submission.review_status.humanize %></span>
@@ -30,6 +31,7 @@
           <%= time_tag submission.created_at, submission.created_at.strftime("%b %d, %Y %H:%M") %>
           by <%= submission.user&.email || "a deleted user" %>
           <% if submission.user_list %>to <em><%= submission.user_list.name %></em><% end %>
+          <% if submission.list %>to <%= link_to submission.list.name, admin_books_list_path(submission.list), class: "link", data: {testid: "submission-target-list"} %><% if submission.list_position %> at position <%= submission.list_position %><% end %><% end %>
         </dd>
       </div>
       <div>

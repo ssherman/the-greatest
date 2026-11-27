@@ -18,7 +18,7 @@ module Api
         class BookSubmissionResource
           # The lookup answers an agent may see; "error_message" is deliberately not one.
           LOOKUP_KEYS = %w[source outcome title author_names year error_class].freeze
-          PRELOADS = [:user_list, :match_decision, {book: [:authors, :identifiers]}].freeze
+          PRELOADS = [:user_list, :list, :match_decision, {book: [:authors, :identifiers]}].freeze
           # The statuses in which a request that has no book, or a failed one, is work for an agent.
           DETAILS_STATUSES = %w[needs_details failed].freeze
 
@@ -73,6 +73,10 @@ module Api
               parsed_ids: {goodreads_book_id: @row.goodreads_book_id, asin: @row.asin, isbn13: @row.isbn13, isbn10: @row.isbn10},
               status: @row.status,
               review_status: @row.review_status,
+              origin: @row.origin,
+              list_id: @row.list_id,
+              list_position: @row.list_position,
+              list_item_id: @row.list_item_id,
               needs: needs,
               lookup: lookup,
               decision: decision,

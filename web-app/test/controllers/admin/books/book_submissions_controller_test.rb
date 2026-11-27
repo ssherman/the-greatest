@@ -95,6 +95,15 @@ module Admin
         assert_select "[data-testid=copy-agent-prompt]"
       end
 
+      test "an admin request with a target list renders on the queue" do
+        admin_row = reviewable_submission(user: @admin, user_list: nil, origin: :admin, list: lists(:books_list), list_position: 4)
+        sign_in_as(@admin, stub_auth: true)
+        get admin_books_book_submissions_path(submission_id: admin_row.id)
+
+        assert_response :success
+        assert_select "#submission-#{admin_row.id}"
+      end
+
       test "an unknown tab shows needs review" do
         sign_in_as(@admin, stub_auth: true)
         get admin_books_book_submissions_path(tab: "bogus; DROP")

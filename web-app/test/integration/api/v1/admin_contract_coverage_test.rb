@@ -647,6 +647,21 @@ module Api
           ["GET", "/api/v1/admin/book_submissions/{id}", "403"] => -> { get "/api/v1/admin/book_submissions/1", headers: bearer(MEMBER) },
           ["GET", "/api/v1/admin/book_submissions/{id}", "404"] => -> { get "/api/v1/admin/book_submissions/999999999", headers: bearer(READ) },
           ["GET", "/api/v1/admin/book_submissions/{id}", "429"] => -> { with_exhausted_limit { get "/api/v1/admin/book_submissions/1", headers: bearer(READ) } },
+          ["POST", "/api/v1/admin/book_submissions", "200"] => -> {
+            book = ::Books::Book.create!(title: "Coverage Held Book")
+            ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "Coverage Held Author"), position: 1)
+            post "/api/v1/admin/book_submissions", params: {method: "title_authors", title: book.title, authors: ["Coverage Held Author"]}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/book_submissions", "201"] => -> {
+            stub_review_side_effects
+            post "/api/v1/admin/book_submissions", params: {method: "title_authors", title: "Coverage Requested Book", authors: ["Coverage Author"], list_id: lists(:books_list).id, position: 2}, as: :json, headers: bearer(MERGE)
+          },
+          ["POST", "/api/v1/admin/book_submissions", "400"] => -> { post "/api/v1/admin/book_submissions", params: {method: "isbn", isbn: "9780140449136", position: "2"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions", "401"] => -> { post "/api/v1/admin/book_submissions", as: :json },
+          ["POST", "/api/v1/admin/book_submissions", "403"] => -> { post "/api/v1/admin/book_submissions", as: :json, headers: bearer(READ) },
+          ["POST", "/api/v1/admin/book_submissions", "404"] => -> { post "/api/v1/admin/book_submissions", params: {method: "isbn", isbn: "9780140449136", list_id: 999999999}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions", "422"] => -> { post "/api/v1/admin/book_submissions", params: {method: "isbn", isbn: "not an isbn"}, as: :json, headers: bearer(MERGE) },
+          ["POST", "/api/v1/admin/book_submissions", "429"] => -> { with_exhausted_limit { post "/api/v1/admin/book_submissions", as: :json, headers: bearer(MERGE) } },
           ["POST", "/api/v1/admin/book_submissions/claims", "200"] => -> {
             submission_row(leased: false)
             post "/api/v1/admin/book_submissions/claims", params: {limit: 1}, as: :json, headers: bearer(MERGE)

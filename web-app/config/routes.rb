@@ -773,6 +773,7 @@ Rails.application.routes.draw do
             post "enrichment_items/:id/submit", to: "enrichment_items#submit", constraints: {id: /\d+/}
             post "enrichment_items/:id/skip", to: "enrichment_items#skip", constraints: {id: /\d+/}
             get "book_submissions", to: "book_submissions#index"
+            post "book_submissions", to: "book_submissions#create"
             post "book_submissions/claims", to: "book_submissions#claim"
             get "book_submissions/:id", to: "book_submissions#show", constraints: {id: /\d+/}
             post "book_submissions/:id/details", to: "book_submissions#details", constraints: {id: /\d+/}

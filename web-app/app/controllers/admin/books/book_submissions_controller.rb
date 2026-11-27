@@ -10,7 +10,7 @@ class Admin::Books::BookSubmissionsController < Admin::Books::BaseController
   PER_PAGE = 50
   VIA = "admin_ui"
   Submissions = ::Services::Books::BookSubmissions
-  PRELOADS = [:user, :user_list, :reviewed_by, :match_decision, {book: [:authors, :submissions]}].freeze
+  PRELOADS = [:user, :user_list, :list, :reviewed_by, :match_decision, {book: [:authors, :submissions]}].freeze
 
   # Approving, merging and rejecting settle or destroy a book, so they take the delete gate.
   before_action :require_domain_delete!, only: [:approve, :merge, :reject]

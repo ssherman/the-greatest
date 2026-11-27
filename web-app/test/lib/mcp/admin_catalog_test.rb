@@ -11,7 +11,7 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 94, expected.size
+      assert_equal 95, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
@@ -21,7 +21,7 @@ module Mcp
         merge_author tag_book untag_book tag_author untag_author add_book_author update_book_author remove_book_author list_duplicate_candidates get_duplicate_candidate list_match_decisions get_match_decision list_repair_verdicts get_repair_verdict approve_repair_verdict reject_repair_verdict correct_repair_verdict bulk_approve_repair_verdicts get_book_identifiers get_author_identifiers get_book_descriptions get_author_descriptions get_admin_book get_admin_author create_admin_author delete_admin_author list_admin_series get_admin_series create_admin_series update_admin_series delete_admin_series merge_admin_series add_series_book update_series_book remove_series_book update_book update_author add_book_description add_author_description update_description set_preferred_description delete_description find_by_identifier add_book_identifier add_author_identifier remove_book_identifier remove_author_identifier review_match_decision reject_match_decision_link
         merge_duplicate_candidate dismiss_duplicate_candidate list_enrichment_queues get_enrichment_queue
         claim_enrichment_items submit_enrichment_item skip_enrichment_item
-        list_book_submissions get_book_submission claim_book_submissions supply_book_submission_details
+        list_book_submissions get_book_submission request_book claim_book_submissions supply_book_submission_details
         skip_book_submission approve_book_submission merge_book_submission reject_book_submission
         search_admin_lists get_admin_list list_admin_list_items list_admin_penalties list_admin_news_posts get_admin_news_post list_news_topics create_news_post update_news_post publish_news_post unpublish_news_post
         update_admin_list attach_list_penalty detach_list_penalty create_admin_list_item update_admin_list_item delete_admin_list_item
