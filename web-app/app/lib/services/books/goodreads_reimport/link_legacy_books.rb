@@ -59,18 +59,23 @@ module Services
           @user_ids = user_ids
           @legacy_holders = legacy_holders
           @redirects = ::Services::BooksMigration::Redirects.load
+          # The sync leaves a held reader/book pair alone before routing it, so a held reader's legacy entry on a book
+          # removed here was never routed anywhere: following the redirect for them would name a book legacy never chose.
+          @hold = ::Services::BooksMigration::ReimportHold.load(redirects: @redirects)
         end
 
         def call
           rows = self.class.unlinked_rows.where(books_goodreads_imports: {user_id: @user_ids})
             .includes(:import, :goodreads_edition).to_a
           goodreads_ids = rows.map { |row| row.goodreads_edition.goodreads_book_id.to_s }.uniq
-          holders = holders_for(goodreads_ids)
+          ours, theirs = holders_for(goodreads_ids)
           linked = unlinked = 0
           rows.group_by { |row| row.import.user_id }.each do |user_id, user_rows|
             on_lists = book_ids_on_lists(user_id)
             user_rows.each do |row|
-              book_id = holders.fetch(row.goodreads_edition.goodreads_book_id.to_s, []).select { |id| on_lists.include?(id) }.min
+              id = row.goodreads_edition.goodreads_book_id.to_s
+              candidates = Array(ours[id]) + routed_for(user_id, Array(theirs[id]))
+              book_id = candidates.select { |candidate| on_lists.include?(candidate) }.min
               if book_id
                 row.update_columns(legacy_book_id: book_id, updated_at: Time.current)
                 linked += 1
@@ -84,21 +89,25 @@ module Services
 
         private
 
-        # {goodreads book id string => [book ids here]}: our holders (plain and slug-form values) plus legacy's,
-        # each legacy id routed the way the sync routes it (a deleted book drops out).
+        # [ours, theirs], each {goodreads book id string => [book ids]}: our holders (plain and slug-form values) and
+        # legacy's raw book ids.
         def holders_for(goodreads_ids)
-          return {} if goodreads_ids.empty?
+          return [{}, {}] if goodreads_ids.empty?
 
           ours = ::Identifier.where(identifiable_type: "Books::Book", identifier_type: TYPE)
             .where("substring(value from '^[0-9]+') IN (?)", goodreads_ids).pluck(:value, :identifiable_id)
             .group_by { |value, _| value[/\A\d+/] }.transform_values { |pairs| pairs.map(&:last) }
-          theirs = @legacy_holders.call(goodreads_ids)
-          goodreads_ids.to_h do |id|
-            legacy_now = Array(theirs[id]).filter_map do |legacy_id|
-              routed = @redirects.resolve("Books::Book", legacy_id)
-              routed if routed.is_a?(Integer)
-            end
-            [id, (Array(ours[id]) + legacy_now).uniq]
+          [ours, @legacy_holders.call(goodreads_ids)]
+        end
+
+        # Legacy's book ids taken where the sync takes this reader's entry on them: routed through the redirects, unless
+        # the reader is held on that book (the sync then leaves it unrouted); a deleted book drops out.
+        def routed_for(user_id, legacy_ids)
+          legacy_ids.filter_map do |legacy_id|
+            next legacy_id if @hold.held?(user_id, legacy_id)
+
+            routed = @redirects.resolve("Books::Book", legacy_id)
+            routed if routed.is_a?(Integer)
           end
         end
 

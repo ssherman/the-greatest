@@ -112,6 +112,18 @@ module Services
           assert_equal @to.id, @row.reload.legacy_book_id
         end
 
+        test "does not follow the redirect for a reader the sync holds on the removed book" do
+          on_list(@to)
+          RecordRedirect.create!(item_type: "Books::Book", from_id: 999_003, to_id: @to.id)
+          ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:999003", decided_by: :rule,
+            status: :approved, applied_at: Time.current,
+            payload: {"book_id" => 999_003, "redirect_written" => @to.id, "deleted" => [{"id" => 1, "user_id" => @user.id}]})
+
+          link(@gid.to_s => [999_003])
+
+          assert_nil @row.reload.legacy_book_id
+        end
+
         test "uses only the reader's own lists" do
           other = User.create!(email: "other-#{SecureRandom.hex(4)}@example.com", role: :user, email_verified: false)
           UserListItem.create!(user_list: ::Books::UserList.find_by!(user: other, list_type: :read), listable: @from, position: 1)
