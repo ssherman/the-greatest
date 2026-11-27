@@ -28,6 +28,26 @@ class Admin::Lists::AuditsComponentTest < ViewComponent::TestCase
     assert_includes page.text, "Checked against the publisher."
   end
 
+  test "renders row changes and pending requests" do
+    @audit.update!(field_changes: {
+      "fields" => {}, "penalties_attached" => [], "penalties_detached" => [],
+      "items_added" => [{"id" => 90101, "book_id" => 90201, "position" => 1}],
+      "items_removed" => [{"id" => 90102, "book_id" => 90202, "position" => 2}],
+      "items_changed" => [{"id" => 90103, "position" => {"from" => 3, "to" => 4}}],
+      "pending_submissions" => [90301]
+    })
+
+    render_inline(Admin::Lists::AuditsComponent.new(list: @list, can_release: false))
+
+    %w[90101 90102 90103 90301].each { |id| assert_includes page.text, id }
+  end
+
+  test "an audit written before row changes existed still renders" do
+    @audit.update!(field_changes: {"fields" => {"name" => {"from" => "A", "to" => "B"}}, "penalties_attached" => [], "penalties_detached" => []})
+    render_inline(Admin::Lists::AuditsComponent.new(list: @list, can_release: false))
+    assert_includes page.text, "name"
+  end
+
   test "an open audit shows a Release button only when permitted" do
     @audit.update!(status: :in_progress, verdict: nil, finished_at: nil, lease_expires_at: 1.hour.from_now)
 

@@ -24,8 +24,26 @@ class Admin::Lists::AuditsComponent < ViewComponent::Base
     Array((audit.field_changes || {})[key])
   end
 
+  def item_rows(audit, key)
+    Array((audit.field_changes || {})[key])
+  end
+
+  def pending_submissions(audit)
+    Array((audit.field_changes || {})["pending_submissions"])
+  end
+
+  def row_label(row)
+    "row #{row["id"]}, book #{row["book_id"]}, position #{row["position"]}"
+  end
+
+  def item_change_label(row)
+    parts = %w[book_id position].filter_map { |key| "#{key} #{row[key]["from"]} -> #{row[key]["to"]}" if row[key] }
+    "row #{row["id"]}: #{parts.join(", ")}"
+  end
+
   def changed?(audit)
-    field_changes(audit).any? || penalties(audit, "penalties_attached").any? || penalties(audit, "penalties_detached").any?
+    field_changes(audit).any? || penalties(audit, "penalties_attached").any? || penalties(audit, "penalties_detached").any? ||
+      %w[items_added items_removed items_changed].any? { |key| item_rows(audit, key).any? }
   end
 
   def verdict_badge_class(audit)

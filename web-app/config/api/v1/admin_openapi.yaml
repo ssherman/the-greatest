@@ -6007,7 +6007,29 @@ components:
         lease_expires_at: {type: [string, "null"], format: date-time}
         note: {type: [string, "null"]}
         sources: {description: The sources the auditor recorded.}
-        changes: {description: The field changes the audit recorded.}
+        changes:
+          type: [object, "null"]
+          description: What the audit changed, recorded when it finished. Audits finished before row changes were recorded lack the items_* and pending_submissions keys.
+          properties:
+            fields: {type: object, description: "Changed fields, each {from, to}."}
+            penalties_attached: {type: array, items: {type: object}}
+            penalties_detached: {type: array, items: {type: object}}
+            items_added:
+              type: array
+              description: Rows added to the list during the audit.
+              items: {type: object, properties: {id: {type: integer}, book_id: {type: integer}, position: {type: [integer, "null"]}}}
+            items_removed:
+              type: array
+              description: Rows removed from the list during the audit.
+              items: {type: object, properties: {id: {type: integer}, book_id: {type: integer}, position: {type: [integer, "null"]}}}
+            items_changed:
+              type: array
+              description: "Rows whose book_id or position changed; only the changed keys appear, each {from, to}."
+              items: {type: object, properties: {id: {type: integer}}}
+            pending_submissions:
+              type: array
+              description: Ids of admin book requests still open on the list when the audit finished.
+              items: {type: integer}
     AdminListFull:
       allOf:
         - $ref: "#/components/schemas/AdminList"

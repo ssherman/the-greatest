@@ -33,6 +33,14 @@ module Services
           assert expected.any?
           assert_equal expected, Snapshot.call(@list)["penalties"]
         end
+
+        test "captures the list's rows ordered by id" do
+          ListItem.create!(list: @list, listable: books_books(:war_and_peace), position: 3)
+          ListItem.create!(list: @list, listable: books_books(:crime_and_punishment), position: 2)
+          expected = ListItem.where(list: @list).order(:id).map { |i| {"id" => i.id, "book_id" => i.listable_id, "position" => i.position} }
+          assert_operator expected.size, :>=, 3
+          assert_equal expected, Snapshot.call(@list)["items"]
+        end
       end
     end
   end

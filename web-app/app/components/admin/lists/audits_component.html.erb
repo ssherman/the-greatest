@@ -57,9 +57,24 @@
                 <% penalties(audit, "penalties_detached").each do |penalty| %>
                   <tr><td colspan="3">Penalty detached: <%= penalty["name"] %></td></tr>
                 <% end %>
+                <% item_rows(audit, "items_added").each do |row| %>
+                  <tr><td colspan="3">Row added: <%= row_label(row) %></td></tr>
+                <% end %>
+                <% item_rows(audit, "items_removed").each do |row| %>
+                  <tr><td colspan="3">Row removed: <%= row_label(row) %></td></tr>
+                <% end %>
+                <% item_rows(audit, "items_changed").each do |row| %>
+                  <tr><td colspan="3">Row changed: <%= item_change_label(row) %></td></tr>
+                <% end %>
               </tbody>
             </table>
           </div>
+        <% end %>
+
+        <% if pending_submissions(audit).any? %>
+          <p class="text-sm" data-testid="pending-submissions">
+            Open book requests when this audit finished: <%= pending_submissions(audit).map { |id| "##{id}" }.join(", ") %>
+          </p>
         <% end %>
       </div>
     <% end %>

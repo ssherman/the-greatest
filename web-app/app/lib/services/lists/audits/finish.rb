@@ -34,7 +34,7 @@ module Services
             after = Snapshot.call(@audit.list)
             @audit.update!(
               verdict: @verdict, note: @note, sources: @sources, after: after,
-              field_changes: Diff.call(before: @audit.before, after: after),
+              field_changes: Diff.call(before: @audit.before, after: after).merge("pending_submissions" => pending_submissions),
               status: :finished, finished_at: Time.current, lease_expires_at: nil
             )
             Result.new(success?: true, data: {audit: @audit}, errors: [])
@@ -42,6 +42,12 @@ module Services
         end
 
         private
+
+        # Admin requests for new books on this list that are still being worked;
+        # the audit is not the whole story while they are open.
+        def pending_submissions
+          ::Books::BookSubmission.origin_admin.open.where(list_id: @audit.list_id).order(:id).pluck(:id)
+        end
 
         def validation_errors
           errors = []
