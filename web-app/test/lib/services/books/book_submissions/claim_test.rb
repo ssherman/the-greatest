@@ -45,6 +45,16 @@ module Services
           assert_nil result.data[:lease_token]
         end
 
+        test "admin rows are never claimed" do
+          admin_row = reviewable_submission(book: nil, review_status: :not_needed, status: :needs_details, origin: :admin)
+          admin_pending = reviewable_submission(origin: :admin)
+
+          result = Claim.call(user: @admin)
+
+          assert_not_includes result.data[:items].map(&:id), admin_row.id
+          assert_not_includes result.data[:items].map(&:id), admin_pending.id
+        end
+
         test "an expired lease can be claimed again, and the old token no longer matches" do
           row = lease(reviewable_submission, token: "old", expires_at: 1.minute.ago)
           row.update_columns(claims: 1)

@@ -13,6 +13,15 @@ module Services
           lease(@row)
         end
 
+        test "an admin row is refused" do
+          @row.update_columns(origin: ::Books::BookSubmission.origins[:admin])
+          before = @row.reload.attributes
+          ::Books::ProcessBookSubmissionJob.expects(:perform_async).never
+
+          assert_failure Retry.call(submission: @row, user: @admin), :invalid, "requested by an admin agent"
+          assert_equal before, fresh(@row).attributes
+        end
+
         test "puts a failed row back to queued with every counter reset, and queues the job" do
           ::Books::ProcessBookSubmissionJob.expects(:perform_async).with(@row.id).once
 

@@ -13,6 +13,9 @@ module Services
         module_function
 
         def for(row)
+          # An admin agent's row is worked only by that agent, so none of the page's buttons apply.
+          return [] if row.origin_admin?
+
           actions = []
           actions << :approve if Approve.available?(row)
           actions << :merge if Merge.available?(row)

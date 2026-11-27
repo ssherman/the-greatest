@@ -36,6 +36,14 @@ module Services
           assert_includes ids("all"), @looking.id
         end
 
+        test "admin rows are in neither agent tab" do
+          admin_review = reviewable_submission(origin: :admin)
+          admin_details = reviewable_submission(book: nil, status: :needs_details, created_book: false, origin: :admin)
+
+          assert_not_includes ids("needs_review") + ids("needs_details"), admin_review.id
+          assert_not_includes ids("needs_review") + ids("needs_details"), admin_details.id
+        end
+
         test "needs review and needs details leave out a row nobody can act on" do
           assert_not_includes ids("needs_review") + ids("needs_details"), @looking.id
           assert_not_includes ids("needs_review") + ids("needs_details"), @human.id

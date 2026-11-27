@@ -24,8 +24,10 @@
 #  isbn13                :string
 #  lease_expires_at      :datetime
 #  lease_token           :string
+#  list_position         :integer
 #  lookup                :jsonb
 #  next_attempt_at       :datetime
+#  origin                :integer          default(0), not null
 #  processing_started_at :datetime
 #  raw_input             :text
 #  resolved_author_names :jsonb
@@ -46,6 +48,8 @@
 #  book_id               :bigint
 #  claimed_by_id         :bigint
 #  goodreads_book_id     :bigint
+#  list_id               :bigint
+#  list_item_id          :bigint
 #  match_decision_id     :bigint
 #  reviewed_by_id        :bigint
 #  user_id               :bigint
@@ -56,6 +60,8 @@
 #
 #  index_books_book_submissions_on_book_id                   (book_id)
 #  index_books_book_submissions_on_claimed_by_id             (claimed_by_id)
+#  index_books_book_submissions_on_list_id                   (list_id)
+#  index_books_book_submissions_on_list_item_id              (list_item_id)
 #  index_books_book_submissions_on_match_decision_id         (match_decision_id)
 #  index_books_book_submissions_on_reviewed_by_id            (reviewed_by_id)
 #  index_books_book_submissions_on_signature                 (signature)
@@ -68,6 +74,8 @@
 #
 #  fk_rails_...  (book_id => books_books.id) ON DELETE => nullify
 #  fk_rails_...  (claimed_by_id => users.id) ON DELETE => nullify
+#  fk_rails_...  (list_id => lists.id) ON DELETE => nullify
+#  fk_rails_...  (list_item_id => list_items.id) ON DELETE => nullify
 #  fk_rails_...  (match_decision_id => match_decisions.id) ON DELETE => nullify
 #  fk_rails_...  (reviewed_by_id => users.id) ON DELETE => nullify
 #  fk_rails_...  (user_id => users.id) ON DELETE => nullify
@@ -86,6 +94,25 @@ added_title_authors:
   input_method: <%= Books::BookSubmission.input_methods[:title_authors] %>
   typed_title: A Book Nobody Had
   typed_author_names: ["Some Author"]
+  status: <%= Books::BookSubmission.statuses[:added] %>
+  review_status: <%= Books::BookSubmission.review_statuses[:pending] %>
+  created_book: true
+
+admin_needs_details:
+  user: admin_user
+  origin: 1
+  input_method: <%= Books::BookSubmission.input_methods[:title_authors] %>
+  typed_title: A Book An Admin Agent Wants
+  typed_author_names: ["Admin Author"]
+  status: <%= Books::BookSubmission.statuses[:needs_details] %>
+  review_status: <%= Books::BookSubmission.review_statuses[:not_needed] %>
+
+admin_added:
+  user: admin_user
+  origin: 1
+  input_method: <%= Books::BookSubmission.input_methods[:title_authors] %>
+  typed_title: A Book An Admin Agent Added
+  typed_author_names: ["Admin Author"]
   status: <%= Books::BookSubmission.statuses[:added] %>
   review_status: <%= Books::BookSubmission.review_statuses[:pending] %>
   created_book: true

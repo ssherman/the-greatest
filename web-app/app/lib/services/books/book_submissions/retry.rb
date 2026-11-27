@@ -27,6 +27,8 @@ module Services
         end
 
         def call
+          return Lease.failure(:invalid, Lease::ADMIN_ROW_REFUSAL) if ::Books::BookSubmission.origin_admin.exists?(@submission.id)
+
           changed = Requeue.call(::Books::BookSubmission.where(status: :failed).where.not(review_status: :rejected), id: @submission.id)
           return Lease.failure(:conflict, "only a failed submission that was not rejected can be retried") if changed.zero?
 

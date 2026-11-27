@@ -21,6 +21,7 @@ module Services
 
         DURATION = 30.minutes
         VIAS = %w[api admin_ui].freeze
+        ADMIN_ROW_REFUSAL = "This book was requested by an admin agent; only that agent re-requests it."
         MAX_NOTE = 1_000
         MAX_SOURCES = 20
         MAX_URL = 2_000

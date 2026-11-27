@@ -14,6 +14,11 @@ module Services
           assert_equal %i[approve merge reject], actions(reviewable_submission)
         end
 
+        test "an admin row has no actions" do
+          assert_equal [], actions(reviewable_submission(origin: :admin))
+          assert_equal [], actions(reviewable_submission(origin: :admin, book: nil, status: :failed, review_status: :not_needed))
+        end
+
         test "a needs_human row keeps the three decisions" do
           assert_equal %i[approve merge reject], actions(reviewable_submission(review_status: :needs_human))
         end
