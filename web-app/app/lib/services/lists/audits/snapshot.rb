@@ -10,7 +10,7 @@ module Services
           {
             "fields" => FIELDS.index_with { |field| list.public_send(field) },
             "penalties" => list.penalties.reorder(:id).map { |p| {"id" => p.id, "name" => p.name} },
-            "items" => list.list_items.reorder(:id).map { |i| {"id" => i.id, "book_id" => i.listable_id, "position" => i.position} }
+            "items" => list.list_items.reorder(:id).pluck(:id, :listable_id, :position).map { |id, book_id, position| {"id" => id, "book_id" => book_id, "position" => position} }
           }
         end
       end

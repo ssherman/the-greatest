@@ -6017,11 +6017,11 @@ components:
             items_added:
               type: array
               description: Rows added to the list during the audit.
-              items: {type: object, properties: {id: {type: integer}, book_id: {type: integer}, position: {type: [integer, "null"]}}}
+              items: {type: object, properties: {id: {type: integer}, book_id: {type: [integer, "null"]}, position: {type: [integer, "null"]}}}
             items_removed:
               type: array
               description: Rows removed from the list during the audit.
-              items: {type: object, properties: {id: {type: integer}, book_id: {type: integer}, position: {type: [integer, "null"]}}}
+              items: {type: object, properties: {id: {type: integer}, book_id: {type: [integer, "null"]}, position: {type: [integer, "null"]}}}
             items_changed:
               type: array
               description: "Rows whose book_id or position changed; only the changed keys appear, each {from, to}."
