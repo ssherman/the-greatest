@@ -118,7 +118,21 @@ module Services
           end
           raise NoAuthor, "the book for submission #{@submission.id} got no author" unless ::Books::BookAuthor.exists?(book: book)
 
+          promote_authors(book) if @submission.origin_admin?
           book
+        end
+
+        # An admin row's book is created public, but `provisional: false` reaches only
+        # the authors the importer creates: an author it matched (one a reader's
+        # request or a Goodreads import made) stays provisional, hidden from the
+        # catalog and the author rankings while its public book shows. Promote those
+        # with the book, as an approval would.
+        def promote_authors(book)
+          authors = book.authors.where(provisional: true).to_a
+          return if authors.empty?
+
+          ::Services::Books::GoodreadsImports::PromoteRecords.call(books: [], authors: authors,
+            initiated_by: "admin_book_request", lane: "priority")
         end
 
         def record(book, created:)

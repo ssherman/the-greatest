@@ -9,7 +9,9 @@ module Services
     #
     # The row is validated first, so a refused write never promotes a book. Then a
     # provisional book is promoted outside the row write (PromoteProvisionalBook
-    # takes its own locks), so a failed promotion writes no row.
+    # takes its own locks), so a failed promotion writes no row. The row is saved
+    # under a lock on the book (save_with_book), so a book deleted since it was read
+    # is a conflict, never a row naming a missing book.
     # A failure flagged `conflict` is a 409; any other failure is a 422.
     # Model validation messages are the errors.
     class AdminItems
@@ -21,7 +23,9 @@ module Services
 
         promotion = promote(book, user)
         return promotion unless promotion.success?
-        return failure(item.errors.full_messages) unless item.save
+
+        saved = save_with_book(item, book)
+        return saved unless saved.success?
 
         success(item: item, promoted: promotion.data[:promoted])
       end
@@ -38,7 +42,9 @@ module Services
 
           promoted = promotion.data[:promoted]
         end
-        return failure(item.errors.full_messages) unless item.save
+
+        saved = save_with_book(item, (book == :unset) ? nil : book)
+        return saved unless saved.success?
 
         success(item: item, promoted: promoted)
       end
@@ -68,11 +74,34 @@ module Services
         Result.new(success?: result.success?, data: result.data, errors: result.errors)
       end
 
+      # Saves the row while holding the book FOR KEY SHARE, re-read by id. The
+      # listable is polymorphic with no foreign key, so without the lock a book
+      # deleted or merged away after the caller read it would leave a row naming a
+      # book that no longer exists. A delete or merge locks the book FOR UPDATE, so it
+      # either finished before this lock (the book is gone: a conflict, no row) or
+      # waits for this save to commit and then deletes or moves the row with the book.
+      # The book job already holds this lock in its transaction; taking it again is a
+      # no-op. `book` nil saves without a lock (a position-only update).
+      def self.save_with_book(item, book)
+        gone = false
+        saved = ActiveRecord::Base.transaction(requires_new: true) do
+          if book && ::Books::Book.lock("FOR KEY SHARE").where(id: book.id).pick(:id).nil?
+            gone = true
+            raise ActiveRecord::Rollback
+          end
+          item.save
+        end
+        return Result.new(success?: false, data: {conflict: true}, errors: ["the book no longer exists"]) if gone
+        return failure(item.errors.full_messages) unless saved
+
+        success(item: item)
+      end
+
       def self.success(data) = Result.new(success?: true, data: data, errors: [])
 
       def self.failure(errors) = Result.new(success?: false, data: {}, errors: Array(errors))
 
-      private_class_method :promote, :success, :failure
+      private_class_method :promote, :save_with_book, :success, :failure
     end
   end
 end

@@ -8,6 +8,7 @@ module Services
       class CreateBookTest < ActiveSupport::TestCase
         include GoodreadsImportHelper
         include BookSubmissionHelper
+        include BookSubmissionReviewHelper
 
         setup do
           stub_resolution_services
@@ -57,6 +58,31 @@ module Services
           assert result.success?
           submission.reload
           assert_equal ["not_needed", true, book], [submission.review_status, submission.created_book, submission.book]
+        end
+
+        test "an admin row's new book takes its matched provisional author into the catalog" do
+          stub_review_side_effects
+          submission = admin_row
+          book = ::Books::Book.create!(title: "The Quiet Year", provisional: false)
+          author = ::Books::Author.create!(name: "Anna Brenner", provisional: true)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          importer = mock("importer")
+          importer.expects(:call).returns(stub(item: book, created?: true))
+
+          assert create(submission: submission, importer: importer).success?
+          assert_not author.reload.provisional?
+        end
+
+        test "a reader row's new book leaves a provisional author provisional" do
+          submission = @submission
+          book = ::Books::Book.create!(title: "Reader Year", provisional: true)
+          author = ::Books::Author.create!(name: "Reader Author", provisional: true)
+          ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+          importer = mock("importer")
+          importer.expects(:call).returns(stub(item: book, created?: true))
+
+          assert create(submission: submission, importer: importer).success?
+          assert author.reload.provisional?
         end
 
         test "an admin row with no list is not no_owner" do

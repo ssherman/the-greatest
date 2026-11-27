@@ -37,6 +37,31 @@ module Services
         assert_equal [1, 2], [one.reload.position, two.reload.position]
       end
 
+      test "a book deleted after it was read is a conflict and writes no row" do
+        stale = ::Books::Book.create!(title: "Gone Soon")
+        ::Books::Book.find(stale.id).destroy!
+
+        assert_no_difference -> { ListItem.count } do
+          result = AdminItems.create(list: @list, book: stale, position: 1, user: @admin)
+
+          assert_not result.success?
+          assert result.data[:conflict]
+          assert_match(/no longer exists/, result.errors.join)
+        end
+      end
+
+      test "relinking to a book deleted after it was read is a conflict and leaves the row" do
+        item = ListItem.create!(list: @list, listable: @book, position: 1)
+        stale = ::Books::Book.create!(title: "Gone Soon")
+        ::Books::Book.find(stale.id).destroy!
+
+        result = AdminItems.update(item: item, user: @admin, book: stale)
+
+        assert_not result.success?
+        assert result.data[:conflict]
+        assert_equal @book.id, item.reload.listable_id
+      end
+
       test "create with no position leaves it null" do
         result = AdminItems.create(list: @list, book: @book, position: nil, user: @admin)
 
