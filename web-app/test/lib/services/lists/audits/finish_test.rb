@@ -27,18 +27,23 @@ module Services
         end
 
         test "finish records open admin requests for the list" do
-          mine = books_book_submissions(:admin_needs_details)
+          stuck = books_book_submissions(:admin_needs_details)
           done = books_book_submissions(:admin_added)
           reader = books_book_submissions(:queued_goodreads)
+          mine = ::Books::BookSubmission.create!(
+            user: @user, origin: :admin, input_method: :title_authors, typed_title: "In flight",
+            typed_author_names: ["Y"], status: :looking_up, list: @list
+          )
           elsewhere = ::Books::BookSubmission.create!(
             user: @user, origin: :admin, input_method: :title_authors, typed_title: "Elsewhere",
-            typed_author_names: ["X"], status: :needs_details, list: lists(:books_list)
+            typed_author_names: ["X"], status: :queued, list: lists(:books_list)
           )
-          [mine, done, reader].each { |s| s.update_columns(list_id: @list.id) }
+          [stuck, done, reader].each { |s| s.update_columns(list_id: @list.id) }
 
           audit = finish.data[:audit].reload
           assert_equal [mine.id], audit.field_changes["pending_submissions"]
           assert_not_includes audit.field_changes["pending_submissions"], elsewhere.id
+          assert_not_includes audit.field_changes["pending_submissions"], stuck.id
         end
 
         test "an unverifiable audit needs no sources" do

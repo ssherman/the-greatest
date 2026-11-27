@@ -48,8 +48,11 @@ module Services
         test "admin rows are never claimed" do
           admin_row = reviewable_submission(book: nil, review_status: :not_needed, status: :needs_details, origin: :admin)
           admin_pending = reviewable_submission(origin: :admin)
+          reader_row = reviewable_submission
 
           result = Claim.call(user: @admin)
+
+          assert_equal [reader_row.id], result.data[:items].map(&:id)
 
           assert_not_includes result.data[:items].map(&:id), admin_row.id
           assert_not_includes result.data[:items].map(&:id), admin_pending.id

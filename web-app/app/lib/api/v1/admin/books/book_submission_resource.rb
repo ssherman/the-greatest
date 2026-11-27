@@ -94,6 +94,8 @@ module Api
           # "review": a book awaits a decision. "details": no book yet and the reader's words got nowhere.
           # nil: nothing for an agent (still being looked up, or already decided, or handed to a person).
           def needs
+            return if @row.origin_admin? # nothing an agent can do to an admin row: Supply, Retry and Skip refuse it
+
             if @row.book_id.nil?
               "details" if DETAILS_STATUSES.include?(@row.status) && %w[not_needed pending].include?(@row.review_status)
             elsif @row.review_pending? && (["added"] + DETAILS_STATUSES).include?(@row.status)

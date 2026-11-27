@@ -92,6 +92,27 @@ module Api
             assert_not book.reload.provisional?
           end
 
+          test "create by a token whose owner may not edit the list is 403 and writes nothing" do
+            ::Books::ListPolicy.any_instance.stubs(:update?).returns(false)
+
+            assert_no_difference -> { ListItem.count } do
+              post_item({book_id: books_books(:war_and_peace).id})
+            end
+
+            assert_response :forbidden
+            assert_includes response.parsed_body["detail"], "Your account may not edit list #{@list.id}."
+          end
+
+          test "a position beyond the int4 range is a 400 on create and update" do
+            post_item({book_id: books_books(:war_and_peace).id, position: 2_147_483_648})
+            assert_response :bad_request
+
+            item = ListItem.create!(list: @list, listable: books_books(:war_and_peace), position: 1)
+            patch_item(item, {position: 2_147_483_648})
+            assert_response :bad_request
+            assert_equal 1, item.reload.position
+          end
+
           test "create with a read token is forbidden" do
             post_item({book_id: books_books(:war_and_peace).id}, headers: bearer(READ))
 

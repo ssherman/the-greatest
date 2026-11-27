@@ -204,6 +204,13 @@ module Books
       assert_not submission.user_added?
     end
 
+    test "user_added? is false for an admin request" do
+      submission = books_book_submissions(:added_title_authors)
+      submission.origin = :admin
+
+      assert_not submission.user_added?
+    end
+
     test "a row may not target both a user list and a books list" do
       list = ::Books::List.create!(name: "Target", status: :active)
       submission = build(user_list: user_lists(:regular_user_books_read), list: list)

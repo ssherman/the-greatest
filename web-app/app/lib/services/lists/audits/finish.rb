@@ -43,10 +43,11 @@ module Services
 
         private
 
-        # Admin requests for new books on this list that are still being worked;
-        # the audit is not the whole story while they are open.
+        # Admin requests for new books on this list that are still queued or being
+        # looked up; the audit is not the whole story while they are. A request
+        # that ended needs_details has nobody to move it on, so it is not pending.
         def pending_submissions
-          ::Books::BookSubmission.origin_admin.open.where(list_id: @audit.list_id).order(:id).pluck(:id)
+          ::Books::BookSubmission.origin_admin.where(status: ::Books::BookSubmission::IN_PROGRESS_STATUSES).where(list_id: @audit.list_id).order(:id).pluck(:id)
         end
 
         def validation_errors

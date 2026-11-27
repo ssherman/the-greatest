@@ -11,6 +11,9 @@ module Services
       # matching token; the admin page (`via: "admin_ui"`) needs none, because an
       # admin may act on a row an agent holds or on one flagged needs_human.
       #
+      # An admin-origin row is refused before anything else (ADMIN_ROW_REFUSAL):
+      # its agent re-requests it, so no lease or state is looked at.
+      #
       # Check order, as in Services::EnrichmentQueue::Submit: state and lease are
       # judged first (:conflict), input second (:invalid). A caller with a stale
       # token therefore always hears "conflict", even when its note is also bad.
@@ -25,8 +28,9 @@ module Services
         MAX_NOTE = 1_000
         MAX_SOURCES = 20
         MAX_URL = 2_000
-        # Rows an admin or an agent may still decide: what `reviewable` selects,
-        # minus the status half, which is for the claim.
+        # Review statuses an admin or an agent may still decide: what `reviewable`
+        # selects, minus the status half (for the claim) and the origin half (the
+        # claim only hands out reader rows).
         OPEN_REVIEWS = %w[pending needs_human].freeze
 
         module_function

@@ -92,6 +92,17 @@ module Api
             assert_nil json["data"]["needs"]
           end
 
+          test "needs is nil for an admin row, which no agent tool can move on" do
+            row = ::Books::BookSubmission.create!(
+              user: users(:admin_user), origin: :admin, input_method: :title_authors, typed_title: "Admin Ask",
+              typed_author_names: ["A"], status: :needs_details, review_status: :not_needed
+            )
+            show(row.id)
+
+            assert_equal "needs_details", json["data"]["status"]
+            assert_nil json["data"]["needs"]
+          end
+
           test "status and review_status filter the whole table, and an unknown value is a 400" do
             done = reviewable_submission(review_status: :approved)
             list({review_status: "approved"})

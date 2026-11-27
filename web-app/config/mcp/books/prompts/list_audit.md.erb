@@ -50,7 +50,7 @@ Rows:
 - Search the catalogue (`search_admin_books`, `find_by_identifier`) before `request_book`. If it finds the book, add it with `create_admin_list_item`; do not request a duplicate. Pass the source's position to `request_book` or `create_admin_list_item`.
 - Positions are never renumbered. Other rows do not move when you change one, so set each row's position to what the source states (null clears it for an unranked row).
 - `request_book` takes an Amazon link, a Goodreads link, an ISBN, or a title and authors, plus the `list_id` and `position`. Prefer an ISBN or a link from the source. A book you add or relink that a reader had submitted but nobody had reviewed is made public first; that is your review, so check the book against the source before you use it.
-- Wait for each `request_book` to reach `added`, `needs_details` or `failed` (poll `get_book_submission`) before `finish_list_audit`. On `needs_details` or `failed`, request again with an ISBN or a link from the source, or leave it. Nobody else works your requests. A request still open when you finish is recorded in the audit as pending.
+- Wait for each `request_book` to reach `added`, `needs_details` or `failed` (poll `get_book_submission`) before `finish_list_audit`. On `needs_details` or `failed`, request again with an ISBN or a link from the source, or leave it. Nobody else works your requests. A request still queued or being looked up when you finish is recorded in the audit as pending.
 - Keep `items_need_revision` true while anything is left unfixed, and say what in the note. It is never set back to false.
 - Auto-generated lists cannot be edited by row; leave them and say so.
 
@@ -65,7 +65,7 @@ Finish every list with `finish_list_audit`:
 - `verdict` is `verified` (you researched it and its fields and penalties now match what its source supports; the verdict covers fields, penalties and the rows you changed, so a list flagged `items_need_revision` can still be `verified`; say in the note which rows you left unfixed) or `unverifiable` (you could not find enough to judge).
 - `note` is required and must not be blank. List what you changed and why, with your confidence in each, and what you recommend for `status` if anything.
 - `sources` is an array of http(s) URLs you used. `verified` needs at least one.
-- The response's `changes` is computed by the server from the list's fields before and after, so you do not report them yourself.
+- The response's `changes` is computed by the server from the list's fields and rows before and after, plus the requests still pending, so you do not report them yourself.
 
 If you are interrupted or cannot finish a list, call `release_list_audit` with a note saying why, so it goes back to the queue.
 

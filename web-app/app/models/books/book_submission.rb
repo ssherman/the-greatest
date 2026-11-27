@@ -146,7 +146,7 @@ module Books
 
     # A book this request created that nobody has merged away or rejected.
     def user_added?
-      created_book? && !review_merged? && !review_rejected?
+      origin_reader? && created_book? && !review_merged? && !review_rejected?
     end
 
     private

@@ -3,7 +3,8 @@
 module Services
   module Books
     module BookSubmissions
-      # Takes one reader's submission from its input to a book on their list.
+      # Takes one submission, a reader's or an admin agent's, from its input to a
+      # book (and its list row, if it names a list).
       # Runs in ProcessBookSubmissionJob, never in a web request. (Not named
       # Process: that would shadow Ruby's ::Process in this namespace.)
       #
@@ -21,7 +22,7 @@ module Services
       # A submission that already has its book skips straight to step 2, so a
       # crash never loses the list item and never makes a second book. Once
       # the book exists a deleted list just means no item; the submission is
-      # still added. Before it exists, a missing user or list means cancelled.
+      # still added. Before it exists, a missing user means cancelled, and so does a missing list for a reader row (an admin row has no user list).
       #
       # Retries are for a source that is down (see RetrySchedule): the
       # resolve step unavailable, or an unmatched finder answer that fell back

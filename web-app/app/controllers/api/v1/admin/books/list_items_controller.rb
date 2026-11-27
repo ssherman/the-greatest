@@ -96,7 +96,7 @@ module Api
             render_problem(::Api::Problem.new(:forbidden, detail: "Your account may not edit list #{list.id}."))
           end
 
-          def position_ok?(body) = !body.key?("position") || body["position"].nil? || body["position"].is_a?(Integer)
+          def position_ok?(body) = !body.key?("position") || body["position"].nil? || (body["position"].is_a?(Integer) && body["position"].abs <= 2_147_483_647)
 
           def unprocessable(detail)
             render_problem(::Api::Problem.new(:unprocessable, detail: detail))

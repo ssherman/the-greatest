@@ -68,6 +68,19 @@ module Services
           assert_equal first.id, again.data[:submission].id
         end
 
+        test "an identical request after the earlier row ended needs_details or failed is a new row" do
+          %i[needs_details failed].each do |ended|
+            first = request_book(list: @list).data[:submission]
+            first.update_columns(status: ::Books::BookSubmission.statuses[ended])
+
+            again = request_book(list: @list)
+
+            assert_equal :created, again.data[:outcome], "after #{ended}"
+            assert_not_equal first.id, again.data[:submission].id
+            again.data[:submission].update_columns(status: ::Books::BookSubmission.statuses[:added])
+          end
+        end
+
         test "the same request without the list is a new row" do
           first = request_book(list: @list).data[:submission]
 
@@ -102,6 +115,14 @@ module Services
 
         test "a position that is not positive is refused" do
           assert_equal :invalid, request_book(list: @list, position: 0).data[:reason]
+        end
+
+        test "a position beyond the int4 range is refused, not a 500" do
+          result = request_book(list: @list, position: 2_147_483_648)
+
+          assert_not result.success?
+          assert_equal :invalid, result.data[:reason]
+          assert_equal :created, request_book(list: @list, position: 2_147_483_647).data[:outcome]
         end
 
         test "bad input is refused as invalid" do

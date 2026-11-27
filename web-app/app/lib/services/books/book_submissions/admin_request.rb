@@ -16,7 +16,8 @@ module Services
       # data[:outcome] is
       #   :hits     the site already holds books that may be it (data[:books]);
       #             nothing is written,
-      #   :existing the same request is already open on this list
+      #   :existing the same request is still queued or being
+      #             looked up on this list
       #             (data[:submission]),
       #   :created  a new queued submission (data[:submission]).
       #
@@ -27,6 +28,7 @@ module Services
         Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         LIST_MESSAGE = "That list cannot take a book from a request"
+        MAX_POSITION = 2_147_483_647 # int4: a column limit, not a policy
         POSITION_MESSAGE = "Position must be a positive whole number and needs a list"
 
         def self.call(user:, params:, list: nil, position: nil, confirmed_new: false)
@@ -68,11 +70,11 @@ module Services
           return true if @position.nil?
           return false unless @list
 
-          @position.is_a?(Integer) && @position > 0
+          @position.is_a?(Integer) && @position.between?(1, MAX_POSITION)
         end
 
         def write(parsed)
-          existing = ::Books::BookSubmission.open.visible.origin_admin
+          existing = ::Books::BookSubmission.where(status: ::Books::BookSubmission::IN_PROGRESS_STATUSES).visible.origin_admin
             .where(user_id: @user.id, list_id: @list&.id, fingerprint: parsed[:fingerprint])
             .order(:id).first
           return [:existing, existing] if existing
