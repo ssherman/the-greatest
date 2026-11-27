@@ -7,18 +7,20 @@ module Services
     # person's decision, so it is verified. Positions are stored exactly as
     # given: nothing is renumbered and no other row moves.
     #
-    # A provisional book is promoted first, outside the row write
-    # (PromoteProvisionalBook takes its own locks), so a failed promotion writes
-    # no row. A failure flagged `conflict` is a 409; any other failure is a 422.
+    # The row is validated first, so a refused write never promotes a book. Then a
+    # provisional book is promoted outside the row write (PromoteProvisionalBook
+    # takes its own locks), so a failed promotion writes no row.
+    # A failure flagged `conflict` is a 409; any other failure is a 422.
     # Model validation messages are the errors.
     class AdminItems
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       def self.create(list:, book:, position:, user:)
+        item = list.list_items.build(listable: book, position: position, verified: true)
+        return failure(item.errors.full_messages) unless item.valid?
+
         promotion = promote(book, user)
         return promotion unless promotion.success?
-
-        item = list.list_items.build(listable: book, position: position, verified: true)
         return failure(item.errors.full_messages) unless item.save
 
         success(item: item, promoted: promotion.data[:promoted])
@@ -26,14 +28,16 @@ module Services
 
       def self.update(item:, user:, book: :unset, position: :unset)
         promoted = false
+        item.assign_attributes(listable: book, verified: true) unless book == :unset
+        item.position = position unless position == :unset
+        return failure(item.errors.full_messages) unless item.valid?
+
         unless book == :unset
           promotion = promote(book, user)
           return promotion unless promotion.success?
 
           promoted = promotion.data[:promoted]
-          item.assign_attributes(listable: book, verified: true)
         end
-        item.position = position unless position == :unset
         return failure(item.errors.full_messages) unless item.save
 
         success(item: item, promoted: promoted)

@@ -58,6 +58,26 @@ module Services
         assert_not book.reload.provisional?
       end
 
+      test "a refused write never promotes the book" do
+        ::Services::Books::GoodreadsImports::PromoteRecords.expects(:call).never
+        generated = ::Books::List.create!(name: "Generated Two", status: :approved, auto_generated_kind: :year_top, auto_generated_year: 1998)
+        on_list = ::Books::Book.create!(title: "Provisional On List", provisional: true)
+        ListItem.create!(list: @list, listable: on_list, position: 1)
+        movable = ListItem.create!(list: @list, listable: @other, position: 2)
+        fresh = ::Books::Book.create!(title: "Provisional Fresh", provisional: true)
+
+        results = [
+          AdminItems.create(list: @list, book: fresh, position: 0, user: @admin),
+          AdminItems.create(list: generated, book: fresh, position: 1, user: @admin),
+          AdminItems.create(list: @list, book: on_list, position: nil, user: @admin),
+          AdminItems.update(item: movable, user: @admin, book: on_list)
+        ]
+
+        results.each { |result| assert_not result.success? }
+        assert_equal [true, true], [fresh.reload.provisional?, on_list.reload.provisional?]
+        assert_equal @other, movable.reload.listable
+      end
+
       test "a failed promotion writes no row" do
         ::Services::Books::PromoteProvisionalBook.stubs(:call).returns(conflict_failure)
 
