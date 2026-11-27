@@ -351,6 +351,12 @@ In order. Each step says whether it is safe now or what it waits for.
 22. **Author enrichment beyond the ranked authors (decide).** `bin/rails "books:authors:enrich[all]"`.
     Most of the 76,931 authors have no ranked book. One author every 2 seconds on the Wikimedia pace, so not at
     the same time as step 10's backfill. Check it with `bin/rails "books:authors:enrich_report[<the time it printed>]"`.
+23. **First-pass duplicate entries (decide; no tool yet).** 21 legacy imports loaded on 2026-11-13 reached the first
+    re-import pass without legacy's book on their rows (section 3.2, step 0, did not exist yet), so all 6,358 of their
+    rows were applied as adds. 6,123 changed nothing (legacy had already put the reader on the right book). 234 left
+    legacy's wrong book on the reader's list beside the right one, nearly all for one reader (user 70967, mostly manhwa
+    volumes). Measured read-only 2026-11-27. Removing them needs a small reviewed change (each removal recorded on a
+    verdict, so the sync's hold keeps it); until then they are harmless extra entries.
 
 ## 5. Cutover, hostname switch, after launch
 

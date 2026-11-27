@@ -82,6 +82,45 @@ module Services
           assert_equal @to.id, @row.reload.legacy_book_id
         end
 
+        test "leaves rows an applied verdict already decided" do
+          on_list(@from)
+          row_verdict(@row, action: "add", from: nil).update!(applied_at: Time.current)
+
+          result = link(@gid.to_s => [@from.id])
+
+          assert_nil @row.reload.legacy_book_id
+          assert_equal [0, 0], result.data.values_at(:linked, :unlinked)
+        end
+
+        test "leaves rows the old replay decided had no legacy choice" do
+          on_list(@from)
+          @row.update_columns(replay_finding: ::Books::GoodreadsImportRow.replay_findings.fetch("no_legacy_choice"))
+
+          link(@gid.to_s => [@from.id])
+
+          assert_nil @row.reload.legacy_book_id
+        end
+
+        test "follows a deleted mixed book's redirect, as the sync routes the reader's legacy entry" do
+          on_list(@to)
+          RecordRedirect.create!(item_type: "Books::Book", from_id: 999_002, to_id: @to.id)
+          ::Books::RepairVerdict.create!(kind: :reimport_mixed, subject_key: "reimport:book:999002", decided_by: :rule,
+            status: :approved, applied_at: Time.current, payload: {"book_id" => 999_002, "redirect_written" => @to.id})
+
+          link(@gid.to_s => [999_002])
+
+          assert_equal @to.id, @row.reload.legacy_book_id
+        end
+
+        test "uses only the reader's own lists" do
+          other = User.create!(email: "other-#{SecureRandom.hex(4)}@example.com", role: :user, email_verified: false)
+          UserListItem.create!(user_list: ::Books::UserList.find_by!(user: other, list_type: :read), listable: @from, position: 1)
+
+          link(@gid.to_s => [@from.id])
+
+          assert_nil @row.reload.legacy_book_id
+        end
+
         test "user_ids_to_link names only readers with unlinked rows of complete replay imports" do
           linked_user = @user
           @row.update_columns(legacy_book_id: @from.id)

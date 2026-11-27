@@ -13,8 +13,12 @@ module Services
       # every book on its own: it reads our identifiers, and the sync stopped copying the Goodreads ids legacy's
       # importer stamps onto books we already have (docs/features/books-legacy-sync.md, "Identifiers"). So this reads
       # legacy's own book_identifiers as well. The rule is LegacyChoice's: among the books holding the row's Goodreads
-      # id, the lowest-id one on the reader's lists here. A legacy book merged since is followed (MergedBook).
+      # id, the lowest-id one on the reader's lists here. A legacy book removed here since is followed the way the
+      # sync routes legacy's list items (Redirects), because that is where the reader's entry sits now: including a
+      # deleted mixed book's redirect, which MergedBook deliberately does not follow.
       #
+      # Only rows nothing has decided yet: no replay finding (CompareEdition left legacy_book_id empty on purpose for
+      # its no_legacy_choice rows) and no applied reimport_row verdict (an applied row has already changed the lists).
       # Writes only legacy_book_id, and only where it is empty. A row nothing traces stays empty and is decided "add",
       # which is right: legacy never put it on the reader's lists.
       class LinkLegacyBooks
@@ -43,13 +47,18 @@ module Services
         end
 
         def self.unlinked_rows
+          applied = ::Books::RepairVerdict.reimport_row.where.not(applied_at: nil)
+            .where("books_repair_verdicts.subject_key = 'reimport:row:' || books_goodreads_import_rows.import_id || ':' || " \
+              "books_goodreads_import_rows.row_number")
           ::Books::GoodreadsImportRow.joins(:import).merge(::Books::GoodreadsImport.legacy_replay.complete)
-            .where(legacy_book_id: nil).where.not(goodreads_edition_id: nil)
+            .where(legacy_book_id: nil, replay_finding: nil).where.not(goodreads_edition_id: nil)
+            .where.not(applied.arel.exists)
         end
 
         def initialize(user_ids, legacy_holders)
           @user_ids = user_ids
           @legacy_holders = legacy_holders
+          @redirects = ::Services::BooksMigration::Redirects.load
         end
 
         def call
@@ -76,7 +85,7 @@ module Services
         private
 
         # {goodreads book id string => [book ids here]}: our holders (plain and slug-form values) plus legacy's,
-        # each legacy id taken to the book it names now.
+        # each legacy id routed the way the sync routes it (a deleted book drops out).
         def holders_for(goodreads_ids)
           return {} if goodreads_ids.empty?
 
@@ -84,10 +93,10 @@ module Services
             .where("substring(value from '^[0-9]+') IN (?)", goodreads_ids).pluck(:value, :identifiable_id)
             .group_by { |value, _| value[/\A\d+/] }.transform_values { |pairs| pairs.map(&:last) }
           theirs = @legacy_holders.call(goodreads_ids)
-          now = {}
           goodreads_ids.to_h do |id|
             legacy_now = Array(theirs[id]).filter_map do |legacy_id|
-              now.fetch(legacy_id) { now[legacy_id] = ::Services::Books::GoodreadsReplay::Apply::MergedBook.call(legacy_id)&.id }
+              routed = @redirects.resolve("Books::Book", legacy_id)
+              routed if routed.is_a?(Integer)
             end
             [id, (Array(ours[id]) + legacy_now).uniq]
           end
