@@ -2,7 +2,7 @@ require "test_helper"
 
 module Mcp
   class AdminCatalogTest < ActiveSupport::TestCase
-    DESTRUCTIVE = %w[deleteAdminAuthor mergeCategories mergeBook mergeAuthor mergeDuplicateCandidate deleteAdminCategory deleteAdminSeries mergeAdminSeries removeSeriesBook detachListPenalty untagBook untagAuthor removeBookAuthor rejectMatchDecisionLink removeBookIdentifier removeAuthorIdentifier deleteDescription approveRepairVerdict bulkApproveRepairVerdicts mergeBookSubmission rejectBookSubmission].freeze
+    DESTRUCTIVE = %w[deleteAdminAuthor mergeCategories mergeBook mergeAuthor mergeDuplicateCandidate deleteAdminCategory deleteAdminSeries mergeAdminSeries removeSeriesBook detachListPenalty untagBook untagAuthor removeBookAuthor rejectMatchDecisionLink removeBookIdentifier removeAuthorIdentifier deleteDescription approveRepairVerdict bulkApproveRepairVerdicts mergeBookSubmission rejectBookSubmission deleteAdminListItem].freeze
 
     def catalog = Mcp::Catalog.for(document: :admin, domain: :books)
 
@@ -11,7 +11,7 @@ module Mcp
     test "every admin operation but getAdminOpenapi is a tool" do
       expected = ::Api::OpenapiDocument.operations(::Api::OpenapiDocument.raw(:admin)).map(&:operation_id) - ["getAdminOpenapi"]
 
-      assert_equal 91, expected.size
+      assert_equal 94, expected.size
       assert_equal expected.sort, catalog.operations.map(&:operation_id).sort
     end
 
@@ -24,7 +24,7 @@ module Mcp
         list_book_submissions get_book_submission claim_book_submissions supply_book_submission_details
         skip_book_submission approve_book_submission merge_book_submission reject_book_submission
         search_admin_lists get_admin_list list_admin_list_items list_admin_penalties list_admin_news_posts get_admin_news_post list_news_topics create_news_post update_news_post publish_news_post unpublish_news_post
-        update_admin_list attach_list_penalty detach_list_penalty
+        update_admin_list attach_list_penalty detach_list_penalty create_admin_list_item update_admin_list_item delete_admin_list_item
         start_list_audit finish_list_audit release_list_audit fetch_page]
 
       assert_equal expected.sort, catalog.operations.map(&:tool_name).sort

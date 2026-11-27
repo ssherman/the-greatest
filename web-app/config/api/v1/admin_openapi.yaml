@@ -4578,6 +4578,160 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+    post:
+      operationId: createAdminListItem
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Add a book to a books list
+      description: |
+        Adds the catalogue book `book_id` to the list as a verified row, at `position` or with no position. The position is stored exactly as given: no other row is renumbered or moved. A provisional (reader- or import-added, unreviewed) book is made public first. A book already on the list, a book that does not exist, a position below 1 and an auto-generated list are refused with 422; a book deleted while the request runs is 409. A body without `book_id`, or with a `book_id` or `position` that is not an integer, is 400, and an unknown key is 422 naming the accepted ones. Returns the row and whether the book was promoted. The list's rankings do not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit lists.
+      x-mcp:
+        description: >-
+          Adds book `book_id` to books list `id` as a verified row, at `position` (optional). Positions are set exactly as given and never renumbered, and no other row moves. Adding or relinking to a provisional book makes it public. Take `book_id` from search_admin_books or find_by_identifier. The list's rankings do not change until an admin refreshes the ranking configuration.
+          Returns the row (`data`) and `promoted`, true when the book was provisional and is now public. A book already on
+          the list, an unknown book and an auto-generated list are refused.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListItemCreateRequest"
+      responses:
+        "200":
+          description: The new row, and whether the book was promoted.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListItemWritten"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/list_items/{id}:
+    x-domain: books
+    patch:
+      operationId: updateAdminListItem
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Relink or reposition a books list row
+      description: |
+        Changes the row's book (`book_id`, which also marks the row verified) and/or its `position` (an integer, or null to clear it). Send at least one; an empty body is 422. Positions are stored exactly as given and no other row moves. Relinking to a provisional book makes it public first. A book already on the list, an unknown book, a position below 1 and an auto-generated list are refused with 422; a row that is not on a books list is 404. Returns the row and whether a book was promoted. Requires `books:admin:write`, and the token's owner must be allowed to edit the list.
+      x-mcp:
+        description: >-
+          Changes list row `id` (from list_admin_list_items): `book_id` relinks it to another book and marks it verified,
+          `position` sets its position (null clears it). Send at least one. Positions are set exactly as given and never renumbered, and no other row moves. Adding or relinking to a provisional book makes it public. Take `book_id` from search_admin_books or find_by_identifier. The list's rankings do not change until an admin refreshes the ranking configuration.
+          Returns the row (`data`) and `promoted`.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminListItemUpdateRequest"
+      responses:
+        "200":
+          description: The updated row, and whether a book was promoted.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListItemWritten"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      operationId: deleteAdminListItem
+      security: [{bearerAuth: ["books:admin:write"]}]
+      summary: Remove a row from a books list
+      description: |
+        Deletes the row; the book it pointed at is kept. Other rows keep their positions. An auto-generated list is refused with 422, and a row that is not on a books list is 404. Returns the row as it was. The list's rankings do not change until an admin refreshes the ranking configuration. Requires `books:admin:write`, and the token's owner must be allowed to edit the list.
+      x-mcp:
+        description: >-
+          Removes list row `id` (from list_admin_list_items) from its books list. The book stays in the catalogue and
+          other rows keep their positions (never renumbered). The list's rankings do not change until an admin refreshes
+          the ranking configuration. Returns the row as it was.
+        destructive: true
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: The row that was removed.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListItemDeleted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/admin/penalties:
     x-domain: books
     get:
@@ -6006,6 +6160,35 @@ components:
           $ref: "#/components/schemas/PaginationMeta"
         links:
           $ref: "#/components/schemas/PaginationLinks"
+    AdminListItemCreateRequest:
+      type: object
+      required: [book_id]
+      additionalProperties: false
+      properties:
+        book_id: {type: integer, description: "The catalogue book to add, from search_admin_books or find_by_identifier."}
+        position: {type: [integer, "null"], description: "Where the row sits, stored as given. Omit or null for no position."}
+    AdminListItemUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        book_id: {type: integer, description: "Relink the row to this catalogue book; marks the row verified."}
+        position: {type: [integer, "null"], description: "The row's position, stored as given. null clears it."}
+    AdminListItemWritten:
+      type: object
+      required: [data, promoted]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListItem"
+        promoted:
+          type: boolean
+          description: True when the book was provisional and was made public by this call.
+    AdminListItemDeleted:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminListItem"
     AdminPenalty:
       type: object
       required: [id, name, type, kind, dynamic_type, driving_field, category, category_title, description, guidance, value_on_primary, books_list_count]

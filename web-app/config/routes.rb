@@ -804,6 +804,9 @@ Rails.application.routes.draw do
             get "lists/:id", to: "lists#show", constraints: {id: /\d+/}
             patch "lists/:id", to: "lists#update", constraints: {id: /\d+/}
             get "lists/:id/items", to: "list_items#index", constraints: {id: /\d+/}
+            post "lists/:id/items", to: "list_items#create", constraints: {id: /\d+/}
+            patch "list_items/:id", to: "list_items#update", constraints: {id: /\d+/}
+            delete "list_items/:id", to: "list_items#destroy", constraints: {id: /\d+/}
             post "lists/:id/penalties", to: "list_penalties#create", constraints: {id: /\d+/}
             delete "lists/:id/penalties/:penalty_id", to: "list_penalties#destroy", constraints: {id: /\d+/, penalty_id: /\d+/}
             post "fetch_page", to: "fetch_pages#create"
