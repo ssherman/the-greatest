@@ -395,6 +395,16 @@ In order. Each step says whether it is safe now or what it waits for.
    `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run the "Deploy OpenSearch"
    workflow before the worker uses search (`docs/features/opensearch-server.md`, "Add or remove an app
    server").
+8. **One reader on the wrong Grabiński book.** After step 3 (no sync runs after it). The 2026-11-27
+   sample check answered no for `reimport:row:1493:400`: Goodreads edition 19368780, *The Dark Domain*,
+   was matched on 2026-11-17 to #83959 *Niesamowite Opowieści*, a different collection, before #250214
+   *The Dark Domain* existed. An applied match cannot be corrected, and a hand move before the last sync
+   is undone by it (the sync holds only the moves a verdict recorded). In a console:
+   - point the `Books::GoodreadsEdition` with `goodreads_book_id` 19368780 at book 250214, and move its
+     `books_work_goodreads_id` 19368780 identifier from #83959 to #250214;
+   - move user 69160's entries for this row from #83959 to #250214. The user has three items on #83959
+     (one on `read`, two on custom lists) and may also have read the Polish collection: check their other
+     rows on #83959 before moving all three.
 
 ### 5.2 Hostname switch (thegreatestbooks.org points here)
 
