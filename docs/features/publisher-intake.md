@@ -94,11 +94,12 @@ tie) is used and a warning names both. A re-read replaces the facts and unions t
   itself for that moment with a flag saying its turn is reserved. There is one gate per source, so
   a block on one publisher leaves the others running, built on the same gate logic as Goodreads
   fetching, with its own Redis key and limits. Discovery requests take the gate's priority lane:
-  100 of each source's daily cap is kept for them and they start as soon as the fetch interval
+  a twentieth of each source's daily cap, at most 100 (100 at the default cap), is kept for them and they start as soon as the fetch interval
   allows, ahead of the page reads already in line. Without that a run's first request waited for
   the next UTC day whenever a backlog of reads had used the cap (the daily job starts runs at 06:20
-  UTC; a 2,000-read backlog spends the cap by about 05:35). Reads get the other 1,900; a run with
-  more than 100 discovery requests takes the extra ones from the reads' line. The two fetch jobs
+  UTC; a 2,000-read backlog spends the cap by about 05:35). Reads get the rest (1,900 at the
+  default), so a small cap still leaves them turns; a run with more discovery requests than the
+  share takes the extra ones from the reads' line. The two fetch jobs
   (`DiscoveryRequestJob` and `ReadListingJob`) run on one Sidekiq capsule, `publisher_fetch`, with
   concurrency 1, because the gate's read-then-write is only correct with a single thread;
   `DailyJob` and `SweepJob` run on the `low` queue. Intake builds its page fetcher client with its own circuit breaker, so an intake
@@ -226,7 +227,7 @@ value logs and falls back, and never stops boot.
 | enabled sources | `PUBLISHER_INTAKE_SOURCES` (comma-separated keys) | none: the feature is off |
 | fetch interval, seconds | `PUBLISHER_INTAKE_FETCH_INTERVAL` | 10 |
 | daily fetch cap per source, per UTC day | `PUBLISHER_INTAKE_DAILY_FETCH_CAP` | 2000 |
-| part of that cap kept for discovery requests | | 100 |
+| part of that cap kept for discovery requests | | a twentieth of the cap, at most 100 (100 at the default) |
 | block cooldown | | 6 hours |
 | fetch attempts | | 3 |
 | run every, days | | 7 |

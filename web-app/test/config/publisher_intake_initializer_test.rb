@@ -28,6 +28,15 @@ class PublisherIntakeInitializerTest < ActiveSupport::TestCase
     end
   end
 
+  # A fixed 100 would take the whole of a small cap and leave page reads no turn.
+  test "the discovery share is a twentieth of the daily cap, at most 100, so reads always keep the rest" do
+    {"2000" => 100, "5000" => 100, "500" => 25, "100" => 5, "40" => 2, "10" => 0, "0" => 0}.each do |cap, reserved|
+      reload_with("PUBLISHER_INTAKE_DAILY_FETCH_CAP" => cap) do |s|
+        assert_equal [cap.to_i, reserved], [s.daily_fetch_cap, s.priority_reserved]
+      end
+    end
+  end
+
   test "sources are split, stripped and de-duplicated" do
     assert_equal %w[hachette_us macmillan_us], PublisherIntakeEnv.sources(" hachette_us, macmillan_us ,,hachette_us ")
   end

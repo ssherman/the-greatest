@@ -8,7 +8,15 @@ module PublisherIntakeEnv
   def self.sources(raw)
     raw.to_s.split(",").map(&:strip).reject(&:empty?).uniq
   end
+
+  # A twentieth of the daily cap, at most 100. A fixed number would take the
+  # whole of a small cap and leave page reads no turn at all.
+  def self.discovery_share(daily_cap)
+    [[daily_cap.to_i, 0].max / 20, 100].min
+  end
 end
+
+publisher_intake_daily_cap = GoodreadsEnv.integer("PUBLISHER_INTAKE_DAILY_FETCH_CAP", 2_000)
 
 Rails.application.config.x.publisher_intake = ActiveSupport::OrderedOptions.new.merge(
   # Catalog source keys the weekly run reads. Empty means the feature does nothing.
@@ -16,12 +24,12 @@ Rails.application.config.x.publisher_intake = ActiveSupport::OrderedOptions.new.
   # Seconds from one fetch start to the next. PUBLISHER_INTAKE_FETCH_INTERVAL overrides it.
   fetch_interval: GoodreadsEnv.integer("PUBLISHER_INTAKE_FETCH_INTERVAL", 10),
   # Fetches reserved per UTC day. PUBLISHER_INTAKE_DAILY_FETCH_CAP overrides it.
-  daily_fetch_cap: GoodreadsEnv.integer("PUBLISHER_INTAKE_DAILY_FETCH_CAP", 2_000),
+  daily_fetch_cap: publisher_intake_daily_cap,
   # Part of each source's daily cap kept for discovery requests (Books::FetchGate's
   # priority lane), so a run's few requests never wait behind a day of page reads.
   # Reads get the rest. A run with more discovery requests than this takes the
   # extra ones from the reads' line.
-  priority_reserved: 100,
+  priority_reserved: PublisherIntakeEnv.discovery_share(publisher_intake_daily_cap),
   # How long a block stops every fetch for a source.
   block_cooldown: 6.hours.to_i,
   # Tries for a fetch that got no answer before it is given up.
