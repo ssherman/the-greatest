@@ -357,6 +357,17 @@ In order. Each step says whether it is safe now or what it waits for.
     legacy's wrong book on the reader's list beside the right one, nearly all for one reader (user 70967, mostly manhwa
     volumes). Measured read-only 2026-11-27. Removing them needs a small reviewed change (each removal recorded on a
     verdict, so the sync's hold keeps it); until then they are harmless extra entries.
+24. **Amazon identifiers skipped for "Last, First" authors. Shane runs with `!`.** Safe now, after the deploy
+    that adds `books:amazon_book_identifiers_repair`. Until 2026-11-27 the Amazon enrichment compared the
+    author as Amazon writes it ("Johnson, Daisy") with ours ("Daisy Johnson"), so for most books it kept the
+    edition but never put the product's ASIN and ISBNs on the book. The repair re-checks the stored Amazon
+    data under the same rules as a live enrichment and asks Amazon nothing. First
+    `bin/rails "books:amazon_book_identifiers_repair[dry_run]"`, which writes and flags nothing, then
+    `bin/rails "books:amazon_book_identifiers_repair[apply]"`. Both queue a chain of jobs on `low`; the totals
+    are in the worker log ("Amazon book identifiers repair ... finished"). On the development database
+    (2026-11-27): 72,833 editions checked, 46,933 would add 71,829 identifiers to their books, and 38 raise a
+    duplicate pair for step 13 instead. A rerun writes nothing new. Running it again after step 19 covers the
+    editions step 19 adds.
 
 ## 5. Cutover, hostname switch, after launch
 
@@ -384,6 +395,16 @@ In order. Each step says whether it is safe now or what it waits for.
    `OPENSEARCH_ALLOWED_IPS` (`sops secrets/.env.opensearch`), merge, and run the "Deploy OpenSearch"
    workflow before the worker uses search (`docs/features/opensearch-server.md`, "Add or remove an app
    server").
+8. **One reader on the wrong Grabiński book.** After step 3 (no sync runs after it). The 2026-11-27
+   sample check answered no for `reimport:row:1493:400`: Goodreads edition 19368780, *The Dark Domain*,
+   was matched on 2026-11-17 to #83959 *Niesamowite Opowieści*, a different collection, before #250214
+   *The Dark Domain* existed. An applied match cannot be corrected, and a hand move before the last sync
+   is undone by it (the sync holds only the moves a verdict recorded). In a console:
+   - point the `Books::GoodreadsEdition` with `goodreads_book_id` 19368780 at book 250214, and move its
+     `books_work_goodreads_id` 19368780 identifier from #83959 to #250214;
+   - move user 69160's entries for this row from #83959 to #250214. The user has three items on #83959
+     (one on `read`, two on custom lists) and may also have read the Polish collection: check their other
+     rows on #83959 before moving all three.
 
 ### 5.2 Hostname switch (thegreatestbooks.org points here)
 

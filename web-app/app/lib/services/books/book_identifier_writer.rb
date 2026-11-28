@@ -11,35 +11,45 @@ module Services
     # held by another book from an unverified source does not block the write,
     # because that holder is as likely to be the wrong one.
     class BookIdentifierWriter
-      Result = Struct.new(:written, :flagged_book_ids, keyword_init: true)
+      # created: the pairs the book did not hold yet. A dry run writes and
+      # flags nothing and answers what a real run would have done.
+      Result = Struct.new(:written, :flagged_book_ids, :created, keyword_init: true)
 
       # pairs: [[identifier_type_string, value], ...]. evidence is the provider's
       # own context; the conflicts are merged in under "conflicts".
-      def self.call(book:, pairs:, source:, evidence: {})
-        new(book: book, pairs: pairs, source: source, evidence: evidence).call
+      def self.call(book:, pairs:, source:, evidence: {}, dry_run: false)
+        new(book: book, pairs: pairs, source: source, evidence: evidence, dry_run: dry_run).call
       end
 
-      def initialize(book:, pairs:, source:, evidence: {})
+      def initialize(book:, pairs:, source:, evidence: {}, dry_run: false)
         @book = book
         @pairs = pairs
         @source = source
         @evidence = evidence
+        @dry_run = dry_run
       end
 
       def call
         conflicts = verified_conflicts
         return flag(conflicts) if conflicts.any?
+        return Result.new(written: [], flagged_book_ids: [], created: missing_pairs) if @dry_run
 
         written = []
+        created = []
         ::Identifier.transaction do
           @pairs.each do |type, value|
             row = @book.identifiers.find_or_initialize_by(identifier_type: type, value: value)
+            created << [type, value] if row.new_record?
             row.source = @source if row.new_record?
             row.save!
             written << [type, value]
           end
         end
-        Result.new(written: written, flagged_book_ids: [])
+        Result.new(written: written, flagged_book_ids: [], created: created)
+      end
+
+      def missing_pairs
+        @pairs.reject { |type, value| @book.identifiers.exists?(identifier_type: type, value: value) }
       end
 
       private
@@ -70,6 +80,8 @@ module Services
 
       def flag(conflicts)
         by_holder = conflicts.group_by { |conflict| conflict["holder_book_id"] }
+        return Result.new(written: [], flagged_book_ids: by_holder.keys, created: []) if @dry_run
+
         by_holder.each do |holder_id, holder_conflicts|
           ::Services::DuplicateCandidates::Flag.call(
             item_type: "Books::Book",
@@ -79,7 +91,7 @@ module Services
             match_decision: nil
           )
         end
-        Result.new(written: [], flagged_book_ids: by_holder.keys)
+        Result.new(written: [], flagged_book_ids: by_holder.keys, created: [])
       end
     end
   end
