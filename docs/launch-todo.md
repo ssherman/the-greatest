@@ -357,6 +357,17 @@ In order. Each step says whether it is safe now or what it waits for.
     legacy's wrong book on the reader's list beside the right one, nearly all for one reader (user 70967, mostly manhwa
     volumes). Measured read-only 2026-11-27. Removing them needs a small reviewed change (each removal recorded on a
     verdict, so the sync's hold keeps it); until then they are harmless extra entries.
+24. **Amazon identifiers skipped for "Last, First" authors. Shane runs with `!`.** Safe now, after the deploy
+    that adds `books:amazon_book_identifiers_repair`. Until 2026-11-27 the Amazon enrichment compared the
+    author as Amazon writes it ("Johnson, Daisy") with ours ("Daisy Johnson"), so for most books it kept the
+    edition but never put the product's ASIN and ISBNs on the book. The repair re-checks the stored Amazon
+    data under the same rules as a live enrichment and asks Amazon nothing. First
+    `bin/rails "books:amazon_book_identifiers_repair[dry_run]"`, which writes and flags nothing, then
+    `bin/rails "books:amazon_book_identifiers_repair[apply]"`. Both queue a chain of jobs on `low`; the totals
+    are in the worker log ("Amazon book identifiers repair ... finished"). On the development database
+    (2026-11-27): 72,833 editions checked, 46,933 would add 71,829 identifiers to their books, and 38 raise a
+    duplicate pair for step 13 instead. A rerun writes nothing new. Running it again after step 19 covers the
+    editions step 19 adds.
 
 ## 5. Cutover, hostname switch, after launch
 

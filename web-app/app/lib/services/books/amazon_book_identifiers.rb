@@ -7,13 +7,14 @@ module Services
     # (AmazonBookCheck.same_book?); this class only builds the pairs;
     # BookIdentifierWriter decides whether they are safe to write.
     class AmazonBookIdentifiers
-      def self.call(book:, product:)
-        new(book: book, product: product).call
+      def self.call(book:, product:, dry_run: false)
+        new(book: book, product: product, dry_run: dry_run).call
       end
 
-      def initialize(book:, product:)
+      def initialize(book:, product:, dry_run: false)
         @book = book
         @product = product
+        @dry_run = dry_run
       end
 
       def call
@@ -23,7 +24,8 @@ module Services
           evidence: {
             "amazon_asin" => @product["asin"],
             "amazon_title" => @product.dig("itemInfo", "title", "displayValue")
-          }
+          },
+          dry_run: @dry_run
         )
       end
 

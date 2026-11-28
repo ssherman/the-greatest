@@ -39,6 +39,31 @@ module Services
         end
       end
 
+      test "created lists only the pairs the book did not hold" do
+        book = books_books(:war_and_peace)
+        book.identifiers.create!(identifier_type: :books_work_goodreads_id, value: "1", source: :goodreads)
+
+        result = BookIdentifierWriter.call(book: book, pairs: [["books_work_goodreads_id", "1"], ["books_work_goodreads_id", "2"]], source: :goodreads)
+
+        assert_equal [["books_work_goodreads_id", "2"]], result.created
+      end
+
+      test "a dry run writes and flags nothing and answers what a real run would do" do
+        book = books_books(:war_and_peace)
+        pairs = [["books_work_goodreads_id", "777"]]
+        assert_no_difference "::Identifier.count" do
+          assert_equal pairs, BookIdentifierWriter.call(book: book, pairs: pairs, source: :goodreads, dry_run: true).created
+        end
+
+        other = ::Books::Book.create!(title: "Other")
+        other.identifiers.create!(identifier_type: :books_work_isbn10, value: "1400079985", source: :open_library)
+        assert_no_difference ["::Identifier.count", "::DuplicateCandidate.count"] do
+          result = BookIdentifierWriter.call(book: book, pairs: [["books_work_isbn13", "9781400079988"]], source: :goodreads, dry_run: true)
+          assert_equal [other.id], result.flagged_book_ids
+          assert_empty result.created
+        end
+      end
+
       test "a re-run creates no duplicates" do
         book = books_books(:war_and_peace)
         pairs = [["books_work_goodreads_id", "12345"]]
