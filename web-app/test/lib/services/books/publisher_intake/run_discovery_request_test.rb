@@ -62,6 +62,24 @@ module Services
           assert_equal %w[pending baseline], states
         end
 
+        # Production, 2026-11-27: the reads of a first run used the day's cap by
+        # 05:35 UTC and the daily job's 06:20 run waited until midnight for a turn.
+        test "a discovery request takes its turn at once while reads hold the line and have spent their share of the cap" do
+          config = ActiveSupport::OrderedOptions.new.merge(fetch_interval: 10, daily_fetch_cap: 100,
+            block_cooldown: 6.hours.to_i, priority_reserved: 10)
+          gate = ::Books::FetchGate.new(key: "test:gate:slice", config: config, label: "test_source",
+            redis: ::Books::OpenLibrary::FakeRedis.new)
+          ::Books::PublisherIntake.stubs(:gate_for).returns(gate)
+          90.times { gate.reserve }
+          assert_equal :daily_cap, gate.reserve.refusal
+          @client.expects(:fetch).returns(page_response)
+          discovery(:ok)
+
+          result = run_request(due: false)
+
+          assert_equal [:done, :ok], result.data.values_at(:action, :outcome)
+        end
+
         test "a refused turn waits until the gate reopens" do
           @gate.block!
           @client.expects(:fetch).never

@@ -22,9 +22,18 @@ class PublisherIntakeInitializerTest < ActiveSupport::TestCase
 
   test "defaults when nothing is set" do
     reload_with({}) do |s|
-      assert_equal [[], 10, 2_000, 21_600, 3, 7, 28, 30, 365, 3, 30_000],
-        [s.enabled_sources, s.fetch_interval, s.daily_fetch_cap, s.block_cooldown, s.fetch_attempts,
+      assert_equal [[], 10, 2_000, 100, 21_600, 3, 7, 28, 30, 365, 3, 30_000],
+        [s.enabled_sources, s.fetch_interval, s.daily_fetch_cap, s.priority_reserved, s.block_cooldown, s.fetch_attempts,
           s.run_every_days, s.reread_after_days, s.lookback_days, s.horizon_days, s.stuck_run_days, s.fetch_timeout_ms]
+    end
+  end
+
+  # A fixed 100 would take the whole of a small cap and leave page reads no turn.
+  test "the discovery share is a twentieth of the daily cap, at most 100, so reads always keep the rest" do
+    {"2000" => 100, "5000" => 100, "500" => 25, "100" => 5, "40" => 2, "10" => 0, "0" => 0}.each do |cap, reserved|
+      reload_with("PUBLISHER_INTAKE_DAILY_FETCH_CAP" => cap) do |s|
+        assert_equal [cap.to_i, reserved], [s.daily_fetch_cap, s.priority_reserved]
+      end
     end
   end
 

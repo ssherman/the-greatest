@@ -43,7 +43,9 @@ module Services
 
           @strategy = ::Books::PublisherIntake::Sources.fetch(@run.source)
           @gate = ::Books::PublisherIntake.gate_for(@run.source)
-          turn = ::Books::Goodreads::GateTurn.call(gate: @gate, due: @due)
+          # A priority turn: discovery is a few requests, and it must not wait
+          # behind the page reads that fill a source's line and its daily cap.
+          turn = ::Books::Goodreads::GateTurn.call(gate: @gate, due: @due, priority: true)
           case turn.action
           when :wait then return result(:wait, wait: turn.wait)
           when :refused then return result(:refused, wait: until_reopened)
@@ -102,7 +104,7 @@ module Services
         # The gate reopened between the refusal and this check when reopens_at
         # is nil; a minute is then a safe pause before asking again.
         def until_reopened
-          reopens_at = @gate.reopens_at
+          reopens_at = @gate.reopens_at(priority: true)
           return MIN_REOPEN_WAIT if reopens_at.nil?
 
           [(reopens_at - Time.current).ceil, MIN_REOPEN_WAIT].max
